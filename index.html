@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cast Receiver</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        body {
+            background: #000;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial', sans-serif;
+        }
+
+        #stream-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #stream {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        #status {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: #0f0;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            z-index: 1000;
+            transition: opacity 0.3s;
+        }
+
+        #status.hidden {
+            opacity: 0;
+        }
+
+        .error {
+            color: #f00 !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="status">Initializing receiver...</div>
+    <div id="stream-container">
+        <img id="stream" alt="App Stream">
+    </div>
+
+    <script>
+        console.log('🎬 Chromecast Custom Receiver v1.0');
+
+        // Parse URL parameters to get stream source
+        const urlParams = new URLSearchParams(window.location.search);
+        const streamHost = urlParams.get('host');
+        const streamPort = urlParams.get('port');
+
+        const statusEl = document.getElementById('status');
+        const streamEl = document.getElementById('stream');
+
+        function updateStatus(message, isError = false) {
+            console.log(message);
+            statusEl.textContent = message;
+            if (isError) {
+                statusEl.classList.add('error');
+            } else {
+                statusEl.classList.remove('error');
+            }
+        }
+
+        // Construct stream URL
+        let streamUrl;
+        if (streamHost && streamPort) {
+            streamUrl = `http://${streamHost}:${streamPort}/stream.mjpeg`;
+        } else {
+            // Fallback: try to use same host as receiver
+            const currentUrl = new URL(window.location.href);
+            streamUrl = `${currentUrl.protocol}//${currentUrl.hostname}:8089/stream.mjpeg`;
+        }
+
+        updateStatus(`Loading stream from ${streamUrl}...`);
+        console.log('Stream URL:', streamUrl);
+
+        // Set stream source
+        streamEl.src = streamUrl;
+
+        // Handle successful load
+        streamEl.onload = function () {
+            console.log('✅ Stream loaded successfully');
+            updateStatus('✅ Streaming live!');
+            // Hide status after 3 seconds
+            setTimeout(() => {
+                statusEl.classList.add('hidden');
+            }, 3000);
+        };
+
+        // Handle errors
+        streamEl.onerror = function (e) {
+            console.error('❌ Stream error:', e);
+            updateStatus(`❌ Stream error - Retrying in 3s...`, true);
+
+            // Retry after 3 seconds
+            setTimeout(() => {
+                const retryUrl = streamUrl + '?t=' + Date.now();
+                console.log('Retrying:', retryUrl);
+                streamEl.src = retryUrl;
+            }, 3000);
+        };
+
+        // Keep connection alive
+        setInterval(() => {
+            console.log('🔄 Keep-alive ping');
+        }, 30000);
+
+        console.log('✅ Receiver initialized');
+    </script>
+</body>
+
+</html>
