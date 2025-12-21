@@ -4,8 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cast Receiver</title>
+    <title>MXS-004 Premium Cast Receiver</title>
     <style>
+        :root {
+            --gold: #b38600;
+            --dark-gold: #8a6800;
+            --off-black: #1a1a1a;
+            --text-color: #f0f0f0;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -14,13 +21,41 @@
         }
 
         body {
-            background: #000;
+            background: var(--off-black);
+            color: var(--text-color);
             width: 100vw;
             height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'Arial', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(179, 134, 0, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(179, 134, 0, 0.05) 0%, transparent 40%);
+        }
+
+        #splash {
+            position: absolute;
+            z-index: 10;
+            text-align: center;
+            transition: opacity 1s ease-out;
+        }
+
+        .branding-h1 {
+            font-size: 4rem;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            text-shadow: 0 0 20px rgba(179, 134, 0, 0.4);
+            margin-bottom: 0.5rem;
+        }
+
+        .branding-h2 {
+            font-size: 1.5rem;
+            color: var(--text-color);
+            opacity: 0.7;
+            font-weight: 300;
+            letter-spacing: 0.1em;
         }
 
         #stream-container {
@@ -29,109 +64,141 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 1s ease-in;
         }
 
         #stream {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
         }
 
-        #status {
+        #status-bar {
             position: fixed;
-            top: 20px;
-            left: 20px;
-            color: #0f0;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 20px;
-            border-radius: 8px;
-            font-size: 16px;
-            z-index: 1000;
-            transition: opacity 0.3s;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            padding: 10px 25px;
+            border-radius: 50px;
+            border: 1px solid rgba(179, 134, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 14px;
+            letter-spacing: 1px;
+            z-index: 20;
+            transition: opacity 0.5s;
         }
 
-        #status.hidden {
-            opacity: 0;
+        .spinner {
+            width: 10px;
+            height: 10px;
+            background: var(--gold);
+            border-radius: 50%;
+            animation: pulse 1s infinite alternate;
         }
 
-        .error {
-            color: #f00 !important;
+        @keyframes pulse {
+            from {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            to {
+                transform: scale(1.5);
+                opacity: 0.3;
+            }
+        }
+
+        .hidden {
+            opacity: 0 !important;
+            pointer-events: none;
         }
     </style>
 </head>
 
 <body>
-    <div id="status">Initializing receiver...</div>
-    <div id="stream-container">
-        <img id="stream" alt="App Stream">
+    <div id="splash">
+        <h1 class="branding-h1">MXS-004</h1>
+        <h2 class="branding-h2">Mix N Studio 004</h2>
     </div>
 
+    <div id="stream-container">
+        <img id="stream" alt="Studio View">
+    </div>
+
+    <div id="status-bar">
+        <div class="spinner"></div>
+        <span id="status-text">INITIALIZING STUDIO SYNC...</span>
+    </div>
+
+    <cast-media-player style="display:none"></cast-media-player>
+
+    <script src="//www.gstatic.com/cast/sdk/libs/caf/receiver/v3/cast_receiver_framework.js"></script>
     <script>
-        console.log('🎬 Chromecast Custom Receiver v1.0');
+        const context = cast.framework.CastReceiverContext.getInstance();
+        const playerManager = context.getPlayerManager();
+        const splash = document.getElementById('splash');
+        const container = document.getElementById('stream-container');
+        const stream = document.getElementById('stream');
+        const statusText = document.getElementById('status-text');
+        const statusBar = document.getElementById('status-bar');
 
-        // Parse URL parameters to get stream source
-        const urlParams = new URLSearchParams(window.location.search);
-        const streamHost = urlParams.get('host');
-        const streamPort = urlParams.get('port');
-
-        const statusEl = document.getElementById('status');
-        const streamEl = document.getElementById('stream');
-
-        function updateStatus(message, isError = false) {
-            console.log(message);
-            statusEl.textContent = message;
-            if (isError) {
-                statusEl.classList.add('error');
-            } else {
-                statusEl.classList.remove('error');
+        function startStreaming(url) {
+            // FORCE http instead of https to bypass mixed content blocks for local IP streams
+            let targetUrl = url;
+            if (targetUrl.startsWith('https://')) {
+                // If the app sent https by mistake for a local IP, downgrade it
+                targetUrl = targetUrl.replace('https://', 'http://');
             }
+            
+            console.log('Synchronizing with Studio:', targetUrl);
+            statusText.textContent = 'STUDIO CONNECTED';
+            stream.src = targetUrl;
+            
+            stream.onload = () => {
+                splash.classList.add('hidden');
+                container.style.opacity = '1';
+                setTimeout(() => {
+                    statusBar.classList.add('hidden');
+                }, 4000);
+            };
+
+            stream.onerror = () => {
+                statusBar.classList.remove('hidden');
+                statusText.textContent = 'WAITING FOR STUDIO...';
+                statusText.style.color = '#ff4444';
+            };
         }
 
-        // Construct stream URL
-        let streamUrl;
-        if (streamHost && streamPort) {
-            streamUrl = `http://${streamHost}:${streamPort}/stream.mjpeg`;
-        } else {
-            // Fallback: try to use same host as receiver
-            const currentUrl = new URL(window.location.href);
-            streamUrl = `${currentUrl.protocol}//${currentUrl.hostname}:8089/stream.mjpeg`;
+        // CAF Load Interceptor
+        playerManager.setMessageInterceptor(
+            cast.framework.messages.MessageType.LOAD,
+            loadData => {
+                console.log('Handshake received:', loadData);
+                if (loadData.media && loadData.media.contentId) {
+                    // contentId IS the stream URL
+                    startStreaming(loadData.media.contentId);
+                }
+                return loadData;
+            }
+        );
+
+        context.start();
+        console.log('✅ MXS-004 Premium Receiver Active');
+
+        // Initial check for deep link parameters
+        const params = new URLSearchParams(window.location.search);
+        const host = params.get('host');
+        const port = params.get('port');
+        if (host && port) {
+            startStreaming(`http://${host}:${port}/stream.mjpeg`);
         }
-
-        updateStatus(`Loading stream from ${streamUrl}...`);
-        console.log('Stream URL:', streamUrl);
-
-        // Set stream source
-        streamEl.src = streamUrl;
-
-        // Handle successful load
-        streamEl.onload = function () {
-            console.log('✅ Stream loaded successfully');
-            updateStatus('✅ Streaming live!');
-            // Hide status after 3 seconds
-            setTimeout(() => {
-                statusEl.classList.add('hidden');
-            }, 3000);
-        };
-
-        // Handle errors
-        streamEl.onerror = function (e) {
-            console.error('❌ Stream error:', e);
-            updateStatus(`❌ Stream error - Retrying in 3s...`, true);
-
-            // Retry after 3 seconds
-            setTimeout(() => {
-                const retryUrl = streamUrl + '?t=' + Date.now();
-                console.log('Retrying:', retryUrl);
-                streamEl.src = retryUrl;
-            }, 3000);
-        };
-
-        // Keep connection alive
-        setInterval(() => {
-            console.log('🔄 Keep-alive ping');
-        }, 30000);
-
-        console.log('✅ Receiver initialized');
     </script>
 </body>
 
