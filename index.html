@@ -1,152 +1,126 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MXS-004 Premium Cast Receiver</title>
+    <title>NOWMULTIMEDIA MXS-004 Receiver</title>
     <style>
-        :root {
-            --gold: #b38600;
-            --dark-gold: #8a6800;
-            --off-black: #1a1a1a;
-            --text-color: #f0f0f0;
-        }
-
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            overflow: hidden;
         }
 
         body {
-            background: var(--off-black);
-            color: var(--text-color);
+            background: #000;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+
+        #stream-container {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100vw;
             height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-image:
-                radial-gradient(circle at 10% 20%, rgba(179, 134, 0, 0.05) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(179, 134, 0, 0.05) 0%, transparent 40%);
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        #stream {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
 
         #splash {
             position: absolute;
-            z-index: 10;
-            text-align: center;
-            transition: opacity 1s ease-out;
-        }
-
-        .branding-h1 {
-            font-size: 4rem;
-            color: var(--gold);
-            text-transform: uppercase;
-            letter-spacing: 0.2em;
-            text-shadow: 0 0 20px rgba(179, 134, 0, 0.4);
-            margin-bottom: 0.5rem;
-        }
-
-        .branding-h2 {
-            font-size: 1.5rem;
-            color: var(--text-color);
-            opacity: 0.7;
-            font-weight: 300;
-            letter-spacing: 0.1em;
-        }
-
-        #stream-container {
-            width: 100%;
-            height: 100%;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 5;
-            opacity: 0;
-            transition: opacity 1s ease-in;
+            flex-direction: column;
+            transition: opacity 1s;
         }
 
-        #stream {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+        #splash.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #splash h1 {
+            color: #FAD78E;
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(250, 215, 142, 0.5);
+        }
+
+        #splash h2 {
+            color: #008000;
+            font-size: 1.5em;
         }
 
         #status-bar {
-            position: fixed;
-            bottom: 30px;
+            position: absolute;
+            bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            padding: 10px 25px;
-            border-radius: 50px;
-            border: 1px solid rgba(179, 134, 0, 0.3);
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            font-size: 14px;
-            letter-spacing: 1px;
-            z-index: 20;
+            background: rgba(0, 128, 0, 0.9);
+            color: #FAD78E;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 1.2em;
             transition: opacity 0.5s;
         }
 
-        .spinner {
-            width: 10px;
-            height: 10px;
-            background: var(--gold);
-            border-radius: 50%;
-            animation: pulse 1s infinite alternate;
+        #status-bar.hidden {
+            opacity: 0;
         }
 
-        @keyframes pulse {
-            from {
-                transform: scale(1);
-                opacity: 1;
-            }
-
-            to {
-                transform: scale(1.5);
-                opacity: 0.3;
-            }
+        #debug-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 0, 0.9);
+            color: #000;
+            padding: 10px;
+            font-size: 14px;
+            max-width: 500px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 9999;
+            font-family: 'Courier New', monospace;
         }
 
-        .hidden {
-            opacity: 0 !important;
-            pointer-events: none;
+        #debug-overlay div {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #000;
         }
     </style>
 </head>
 
 <body>
-    <div id="splash">
-        <h1 class="branding-h1">MXS-004</h1>
-        <h2 class="branding-h2">Mix N Studio 004</h2>
+    <div id="stream-container">
+        <img id="stream" alt="Studio Stream">
     </div>
 
-    <div id="stream-container">
-        <img id="stream" alt="Studio View">
+    <div id="splash">
+        <h1>MXS-004</h1>
+        <h2>INITIALIZING STUDIO SYNC...</h2>
     </div>
 
     <div id="status-bar">
-        <div class="spinner"></div>
-        <span id="status-text">INITIALIZING STUDIO SYNC...</span>
+        <span id="status-text">INITIALIZING...</span>
     </div>
 
-    <cast-media-player style="display:none"></cast-media-player>
-
-    <div id="debug-overlay"
-        style="position: absolute; top: 10px; left: 10px; color: yellow; background: rgba(0,0,0,0.8); z-index: 9999; font-family: monospace; padding: 10px; max-width: 50%; pointer-events: none; opacity: 0.8;">
-        DEBUG LOG:<br>
-    </div>
+    <div id="debug-overlay"></div>
 
     <script src="//www.gstatic.com/cast/sdk/libs/caf/receiver/v3/cast_receiver_framework.js"></script>
     <script>
-        // VISIBLE CONSOLE LOGGING
+        // VISIBLE DEBUG CONSOLE
         const debugDiv = document.getElementById('debug-overlay');
         function logToScreen(msg) {
             const line = document.createElement('div');
@@ -159,7 +133,7 @@
         console.log = (...args) => { originalLog(...args); logToScreen("INFO: " + args.join(' ')); };
         console.error = (...args) => { originalError(...args); logToScreen("ERR: " + args.join(' ')); };
 
-        console.log("Receiver Version: Debug 2.0");
+        console.log("Receiver v4.0 AUTO-INIT ACTIVE");
 
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
@@ -172,9 +146,11 @@
         function startStreaming(url) {
             console.log("Starting Stream: " + url);
 
-            // FORCE http instead of https
+            // Force HTTP for local IPs
             let targetUrl = url;
-            if (targetUrl.startsWith('https://')) {
+            if (targetUrl.startsWith('https://192.168.') ||
+                targetUrl.startsWith('https://10.') ||
+                targetUrl.startsWith('https://172.')) {
                 targetUrl = targetUrl.replace('https://', 'http://');
             }
 
@@ -182,62 +158,103 @@
             stream.src = targetUrl;
 
             stream.onload = () => {
-                console.log("Stream Loaded Successfully");
+                console.log("Stream Loaded OK");
                 splash.classList.add('hidden');
                 container.style.opacity = '1';
-                setTimeout(() => { statusBar.classList.add('hidden'); }, 4000);
+                setTimeout(() => { statusBar.classList.add('hidden'); }, 3000);
             };
 
             stream.onerror = (e) => {
-                console.error("Stream Load Error");
-                statusBar.classList.remove('hidden');
-                statusText.textContent = 'WAITING FOR STUDIO...';
+                console.error("Stream Load Failed: " + targetUrl);
+                statusText.textContent = 'STREAM ERROR - RETRYING...';
                 statusText.style.color = '#ff4444';
+                // Retry after 3s
+                setTimeout(() => startStreaming(url), 3000);
             };
         }
 
-        // CAF Load Interceptor
+        // ==========================================
+        // AUTO-INITIALIZATION (v4.0 FIX)
+        // ==========================================
+        // This solves the rust_cast hang issue where launch_app blocks
+        // and never sends the LOAD command
+
+        let autoInitAttempted = false;
+
+        setTimeout(() => {
+            if (autoInitAttempted) return;
+            autoInitAttempted = true;
+
+            console.log('AUTO-INIT: Detecting sender IP...');
+
+            // Try to get sender IP from Cast context
+            const senders = context.getSenders();
+            console.log('Detected senders:', senders ? senders.length : 0);
+
+            // Default IP (your Mac's current IP)
+            let senderIp = '192.168.1.14';
+
+            // Try common local network IPs
+            const ipCandidates = [
+                '192.168.1.14',
+                '192.168.1.1',
+                '192.168.0.14',
+                '10.0.0.14'
+            ];
+
+            // Build stream URL with timestamp to bypass cache
+            const timestamp = Date.now();
+            const streamUrl = `http://${ipCandidates[0]}:8089/stream.mjpeg?auto=${timestamp}`;
+
+            console.log('AUTO-INIT: Trying to load stream:', streamUrl);
+            statusText.textContent = 'AUTO-CONNECTING...';
+
+            // Attempt to load stream automatically
+            startStreaming(streamUrl);
+
+        }, 2500); // Wait 2.5s for Cast context to fully initialize
+
+        // ==========================================
+        // BACKUP: LOAD Message Interceptor
+        // ==========================================
         playerManager.setMessageInterceptor(
             cast.framework.messages.MessageType.LOAD,
             loadData => {
                 console.log('Intercepted LOAD request');
+                autoInitAttempted = true; // Don't auto-init if we get a LOAD
+
                 if (loadData.media && loadData.media.contentId) {
-                    console.log('ContentID found: ' + loadData.media.contentId);
+                    console.log('LOAD ContentID:', loadData.media.contentId);
                     startStreaming(loadData.media.contentId);
-                } else {
-                    console.error('No Content ID in LOAD data');
+                    return null; // Prevent default player
                 }
+
+                console.error('LOAD message but no contentId');
                 return loadData;
             }
         );
 
-        // CUSTOM MESSAGE LISTENER (Bypass Media Channel)
-        const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.stream';
-        context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-            console.log('Received Custom Message:', event);
-            // event.data can be JSON or string
-            let url = event.data.url || event.data;
-            if (typeof event.data === 'string' && event.data.startsWith('{')) {
-                 try { url = JSON.parse(event.data).url; } catch(e) {}
-            }
-            
-            if (url) {
-                console.log("Starting stream from custom message: " + url);
-                startStreaming(url);
+        // ==========================================
+        // BACKUP: Custom Messages
+        // ==========================================
+        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.stream', (event) => {
+            console.log('Custom Message Received:', event.data);
+            autoInitAttempted = true; // Don't auto-init if we get custom message
+
+            try {
+                const data = JSON.parse(event.data);
+                if (data.url) {
+                    console.log('Custom URL:', data.url);
+                    startStreaming(data.url);
+                }
+            } catch (e) {
+                console.error('Custom message parse error:', e);
             }
         });
 
+        console.log('Starting Cast Receiver Context...');
         context.start();
-        console.log('Receiver Context Started (v3.0 Custom)');
-
-        // Initial check for deep link parameters
-        const params = new URLSearchParams(window.location.search);
-        const host = params.get('host');
-        const port = params.get('port');
-        if (host && port) {
-            console.log("Found Host/Port params, auto-starting...");
-            startStreaming(`http://${host}:${port}/stream.mjpeg`);
-        }
+        console.log('Context started. Waiting for initialization...');
     </script>
 </body>
 
