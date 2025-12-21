@@ -139,8 +139,28 @@
 
     <cast-media-player style="display:none"></cast-media-player>
 
+    <div id="debug-overlay"
+        style="position: absolute; top: 10px; left: 10px; color: yellow; background: rgba(0,0,0,0.8); z-index: 9999; font-family: monospace; padding: 10px; max-width: 50%; pointer-events: none; opacity: 0.8;">
+        DEBUG LOG:<br>
+    </div>
+
     <script src="//www.gstatic.com/cast/sdk/libs/caf/receiver/v3/cast_receiver_framework.js"></script>
     <script>
+        // VISIBLE CONSOLE LOGGING
+        const debugDiv = document.getElementById('debug-overlay');
+        function logToScreen(msg) {
+            const line = document.createElement('div');
+            line.textContent = msg;
+            debugDiv.appendChild(line);
+            if (debugDiv.childElementCount > 10) debugDiv.firstChild.remove();
+        }
+        const originalLog = console.log;
+        const originalError = console.error;
+        console.log = (...args) => { originalLog(...args); logToScreen("INFO: " + args.join(' ')); };
+        console.error = (...args) => { originalError(...args); logToScreen("ERR: " + args.join(' ')); };
+
+        console.log("Receiver Version: Debug 2.0");
+
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
         const splash = document.getElementById('splash');
@@ -150,26 +170,26 @@
         const statusBar = document.getElementById('status-bar');
 
         function startStreaming(url) {
-            // FORCE http instead of https to bypass mixed content blocks for local IP streams
+            console.log("Starting Stream: " + url);
+
+            // FORCE http instead of https
             let targetUrl = url;
             if (targetUrl.startsWith('https://')) {
-                // If the app sent https by mistake for a local IP, downgrade it
                 targetUrl = targetUrl.replace('https://', 'http://');
             }
-            
-            console.log('Synchronizing with Studio:', targetUrl);
+
             statusText.textContent = 'STUDIO CONNECTED';
             stream.src = targetUrl;
-            
+
             stream.onload = () => {
+                console.log("Stream Loaded Successfully");
                 splash.classList.add('hidden');
                 container.style.opacity = '1';
-                setTimeout(() => {
-                    statusBar.classList.add('hidden');
-                }, 4000);
+                setTimeout(() => { statusBar.classList.add('hidden'); }, 4000);
             };
 
-            stream.onerror = () => {
+            stream.onerror = (e) => {
+                console.error("Stream Load Error");
                 statusBar.classList.remove('hidden');
                 statusText.textContent = 'WAITING FOR STUDIO...';
                 statusText.style.color = '#ff4444';
@@ -180,23 +200,26 @@
         playerManager.setMessageInterceptor(
             cast.framework.messages.MessageType.LOAD,
             loadData => {
-                console.log('Handshake received:', loadData);
+                console.log('Intercepted LOAD request');
                 if (loadData.media && loadData.media.contentId) {
-                    // contentId IS the stream URL
+                    console.log('ContentID found: ' + loadData.media.contentId);
                     startStreaming(loadData.media.contentId);
+                } else {
+                    console.error('No Content ID in LOAD data');
                 }
                 return loadData;
             }
         );
 
         context.start();
-        console.log('✅ MXS-004 Premium Receiver Active');
+        console.log('Receiver Context Started');
 
         // Initial check for deep link parameters
         const params = new URLSearchParams(window.location.search);
         const host = params.get('host');
         const port = params.get('port');
         if (host && port) {
+            console.log("Found Host/Port params, auto-starting...");
             startStreaming(`http://${host}:${port}/stream.mjpeg`);
         }
     </script>
