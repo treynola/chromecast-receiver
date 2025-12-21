@@ -143,33 +143,53 @@
         const statusText = document.getElementById('status-text');
         const statusBar = document.getElementById('status-bar');
 
-        function startStreaming(url) {
-            console.log("Starting Stream: " + url);
+        let frameInterval = null;
+        let frameNumber = 0;
 
+        function startStreaming(baseUrl) {
+            console.log("Starting Frame Polling: " + baseUrl);
+
+            // Stop any existing polling
+            if (frameInterval) {
+                clearInterval(frameInterval);
+            }
+
+            // Extract base URL without query params
+            let targetUrl = baseUrl.split('?')[0];
+            
             // Force HTTP for local IPs
-            let targetUrl = url;
-            if (targetUrl.startsWith('https://192.168.') ||
-                targetUrl.startsWith('https://10.') ||
+            if (targetUrl.startsWith('https://192.168.') || 
+                targetUrl.startsWith('https://10.') || 
                 targetUrl.startsWith('https://172.')) {
                 targetUrl = targetUrl.replace('https://', 'http://');
             }
 
-            statusText.textContent = 'STUDIO CONNECTED';
-            stream.src = targetUrl;
+            // Use /screen.jpg endpoint which gives us a fresh frame each time
+            const frameUrl = targetUrl.replace('/stream.mjpeg', '/screen.jpg');
 
-            stream.onload = () => {
-                console.log("Stream Loaded OK");
-                splash.classList.add('hidden');
-                container.style.opacity = '1';
-                setTimeout(() => { statusBar.classList.add('hidden'); }, 3000);
-            };
+            statusText.textContent = 'STUDIO CONNECTED';
+            splash.classList.add('hidden');
+            container.style.opacity = '1';
+
+            // Poll for new frames at ~30 FPS (33ms) 
+            // Start with 100ms to be safe, can optimize later
+            frameInterval = setInterval(() => {
+                frameNumber++;
+                // Add timestamp to prevent caching
+                stream.src = `${frameUrl}?frame=${frameNumber}&t=${Date.now()}`;
+            }, 100); // 10 FPS (100ms between frames)
+
+            console.log("Frame polling started at 10 FPS");
+            setTimeout(() => { statusBar.classList.add('hidden'); }, 3000);
 
             stream.onerror = (e) => {
-                console.error("Stream Load Failed: " + targetUrl);
+                console.error("Frame Load Error");
+                clearInterval(frameInterval);
                 statusText.textContent = 'STREAM ERROR - RETRYING...';
                 statusText.style.color = '#ff4444';
+                statusBar.classList.remove('hidden');
                 // Retry after 3s
-                setTimeout(() => startStreaming(url), 3000);
+                setTimeout(() => startStreaming(baseUrl), 3000);
             };
         }
 
