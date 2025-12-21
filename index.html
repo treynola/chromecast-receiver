@@ -211,8 +211,24 @@
             }
         );
 
+        // CUSTOM MESSAGE LISTENER (Bypass Media Channel)
+        const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.stream';
+        context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+            console.log('Received Custom Message:', event);
+            // event.data can be JSON or string
+            let url = event.data.url || event.data;
+            if (typeof event.data === 'string' && event.data.startsWith('{')) {
+                 try { url = JSON.parse(event.data).url; } catch(e) {}
+            }
+            
+            if (url) {
+                console.log("Starting stream from custom message: " + url);
+                startStreaming(url);
+            }
+        });
+
         context.start();
-        console.log('Receiver Context Started');
+        console.log('Receiver Context Started (v3.0 Custom)');
 
         // Initial check for deep link parameters
         const params = new URLSearchParams(window.location.search);
