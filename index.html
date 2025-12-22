@@ -194,45 +194,21 @@
         }
 
         // ==========================================
-        // AUTO-INITIALIZATION (v4.0 FIX)
-        // ==========================================
-        // This solves the rust_cast hang issue where launch_app blocks
-        // and never sends the LOAD command
-
+        // AUTO-INIT: Start immediately!
         let autoInitAttempted = false;
-
+        
+        console.log('AUTO-INIT: Starting immediately...');
+        
+        // Start polling right away with hardcoded URL
+        const streamUrl = `http://192.168.1.14:8089/screen.jpg?init=${Date.now()}`;
+        console.log('AUTO-INIT: Direct stream attempt:', streamUrl);
+        
         setTimeout(() => {
-            if (autoInitAttempted) return;
-            autoInitAttempted = true;
-
-            console.log('AUTO-INIT: Detecting sender IP...');
-
-            // Try to get sender IP from Cast context
-            const senders = context.getSenders();
-            console.log('Detected senders:', senders ? senders.length : 0);
-
-            // Default IP (your Mac's current IP)
-            let senderIp = '192.168.1.14';
-
-            // Try common local network IPs
-            const ipCandidates = [
-                '192.168.1.14',
-                '192.168.1.1',
-                '192.168.0.14',
-                '10.0.0.14'
-            ];
-
-            // Build stream URL with timestamp to bypass cache
-            const timestamp = Date.now();
-            const streamUrl = `http://${ipCandidates[0]}:8089/stream.mjpeg?auto=${timestamp}`;
-
-            console.log('AUTO-INIT: Trying to load stream:', streamUrl);
-            statusText.textContent = 'AUTO-CONNECTING...';
-
-            // Attempt to load stream automatically
-            startStreaming(streamUrl);
-
-        }, 2500); // Wait 2.5s for Cast context to fully initialize
+            if (!autoInitAttempted) {
+                autoInitAttempted = true;
+                startStreaming(streamUrl);
+            }
+        }, 500); // Start after just 500ms
 
         // ==========================================
         // BACKUP: LOAD Message Interceptor
