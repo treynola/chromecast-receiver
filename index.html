@@ -133,7 +133,7 @@
         console.log = (...args) => { originalLog(...args); logToScreen("INFO: " + args.join(' ')); };
         console.error = (...args) => { originalError(...args); logToScreen("ERR: " + args.join(' ')); };
 
-        console.log("Receiver v4.0 AUTO-INIT ACTIVE");
+        console.log("Receiver v4.1 FRAME-POLLING ACTIVE");
 
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
@@ -156,10 +156,10 @@
 
             // Extract base URL without query params
             let targetUrl = baseUrl.split('?')[0];
-            
+
             // Force HTTP for local IPs
-            if (targetUrl.startsWith('https://192.168.') || 
-                targetUrl.startsWith('https://10.') || 
+            if (targetUrl.startsWith('https://192.168.') ||
+                targetUrl.startsWith('https://10.') ||
                 targetUrl.startsWith('https://172.')) {
                 targetUrl = targetUrl.replace('https://', 'http://');
             }
