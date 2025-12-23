@@ -113,7 +113,8 @@
     </div>
 
     <div id="status-bar">
-        <span id="status-text">INITIALIZING...</span>
+        <div class="spinner"></div>
+        <span id="status-text">INITIALIZING STUDIO SYNC (v4.2)...</span>
     </div>
 
     <div id="debug-overlay"></div>
@@ -133,7 +134,7 @@
         console.log = (...args) => { originalLog(...args); logToScreen("INFO: " + args.join(' ')); };
         console.error = (...args) => { originalError(...args); logToScreen("ERR: " + args.join(' ')); };
 
-        console.log("Receiver v4.1 FRAME-POLLING ACTIVE");
+        console.log("Receiver v4.2 FRAME-POLLING ACTIVE");
 
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
@@ -194,21 +195,20 @@
         }
 
         // ==========================================
-        // AUTO-INIT: Start immediately!
+        // AUTO-INIT: Wait for actual data!
         let autoInitAttempted = false;
         
-        console.log('AUTO-INIT: Starting immediately...');
+        console.log('Receiver waiting for LOAD or Custom Message...');
         
-        // Start polling right away with hardcoded URL
-        const streamUrl = `http://192.168.1.14:8089/screen.jpg?init=${Date.now()}`;
-        console.log('AUTO-INIT: Direct stream attempt:', streamUrl);
+        // Remove the hardcoded fallback which causes hangs on wrong networks
+        // startStreaming(streamUrl); 
         
         setTimeout(() => {
             if (!autoInitAttempted) {
-                autoInitAttempted = true;
-                startStreaming(streamUrl);
+                console.log('No signal received after 10s. Waiting for manual trigger.');
+                statusText.textContent = 'READY - WAITING FOR SENDER...';
             }
-        }, 500); // Start after just 500ms
+        }, 10000);
 
         // ==========================================
         // BACKUP: LOAD Message Interceptor
