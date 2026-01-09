@@ -2,45 +2,35 @@
 <html>
 
 <head>
-    <title>NOWMULTIMEDIA MXS-004 Receiver v5.9</title>
+    <title>NOWMULTIMEDIA MXS-004 Receiver v6.0</title>
+    <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: #000;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
             overflow: hidden;
-            font-family: 'Courier New', monospace;
-        }
-
-        #stream-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             height: 100vh;
-            opacity: 0;
-            transition: opacity 1s;
         }
 
-        #video-stream {
+        #video-container {
             width: 100%;
             height: 100%;
-            object-fit: contain;
-            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
         }
 
-        #splash {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
-            display: flex;
+        #stream-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
             display: none;
             background: #111;
         }
@@ -107,202 +97,143 @@
     <script type="text/javascript"
         src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script>
+        const statusEl = document.getElementById('status-text');
+        const statusOverlay = document.getElementById('status-overlay');
+        const errorOverlay = document.getElementById('error-overlay');
+        const streamImg = document.getElementById('stream-img');
 
-            console.log("✅ PeerConnection ready");
-            return peerConnection;
+        let isCasting = false;
+        let activeStreamUrl = '';
+
+        function updateStatus(text, showOverlay = true) {
+            console.log("Status Update:", text);
+            statusEl.innerText = text;
+            statusOverlay.style.display = showOverlay ? 'block' : 'none';
         }
 
-        async function handleOffer(offer) {
-            console.log("📥 Received WebRTC offer");
-
-            if (!peerConnection) {
-                setupPeerConnection();
-            }
-
-            try {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-                console.log("✅ Remote description set");
-
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                console.log("✅ Created answer, sending back...");
-
-                // Send answer back to sender
-                if (context && context.sendCustomMessage) {
-                    context.sendCustomMessage('urn:x-cast:com.nowmultimedia.webrtc', undefined, {
-                        type: 'answer',
-                        answer: peerConnection.localDescription
-                    });
-                }
-
-                statusText.textContent = '🔗 CONNECTING...';
-            } catch (e) {
-                console.error("❌ Error handling offer:", e);
-            }
+        function showError(text) {
+            console.error("Error:", text);
+            document.getElementById('error-text').innerText = text;
+            errorOverlay.style.display = 'block';
+            statusOverlay.style.display = 'none';
         }
 
-        async function handleIceCandidate(candidate) {
-            if (peerConnection && candidate) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                    console.log("🧊 Added ICE candidate");
-                } catch (e) {
-                    console.error("❌ Error adding ICE candidate:", e);
-                }
-            }
-        }
+        // Probing Logic
+        async function probeForStream() {
+            updateStatus("DETECTING STUDIO SERVER...");
 
-        // ==========================================
-        // CUSTOM MESSAGE LISTENER (WebRTC Signaling)
-        // ==========================================
-        if (context) {
-            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (event) => {
-                console.log("📩 WebRTC message received:", event.data?.type || 'unknown');
-
-                const data = event.data;
-
-                if (data.type === 'offer') {
-                    handleOffer(data.offer);
-                } else if (data.type === 'ice-candidate') {
-                    handleIceCandidate(data.candidate);
-                } else if (data.type === 'ping') {
-                    console.log("🏓 Ping received, connection test OK");
-                    statusText.textContent = '📡 SENDER CONNECTED';
-                }
-            });
-        }
-
-        // ==========================================
-        // FALLBACK: Frame Polling for Legacy Mode
-        // ==========================================
-        let isPolling = false;
-        let frameInterval = null;
-        let frameNumber = 0;
-        const imgEl = document.createElement('img');
-        imgEl.style.cssText = 'width:100%;height:100%;object-fit:contain;';
-
-        function startFramePolling(baseUrl) {
-            if (isPolling) return;
-            isPolling = true;
-            console.log("📺 Starting Frame Polling (legacy mode):", baseUrl);
-
-            if (frameInterval) clearInterval(frameInterval);
-
-            // Replace video with img for frame polling
-            container.innerHTML = '';
-            container.appendChild(imgEl);
-
-            let targetUrl = baseUrl.split('?')[0].replace('/stream.mjpeg', '/screen.jpg');
-
-            statusText.textContent = 'STUDIO CONNECTED (Legacy)';
-            splash.classList.add('hidden');
-            container.style.opacity = '1';
-
-            frameInterval = setInterval(() => {
-                frameNumber++;
-                imgEl.src = `${targetUrl}?frame=${frameNumber}&t=${Date.now()}`;
-            }, 100);
-
-            setTimeout(() => { statusText.parentElement.classList.add('hidden'); }, 5000);
-        }
-
-        // ==========================================
-        // LOAD Message Handler (Legacy fallback)
-        // ==========================================
-        if (playerManager && typeof cast !== 'undefined') {
-            playerManager.setMessageInterceptor(
-                cast.framework.messages.MessageType.LOAD,
-                loadData => {
-                    console.log('📼 Intercepted LOAD request');
-                    if (loadData.media && loadData.media.contentId) {
-                        console.log('📼 LOAD ContentID:', loadData.media.contentId);
-                        // Stop any existing polling and start new one
-                        if (frameInterval) clearInterval(frameInterval);
-                        startFramePolling(loadData.media.contentId);
-                        statusText.textContent = '📡 STREAM LOADED';
-                        return null;
-                    }
-                    return loadData;
-                }
-            );
-        }
-
-        // ==========================================
-        // AUTO-PROBE: Find stream server since LOAD may not be sent
-        // ==========================================
-        function probeForStream() {
-            console.log("🔍 Starting network probe for stream server...");
-            statusText.textContent = '🔍 SEARCHING FOR STUDIO...';
-
-            const ips = [
-                '192.168.1.8', '192.168.1.7', '192.168.1.6', '192.168.1.1',
-                '192.168.0.1', '192.168.0.100', '192.168.1.100',
-                '10.0.0.1', '10.0.0.2', '10.0.1.1'
+            // Hardcoded common developer IPs for faster discovery
+            const candidates = [
+                'http://localhost:8089',
+                'http://127.0.0.1:8089',
+                'http://192.168.1.2:8089',
+                'http://192.168.1.3:8089',
+                'http://192.168.1.4:8089',
+                'http://192.168.1.5:8089',
+                'http://192.168.1.6:8089',
+                'http://192.168.1.7:8089',
+                'http://192.168.1.8:8089',
+                'http://192.168.1.9:8089',
+                'http://192.168.1.10:8089',
+                'http://192.168.1.20:8089',
+                'http://192.168.1.100:8089',
+                'http://10.0.0.1:8089',
+                'http://10.0.0.2:8089',
+                'http://10.0.0.5:8089',
+                'http://10.0.0.10:8089'
             ];
-            const ports = [8089, 8088, 8090, 52524, 52525, 52526];
 
-            let found = false;
-            let pendingProbes = 0;
+            for (const base of candidates) {
+                const url = base + '/screen.jpg?probe=' + Date.now();
+                console.log("Probing:", url);
 
-            // Use Image element for probing - bypasses CORS and detects real errors
-            for (const ip of ips) {
-                for (const port of ports) {
-                    if (found) return;
-                    pendingProbes++;
+                try {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 1500);
 
-                    const probeImg = new Image();
-                    const url = `http://${ip}:${port}/screen.jpg?probe=1&t=${Date.now()}`;
-
-                    probeImg.onload = () => {
-                        if (found) return;
-                        found = true;
-                        console.log("✅ PROBE SUCCESS: " + url);
-                        startFramePolling(`http://${ip}:${port}/screen.jpg`);
-                    };
-                    probeImg.onerror = () => {
-                        console.log("❌ PROBE FAILED: " + url);
-                        pendingProbes--;
-                        if (pendingProbes <= 0 && !found) {
-                            console.log("❌ All probes finished, none succeeded.");
-                            statusText.textContent = 'STUDIO NOT FOUND (RETRYING...)';
+                    const response = await fetch(url, {
+                        mode: 'cors',
+                        signal: controller.signal,
+                        headers: {
+                            'Access-Control-Request-Private-Network': 'true'
                         }
-                    };
+                    });
 
-                    probeImg.src = url;
-                    console.log(`Probing: ${url}`);
+                    clearTimeout(timeout);
 
-                    // Timeout for each probe
-                    setTimeout(() => {
-                        if (!found) {
-                            probeImg.src = ''; // Cancel loading
-                            pendingProbes--;
-                            if (pendingProbes <= 0 && !found) {
-                                statusText.textContent = '❌ STUDIO NOT FOUND';
+                    if (response.ok) {
+                        console.log("✅ STUDIO FOUND AT:", base);
+                        startLiveStream(base + '/stream.mjpeg');
+                        return;
+                    }
+                } catch (e) {
+                    console.warn("Probe failed for", base, e);
+                }
+            }
+
+            updateStatus("SEARCHING... (PNA PROBE)", true);
+            setTimeout(probeForStream, 5000);
+        }
+
+        function startLiveStream(url) {
+            console.log("🎬 Starting Live Stream:", url);
+            activeStreamUrl = url;
+            isCasting = true;
+
+            updateStatus("CONNECTING TO STREAM...", true);
+
+            streamImg.src = url;
+            streamImg.style.display = 'block';
+            statusOverlay.style.display = 'none';
+            errorOverlay.style.display = 'none';
+
+            streamImg.onload = () => {
+                console.log("✅ Stream Image Loaded");
+            };
+
+            streamImg.onerror = () => {
+                console.error("❌ Stream Connection Error");
+                showError("STREAM CONNECTION LOST");
+                setTimeout(probeForStream, 5000);
+            };
+        }
+
+        // Cast SDK Initialization
+        window.onload = function () {
+            try {
+                const context = cast.framework.CastReceiverContext.getInstance();
+                const playerManager = context.getPlayerManager();
+
+                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
+                    console.log("Message received:", event);
+                });
+
+                playerManager.setMessageInterceptor(
+                    cast.framework.messages.MessageType.LOAD,
+                    loadRequestData => {
+                        console.log("LOAD Interceptor:", loadRequestData);
+                        if (loadRequestData.media && loadRequestData.media.contentId) {
+                            const url = loadRequestData.media.contentId;
+                            if (url.includes('stream.mjpeg')) {
+                                startLiveStream(url);
                             }
                         }
-                    }, 3000);
-                }
-            }
-        }
+                        return loadRequestData;
+                    }
+                );
 
-        // ==========================================
-        // START RECEIVER
-        // ==========================================
-        if (context) {
-            console.log('🎬 Starting Cast Receiver Context...');
-            context.start();
-            console.log('✅ Cast Receiver started');
-        } else {
-            console.log('🎬 Running in standalone mode (no Cast SDK)');
-        }
+                const options = new cast.framework.CastReceiverOptions();
+                options.maxInactivity = 3600; // 1 hour
 
-        // Start probing after 2 seconds (give LOAD message a chance first)
-        setTimeout(() => {
-            if (!frameInterval) {
-                console.log('⏰ Auto-starting probe...');
-                probeForStream();
+                context.start(options);
+                console.log("✅ Cast Receiver Context Started");
+            } catch (e) {
+                console.warn("Cast SDK init failed (standalone mode):", e);
             }
-        }, 2000);
+
+            // Start Probing
+            probeForStream();
+        };
     </script>
 </body>
 
