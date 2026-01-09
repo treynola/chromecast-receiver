@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Cast Receiver v6.3</title>
+    <title>MXS-004 Cast Receiver v6.4</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
@@ -34,6 +34,7 @@
             object-fit: contain;
             display: none;
             background: #111;
+            image-rendering: -webkit-optimize-contrast;
         }
 
         #audio-player {
@@ -113,6 +114,17 @@
             font-size: 10px;
             opacity: 0.3;
         }
+
+        #log-overlay {
+            position: absolute;
+            bottom: 40px;
+            left: 10px;
+            font-size: 10px;
+            color: #666;
+            width: 300px;
+            max-height: 100px;
+            overflow: hidden;
+        }
     </style>
 </head>
 
@@ -131,12 +143,13 @@
         </div>
 
         <div id="error-overlay" class="overlay">
-            <div class="status-title">CONNECTION FAILED</div>
-            <div id="error-msg" class="status-msg">Studio server not found</div>
-            <button style="margin-top:20px; padding:10px 20px;" onclick="location.reload()">RETRY</button>
+            <div class="status-title">STREAM INTERRUPTED</div>
+            <div id="error-msg" class="status-msg">Check Studio connection</div>
+            <button style="margin-top:20px; padding:10px 20px;" onclick="location.reload()">RECONNECT</button>
         </div>
 
-        <div class="version-tag">Receiver v6.3 (Audio Fix)</div>
+        <div id="log-overlay"></div>
+        <div class="version-tag">Receiver v6.4 (Connect Fix)</div>
     </div>
 
     <script>
@@ -146,19 +159,28 @@
         const statusMsg = document.getElementById('status-msg');
         const unmuteOverlay = document.getElementById('unmute-overlay');
         const errorOverlay = document.getElementById('error-overlay');
+        const logOverlay = document.getElementById('log-overlay');
 
         let isCasting = false;
         let activeBaseUrl = '';
-        const VERSION = "v6.3";
+        const VERSION = "v6.4";
+
+        function addLog(msg) {
+            const div = document.createElement('div');
+            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logOverlay.prepend(div);
+            if (logOverlay.children.length > 5) logOverlay.removeChild(logOverlay.lastChild);
+            console.log(msg);
+        }
 
         function updateStatus(msg) {
-            console.log("Status:", msg);
             statusMsg.innerText = msg;
+            addLog(msg);
         }
 
         function startStream(baseUrl) {
             if (isCasting && activeBaseUrl === baseUrl) return;
-            console.log("🚀 Starting Optimized Stream from:", baseUrl);
+            addLog("🚀 Connecting to: " + baseUrl);
             activeBaseUrl = baseUrl;
             isCasting = true;
 
@@ -172,16 +194,15 @@
             // 2. AUDIO (WAV)
             audioPlayer.src = baseUrl + "/audio.wav?t=" + Date.now();
             audioPlayer.play().then(() => {
-                console.log("✅ Audio playing");
+                addLog("✅ Audio playing");
                 unmuteOverlay.style.display = 'none';
             }).catch(err => {
-                console.warn("❌ Audio blocked:", err);
+                addLog("⚠️ Audio blocked");
                 unmuteOverlay.style.display = 'block';
             });
 
-            // Failsafe: If image doesn't load/stalls, try re-probing
             streamImg.onerror = () => {
-                console.error("Video stream error");
+                addLog("❌ Video feed failed");
                 isCasting = false;
                 errorOverlay.style.display = 'block';
             };
@@ -197,13 +218,12 @@
             if (isCasting) return;
             updateStatus("DETECTING STUDIO SERVER...");
 
+            // Priority subnets
             const subnets = ['192.168.1', '192.168.0', '10.0.0'];
             const candidates = [];
             for (const sn of subnets) {
-                for (let i = 2; i < 20; i++) candidates.push(`http://${sn}.${i}:8089`);
+                for (let i = 2; i < 30; i++) candidates.push(`http://${sn}.${i}:8089`);
             }
-
-            console.log(`Probing ${candidates.length} candidates...`);
 
             for (const url of candidates) {
                 if (isCasting) return;
@@ -213,10 +233,10 @@
                         img.onload = () => res(true);
                         img.onerror = () => res(false);
                         img.src = url + "/screen.jpg?p=" + Date.now();
-                        setTimeout(() => res(false), 500); // Fast probe
+                        setTimeout(() => { img.src = ""; res(false); }, 1500); // 1.5s timeout
                     });
                     if (success) {
-                        console.log("✅ Found Studio at:", url);
+                        addLog("✅ Found Studio!");
                         startStream(url);
                         return;
                     }
@@ -226,20 +246,38 @@
         }
 
         window.onload = () => {
-            console.log(`Receiver v6.3 Ready`);
+            addLog(`v${VERSION} Ready`);
 
             try {
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const playerManager = context.getPlayerManager();
 
-                // Direct URL via custom message
-                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.stream', (event) => {
-                    if (event.data && event.data.url) startStream(event.data.url);
+                // Direct URL via custom message from App
+                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
+                    addLog("📩 Custom Msg: " + JSON.stringify(event.data));
+                    if (event.data && event.data.stream_url) startStream(event.data.stream_url);
                 });
+
+                // Intercept Media LOAD messages (Standard SDK flow)
+                playerManager.setMessageInterceptor(
+                    cast.framework.messages.MessageType.LOAD,
+                    loadRequestData => {
+                        addLog("📥 LOAD message received");
+                        if (loadRequestData.media && loadRequestData.media.contentId) {
+                            const url = loadRequestData.media.contentId;
+                            // Extract base URL if it's a direct stream link
+                            if (url.includes(':8089')) {
+                                const baseUrl = url.split('/stream.mjpeg')[0];
+                                startStream(baseUrl);
+                            }
+                        }
+                        return loadRequestData;
+                    }
+                );
 
                 context.start();
             } catch (e) {
-                console.warn("SDK Standalone Mode");
+                addLog("⚠️ SDK Standalone");
             }
 
             setTimeout(probeServers, 1000);
