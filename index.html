@@ -2,13 +2,13 @@
 <html>
 
 <head>
-    <title>NOWMULTIMEDIA MXS-004 Receiver v6.1</title>
+    <title>MXS-004 Cast Receiver v6.2</title>
     <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: #000;
+            background: #000;
             color: #fff;
             font-family: 'Inter', sans-serif;
             overflow: hidden;
@@ -16,9 +16,10 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            width: 100vw;
         }
 
-        #video-container {
+        #stream-container {
             width: 100%;
             height: 100%;
             display: flex;
@@ -80,160 +81,159 @@
     <div id="video-container">
         <img id="stream-img" alt="Live Stream">
 
-        <div id="status-overlay" class="overlay">
-            <div class="status">NOWMULTIMEDIA MXS-004</div>
-            <div id="status-text" class="sub-status">INITIALIZING...</div>
+        <div id="stream-container">
+            <img id="stream-img" src="" alt="Live Stream">
+            <audio id="audio-player" preload="none"></audio>
+
+            <div id="status-overlay">
+                <h1 id="status-text">INITIALIZING...</h1>
+                <p id="version-text">MXS-004 v6.2</p>
+            </div>
+
+            <div id="error-overlay" style="display:none">
+                <h1>STREAM ERROR</h1>
+                <p id="error-msg">Connection lost</p>
+                <button onclick="location.reload()">RETRY</button>
+            </div>
         </div>
 
-        <div id="error-overlay" class="overlay">
-            <div class="status">STREAM ERROR</div>
-            <div id="error-text" class="sub-status">CONNECTION FAILED</div>
-            <div style="margin-top: 15px; font-size: 12px;">Ensure app is running and on same network.</div>
-        </div>
-    </div>
+        <script type="text/javascript"
+            src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+        <script>
+            const streamImg = document.getElementById('stream-img');
+            const audioPlayer = document.getElementById('audio-player');
+            const statusOverlay = document.getElementById('status-overlay');
+            const statusText = document.getElementById('status-text');
+            const errorOverlay = document.getElementById('error-overlay');
+            const errorMsg = document.getElementById('error-msg');
 
-    <div class="version">Receiver v6.1 (Mixed-Content Fix)</div>
+            let isCasting = false;
+            let activeStreamUrl = '';
+            const VERSION = "v6.2";
 
-    <script type="text/javascript"
-        src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <script>
-        const statusEl = document.getElementById('status-text');
-        const statusOverlay = document.getElementById('status-overlay');
-        const errorOverlay = document.getElementById('error-overlay');
-        const streamImg = document.getElementById('stream-img');
-
-        let isCasting = false;
-        let activeStreamUrl = '';
-        const VERSION = "v6.1";
-
-        function updateStatus(text, showOverlay = true) {
-            console.log("Status Update:", text);
-            statusEl.innerText = text;
-            statusOverlay.style.display = showOverlay ? 'block' : 'none';
-        }
-
-        function showError(text) {
-            console.error("Error:", text);
-            document.getElementById('error-text').innerText = text;
-            errorOverlay.style.display = 'block';
-            statusOverlay.style.display = 'none';
-        }
-
-        // Probing Logic - REVERTING TO IMAGE PROBING to bypass HTTPS Mixed Content fetch block
-        async function probeForStream() {
-            if (isCasting) return;
-            updateStatus("DETECTING STUDIO SERVER (" + VERSION + ")...");
-
-            // Generate candidates
-            const candidates = [];
-
-            // 1. Try common subnets
-            const subnets = ['192.168.1', '192.168.0', '10.0.0'];
-            for (const subnet of subnets) {
-                // Probable sender IPs (usually low numbers or .100+)
-                for (let i = 2; i < 20; i++) candidates.push(`http://${subnet}.${i}:8089`);
-                for (let i = 100; i < 110; i++) candidates.push(`http://${subnet}.${i}:8089`);
+            function updateStatus(text, showSpinner = false) {
+                console.log("Status Update:", text, `(${VERSION})`);
+                statusText.innerText = text;
             }
 
-            // 2. Fallbacks
-            candidates.push('http://localhost:8089', 'http://127.0.0.1:8089');
+            function showError(msg) {
+                console.error("Show Error:", msg);
+                errorMsg.innerText = msg;
+                errorOverlay.style.display = 'flex';
+                statusOverlay.style.display = 'none';
+            }
 
-            console.log("🔍 Probing " + candidates.length + " candidates using Image object...");
+            function startLiveStream(baseUrl) {
+                if (isCasting && activeStreamUrl === baseUrl) return;
+                console.log("🎬 Starting Live Unity Stream:", baseUrl);
+                activeStreamUrl = baseUrl;
+                isCasting = true;
 
-            for (const base of candidates) {
-                if (isCasting) return;
-                const url = base + '/screen.jpg?probe=' + Date.now();
+                updateStatus("CONNECTING TO STREAM...", true);
 
-                try {
-                    const success = await new Promise((resolve) => {
+                // Start Video
+                streamImg.src = baseUrl + "/stream.mjpeg?ts=" + Date.now();
+                streamImg.style.display = 'block';
+
+                // Start Audio
+                audioPlayer.src = baseUrl + "/audio.wav?ts=" + Date.now();
+                audioPlayer.play().then(() => {
+                    console.log("🔊 Audio stream started");
+                }).catch(e => {
+                    console.warn("⚠️ Audio autoplay blocked or failed:", e);
+                    // On some TVs, we might need a user interaction, but TVs usually allow autoplay
+                });
+
+                statusOverlay.style.display = 'none';
+                errorOverlay.style.display = 'none';
+            }
+
+            async function probeForStream() {
+                updateStatus("DETECTING STUDIO SERVER...");
+
+                // Generate candidates
+                const candidates = [];
+                for (let i = 2; i < 20; i++) {
+                    candidates.push(`http://192.168.1.${i}:8089`);
+                    candidates.push(`http://192.168.1.${i}:8088`);
+                }
+                // Add common subnets
+                for (let i = 2; i < 20; i++) {
+                    candidates.push(`http://192.168.0.${i}:8089`);
+                }
+
+                console.log(`🔍 Probing ${candidates.length} candidates using Image object...`);
+
+                const probePromises = candidates.map(url => {
+                    return new Promise((resolve) => {
                         const img = new Image();
-                        img.onload = () => resolve(true);
+                        img.onload = () => {
+                            console.log("✅ STUDIO FOUND AT:", url);
+                            startLiveStream(url);
+                            resolve(true);
+                        };
                         img.onerror = () => resolve(false);
-                        img.src = url;
-                        setTimeout(() => resolve(false), 800); // 800ms timeout per probe
-                    });
+                        // Use screen.jpg for probing
+                        img.src = `${url}/screen.jpg?probe=${Date.now()}`;
 
-                    if (success) {
-                        console.log("✅ STUDIO FOUND AT:", base);
-                        startLiveStream(base + '/stream.mjpeg');
-                        return;
-                    }
-                } catch (e) {
-                    console.warn("Probe failed for", base, e);
+                        // Timeout probe
+                        setTimeout(() => {
+                            img.src = "";
+                            resolve(false);
+                        }, 3000);
+                    });
+                });
+
+                const results = await Promise.all(probePromises);
+                if (!results.some(r => r === true) && !isCasting) {
+                    updateStatus("SERVER NOT FOUND. RETRYING...");
+                    setTimeout(probeForStream, 5000);
                 }
             }
 
-            updateStatus("SEARCHING... (PNA IMAGE PROBE)", true);
-            setTimeout(probeForStream, 5000);
-        }
+            window.onload = () => {
+                console.log(`✅ Cast Receiver started (${VERSION})`);
 
-        function startLiveStream(url) {
-            if (isCasting && activeStreamUrl === url) return;
-            console.log("🎬 Starting Live Stream:", url);
-            activeStreamUrl = url;
-            isCasting = true;
+                try {
+                    const context = cast.framework.CastReceiverContext.getInstance();
+                    const playerManager = context.getPlayerManager();
 
-            updateStatus("CONNECTING TO STREAM...", true);
-
-            streamImg.src = url;
-            streamImg.style.display = 'block';
-            statusOverlay.style.display = 'none';
-            errorOverlay.style.display = 'none';
-
-            streamImg.onload = () => {
-                console.log("✅ Stream Image Initialized");
-            };
-
-            streamImg.onerror = () => {
-                console.error("❌ Stream Connection Error");
-                isCasting = false;
-                showError("STREAM CONNECTION LOST");
-                setTimeout(probeForStream, 5000);
-            };
-        }
-
-        // Initialize Cast Receiver
-        window.onload = function () {
-            try {
-                const context = cast.framework.CastReceiverContext.getInstance();
-                const playerManager = context.getPlayerManager();
-
-                // Listen for custom messages from sender
-                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-                    console.log("📩 Custom Message:", event.data);
-                    if (event.data && event.data.stream_url) {
-                        startLiveStream(event.data.stream_url);
-                    }
-                });
-
-                // Intercept Media LOAD messages
-                playerManager.setMessageInterceptor(
-                    cast.framework.messages.MessageType.LOAD,
-                    loadRequestData => {
-                        console.log("📥 LOAD message intercepted:", loadRequestData);
-                        if (loadRequestData.media && loadRequestData.media.contentId) {
-                            const url = loadRequestData.media.contentId;
-                            if (url.includes('stream.mjpeg') || url.includes(':8089')) {
-                                startLiveStream(url);
-                            }
+                    // Listen for custom messages from sender
+                    context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
+                        console.log("📩 Custom Message:", event.data);
+                        if (event.data && event.data.stream_url) {
+                            startLiveStream(event.data.stream_url);
                         }
-                        return loadRequestData;
-                    }
-                );
+                    });
 
-                const options = new cast.framework.CastReceiverOptions();
-                options.maxInactivity = 3600;
+                    // Intercept Media LOAD messages
+                    playerManager.setMessageInterceptor(
+                        cast.framework.messages.MessageType.LOAD,
+                        loadRequestData => {
+                            console.log("📥 LOAD message intercepted:", loadRequestData);
+                            if (loadRequestData.media && loadRequestData.media.contentId) {
+                                const url = loadRequestData.media.contentId;
+                                if (url.includes('stream.mjpeg') || url.includes(':8089')) {
+                                    startLiveStream(url);
+                                }
+                            }
+                            return loadRequestData;
+                        }
+                    );
 
-                context.start(options);
-                console.log("✅ Cast Receiver started (" + VERSION + ")");
-            } catch (e) {
-                console.warn("Cast SDK init failed (standalone mode):", e);
-            }
+                    const options = new cast.framework.CastReceiverOptions();
+                    options.maxInactivity = 3600;
 
-            // Start fallback probe
-            probeForStream();
-        };
-    </script>
+                    context.start(options);
+                    console.log("✅ Cast Receiver started (" + VERSION + ")");
+                } catch (e) {
+                    console.warn("Cast SDK init failed (standalone mode):", e);
+                }
+
+                // Start fallback probe
+                probeForStream();
+            };
+        </script>
 </body>
 
 </html>
