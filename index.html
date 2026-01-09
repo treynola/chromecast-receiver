@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Cast Receiver v6.4</title>
+    <title>MXS-004 Cast Receiver v6.5</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
@@ -43,7 +43,7 @@
 
         .overlay {
             position: absolute;
-            background: rgba(0, 0, 0, 0.85);
+            background: rgba(0, 0, 0, 0.9);
             padding: 30px;
             border-radius: 15px;
             border: 2px solid #b38600;
@@ -98,13 +98,16 @@
             }
         }
 
-        #error-overlay {
-            display: none;
-            border-color: #ff4444;
-        }
-
-        #error-overlay .status-title {
-            color: #ff4444;
+        #log-overlay {
+            position: absolute;
+            bottom: 40px;
+            left: 10px;
+            font-size: 10px;
+            color: #888;
+            width: 400px;
+            max-height: 150px;
+            overflow: hidden;
+            text-align: left;
         }
 
         .version-tag {
@@ -115,15 +118,16 @@
             opacity: 0.3;
         }
 
-        #log-overlay {
+        #mixed-content-warning {
             position: absolute;
-            bottom: 40px;
+            top: 10px;
             left: 10px;
-            font-size: 10px;
-            color: #666;
-            width: 300px;
-            max-height: 100px;
-            overflow: hidden;
+            color: #ff4444;
+            font-size: 12px;
+            display: none;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
         }
     </style>
 </head>
@@ -132,64 +136,52 @@
     <div id="main-container">
         <img id="stream-img" alt="Studio Feed">
         <audio id="audio-player"></audio>
-
-        <div id="unmute-overlay" onclick="unmuteAudio()">
-            CLICK TO ENABLE AUDIO 🔊
-        </div>
-
+        <div id="unmute-overlay" onclick="unmuteAudio()">CLICK TO ENABLE AUDIO 🔊</div>
+        <div id="mixed-content-warning">⚠️ MIXED CONTENT DETECTED. AUDIO MAY BE BLOCKED.</div>
         <div id="status-overlay" class="overlay">
             <div class="status-title">MXS-004 STUDIO</div>
-            <div id="status-msg" class="status-msg">INITIALIZING RECEIVER...</div>
+            <div id="status-msg" class="status-msg">v6.5 READY</div>
         </div>
-
-        <div id="error-overlay" class="overlay">
-            <div class="status-title">STREAM INTERRUPTED</div>
-            <div id="error-msg" class="status-msg">Check Studio connection</div>
-            <button style="margin-top:20px; padding:10px 20px;" onclick="location.reload()">RECONNECT</button>
-        </div>
-
         <div id="log-overlay"></div>
-        <div class="version-tag">Receiver v6.4 (Connect Fix)</div>
+        <div class="version-tag">Receiver v6.5 (Multi-Monitor Fix)</div>
     </div>
-
     <script>
         const streamImg = document.getElementById('stream-img');
         const audioPlayer = document.getElementById('audio-player');
         const statusOverlay = document.getElementById('status-overlay');
         const statusMsg = document.getElementById('status-msg');
         const unmuteOverlay = document.getElementById('unmute-overlay');
-        const errorOverlay = document.getElementById('error-overlay');
         const logOverlay = document.getElementById('log-overlay');
-
+        const mixedWarning = document.getElementById('mixed-content-warning');
+        
         let isCasting = false;
         let activeBaseUrl = '';
-        const VERSION = "v6.4";
+        const VERSION = "v6.5";
 
         function addLog(msg) {
             const div = document.createElement('div');
             div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
             logOverlay.prepend(div);
-            if (logOverlay.children.length > 5) logOverlay.removeChild(logOverlay.lastChild);
+            if (logOverlay.children.length > 8) logOverlay.removeChild(logOverlay.lastChild);
             console.log(msg);
         }
 
-        function updateStatus(msg) {
-            statusMsg.innerText = msg;
-            addLog(msg);
+        if (location.protocol === 'https:') {
+            mixedWarning.style.display = 'block';
+            addLog("⚠️ Running over HTTPS - Mixed Content active");
         }
 
         function startStream(baseUrl) {
             if (isCasting && activeBaseUrl === baseUrl) return;
-            addLog("🚀 Connecting to: " + baseUrl);
+            addLog("🚀 Connection Request: " + baseUrl);
             activeBaseUrl = baseUrl;
             isCasting = true;
-
             statusOverlay.style.display = 'none';
-            errorOverlay.style.display = 'none';
 
             // 1. VIDEO (MJPEG)
             streamImg.src = baseUrl + "/stream.mjpeg?t=" + Date.now();
             streamImg.style.display = 'block';
+            addLog("🎞️ Video Stream Started");
 
             // 2. AUDIO (WAV)
             audioPlayer.src = baseUrl + "/audio.wav?t=" + Date.now();
@@ -197,34 +189,34 @@
                 addLog("✅ Audio playing");
                 unmuteOverlay.style.display = 'none';
             }).catch(err => {
-                addLog("⚠️ Audio blocked");
+                addLog("⚠️ Audio Autoplay Blocked");
                 unmuteOverlay.style.display = 'block';
             });
 
             streamImg.onerror = () => {
-                addLog("❌ Video feed failed");
+                addLog("❌ Video feed failed - Retrying in 3s");
                 isCasting = false;
-                errorOverlay.style.display = 'block';
+                setTimeout(() => startStream(baseUrl), 3000);
             };
         }
 
         function unmuteAudio() {
             audioPlayer.play().then(() => {
+                addLog("✅ Audio unmuted");
                 unmuteOverlay.style.display = 'none';
             });
         }
 
         async function probeServers() {
             if (isCasting) return;
-            updateStatus("DETECTING STUDIO SERVER...");
-
-            // Priority subnets
+            statusMsg.innerText = "DETECTING STUDIO...";
+            
             const subnets = ['192.168.1', '192.168.0', '10.0.0'];
             const candidates = [];
             for (const sn of subnets) {
-                for (let i = 2; i < 30; i++) candidates.push(`http://${sn}.${i}:8089`);
+                for (let i = 2; i < 40; i++) candidates.push(`http://${sn}.${i}:8089`);
             }
-
+            
             for (const url of candidates) {
                 if (isCasting) return;
                 try {
@@ -233,53 +225,44 @@
                         img.onload = () => res(true);
                         img.onerror = () => res(false);
                         img.src = url + "/screen.jpg?p=" + Date.now();
-                        setTimeout(() => { img.src = ""; res(false); }, 1500); // 1.5s timeout
+                        setTimeout(() => { img.src = ""; res(false); }, 1000); // 1s timeout
                     });
                     if (success) {
-                        addLog("✅ Found Studio!");
+                        addLog("🎯 Studio Found: " + url);
                         startStream(url);
                         return;
                     }
-                } catch (e) { }
+                } catch(e) {}
             }
-            setTimeout(probeServers, 3000);
+            setTimeout(probeServers, 2000);
         }
 
         window.onload = () => {
-            addLog(`v${VERSION} Ready`);
-
+            addLog(`v${VERSION} Initialized`);
             try {
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const playerManager = context.getPlayerManager();
-
-                // Direct URL via custom message from App
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-                    addLog("📩 Custom Msg: " + JSON.stringify(event.data));
-                    if (event.data && event.data.stream_url) startStream(event.data.stream_url);
-                });
-
-                // Intercept Media LOAD messages (Standard SDK flow)
-                playerManager.setMessageInterceptor(
-                    cast.framework.messages.MessageType.LOAD,
-                    loadRequestData => {
-                        addLog("📥 LOAD message received");
-                        if (loadRequestData.media && loadRequestData.media.contentId) {
-                            const url = loadRequestData.media.contentId;
-                            // Extract base URL if it's a direct stream link
-                            if (url.includes(':8089')) {
-                                const baseUrl = url.split('/stream.mjpeg')[0];
-                                startStream(baseUrl);
-                            }
-                        }
-                        return loadRequestData;
+                    addLog("📩 Cast Msg: " + JSON.stringify(event.data));
+                    if (event.data && event.data.stream_url) {
+                        const baseUrl = event.data.stream_url.split('/stream.mjpeg')[0];
+                        startStream(baseUrl);
                     }
-                );
-
+                });
+                playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, data => {
+                    addLog("📥 LOAD req received");
+                    if (data.media && data.media.contentId) {
+                        const url = data.media.contentId;
+                        if (url.includes(':8089')) {
+                            const baseUrl = url.split('/stream.mjpeg')[0];
+                            startStream(baseUrl);
+                        }
+                    }
+                    return data;
+                });
                 context.start();
-            } catch (e) {
-                addLog("⚠️ SDK Standalone");
-            }
-
+                addLog("✅ Cast SDK Started");
+            } catch (e) { addLog("⚠️ SDK Standalone"); }
             setTimeout(probeServers, 1000);
         };
     </script>
