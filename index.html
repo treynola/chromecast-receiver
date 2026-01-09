@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>NOWMULTIMEDIA MXS-004 Receiver v6.0</title>
+    <title>NOWMULTIMEDIA MXS-004 Receiver v6.1</title>
     <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     <style>
         body {
@@ -92,7 +92,7 @@
         </div>
     </div>
 
-    <div class="version">Receiver v6.0 (PNA Hardened)</div>
+    <div class="version">Receiver v6.1 (Mixed-Content Fix)</div>
 
     <script type="text/javascript"
         src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -104,6 +104,7 @@
 
         let isCasting = false;
         let activeStreamUrl = '';
+        const VERSION = "v6.1";
 
         function updateStatus(text, showOverlay = true) {
             console.log("Status Update:", text);
@@ -118,50 +119,41 @@
             statusOverlay.style.display = 'none';
         }
 
-        // Probing Logic
+        // Probing Logic - REVERTING TO IMAGE PROBING to bypass HTTPS Mixed Content fetch block
         async function probeForStream() {
-            updateStatus("DETECTING STUDIO SERVER...");
+            if (isCasting) return;
+            updateStatus("DETECTING STUDIO SERVER (" + VERSION + ")...");
 
-            // Hardcoded common developer IPs for faster discovery
-            const candidates = [
-                'http://localhost:8089',
-                'http://127.0.0.1:8089',
-                'http://192.168.1.2:8089',
-                'http://192.168.1.3:8089',
-                'http://192.168.1.4:8089',
-                'http://192.168.1.5:8089',
-                'http://192.168.1.6:8089',
-                'http://192.168.1.7:8089',
-                'http://192.168.1.8:8089',
-                'http://192.168.1.9:8089',
-                'http://192.168.1.10:8089',
-                'http://192.168.1.20:8089',
-                'http://192.168.1.100:8089',
-                'http://10.0.0.1:8089',
-                'http://10.0.0.2:8089',
-                'http://10.0.0.5:8089',
-                'http://10.0.0.10:8089'
-            ];
+            // Generate candidates
+            const candidates = [];
+
+            // 1. Try common subnets
+            const subnets = ['192.168.1', '192.168.0', '10.0.0'];
+            for (const subnet of subnets) {
+                // Probable sender IPs (usually low numbers or .100+)
+                for (let i = 2; i < 20; i++) candidates.push(`http://${subnet}.${i}:8089`);
+                for (let i = 100; i < 110; i++) candidates.push(`http://${subnet}.${i}:8089`);
+            }
+
+            // 2. Fallbacks
+            candidates.push('http://localhost:8089', 'http://127.0.0.1:8089');
+
+            console.log("🔍 Probing " + candidates.length + " candidates using Image object...");
 
             for (const base of candidates) {
+                if (isCasting) return;
                 const url = base + '/screen.jpg?probe=' + Date.now();
-                console.log("Probing:", url);
 
                 try {
-                    const controller = new AbortController();
-                    const timeout = setTimeout(() => controller.abort(), 1500);
-
-                    const response = await fetch(url, {
-                        mode: 'cors',
-                        signal: controller.signal,
-                        headers: {
-                            'Access-Control-Request-Private-Network': 'true'
-                        }
+                    const success = await new Promise((resolve) => {
+                        const img = new Image();
+                        img.onload = () => resolve(true);
+                        img.onerror = () => resolve(false);
+                        img.src = url;
+                        setTimeout(() => resolve(false), 800); // 800ms timeout per probe
                     });
 
-                    clearTimeout(timeout);
-
-                    if (response.ok) {
+                    if (success) {
                         console.log("✅ STUDIO FOUND AT:", base);
                         startLiveStream(base + '/stream.mjpeg');
                         return;
@@ -171,11 +163,12 @@
                 }
             }
 
-            updateStatus("SEARCHING... (PNA PROBE)", true);
+            updateStatus("SEARCHING... (PNA IMAGE PROBE)", true);
             setTimeout(probeForStream, 5000);
         }
 
         function startLiveStream(url) {
+            if (isCasting && activeStreamUrl === url) return;
             console.log("🎬 Starting Live Stream:", url);
             activeStreamUrl = url;
             isCasting = true;
@@ -188,33 +181,39 @@
             errorOverlay.style.display = 'none';
 
             streamImg.onload = () => {
-                console.log("✅ Stream Image Loaded");
+                console.log("✅ Stream Image Initialized");
             };
 
             streamImg.onerror = () => {
                 console.error("❌ Stream Connection Error");
+                isCasting = false;
                 showError("STREAM CONNECTION LOST");
                 setTimeout(probeForStream, 5000);
             };
         }
 
-        // Cast SDK Initialization
+        // Initialize Cast Receiver
         window.onload = function () {
             try {
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const playerManager = context.getPlayerManager();
 
+                // Listen for custom messages from sender
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-                    console.log("Message received:", event);
+                    console.log("📩 Custom Message:", event.data);
+                    if (event.data && event.data.stream_url) {
+                        startLiveStream(event.data.stream_url);
+                    }
                 });
 
+                // Intercept Media LOAD messages
                 playerManager.setMessageInterceptor(
                     cast.framework.messages.MessageType.LOAD,
                     loadRequestData => {
-                        console.log("LOAD Interceptor:", loadRequestData);
+                        console.log("📥 LOAD message intercepted:", loadRequestData);
                         if (loadRequestData.media && loadRequestData.media.contentId) {
                             const url = loadRequestData.media.contentId;
-                            if (url.includes('stream.mjpeg')) {
+                            if (url.includes('stream.mjpeg') || url.includes(':8089')) {
                                 startLiveStream(url);
                             }
                         }
@@ -223,15 +222,15 @@
                 );
 
                 const options = new cast.framework.CastReceiverOptions();
-                options.maxInactivity = 3600; // 1 hour
+                options.maxInactivity = 3600;
 
                 context.start(options);
-                console.log("✅ Cast Receiver Context Started");
+                console.log("✅ Cast Receiver started (" + VERSION + ")");
             } catch (e) {
                 console.warn("Cast SDK init failed (standalone mode):", e);
             }
 
-            // Start Probing
+            // Start fallback probe
             probeForStream();
         };
     </script>
