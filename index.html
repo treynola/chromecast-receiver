@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Cast Receiver v6.5</title>
+    <title>MXS-004 Cast Receiver v6.6</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
@@ -33,12 +33,8 @@
             max-height: 100%;
             object-fit: contain;
             display: none;
-            background: #111;
+            background: #000;
             image-rendering: -webkit-optimize-contrast;
-        }
-
-        #audio-player {
-            display: none;
         }
 
         .overlay {
@@ -108,6 +104,7 @@
             max-height: 150px;
             overflow: hidden;
             text-align: left;
+            pointer-events: none;
         }
 
         .version-tag {
@@ -117,46 +114,31 @@
             font-size: 10px;
             opacity: 0.3;
         }
-
-        #mixed-content-warning {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #ff4444;
-            font-size: 12px;
-            display: none;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
-        }
     </style>
 </head>
 
 <body>
     <div id="main-container">
         <img id="stream-img" alt="Studio Feed">
-        <audio id="audio-player"></audio>
-        <div id="unmute-overlay" onclick="unmuteAudio()">CLICK TO ENABLE AUDIO 🔊</div>
-        <div id="mixed-content-warning">⚠️ MIXED CONTENT DETECTED. AUDIO MAY BE BLOCKED.</div>
+        <div id="unmute-overlay" onclick="resumeAudio()">CLICK TO ENABLE AUDIO 🔊</div>
         <div id="status-overlay" class="overlay">
             <div class="status-title">MXS-004 STUDIO</div>
-            <div id="status-msg" class="status-msg">v6.5 READY</div>
+            <div id="status-msg" class="status-msg">v6.6 READY</div>
         </div>
         <div id="log-overlay"></div>
-        <div class="version-tag">Receiver v6.5 (Multi-Monitor Fix)</div>
+        <div class="version-tag">Receiver v6.6 (High-Performance Sync)</div>
     </div>
     <script>
         const streamImg = document.getElementById('stream-img');
-        const audioPlayer = document.getElementById('audio-player');
         const statusOverlay = document.getElementById('status-overlay');
         const statusMsg = document.getElementById('status-msg');
         const unmuteOverlay = document.getElementById('unmute-overlay');
         const logOverlay = document.getElementById('log-overlay');
-        const mixedWarning = document.getElementById('mixed-content-warning');
         
+        const VERSION = "v6.6";
         let isCasting = false;
-        let activeBaseUrl = '';
-        const VERSION = "v6.5";
+        let audioCtx = null;
+        let nextStartTime = 0;
 
         function addLog(msg) {
             const div = document.createElement('div');
@@ -166,33 +148,68 @@
             console.log(msg);
         }
 
-        if (location.protocol === 'https:') {
-            mixedWarning.style.display = 'block';
-            addLog("⚠️ Running over HTTPS - Mixed Content active");
+        function initAudio() {
+            if (audioCtx) return;
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 44100,
+                    latencyHint: 'interactive'
+                });
+                addLog("🔊 Web Audio Context Initialized");
+                if (audioCtx.state === 'suspended') {
+                    unmuteOverlay.style.display = 'block';
+                }
+            } catch (e) {
+                addLog("❌ Audio Initialization Failed: " + e);
+            }
+        }
+
+        function resumeAudio() {
+            if (audioCtx) {
+                audioCtx.resume().then(() => {
+                    addLog("✅ Audio Resumed");
+                    unmuteOverlay.style.display = 'none';
+                });
+            }
+        }
+
+        function playAudioChunk(base64Data) {
+            if (!audioCtx || audioCtx.state !== 'running') return;
+
+            const binaryString = window.atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+            
+            // PCM16 to Float32
+            const i16 = new Int16Array(bytes.buffer);
+            const f32 = new Float32Array(i16.length);
+            for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
+
+            const buffer = audioCtx.createBuffer(1, f32.length, 44100);
+            buffer.getChannelData(0).set(f32);
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+
+            const currentTime = audioCtx.currentTime;
+            if (nextStartTime < currentTime) nextStartTime = currentTime + 0.05;
+            
+            source.start(nextStartTime);
+            nextStartTime += buffer.duration;
         }
 
         function startStream(baseUrl) {
-            if (isCasting && activeBaseUrl === baseUrl) return;
-            addLog("🚀 Connection Request: " + baseUrl);
-            activeBaseUrl = baseUrl;
+            if (isCasting) return;
+            addLog("🚀 Starting Live Stream: " + baseUrl);
             isCasting = true;
             statusOverlay.style.display = 'none';
+            initAudio();
 
-            // 1. VIDEO (MJPEG)
             streamImg.src = baseUrl + "/stream.mjpeg?t=" + Date.now();
             streamImg.style.display = 'block';
-            addLog("🎞️ Video Stream Started");
-
-            // 2. AUDIO (WAV)
-            audioPlayer.src = baseUrl + "/audio.wav?t=" + Date.now();
-            audioPlayer.play().then(() => {
-                addLog("✅ Audio playing");
-                unmuteOverlay.style.display = 'none';
-            }).catch(err => {
-                addLog("⚠️ Audio Autoplay Blocked");
-                unmuteOverlay.style.display = 'block';
-            });
-
+            
             streamImg.onerror = () => {
                 addLog("❌ Video feed failed - Retrying in 3s");
                 isCasting = false;
@@ -200,70 +217,35 @@
             };
         }
 
-        function unmuteAudio() {
-            audioPlayer.play().then(() => {
-                addLog("✅ Audio unmuted");
-                unmuteOverlay.style.display = 'none';
-            });
-        }
-
-        async function probeServers() {
-            if (isCasting) return;
-            statusMsg.innerText = "DETECTING STUDIO...";
-            
-            const subnets = ['192.168.1', '192.168.0', '10.0.0'];
-            const candidates = [];
-            for (const sn of subnets) {
-                for (let i = 2; i < 40; i++) candidates.push(`http://${sn}.${i}:8089`);
-            }
-            
-            for (const url of candidates) {
-                if (isCasting) return;
-                try {
-                    const success = await new Promise(res => {
-                        const img = new Image();
-                        img.onload = () => res(true);
-                        img.onerror = () => res(false);
-                        img.src = url + "/screen.jpg?p=" + Date.now();
-                        setTimeout(() => { img.src = ""; res(false); }, 1000); // 1s timeout
-                    });
-                    if (success) {
-                        addLog("🎯 Studio Found: " + url);
-                        startStream(url);
-                        return;
-                    }
-                } catch(e) {}
-            }
-            setTimeout(probeServers, 2000);
-        }
-
         window.onload = () => {
             addLog(`v${VERSION} Initialized`);
             try {
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const playerManager = context.getPlayerManager();
+                
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-                    addLog("📩 Cast Msg: " + JSON.stringify(event.data));
-                    if (event.data && event.data.stream_url) {
+                    if (!event.data) return;
+                    
+                    if (event.data.type === 'audio_chunk') {
+                        playAudioChunk(event.data.data);
+                    } else if (event.data.stream_url) {
                         const baseUrl = event.data.stream_url.split('/stream.mjpeg')[0];
                         startStream(baseUrl);
                     }
                 });
+
                 playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, data => {
-                    addLog("📥 LOAD req received");
+                    addLog("📥 LOAD intercept");
                     if (data.media && data.media.contentId) {
-                        const url = data.media.contentId;
-                        if (url.includes(':8089')) {
-                            const baseUrl = url.split('/stream.mjpeg')[0];
-                            startStream(baseUrl);
-                        }
+                        const baseUrl = data.media.contentId.split('/stream.mjpeg')[0];
+                        startStream(baseUrl);
                     }
                     return data;
                 });
+
                 context.start();
                 addLog("✅ Cast SDK Started");
             } catch (e) { addLog("⚠️ SDK Standalone"); }
-            setTimeout(probeServers, 1000);
         };
     </script>
 </body>
