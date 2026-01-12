@@ -208,38 +208,35 @@
         }
 
         function startStream(baseUrl) {
-            if (isCasting) return;
-            addLog("🚀 Starting Live Stream (Polling Mode): " + baseUrl);
+            addLog("🚀 Starting Live Stream (MJPEG + Auto-Reconnect): " + baseUrl);
             isCasting = true;
             statusOverlay.style.display = 'none';
             initAudio();
 
-            let frameCount = 0;
-            const frameUrl = baseUrl + "/frame.jpg";
-
-            // Polling approach - fetch new frame every 33ms (~30fps)
-            function fetchFrame() {
-                if (!isCasting) return;
-
+            let reconnectTimer = null;
+            let connectCount = 0;
+            
+            function connectMJPEG() {
+                connectCount++;
+                addLog("📡 MJPEG connect attempt #" + connectCount);
                 // Use cache-busting timestamp
-                streamImg.src = frameUrl + "?t=" + Date.now();
-                frameCount++;
-
-                if (frameCount % 30 === 0) {
-                    addLog("📹 Frames: " + frameCount);
-                }
-
-                // Continue polling
-                setTimeout(fetchFrame, 33);
+                streamImg.src = baseUrl + "/stream.mjpeg?t=" + Date.now();
+                streamImg.style.display = 'block';
             }
 
-            streamImg.style.display = 'block';
             streamImg.onerror = () => {
-                addLog("❌ Frame fetch failed - Retrying...");
-                setTimeout(fetchFrame, 1000);
+                addLog("❌ MJPEG stopped - Reconnecting in 1s...");
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(connectMJPEG, 1000);
             };
+            
+            // Also set up periodic reconnection every 5 seconds as backup
+            setInterval(() => {
+                addLog("🔄 Periodic MJPEG refresh");
+                connectMJPEG();
+            }, 5000);
 
-            fetchFrame();
+            connectMJPEG();
         }
 
         window.onload = () => {
