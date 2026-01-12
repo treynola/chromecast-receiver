@@ -215,21 +215,33 @@
 
             let reconnectTimer = null;
             let connectCount = 0;
-            
+            let frameLoadCount = 0;
+
             function connectMJPEG() {
                 connectCount++;
                 addLog("📡 MJPEG connect attempt #" + connectCount);
                 // Use cache-busting timestamp
-                streamImg.src = baseUrl + "/stream.mjpeg?t=" + Date.now();
+                const url = baseUrl + "/stream.mjpeg?t=" + Date.now();
+                addLog("🔗 URL: " + url);
+                streamImg.src = url;
                 streamImg.style.display = 'block';
+                streamImg.style.width = '100%';
+                streamImg.style.height = '100%';
             }
 
-            streamImg.onerror = () => {
-                addLog("❌ MJPEG stopped - Reconnecting in 1s...");
+            streamImg.onload = () => {
+                frameLoadCount++;
+                if (frameLoadCount % 30 === 1) {
+                    addLog("🖼️ Frame loaded #" + frameLoadCount);
+                }
+            };
+
+            streamImg.onerror = (e) => {
+                addLog("❌ MJPEG error: " + (e.message || 'unknown') + " - Reconnecting...");
                 if (reconnectTimer) clearTimeout(reconnectTimer);
                 reconnectTimer = setTimeout(connectMJPEG, 1000);
             };
-            
+
             // Also set up periodic reconnection every 5 seconds as backup
             setInterval(() => {
                 addLog("🔄 Periodic MJPEG refresh");
