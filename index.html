@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Cast Receiver v6.6</title>
+    <title>MXS-004 Cast Receiver v7.0</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
@@ -123,10 +123,10 @@
         <div id="unmute-overlay" onclick="resumeAudio()">CLICK TO ENABLE AUDIO 🔊</div>
         <div id="status-overlay" class="overlay">
             <div class="status-title">MXS-004 STUDIO</div>
-            <div id="status-msg" class="status-msg">v6.6 READY</div>
+            <div id="status-msg" class="status-msg">v7.0 READY</div>
         </div>
         <div id="log-overlay"></div>
-        <div class="version-tag">Receiver v6.6 (High-Performance Sync)</div>
+        <div class="version-tag">Receiver v7.0 (30fps Stereo Audio)</div>
     </div>
     <script>
         const streamImg = document.getElementById('stream-img');
@@ -134,8 +134,8 @@
         const statusMsg = document.getElementById('status-msg');
         const unmuteOverlay = document.getElementById('unmute-overlay');
         const logOverlay = document.getElementById('log-overlay');
-        
-        const VERSION = "v6.6";
+
+        const VERSION = "v7.0";
         let isCasting = false;
         let audioCtx = null;
         let nextStartTime = 0;
@@ -152,7 +152,7 @@
             if (audioCtx) return;
             try {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 44100,
+                    sampleRate: 48000,
                     latencyHint: 'interactive'
                 });
                 addLog("🔊 Web Audio Context Initialized");
@@ -173,48 +173,73 @@
             }
         }
 
-        function playAudioChunk(base64Data) {
+        function playAudioChunk(base64Data, channels = 2, sampleRate = 48000) {
             if (!audioCtx || audioCtx.state !== 'running') return;
 
             const binaryString = window.atob(base64Data);
             const len = binaryString.length;
             const bytes = new Uint8Array(len);
             for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
-            
-            // PCM16 to Float32
-            const i16 = new Int16Array(bytes.buffer);
-            const f32 = new Float32Array(i16.length);
-            for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
 
-            const buffer = audioCtx.createBuffer(1, f32.length, 44100);
-            buffer.getChannelData(0).set(f32);
+            // PCM16 to Float32 (stereo interleaved: L R L R ...)
+            const i16 = new Int16Array(bytes.buffer);
+            const numSamples = i16.length / channels;
+
+            // Create stereo buffer
+            const buffer = audioCtx.createBuffer(channels, numSamples, sampleRate);
+
+            // Deinterleave stereo channels
+            for (let ch = 0; ch < channels; ch++) {
+                const channelData = buffer.getChannelData(ch);
+                for (let i = 0; i < numSamples; i++) {
+                    channelData[i] = i16[i * channels + ch] / 32768.0;
+                }
+            }
 
             const source = audioCtx.createBufferSource();
             source.buffer = buffer;
             source.connect(audioCtx.destination);
 
             const currentTime = audioCtx.currentTime;
-            if (nextStartTime < currentTime) nextStartTime = currentTime + 0.05;
-            
+            if (nextStartTime < currentTime) nextStartTime = currentTime + 0.02;
+
             source.start(nextStartTime);
             nextStartTime += buffer.duration;
         }
 
         function startStream(baseUrl) {
             if (isCasting) return;
-            addLog("🚀 Starting Live Stream: " + baseUrl);
+            addLog("🚀 Starting Live Stream (Polling Mode): " + baseUrl);
             isCasting = true;
             statusOverlay.style.display = 'none';
             initAudio();
 
-            streamImg.src = baseUrl + "/stream.mjpeg?t=" + Date.now();
+            let frameCount = 0;
+            const frameUrl = baseUrl + "/frame.jpg";
+
+            // Polling approach - fetch new frame every 33ms (~30fps)
+            function fetchFrame() {
+                if (!isCasting) return;
+
+                // Use cache-busting timestamp
+                streamImg.src = frameUrl + "?t=" + Date.now();
+                frameCount++;
+
+                if (frameCount % 30 === 0) {
+                    addLog("📹 Frames: " + frameCount);
+                }
+
+                // Continue polling
+                setTimeout(fetchFrame, 33);
+            }
+
             streamImg.style.display = 'block';
-            
             streamImg.onerror = () => {
-                addLog("❌ Video feed failed - Retrying in 3s");
-                isCasting = false;
-                setTimeout(() => startStream(baseUrl), 3000);
+                addLog("❌ Frame fetch failed - Retrying...");
+                setTimeout(fetchFrame, 1000);
             };
+
+            fetchFrame();
         }
 
         window.onload = () => {
@@ -222,12 +247,12 @@
             try {
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const playerManager = context.getPlayerManager();
-                
+
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
                     if (!event.data) return;
-                    
+
                     if (event.data.type === 'audio_chunk') {
-                        playAudioChunk(event.data.data);
+                        playAudioChunk(event.data.data, event.data.channels || 2, event.data.sampleRate || 48000);
                     } else if (event.data.stream_url) {
                         const baseUrl = event.data.stream_url.split('/stream.mjpeg')[0];
                         startStream(baseUrl);
