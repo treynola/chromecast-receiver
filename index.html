@@ -123,10 +123,10 @@
         <div id="unmute-overlay" onclick="resumeAudio()">CLICK TO ENABLE AUDIO 🔊</div>
         <div id="status-overlay" class="overlay">
             <div class="status-title">MXS-004 STUDIO</div>
-            <div id="status-msg" class="status-msg">v7.2 READY</div>
+            <div id="status-msg" class="status-msg">v7.3 (AntiGravity Fix) READY</div>
         </div>
         <div id="log-overlay"></div>
-        <div class="version-tag">Receiver v7.2 (30fps Stereo Audio)</div>
+        <div class="version-tag">Receiver v7.3 (AntiGravity Fix)</div>
     </div>
     <script>
         const streamImg = document.getElementById('stream-img');
@@ -135,10 +135,11 @@
         const unmuteOverlay = document.getElementById('unmute-overlay');
         const logOverlay = document.getElementById('log-overlay');
 
-        const VERSION = "v7.2";
+        const VERSION = "v7.3";
         let isCasting = false;
         let audioCtx = null;
         let nextStartTime = 0;
+        let audioChunksReceived = 0;
 
         function addLog(msg) {
             const div = document.createElement('div');
@@ -155,12 +156,22 @@
                     sampleRate: 48000,
                     latencyHint: 'interactive'
                 });
-                addLog("🔊 Web Audio Context Initialized");
+                addLog("🔊 Web Audio Initialized. State: " + audioCtx.state);
+
+                audioCtx.onstatechange = () => {
+                    addLog("🔄 Audio State Changed: " + audioCtx.state);
+                    if (audioCtx.state === 'suspended') {
+                        unmuteOverlay.style.display = 'block';
+                    } else {
+                        unmuteOverlay.style.display = 'none';
+                    }
+                };
+
                 if (audioCtx.state === 'suspended') {
                     unmuteOverlay.style.display = 'block';
                 }
             } catch (e) {
-                addLog("❌ Audio Initialization Failed: " + e);
+                addLog("❌ Audio Init Failed: " + e);
             }
         }
 
@@ -170,11 +181,30 @@
                     addLog("✅ Audio Resumed");
                     unmuteOverlay.style.display = 'none';
                 });
+            } else {
+                initAudio();
+                if (audioCtx) {
+                    audioCtx.resume().then(() => {
+                        addLog("✅ Audio Initialized & Resumed");
+                        unmuteOverlay.style.display = 'none';
+                    });
+                }
             }
         }
 
         function playAudioChunk(base64Data, channels = 2, sampleRate = 48000) {
-            if (!audioCtx || audioCtx.state !== 'running') return;
+            audioChunksReceived++;
+            if (audioChunksReceived % 50 === 1) {
+                addLog("🎵 Audio Chunks Received: " + audioChunksReceived);
+            }
+
+            if (!audioCtx) {
+                initAudio();
+            }
+
+            if (!audioCtx || audioCtx.state !== 'running') {
+                return;
+            }
 
             const binaryString = window.atob(base64Data);
             const len = binaryString.length;
@@ -208,7 +238,7 @@
         }
 
         function startStream(baseUrl) {
-            addLog("🚀 Starting Live Stream (MJPEG + Auto-Reconnect): " + baseUrl);
+            addLog("🚀 Live Stream v7.3: " + baseUrl);
             isCasting = true;
             statusOverlay.style.display = 'none';
             initAudio();
@@ -219,10 +249,9 @@
 
             function connectMJPEG() {
                 connectCount++;
-                addLog("📡 MJPEG connect attempt #" + connectCount);
+                addLog("📡 MJPEG connect #" + connectCount);
                 // Use cache-busting timestamp
                 const url = baseUrl + "/stream.mjpeg?t=" + Date.now();
-                addLog("🔗 URL: " + url);
                 streamImg.src = url;
                 streamImg.style.display = 'block';
                 streamImg.style.width = '100%';
@@ -231,22 +260,19 @@
 
             streamImg.onload = () => {
                 frameLoadCount++;
-                if (frameLoadCount % 30 === 1) {
-                    addLog("🖼️ Frame loaded #" + frameLoadCount);
+                if (frameLoadCount % 100 === 1) {
+                    addLog("🖼️ Frames loaded: " + frameLoadCount);
                 }
             };
 
             streamImg.onerror = (e) => {
-                addLog("❌ MJPEG error: " + (e.message || 'unknown') + " - Reconnecting...");
+                addLog("❌ MJPEG Error - Reconnecting in 2s...");
                 if (reconnectTimer) clearTimeout(reconnectTimer);
-                reconnectTimer = setTimeout(connectMJPEG, 1000);
+                reconnectTimer = setTimeout(connectMJPEG, 2000);
             };
 
-            // Also set up periodic reconnection every 5 seconds as backup
-            setInterval(() => {
-                addLog("🔄 Periodic MJPEG refresh");
-                connectMJPEG();
-            }, 5000);
+            // REMOVED: Periodic setInterval refresh which caused Broken Pipe every 5s.
+            // MJPEG is a persistent stream; we should only reconnect on error.
 
             connectMJPEG();
         }
