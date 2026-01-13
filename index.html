@@ -304,19 +304,84 @@
             };
 
             ws.onerror = (e) => {
-                log(`❌ WebSocket error: ${e.message || 'unknown'}`);
+                log(`❌ WebSocket error: ${e.message || 'Mixed content or network error'}`);
+                log('⚠️ Falling back to MJPEG stream...');
+
+                // Fall back to MJPEG mode
+                fallbackToMjpeg();
             };
 
             ws.onclose = () => {
                 isConnected = false;
                 log('🔌 WebSocket disconnected');
-                statusOverlay.style.display = 'flex';
-                statusMsg.textContent = 'Reconnecting...';
-                statusMsg.classList.add('connecting');
 
-                // Auto-reconnect after 2 seconds
+                // If we never connected, try MJPEG fallback
+                if (!wsEverConnected) {
+                    log('⚠️ WS never connected - using MJPEG fallback');
+                    fallbackToMjpeg();
+                } else {
+                    statusOverlay.style.display = 'flex';
+                    statusMsg.textContent = 'Reconnecting...';
+                    statusMsg.classList.add('connecting');
+
+                    // Auto-reconnect after 2 seconds
+                    setTimeout(() => {
+                        if (senderUrl) connectWebSocket(senderUrl);
+                    }, 2000);
+                }
+            };
+
+            // Track if we ever successfully connected
+            let wsEverConnected = false;
+            ws.addEventListener('open', () => { wsEverConnected = true; });
+        }
+
+        // === MJPEG Fallback Mode ===
+        let mjpegActive = false;
+
+        function fallbackToMjpeg() {
+            if (mjpegActive) return;
+            mjpegActive = true;
+
+            // Extract HTTP base URL from WS URL
+            let httpUrl = senderUrl?.replace('ws://', 'http://').replace(':8090', ':8089');
+            if (!httpUrl) {
+                log('❌ No fallback URL available');
+                statusMsg.textContent = 'Error: No stream URL';
+                return;
+            }
+
+            log(`🔄 MJPEG Fallback: ${httpUrl}`);
+            statusMsg.textContent = 'Using MJPEG mode...';
+
+            // Create img element for MJPEG
+            const mjpegImg = document.createElement('img');
+            mjpegImg.id = 'mjpeg-stream';
+            mjpegImg.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain;';
+
+            // Add to canvas container
+            const container = document.getElementById('canvas-container');
+            container.innerHTML = '';
+            container.appendChild(mjpegImg);
+
+            // Start MJPEG stream
+            mjpegImg.src = `${httpUrl}/stream.mjpeg?t=${Date.now()}`;
+
+            mjpegImg.onload = () => {
+                statusOverlay.style.display = 'none';
+                log('✅ MJPEG stream active (Higher latency mode)');
+                latencyStat.textContent = 'MJPEG ~5-10s';
+            };
+
+            mjpegImg.onerror = () => {
+                log('❌ MJPEG stream failed');
+                statusMsg.textContent = 'Stream error - check network';
+
+                // Retry after 2 seconds
                 setTimeout(() => {
-                    if (senderUrl) connectWebSocket(senderUrl);
+                    if (mjpegActive) {
+                        mjpegImg.src = `${httpUrl}/stream.mjpeg?t=${Date.now()}`;
+                    }
                 }, 2000);
             };
         }
