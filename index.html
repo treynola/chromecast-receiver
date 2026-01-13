@@ -107,7 +107,6 @@
             loadRequestData.media.contentType = 'application/x-mpegurl'; // HLS constant
             loadRequestData.media.metadata = new cast.framework.messages.GenericMediaMetadata();
             loadRequestData.media.metadata.title = 'MXS-004 Live Session';
-            loadRequestData.media.hlsSegmentFormat = cast.framework.messages.HlsSegmentFormat.TS;
 
             playerManager.load(loadRequestData)
                 .then(() => log('▶️ Load Request Sent'))
