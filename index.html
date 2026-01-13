@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Studio Cast v8.5</title>
+    <title>MXS-004 Studio Cast v8.7</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
@@ -27,24 +27,29 @@
 
         #log-overlay {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 80%;
-            max-height: 300px;
+            bottom: 40px;
+            left: 40px;
+            width: 90%;
+            max-height: 400px;
             overflow-y: hidden;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 14px;
-            text-shadow: 1px 1px 2px #000;
+            color: rgba(255, 255, 255, 1.0);
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
             pointer-events: none;
             z-index: 1000;
             font-family: monospace;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
         }
 
         #waiting {
             position: absolute;
             color: #b38600;
-            font-size: 24px;
+            font-size: 32px;
             text-align: center;
+            z-index: 500;
         }
     </style>
 </head>
@@ -54,7 +59,7 @@
     <div id="waiting">
         <h1>MXS-004 STUDIO</h1>
         <p>Waiting for Stream...</p>
-        <p style="font-size:14px; opacity:0.6;">v8.5 H.264/AAC HLS Engine</p>
+        <p style="font-size:20px; opacity:0.8;">v8.7 Network Probe Edition</p>
     </div>
     <div id="log-overlay"></div>
 
@@ -68,8 +73,8 @@
             console.log('[MXS-004]', msg);
             const timestamp = new Date().toLocaleTimeString();
             logEl.innerHTML = `<div>${timestamp} ${msg}</div>` + logEl.innerHTML;
-            // Keep only last 10 messages
-            if (logEl.children.length > 10) {
+            // Keep only last 12 messages
+            if (logEl.children.length > 12) {
                 logEl.removeChild(logEl.lastChild);
             }
         }
@@ -116,13 +121,37 @@
             }
         );
 
-        // --- Request Interceptor for debugging ---
+        // --- Request Interceptor with Network Probe ---
         playerManager.setMessageInterceptor(
             cast.framework.messages.MessageType.LOAD,
             (loadRequestData) => {
-                log('🎬 LOAD Request: ' + loadRequestData.media.contentId);
-                log('   Type: ' + loadRequestData.media.contentType);
-                log('   Stream: ' + loadRequestData.media.streamType);
+                log('🎬 LOAD Request v8.7: ' + loadRequestData.media.contentId);
+
+                // Extract Base URL and probe network
+                try {
+                    const url = new URL(loadRequestData.media.contentId);
+                    const baseUrl = `${url.protocol}//${url.host}`;
+
+                    log(`🔍 Probing network: ${baseUrl}/ping ...`);
+
+                    fetch(`${baseUrl}/ping`)
+                        .then(res => res.text())
+                        .then(text => {
+                            if (text === 'pong') {
+                                log('✅ NETWORK OK: Server is reachable!');
+                            } else {
+                                log('⚠️ NETWORK WARNING: Unexpected response: ' + text);
+                            }
+                        })
+                        .catch(err => {
+                            log('❌ NETWORK BLOCKED: Cannot reach server! ' + err);
+                            log('   Check firewall/router isolation.');
+                        });
+
+                } catch (e) {
+                    log('⚠️ Could not parse URL for probing: ' + e);
+                }
+
                 return loadRequestData;
             }
         );
@@ -151,7 +180,7 @@
 
         // --- Start Receiver ---
         context.start(options);
-        log('🚀 Receiver v8.5 Ready (CAF Standard Media)');
+        log('🚀 Receiver v8.7 Ready (Network Probe Enabled)');
     </script>
 </body>
 
