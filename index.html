@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Studio Cast v8.0</title>
+    <title>MXS-004 Studio Cast v8.5</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
@@ -30,13 +30,14 @@
             bottom: 20px;
             left: 20px;
             width: 80%;
-            max-height: 200px;
+            max-height: 300px;
             overflow-y: hidden;
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 12px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
             text-shadow: 1px 1px 2px #000;
             pointer-events: none;
             z-index: 1000;
+            font-family: monospace;
         }
 
         #waiting {
@@ -53,7 +54,7 @@
     <div id="waiting">
         <h1>MXS-004 STUDIO</h1>
         <p>Waiting for Stream...</p>
-        <p style="font-size:14px; opacity:0.6;">v8.0 H.264/AAC Engine</p>
+        <p style="font-size:14px; opacity:0.6;">v8.5 H.264/AAC HLS Engine</p>
     </div>
     <div id="log-overlay"></div>
 
@@ -64,71 +65,93 @@
         const logEl = document.getElementById('log-overlay');
 
         function log(msg) {
-            console.log(msg);
-            logEl.innerHTML = `<div>${new Date().toLocaleTimeString()} ${msg}</div>` + logEl.innerHTML;
+            console.log('[MXS-004]', msg);
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.innerHTML = `<div>${timestamp} ${msg}</div>` + logEl.innerHTML;
+            // Keep only last 10 messages
+            if (logEl.children.length > 10) {
+                logEl.removeChild(logEl.lastChild);
+            }
         }
+
+        // --- Media Loading Events ---
+        playerManager.addEventListener(
+            cast.framework.events.EventType.PLAYER_LOADING,
+            (event) => {
+                log('📥 Loading: ' + (event.media?.contentId || 'unknown'));
+            }
+        );
 
         playerManager.addEventListener(
             cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
             () => {
-                log('✅ Player Load Complete');
+                log('✅ Player Load Complete!');
                 waitingEl.style.display = 'none';
             }
         );
 
-        let lastStreamUrl = null;
-        let retryCount = 0;
-
         playerManager.addEventListener(
-            cast.framework.events.EventType.ERROR,
+            cast.framework.events.EventType.BUFFERING,
             (event) => {
-                log('❌ Player Error: ' + JSON.stringify(event));
-                // Auto-retry on load failure (common during startup race)
-                if (lastStreamUrl && retryCount < 10) {
-                    retryCount++;
-                    log(`🔄 Retrying stream load (${retryCount}/10) in 2s...`);
-                    setTimeout(() => loadStream(lastStreamUrl), 2000);
-                }
+                log('⏳ Buffering: ' + (event.isBuffering ? 'started' : 'ended'));
             }
         );
 
+        playerManager.addEventListener(
+            cast.framework.events.EventType.PLAYING,
+            () => {
+                log('▶️ Playing!');
+                waitingEl.style.display = 'none';
+            }
+        );
+
+        // --- Error Handling ---
+        playerManager.addEventListener(
+            cast.framework.events.EventType.ERROR,
+            (event) => {
+                log('❌ Error: ' + JSON.stringify({
+                    detailedErrorCode: event.detailedErrorCode,
+                    error: event.error
+                }));
+            }
+        );
+
+        // --- Request Interceptor for debugging ---
+        playerManager.setMessageInterceptor(
+            cast.framework.messages.MessageType.LOAD,
+            (loadRequestData) => {
+                log('🎬 LOAD Request: ' + loadRequestData.media.contentId);
+                log('   Type: ' + loadRequestData.media.contentType);
+                log('   Stream: ' + loadRequestData.media.streamType);
+                return loadRequestData;
+            }
+        );
+
+        // --- Receiver Options ---
         const options = new cast.framework.CastReceiverOptions();
         options.disableIdleTimeout = true;
-        options.customNamespaces = {
-            'urn:x-cast:com.nowmultimedia.mxs004': cast.framework.system.MessageType.JSON
+
+        // Allow playback to start without user gesture (for live streams)
+        options.playbackConfig = new cast.framework.PlaybackConfig();
+        options.playbackConfig.autoResumeDuration = 0;
+
+        // Support HTTP (not just HTTPS) for local network streaming
+        options.playbackConfig.manifestRequestHandler = (requestInfo) => {
+            log('📡 Manifest Request: ' + requestInfo.url);
         };
 
-        function loadStream(url) {
-            lastStreamUrl = url;
-            const loadRequestData = new cast.framework.messages.LoadRequestData();
-            loadRequestData.media = new cast.framework.messages.MediaInformation();
-            loadRequestData.media.contentId = url;
-            loadRequestData.media.streamType = cast.framework.messages.StreamType.LIVE;
-            loadRequestData.media.contentType = 'application/x-mpegurl'; // HLS constant
-            loadRequestData.media.metadata = new cast.framework.messages.GenericMediaMetadata();
-            loadRequestData.media.metadata.title = 'MXS-004 Live Session';
-
-            playerManager.load(loadRequestData)
-                .then(() => log('▶️ Load Request Sent'))
-                .catch(err => {
-                    log('⚠️ Load Failed: ' + err);
-                    // Retry is handled by ERROR event listener, but catching here prevents unhandled promise errors
-                });
-        }
-
-        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-            const data = (typeof event.data === 'string') ? JSON.parse(event.data) : event.data;
-            log('📩 Msg: ' + JSON.stringify(data));
-
-            if (data.type === 'start_stream' && data.stream_url) {
-                log('🎬 Loading Stream: ' + data.stream_url);
-                retryCount = 0; // Reset retries on fresh start
-                loadStream(data.stream_url);
+        options.playbackConfig.segmentRequestHandler = (requestInfo) => {
+            // Only log first few segments to avoid spam
+            if (!window.segmentCount) window.segmentCount = 0;
+            if (window.segmentCount < 3) {
+                log('📦 Segment Request: ' + requestInfo.url.split('/').pop());
+                window.segmentCount++;
             }
-        });
+        };
 
+        // --- Start Receiver ---
         context.start(options);
-        log('🚀 Receiver v8.0 Ready (CAF)');
+        log('🚀 Receiver v8.5 Ready (CAF Standard Media)');
     </script>
 </body>
 
