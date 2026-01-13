@@ -76,10 +76,19 @@
             }
         );
 
+        let lastStreamUrl = null;
+        let retryCount = 0;
+
         playerManager.addEventListener(
             cast.framework.events.EventType.ERROR,
             (event) => {
                 log('❌ Player Error: ' + JSON.stringify(event));
+                // Auto-retry on load failure (common during startup race)
+                if (lastStreamUrl && retryCount < 10) {
+                    retryCount++;
+                    log(`🔄 Retrying stream load (${retryCount}/10) in 2s...`);
+                    setTimeout(() => loadStream(lastStreamUrl), 2000);
+                }
             }
         );
 
@@ -89,24 +98,33 @@
             'urn:x-cast:com.nowmultimedia.mxs004': cast.framework.system.MessageType.JSON
         };
 
+        function loadStream(url) {
+            lastStreamUrl = url;
+            const loadRequestData = new cast.framework.messages.LoadRequestData();
+            loadRequestData.media = new cast.framework.messages.MediaInformation();
+            loadRequestData.media.contentId = url;
+            loadRequestData.media.streamType = cast.framework.messages.StreamType.LIVE;
+            loadRequestData.media.contentType = 'application/x-mpegurl'; // HLS constant
+            loadRequestData.media.metadata = new cast.framework.messages.GenericMediaMetadata();
+            loadRequestData.media.metadata.title = 'MXS-004 Live Session';
+            loadRequestData.media.hlsSegmentFormat = cast.framework.messages.HlsSegmentFormat.TS;
+
+            playerManager.load(loadRequestData)
+                .then(() => log('▶️ Load Request Sent'))
+                .catch(err => {
+                    log('⚠️ Load Failed: ' + err);
+                    // Retry is handled by ERROR event listener, but catching here prevents unhandled promise errors
+                });
+        }
+
         context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
             const data = (typeof event.data === 'string') ? JSON.parse(event.data) : event.data;
             log('📩 Msg: ' + JSON.stringify(data));
 
             if (data.type === 'start_stream' && data.stream_url) {
                 log('🎬 Loading Stream: ' + data.stream_url);
-
-                const loadRequestData = new cast.framework.messages.LoadRequestData();
-                loadRequestData.media = new cast.framework.messages.MediaInformation();
-                loadRequestData.media.contentId = data.stream_url;
-                loadRequestData.media.streamType = cast.framework.messages.StreamType.LIVE;
-                loadRequestData.media.contentType = 'application/x-mpegurl'; // HLS constant
-                loadRequestData.media.metadata = new cast.framework.messages.GenericMediaMetadata();
-                loadRequestData.media.metadata.title = 'MXS-004 Live Session';
-
-                playerManager.load(loadRequestData)
-                    .then(() => log('▶️ Load Request Sent'))
-                    .catch(err => log('⚠️ Load Failed: ' + err));
+                retryCount = 0; // Reset retries on fresh start
+                loadStream(data.stream_url);
             }
         });
 
