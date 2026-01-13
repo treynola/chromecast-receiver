@@ -285,11 +285,22 @@
 
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
                     if (!event.data) return;
+                    
+                    let data = event.data;
+                    // FIX: Parse string payload if necessary
+                    if (typeof data === 'string') {
+                        try {
+                            data = JSON.parse(data);
+                        } catch (e) {
+                            addLog("⚠️ Parse failed: " + e);
+                        }
+                    }
 
-                    if (event.data.type === 'audio_chunk') {
-                        playAudioChunk(event.data.data, event.data.channels || 2, event.data.sampleRate || 48000);
-                    } else if (event.data.stream_url) {
-                        const baseUrl = event.data.stream_url.split('/stream.mjpeg')[0];
+                    if (data.type === 'audio_chunk') {
+                        playAudioChunk(data.data, data.channels || 2, data.sampleRate || 48000);
+                    } else if (data.type === 'start_stream' || data.stream_url) {
+                        const url = data.stream_url || data.stream_url;
+                        const baseUrl = url.split('/stream.mjpeg')[0];
                         startStream(baseUrl);
                     }
                 });
