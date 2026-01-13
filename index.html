@@ -2,322 +2,116 @@
 <html>
 
 <head>
-    <title>MXS-004 Cast Receiver v7.2</title>
+    <title>MXS-004 Studio Cast v8.0</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         body {
             margin: 0;
             padding: 0;
             background: #000;
-            color: #fff;
-            font-family: 'Inter', sans-serif;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            font-family: 'Segoe UI', sans-serif;
         }
 
-        #main-container {
-            position: relative;
+        cast-media-player {
             width: 100%;
             height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        #stream-img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: none;
-            background: #000;
-            image-rendering: -webkit-optimize-contrast;
-        }
-
-        .overlay {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px;
-            border-radius: 15px;
-            border: 2px solid #b38600;
-            text-align: center;
-            z-index: 1000;
-        }
-
-        .status-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #b38600;
-            margin-bottom: 10px;
-        }
-
-        .status-msg {
-            font-size: 18px;
-            color: #ccc;
-        }
-
-        #unmute-overlay {
-            position: absolute;
-            top: 30px;
-            right: 30px;
-            background: #b38600;
-            color: #000;
-            padding: 15px 25px;
-            border-radius: 50px;
-            cursor: pointer;
-            display: none;
-            font-weight: 800;
-            z-index: 2000;
-            box-shadow: 0 0 20px rgba(179, 134, 0, 0.6);
-            animation: bounce 2s infinite;
-        }
-
-        @keyframes bounce {
-
-            0%,
-            20%,
-            50%,
-            80%,
-            100% {
-                transform: translateY(0);
-            }
-
-            40% {
-                transform: translateY(-10px);
-            }
-
-            60% {
-                transform: translateY(-5px);
-            }
+            --splash-image: url('');
+            --playback-logo-image: url('');
         }
 
         #log-overlay {
             position: absolute;
-            bottom: 40px;
-            left: 10px;
-            font-size: 10px;
-            color: #888;
-            width: 400px;
-            max-height: 150px;
-            overflow: hidden;
-            text-align: left;
+            bottom: 20px;
+            left: 20px;
+            width: 80%;
+            max-height: 200px;
+            overflow-y: hidden;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            text-shadow: 1px 1px 2px #000;
             pointer-events: none;
+            z-index: 1000;
         }
 
-        .version-tag {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            font-size: 10px;
-            opacity: 0.3;
+        #waiting {
+            position: absolute;
+            color: #b38600;
+            font-size: 24px;
+            text-align: center;
         }
     </style>
 </head>
 
 <body>
-    <div id="main-container">
-        <img id="stream-img" alt="Studio Feed">
-        <div id="unmute-overlay" onclick="resumeAudio()">CLICK TO ENABLE AUDIO 🔊</div>
-        <div id="status-overlay" class="overlay">
-            <div class="status-title">MXS-004 STUDIO</div>
-            <div id="status-msg" class="status-msg">v7.3 (AntiGravity Fix) READY</div>
-        </div>
-        <div id="log-overlay"></div>
-        <div class="version-tag">Receiver v7.3 (AntiGravity Fix)</div>
+    <cast-media-player></cast-media-player>
+    <div id="waiting">
+        <h1>MXS-004 STUDIO</h1>
+        <p>Waiting for Stream...</p>
+        <p style="font-size:14px; opacity:0.6;">v8.0 H.264/AAC Engine</p>
     </div>
+    <div id="log-overlay"></div>
+
     <script>
-        const streamImg = document.getElementById('stream-img');
-        const statusOverlay = document.getElementById('status-overlay');
-        const statusMsg = document.getElementById('status-msg');
-        const unmuteOverlay = document.getElementById('unmute-overlay');
-        const logOverlay = document.getElementById('log-overlay');
+        const context = cast.framework.CastReceiverContext.getInstance();
+        const playerManager = context.getPlayerManager();
+        const waitingEl = document.getElementById('waiting');
+        const logEl = document.getElementById('log-overlay');
 
-        const VERSION = "7.4.1";
-        let isCasting = false;
-        let audioCtx = null;
-        let nextStartTime = 0;
-        let audioChunksReceived = 0;
-
-        function addLog(msg) {
-            const div = document.createElement('div');
-            div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            logOverlay.prepend(div);
-            if (logOverlay.children.length > 8) logOverlay.removeChild(logOverlay.lastChild);
+        function log(msg) {
             console.log(msg);
+            logEl.innerHTML = `<div>${new Date().toLocaleTimeString()} ${msg}</div>` + logEl.innerHTML;
         }
 
-        function initAudio() {
-            if (audioCtx) return;
-            try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 48000,
-                    latencyHint: 'interactive'
-                });
-                addLog("🔊 Web Audio Initialized. State: " + audioCtx.state);
-
-                audioCtx.onstatechange = () => {
-                    addLog("🔄 Audio State Changed: " + audioCtx.state);
-                    if (audioCtx.state === 'suspended') {
-                        unmuteOverlay.style.display = 'block';
-                    } else {
-                        unmuteOverlay.style.display = 'none';
-                    }
-                };
-
-                if (audioCtx.state === 'suspended') {
-                    unmuteOverlay.style.display = 'block';
-                }
-            } catch (e) {
-                addLog("❌ Audio Init Failed: " + e);
+        playerManager.addEventListener(
+            cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
+            () => {
+                log('✅ Player Load Complete');
+                waitingEl.style.display = 'none';
             }
-        }
+        );
 
-        function resumeAudio() {
-            if (audioCtx) {
-                audioCtx.resume().then(() => {
-                    addLog("✅ Audio Resumed");
-                    unmuteOverlay.style.display = 'none';
-                });
-            } else {
-                initAudio();
-                if (audioCtx) {
-                    audioCtx.resume().then(() => {
-                        addLog("✅ Audio Initialized & Resumed");
-                        unmuteOverlay.style.display = 'none';
-                    });
-                }
+        playerManager.addEventListener(
+            cast.framework.events.EventType.ERROR,
+            (event) => {
+                log('❌ Player Error: ' + JSON.stringify(event));
             }
-        }
+        );
 
-        function playAudioChunk(base64Data, channels = 2, sampleRate = 48000) {
-            audioChunksReceived++;
-            if (audioChunksReceived % 50 === 1) {
-                addLog("🎵 Audio Chunks Received: " + audioChunksReceived);
-            }
-
-            if (!audioCtx) {
-                initAudio();
-            }
-
-            if (!audioCtx || audioCtx.state !== 'running') {
-                return;
-            }
-
-            const binaryString = window.atob(base64Data);
-            const len = binaryString.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
-
-            // PCM16 to Float32 (stereo interleaved: L R L R ...)
-            const i16 = new Int16Array(bytes.buffer);
-            const numSamples = i16.length / channels;
-
-            // Create stereo buffer
-            const buffer = audioCtx.createBuffer(channels, numSamples, sampleRate);
-
-            // Deinterleave stereo channels
-            for (let ch = 0; ch < channels; ch++) {
-                const channelData = buffer.getChannelData(ch);
-                for (let i = 0; i < numSamples; i++) {
-                    channelData[i] = i16[i * channels + ch] / 32768.0;
-                }
-            }
-
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
-
-            const currentTime = audioCtx.currentTime;
-            if (nextStartTime < currentTime) nextStartTime = currentTime + 0.02;
-
-            source.start(nextStartTime);
-            nextStartTime += buffer.duration;
-        }
-
-        function startStream(baseUrl) {
-            addLog("🚀 Live Stream v7.3: " + baseUrl);
-            isCasting = true;
-            statusOverlay.style.display = 'none';
-            initAudio();
-
-            let reconnectTimer = null;
-            let connectCount = 0;
-            let frameLoadCount = 0;
-
-            function connectMJPEG() {
-                connectCount++;
-                addLog("📡 MJPEG connect #" + connectCount);
-                // Use cache-busting timestamp
-                const url = baseUrl + "/stream.mjpeg?t=" + Date.now();
-                streamImg.src = url;
-                streamImg.style.display = 'block';
-                streamImg.style.width = '100%';
-                streamImg.style.height = '100%';
-            }
-
-            streamImg.onload = () => {
-                frameLoadCount++;
-                if (frameLoadCount % 100 === 1) {
-                    addLog("🖼️ Frames loaded: " + frameLoadCount);
-                }
-            };
-
-            streamImg.onerror = (e) => {
-                addLog("❌ MJPEG Error - Reconnecting in 2s...");
-                if (reconnectTimer) clearTimeout(reconnectTimer);
-                reconnectTimer = setTimeout(connectMJPEG, 2000);
-            };
-
-            // REMOVED: Periodic setInterval refresh which caused Broken Pipe every 5s.
-            // MJPEG is a persistent stream; we should only reconnect on error.
-
-            connectMJPEG();
-        }
-
-        window.onload = () => {
-            addLog(`v${VERSION} Initialized`);
-            try {
-                const context = cast.framework.CastReceiverContext.getInstance();
-                const playerManager = context.getPlayerManager();
-
-                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-                    if (!event.data) return;
-
-                    let data = event.data;
-                    // FIX: Parse string payload if necessary
-                    if (typeof data === 'string') {
-                        try {
-                            data = JSON.parse(data);
-                        } catch (e) {
-                            addLog("⚠️ Parse failed: " + e);
-                        }
-                    }
-
-                    if (data.type === 'audio_chunk') {
-                        playAudioChunk(data.data, data.channels || 2, data.sampleRate || 48000);
-                    } else if (data.type === 'start_stream' || data.stream_url) {
-                        const url = data.stream_url || data.stream_url;
-                        const baseUrl = url.split('/stream.mjpeg')[0];
-                        startStream(baseUrl);
-                    }
-                });
-
-                playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, data => {
-                    addLog("📥 LOAD intercept");
-                    if (data.media && data.media.contentId) {
-                        const baseUrl = data.media.contentId.split('/stream.mjpeg')[0];
-                        startStream(baseUrl);
-                    }
-                    return data;
-                });
-
-                context.start();
-                addLog("✅ Cast SDK Started");
-            } catch (e) { addLog("⚠️ SDK Standalone"); }
+        const options = new cast.framework.CastReceiverOptions();
+        options.disableIdleTimeout = true;
+        options.customNamespaces = {
+            'urn:x-cast:com.nowmultimedia.mxs004': cast.framework.system.MessageType.JSON
         };
+
+        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
+            const data = (typeof event.data === 'string') ? JSON.parse(event.data) : event.data;
+            log('📩 Msg: ' + JSON.stringify(data));
+
+            if (data.type === 'start_stream' && data.stream_url) {
+                log('🎬 Loading Stream: ' + data.stream_url);
+
+                const loadRequestData = new cast.framework.messages.LoadRequestData();
+                loadRequestData.media = new cast.framework.messages.MediaInformation();
+                loadRequestData.media.contentId = data.stream_url;
+                loadRequestData.media.streamType = cast.framework.messages.StreamType.LIVE;
+                loadRequestData.media.contentType = 'application/x-mpegurl'; // HLS constant
+                loadRequestData.media.metadata = new cast.framework.messages.GenericMediaMetadata();
+                loadRequestData.media.metadata.title = 'MXS-004 Live Session';
+
+                playerManager.load(loadRequestData)
+                    .then(() => log('▶️ Load Request Sent'))
+                    .catch(err => log('⚠️ Load Failed: ' + err));
+            }
+        });
+
+        context.start(options);
+        log('🚀 Receiver v8.0 Ready (CAF)');
     </script>
 </body>
 
