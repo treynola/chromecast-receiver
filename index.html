@@ -1,187 +1,404 @@
 <!DOCTYPE html>
 <html>
-<!-- v8.7.2 Force Update -->
 
 <head>
-    <title>MXS-004 Studio Cast v8.7.2</title>
+    <title>MXS-004 Cast Receiver v8.0 (WebSocket Real-Time)</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
             background: #000;
+            color: #fff;
+            font-family: 'Inter', -apple-system, sans-serif;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-family: 'Segoe UI', sans-serif;
+            background: #000;
         }
 
-        cast-media-player {
-            width: 100%;
-            height: 100%;
-            --splash-image: url('');
-            --playback-logo-image: url('');
+        #stream-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            image-rendering: -webkit-optimize-contrast;
         }
 
-        #log-overlay {
-            position: absolute;
-            bottom: 40px;
-            left: 40px;
-            width: 90%;
-            max-height: 400px;
-            overflow-y: hidden;
-            color: rgba(255, 255, 255, 1.0);
-            font-size: 18px;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px #000;
-            pointer-events: none;
+        .overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 40px 60px;
+            border-radius: 20px;
+            border: 2px solid #b38600;
+            text-align: center;
             z-index: 1000;
-            font-family: monospace;
-            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .overlay-title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #b38600;
+            margin-bottom: 15px;
+        }
+
+        .overlay-msg {
+            font-size: 20px;
+            color: #aaa;
+        }
+
+        #stats-overlay {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: #666;
+            background: rgba(0, 0, 0, 0.7);
             padding: 10px;
             border-radius: 8px;
+            font-family: monospace;
+            pointer-events: none;
         }
 
-        #waiting {
-            position: absolute;
-            color: #b38600;
-            font-size: 32px;
-            text-align: center;
-            z-index: 500;
+        #log-area {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 350px;
+            max-height: 120px;
+            overflow: hidden;
+            font-size: 10px;
+            color: #555;
+            text-align: right;
+            pointer-events: none;
+        }
+
+        .version-tag {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            font-size: 10px;
+            opacity: 0.3;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .connecting {
+            animation: pulse 1s infinite;
         }
     </style>
 </head>
 
 <body>
-    <cast-media-player></cast-media-player>
-    <div id="waiting">
-        <h1>MXS-004 STUDIO</h1>
-        <p>Waiting for Stream...</p>
-        <p style="font-size:20px; opacity:0.8;">v8.7 Network Probe Edition</p>
+    <div id="canvas-container">
+        <canvas id="stream-canvas"></canvas>
     </div>
-    <div id="log-overlay"></div>
+
+    <div id="status-overlay" class="overlay">
+        <div class="overlay-title">MXS-004 STUDIO</div>
+        <div id="status-msg" class="overlay-msg connecting">Waiting for connection...</div>
+    </div>
+
+    <div id="stats-overlay">
+        <div>FPS: <span id="fps-stat">0</span></div>
+        <div>Latency: <span id="latency-stat">-</span>ms</div>
+        <div>Audio: <span id="audio-stat">-</span></div>
+    </div>
+
+    <div id="log-area"></div>
+    <div class="version-tag">v8.0 WebSocket Real-Time</div>
 
     <script>
-        const context = cast.framework.CastReceiverContext.getInstance();
-        const playerManager = context.getPlayerManager();
-        const waitingEl = document.getElementById('waiting');
-        const logEl = document.getElementById('log-overlay');
+        // === Configuration ===
+        const VERSION = "8.0";
+        const MSG_VIDEO = 0x01;
+        const MSG_AUDIO = 0x02;
+        const MSG_META = 0x03;
 
+        // === DOM Elements ===
+        const canvas = document.getElementById('stream-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusOverlay = document.getElementById('status-overlay');
+        const statusMsg = document.getElementById('status-msg');
+        const logArea = document.getElementById('log-area');
+        const fpsStat = document.getElementById('fps-stat');
+        const latencyStat = document.getElementById('latency-stat');
+        const audioStat = document.getElementById('audio-stat');
+
+        // === State ===
+        let ws = null;
+        let isConnected = false;
+        let audioCtx = null;
+        let audioBuffer = [];
+        let nextAudioTime = 0;
+        let frameCount = 0;
+        let lastFpsUpdate = performance.now();
+        let senderUrl = null;
+
+        // === Logging ===
         function log(msg) {
-            console.log('[MXS-004]', msg);
-            const timestamp = new Date().toLocaleTimeString();
-            logEl.innerHTML = `<div>${timestamp} ${msg}</div>` + logEl.innerHTML;
-            // Keep only last 12 messages
-            if (logEl.children.length > 12) {
-                logEl.removeChild(logEl.lastChild);
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logArea.prepend(line);
+            while (logArea.children.length > 8) logArea.lastChild.remove();
+            console.log('[Receiver]', msg);
+        }
+
+        // === Audio System ===
+        function initAudio(sampleRate = 48000) {
+            if (audioCtx) return;
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: sampleRate,
+                    latencyHint: 'interactive'
+                });
+                log(`🔊 Audio initialized: ${sampleRate}Hz`);
+                audioStat.textContent = 'Ready';
+
+                // Resume on any interaction
+                document.addEventListener('click', () => {
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume().then(() => log('✅ Audio resumed'));
+                    }
+                }, { once: true });
+
+            } catch (e) {
+                log(`❌ Audio init failed: ${e}`);
+                audioStat.textContent = 'Error';
             }
         }
 
-        // --- Media Loading Events ---
-        playerManager.addEventListener(
-            cast.framework.events.EventType.PLAYER_LOADING,
-            (event) => {
-                log('📥 Loading: ' + (event.media?.contentId || 'unknown'));
+        function playAudioChunk(pcmData) {
+            if (!audioCtx || audioCtx.state !== 'running') {
+                audioStat.textContent = 'Suspended';
+                return;
             }
-        );
 
-        playerManager.addEventListener(
-            cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
-            () => {
-                log('✅ Player Load Complete!');
-                waitingEl.style.display = 'none';
+            // PCM data is Float32 stereo interleaved (L,R,L,R...)
+            const float32 = new Float32Array(pcmData.buffer.slice(pcmData.byteOffset));
+            const numSamples = float32.length / 2; // Stereo
+
+            if (numSamples < 1) return;
+
+            // Create stereo buffer
+            const buffer = audioCtx.createBuffer(2, numSamples, audioCtx.sampleRate);
+            const left = buffer.getChannelData(0);
+            const right = buffer.getChannelData(1);
+
+            // Deinterleave
+            for (let i = 0; i < numSamples; i++) {
+                left[i] = float32[i * 2];
+                right[i] = float32[i * 2 + 1];
             }
-        );
 
-        playerManager.addEventListener(
-            cast.framework.events.EventType.BUFFERING,
-            (event) => {
-                log('⏳ Buffering: ' + (event.isBuffering ? 'started' : 'ended'));
+            // Schedule playback
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            if (nextAudioTime < now) {
+                nextAudioTime = now + 0.05; // 50ms buffer
             }
-        );
 
-        playerManager.addEventListener(
-            cast.framework.events.EventType.PLAYING,
-            () => {
-                log('▶️ Playing!');
-                waitingEl.style.display = 'none';
-            }
-        );
+            source.start(nextAudioTime);
+            nextAudioTime += buffer.duration;
 
-        // --- Error Handling ---
-        playerManager.addEventListener(
-            cast.framework.events.EventType.ERROR,
-            (event) => {
-                log('❌ Error: ' + JSON.stringify({
-                    detailedErrorCode: event.detailedErrorCode,
-                    error: event.error
-                }));
-            }
-        );
+            audioStat.textContent = `Playing (${(nextAudioTime - now).toFixed(2)}s buf)`;
+        }
 
-        // --- Request Interceptor with Network Probe ---
-        playerManager.setMessageInterceptor(
-            cast.framework.messages.MessageType.LOAD,
-            (loadRequestData) => {
-                log('🎬 LOAD Request v8.7: ' + loadRequestData.media.contentId);
+        // === Video Rendering ===
+        function renderFrame(jpegData) {
+            const blob = new Blob([jpegData], { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
 
-                // Extract Base URL and probe network
-                try {
-                    const url = new URL(loadRequestData.media.contentId);
-                    const baseUrl = `${url.protocol}//${url.host}`;
-
-                    log(`🔍 Probing network: ${baseUrl}/ping ...`);
-
-                    fetch(`${baseUrl}/ping`)
-                        .then(res => res.text())
-                        .then(text => {
-                            if (text === 'pong') {
-                                log('✅ NETWORK OK: Server is reachable!');
-                            } else {
-                                log('⚠️ NETWORK WARNING: Unexpected response: ' + text);
-                            }
-                        })
-                        .catch(err => {
-                            log('❌ NETWORK BLOCKED: Cannot reach server! ' + err);
-                            log('   Check firewall/router isolation.');
-                        });
-
-                } catch (e) {
-                    log('⚠️ Could not parse URL for probing: ' + e);
+            const img = new Image();
+            img.onload = () => {
+                // Resize canvas if needed
+                if (canvas.width !== img.width || canvas.height !== img.height) {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    log(`📐 Canvas resized: ${img.width}x${img.height}`);
                 }
 
-                return loadRequestData;
+                // Draw frame
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
+
+                // Update FPS
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFpsUpdate >= 1000) {
+                    fpsStat.textContent = frameCount;
+                    frameCount = 0;
+                    lastFpsUpdate = now;
+                }
+            };
+            img.src = url;
+        }
+
+        // === WebSocket Connection ===
+        function connectWebSocket(wsUrl) {
+            if (ws) {
+                ws.close();
             }
-        );
 
-        // --- Receiver Options ---
-        const options = new cast.framework.CastReceiverOptions();
-        options.disableIdleTimeout = true;
+            log(`🔌 Connecting to ${wsUrl}...`);
+            statusMsg.textContent = 'Connecting...';
+            statusMsg.classList.add('connecting');
 
-        // Allow playback to start without user gesture (for live streams)
-        options.playbackConfig = new cast.framework.PlaybackConfig();
-        options.playbackConfig.autoResumeDuration = 0;
+            ws = new WebSocket(wsUrl);
+            ws.binaryType = 'arraybuffer';
 
-        // Support HTTP (not just HTTPS) for local network streaming
-        options.playbackConfig.manifestRequestHandler = (requestInfo) => {
-            log('📡 Manifest Request: ' + requestInfo.url);
-        };
+            ws.onopen = () => {
+                isConnected = true;
+                log('✅ WebSocket connected!');
+                statusOverlay.style.display = 'none';
+                initAudio();
+            };
 
-        options.playbackConfig.segmentRequestHandler = (requestInfo) => {
-            // Only log first few segments to avoid spam
-            if (!window.segmentCount) window.segmentCount = 0;
-            if (window.segmentCount < 3) {
-                log('📦 Segment Request: ' + requestInfo.url.split('/').pop());
-                window.segmentCount++;
+            ws.onmessage = (event) => {
+                const data = new Uint8Array(event.data);
+                if (data.length < 2) return;
+
+                const msgType = data[0];
+                const payload = data.slice(1);
+
+                switch (msgType) {
+                    case MSG_VIDEO:
+                        renderFrame(payload);
+                        break;
+                    case MSG_AUDIO:
+                        playAudioChunk(payload);
+                        break;
+                    case MSG_META:
+                        const meta = JSON.parse(new TextDecoder().decode(payload));
+                        log(`📋 Metadata: ${JSON.stringify(meta)}`);
+                        if (meta.audioSampleRate) initAudio(meta.audioSampleRate);
+                        break;
+                }
+            };
+
+            ws.onerror = (e) => {
+                log(`❌ WebSocket error: ${e.message || 'unknown'}`);
+            };
+
+            ws.onclose = () => {
+                isConnected = false;
+                log('🔌 WebSocket disconnected');
+                statusOverlay.style.display = 'flex';
+                statusMsg.textContent = 'Reconnecting...';
+                statusMsg.classList.add('connecting');
+
+                // Auto-reconnect after 2 seconds
+                setTimeout(() => {
+                    if (senderUrl) connectWebSocket(senderUrl);
+                }, 2000);
+            };
+        }
+
+        // === Cast SDK Integration ===
+        function initCastReceiver() {
+            try {
+                const context = cast.framework.CastReceiverContext.getInstance();
+                const playerManager = context.getPlayerManager();
+
+                // Listen for custom messages with WebSocket URL
+                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
+                    log(`📩 Cast message: ${JSON.stringify(event.data)}`);
+
+                    if (event.data && event.data.ws_url) {
+                        senderUrl = event.data.ws_url;
+                        connectWebSocket(senderUrl);
+                    }
+
+                    // Legacy: support old stream_url format but convert to WS port
+                    if (event.data && event.data.stream_url) {
+                        const baseUrl = event.data.stream_url;
+                        // Extract IP and convert to WS URL (port 8090)
+                        const match = baseUrl.match(/http:\/\/([^:]+):?(\d+)?/);
+                        if (match) {
+                            senderUrl = `ws://${match[1]}:8090`;
+                            connectWebSocket(senderUrl);
+                        }
+                    }
+                });
+
+                // Intercept LOAD to extract sender info
+                playerManager.setMessageInterceptor(
+                    cast.framework.messages.MessageType.LOAD,
+                    (loadRequestData) => {
+                        log('📥 LOAD intercepted');
+
+                        // Try to extract WS URL from media content
+                        if (loadRequestData.media && loadRequestData.media.contentId) {
+                            const contentId = loadRequestData.media.contentId;
+                            log(`Content ID: ${contentId}`);
+
+                            // If it's an HTTP URL, convert to WS
+                            if (contentId.startsWith('http://')) {
+                                const match = contentId.match(/http:\/\/([^:]+):?(\d+)?/);
+                                if (match) {
+                                    senderUrl = `ws://${match[1]}:8090`;
+                                    connectWebSocket(senderUrl);
+                                }
+                            } else if (contentId.startsWith('ws://')) {
+                                senderUrl = contentId;
+                                connectWebSocket(senderUrl);
+                            }
+                        }
+
+                        // Don't let CAF try to play as media
+                        return null;
+                    }
+                );
+
+                context.start();
+                log('✅ Cast SDK initialized');
+
+            } catch (e) {
+                log(`⚠️ Cast SDK not available: ${e.message}`);
+                log('Running in standalone mode');
+
+                // Standalone mode: check URL parameters
+                const params = new URLSearchParams(window.location.search);
+                const wsParam = params.get('ws');
+                if (wsParam) {
+                    senderUrl = wsParam;
+                    connectWebSocket(senderUrl);
+                }
             }
-        };
+        }
 
-        // --- Start Receiver ---
-        context.start(options);
-        log('🚀 Receiver v8.7 Ready (Network Probe Enabled)');
+        // === Initialize ===
+        window.onload = () => {
+            log(`🚀 MXS-004 Receiver v${VERSION} initialized`);
+            initCastReceiver();
+        };
     </script>
 </body>
 
