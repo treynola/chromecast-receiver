@@ -135,7 +135,7 @@
         const unmuteOverlay = document.getElementById('unmute-overlay');
         const logOverlay = document.getElementById('log-overlay');
 
-        const VERSION = "v7.3";
+        const VERSION = "7.4.1";
         let isCasting = false;
         let audioCtx = null;
         let nextStartTime = 0;
@@ -285,7 +285,7 @@
 
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
                     if (!event.data) return;
-                    
+
                     let data = event.data;
                     // FIX: Parse string payload if necessary
                     if (typeof data === 'string') {
