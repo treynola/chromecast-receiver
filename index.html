@@ -336,12 +336,13 @@
             ws.addEventListener('open', () => { wsEverConnected = true; });
         }
 
-        // === MJPEG Fallback Mode ===
-        let mjpegActive = false;
+        // === HLS Fallback Mode (Video + Audio) ===
+        let hlsFallbackActive = false;
 
         function fallbackToMjpeg() {
-            if (mjpegActive) return;
-            mjpegActive = true;
+            // RENAMED but kept for compatibility - actually uses HLS now
+            if (hlsFallbackActive) return;
+            hlsFallbackActive = true;
 
             // Extract HTTP base URL from WS URL
             let httpUrl = senderUrl?.replace('ws://', 'http://').replace(':8090', ':8089');
@@ -351,39 +352,73 @@
                 return;
             }
 
-            log(`🔄 MJPEG Fallback: ${httpUrl}`);
-            statusMsg.textContent = 'Using MJPEG mode...';
+            const hlsUrl = `${httpUrl}/hls/stream.m3u8`;
+            log(`🔄 HLS Fallback (with audio): ${hlsUrl}`);
+            statusMsg.textContent = 'Loading HLS stream...';
 
-            // Create img element for MJPEG
-            const mjpegImg = document.createElement('img');
-            mjpegImg.id = 'mjpeg-stream';
-            mjpegImg.style.cssText = 'max-width: 100%; max-height: 100%; object-fit: contain;';
+            // Create video element for HLS playback (includes audio!)
+            const video = document.createElement('video');
+            video.id = 'hls-stream';
+            video.autoplay = true;
+            video.muted = false; // AUDIO ENABLED!
+            video.playsInline = true;
+            video.style.cssText = 'width: 100%; height: 100%; object-fit: contain; background: #000;';
 
             // Add to canvas container
             const container = document.getElementById('canvas-container');
             container.innerHTML = '';
-            container.appendChild(mjpegImg);
+            container.appendChild(video);
 
-            // Start MJPEG stream
-            mjpegImg.src = `${httpUrl}/stream.mjpeg?t=${Date.now()}`;
+            // Check if HLS.js is needed (Chromecast supports HLS natively)
+            if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari, Chromecast)
+                log('📺 Using native HLS playback');
+                video.src = hlsUrl;
+            } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                // Use HLS.js for other browsers
+                log('📺 Using HLS.js for playback');
+                const hls = new Hls({
+                    lowLatencyMode: true,
+                    backBufferLength: 30
+                });
+                hls.loadSource(hlsUrl);
+                hls.attachMedia(video);
+            } else {
+                // Fallback: try direct source anyway
+                log('⚠️ HLS support unclear, trying direct...');
+                video.src = hlsUrl;
+            }
 
-            mjpegImg.onload = () => {
+            video.onloadeddata = () => {
                 statusOverlay.style.display = 'none';
-                log('✅ MJPEG stream active (Higher latency mode)');
-                latencyStat.textContent = 'MJPEG ~5-10s';
+                log('✅ HLS stream active (Video + Audio!)');
+                latencyStat.textContent = 'HLS ~8s';
+                audioStat.textContent = 'HLS Audio';
             };
 
-            mjpegImg.onerror = () => {
-                log('❌ MJPEG stream failed');
-                statusMsg.textContent = 'Stream error - check network';
+            video.onplay = () => {
+                log('▶️ HLS playback started');
+            };
 
-                // Retry after 2 seconds
+            video.onerror = (e) => {
+                log(`❌ HLS stream error: ${e.message || 'unknown'}`);
+                statusMsg.textContent = 'Stream error - retrying...';
+
+                // Retry after 3 seconds
                 setTimeout(() => {
-                    if (mjpegActive) {
-                        mjpegImg.src = `${httpUrl}/stream.mjpeg?t=${Date.now()}`;
+                    if (hlsFallbackActive) {
+                        log('🔄 Retrying HLS...');
+                        video.src = `${hlsUrl}?t=${Date.now()}`;
+                        video.load();
                     }
-                }, 2000);
+                }, 3000);
             };
+
+            // Auto-play with sound (may need user gesture on some platforms)
+            video.play().catch(e => {
+                log(`⚠️ Autoplay blocked: ${e.message}`);
+                // Chromecast should auto-play, but log if it doesn't
+            });
         }
 
         // === Cast SDK Integration ===
