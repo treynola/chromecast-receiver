@@ -2,503 +2,715 @@
 <html>
 
 <head>
-    <title>MXS-004 Cast Receiver v8.0 (WebSocket Real-Time)</title>
-    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <title>MXS-004 Hybrid Receiver v9.7</title>
+    <meta name="viewport" content="width=1920, initial-scale=1">
+    <meta charset="UTF-8">
+    <!-- Cast Receiver SDK - used ONLY to receive initial WebSocket URL from sender -->
+    <!-- All real-time data (video frames, audio, UI state) goes through WebSocket -->
+    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
+        /* === Reset & Base === */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        :root {
+            --gold: #FAD78E;
+            --dark-gold: #b38600;
+            --green: #008000;
+            --red: #FF0000;
+            --off-black: #1a1a1a;
+            --dark-gray: #2c2c2c;
+            --mid-gray: #444;
+            --text-color: #f0f0f0;
+        }
+
         body {
             background: #000;
-            color: #fff;
-            font-family: 'Inter', -apple-system, sans-serif;
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
         }
 
-        #canvas-container {
+        /* === App Container (Scales to fit) === */
+        #app-container {
+            width: 1920px;
+            height: 1080px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            background: #000;
+            transform-origin: center center;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* === Video Layer (Background) === */
+        #video-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            z-index: 1;
+            opacity: 0.6;
+            /* Balanced for UI visibility */
             background: #000;
         }
 
-        #stream-canvas {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            image-rendering: -webkit-optimize-contrast;
+        /* === UI Layer (Foreground) === */
+        #ui-layer {
+            position: relative;
+            z-index: 10;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            pointer-events: none;
+            /* UI is read-only for now */
         }
 
+        /* === Mixer Layout === */
+        #mixer {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(44, 44, 44, 0.85);
+            /* Semi-transparent */
+            border-radius: 15px;
+            padding: 20px;
+            border: 3px solid var(--green);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        /* === Header === */
+        #header {
+            text-align: center;
+            padding: 5px 0 15px;
+            border-bottom: 2px solid var(--green);
+            margin-bottom: 20px;
+        }
+
+        #header h1 {
+            color: var(--gold);
+            font-size: 42px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        #header h2 {
+            color: var(--dark-gold);
+            font-size: 20px;
+            margin-top: 5px;
+        }
+
+        /* === Tracks Container === */
+        #tracks-container {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 12px;
+            flex: 1;
+            padding: 5px;
+        }
+
+        /* === Individual Track === */
+        .track {
+            background: rgba(26, 26, 26, 0.9);
+            border: 2px solid var(--green);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .track-header {
+            text-align: center;
+            color: var(--gold);
+            font-weight: bold;
+            font-size: 16px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid var(--mid-gray);
+        }
+
+        .track.muted {
+            opacity: 0.4;
+        }
+
+        .track.solo {
+            border-color: var(--gold);
+            box-shadow: 0 0 10px var(--gold);
+        }
+
+        .track.armed {
+            border-color: var(--red);
+        }
+
+        .track.recording {
+            background: rgba(139, 0, 0, 0.4);
+        }
+
+        /* === Meters === */
+        .meter-container {
+            display: flex;
+            gap: 4px;
+            height: 120px;
+            justify-content: center;
+            background: #111;
+            border-radius: 5px;
+            padding: 4px;
+        }
+
+        .meter {
+            width: 16px;
+            background: #222;
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .meter-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, var(--green) 0%, var(--gold) 75%, var(--red) 100%);
+            transition: height 0.04s ease-out;
+        }
+
+        /* === Fader === */
+        .fader-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .fader-track {
+            flex: 1;
+            height: 6px;
+            background: var(--mid-gray);
+            border-radius: 3px;
+            position: relative;
+        }
+
+        .fader-fill {
+            height: 100%;
+            background: var(--gold);
+            border-radius: 3px;
+            transition: width 0.1s;
+        }
+
+        .fader-value {
+            color: var(--gold);
+            font-size: 11px;
+            min-width: 35px;
+        }
+
+        /* === Track Buttons === */
+        .track-buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+        }
+
+        .track-btn {
+            height: 24px;
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #333;
+            color: #888;
+            border: 1px solid #444;
+        }
+
+        .track-btn.active.mute {
+            background: var(--red);
+            color: #fff;
+        }
+
+        .track-btn.active.solo {
+            background: var(--gold);
+            color: #000;
+        }
+
+        .track-btn.active.arm {
+            background: var(--red);
+            color: #fff;
+        }
+
+        .track-btn.active.loop {
+            background: var(--green);
+            color: #fff;
+        }
+
+        /* === Master Section === */
+        #master-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: rgba(26, 26, 26, 0.95);
+            border-radius: 10px;
+            border: 2px solid var(--gold);
+            margin-top: 15px;
+        }
+
+        .master-meter {
+            display: flex;
+            gap: 8px;
+            height: 50px;
+        }
+
+        .master-meter .meter {
+            width: 25px;
+        }
+
+        /* === Transport === */
+        #transport {
+            display: flex;
+            gap: 10px;
+        }
+
+        .transport-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+            border: 2px solid var(--gold);
+            background: #333;
+            color: var(--gold);
+        }
+
+        .transport-btn.active {
+            background: var(--green);
+            color: #fff;
+        }
+
+        .transport-btn.recording {
+            background: var(--red);
+            color: #fff;
+        }
+
+        /* === Overlays === */
         .overlay {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.95);
-            padding: 40px 60px;
-            border-radius: 20px;
-            border: 2px solid #b38600;
-            text-align: center;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             z-index: 1000;
         }
 
         .overlay-title {
-            font-size: 32px;
-            font-weight: bold;
-            color: #b38600;
-            margin-bottom: 15px;
+            font-size: 48px;
+            color: var(--gold);
+            margin-bottom: 20px;
         }
 
         .overlay-msg {
-            font-size: 20px;
+            font-size: 24px;
             color: #aaa;
+            margin-bottom: 40px;
         }
 
-        #stats-overlay {
+        .start-btn {
+            padding: 20px 40px;
+            font-size: 32px;
+            background: var(--green);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--green);
+        }
+
+        /* === Virtual Cursor === */
+        #remote-cursor {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
+            pointer-events: none;
+            z-index: 10000;
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            background: var(--gold);
+            border-radius: 50%;
+            margin-left: -10px;
+            margin-top: -10px;
+            display: none;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        }
+
+        #remote-cursor.clicking {
+            transform: scale(0.7);
+            background: var(--red);
+        }
+
+        #stats {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
             font-size: 12px;
             color: #666;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 8px;
-            font-family: monospace;
-            pointer-events: none;
-        }
-
-        #log-area {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 350px;
-            max-height: 120px;
-            overflow: hidden;
-            font-size: 10px;
-            color: #555;
-            text-align: right;
-            pointer-events: none;
-        }
-
-        .version-tag {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            font-size: 10px;
-            opacity: 0.3;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.5;
-            }
-        }
-
-        .connecting {
-            animation: pulse 1s infinite;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 100;
         }
     </style>
 </head>
 
 <body>
-    <div id="canvas-container">
-        <canvas id="stream-canvas"></canvas>
+    <div id="app-container">
+        <!-- Video Canvas -->
+        <canvas id="video-canvas"></canvas>
+
+        <!-- UI Filter Overlay -->
+        <div id="ui-layer">
+            <div id="mixer">
+                <div id="header">
+                    <h1>NOWMULTIMEDIA MXS-004</h1>
+                    <h2>REAL-TIME HYBRID RECEIVER</h2>
+                </div>
+
+                <div id="tracks-container">
+                    <!-- Tracks generated dynamically -->
+                </div>
+
+                <div id="master-section">
+                    <div style="display: flex; align-items: center; gap: 20px;">
+                        <span style="color: var(--gold); font-weight: bold;">MASTER</span>
+                        <div class="master-meter">
+                            <div class="meter">
+                                <div class="meter-fill" id="master-meter-l"></div>
+                            </div>
+                            <div class="meter">
+                                <div class="meter-fill" id="master-meter-r"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="transport">
+                        <div class="transport-btn" id="btn-play">PLAY</div>
+                        <div class="transport-btn" id="btn-stop">STOP</div>
+                        <div class="transport-btn" id="btn-rec">REC</div>
+                    </div>
+
+                    <div style="color: #666; font-size: 12px;" id="status-text">
+                        WAITING FOR STREAM...
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div id="status-overlay" class="overlay">
+    <!-- Cursor -->
+    <div id="remote-cursor"></div>
+
+    <!-- Initial Overlay (Bypass Audio Policy) -->
+    <div id="start-overlay" class="overlay">
         <div class="overlay-title">MXS-004 STUDIO</div>
-        <div id="status-msg" class="overlay-msg connecting">Waiting for connection...</div>
+        <div class="overlay-msg">Ultra-Low Latency FCast Receiver</div>
+        <button class="start-btn" onclick="startReceiver()">START MONITORING</button>
     </div>
 
-    <div id="stats-overlay">
-        <div>FPS: <span id="fps-stat">0</span></div>
-        <div>Latency: <span id="latency-stat">-</span>ms</div>
-        <div>Audio: <span id="audio-stat">-</span></div>
+    <div id="stats">
+        FPS: <span id="fps">0</span> | Latency: <span id="lat">0</span>ms | Audio: <span id="audio-status">OFF</span>
     </div>
-
-    <div id="log-area"></div>
-    <div class="version-tag">v8.0 WebSocket Real-Time</div>
 
     <script>
-        // === Configuration ===
-        const VERSION = "8.0";
+        // === Constants ===
         const MSG_VIDEO = 0x01;
         const MSG_AUDIO = 0x02;
         const MSG_META = 0x03;
 
-        // === DOM Elements ===
-        const canvas = document.getElementById('stream-canvas');
-        const ctx = canvas.getContext('2d');
-        const statusOverlay = document.getElementById('status-overlay');
-        const statusMsg = document.getElementById('status-msg');
-        const logArea = document.getElementById('log-area');
-        const fpsStat = document.getElementById('fps-stat');
-        const latencyStat = document.getElementById('latency-stat');
-        const audioStat = document.getElementById('audio-stat');
-
         // === State ===
         let ws = null;
-        let isConnected = false;
         let audioCtx = null;
-        let audioBuffer = [];
-        let nextAudioTime = 0;
+        let workletNode = null;
+        let canvas = document.getElementById('video-canvas');
+        let ctx = canvas.getContext('2d');
         let frameCount = 0;
-        let lastFpsUpdate = performance.now();
-        let senderUrl = null;
+        let lastFrameTime = performance.now();
+        let audioStartTime = 0;
+        let audioBufferSize = 0;
 
-        // === Logging ===
-        function log(msg) {
-            const line = document.createElement('div');
-            line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            logArea.prepend(line);
-            while (logArea.children.length > 8) logArea.lastChild.remove();
-            console.log('[Receiver]', msg);
-        }
+        // Settings
+        const SAMPLE_RATE = 48000;
+        const CHANNELS = 2;
 
-        // === Audio System ===
-        function initAudio(sampleRate = 48000) {
-            if (audioCtx) return;
-            try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: sampleRate,
-                    latencyHint: 'interactive'
-                });
-                log(`🔊 Audio initialized: ${sampleRate}Hz`);
-                audioStat.textContent = 'Ready';
-
-                // Resume on any interaction
-                document.addEventListener('click', () => {
-                    if (audioCtx.state === 'suspended') {
-                        audioCtx.resume().then(() => log('✅ Audio resumed'));
-                    }
-                }, { once: true });
-
-            } catch (e) {
-                log(`❌ Audio init failed: ${e}`);
-                audioStat.textContent = 'Error';
+        // === Initialize UI ===
+        function initUI() {
+            const container = document.getElementById('tracks-container');
+            let html = '';
+            for (let i = 0; i < 8; i++) {
+                html += `
+                    <div class="track" id="track-${i}">
+                        <div class="track-header">TRK ${i + 1}</div>
+                        <div class="meter-container">
+                            <div class="meter"><div class="meter-fill" id="m-l-${i}"></div></div>
+                            <div class="meter"><div class="meter-fill" id="m-r-${i}"></div></div>
+                        </div>
+                        <div class="fader-container">
+                            <div class="fader-track"><div class="fader-fill" id="f-${i}" style="width: 70%"></div></div>
+                            <div class="fader-value" id="v-${i}">-6dB</div>
+                        </div>
+                        <div class="track-buttons">
+                            <div class="track-btn mute" id="btn-m-${i}">M</div>
+                            <div class="track-btn solo" id="btn-s-${i}">S</div>
+                            <div class="track-btn arm" id="btn-a-${i}">R</div>
+                            <div class="track-btn loop" id="btn-l-${i}">L</div>
+                        </div>
+                    </div>
+                `;
             }
+            container.innerHTML = html;
+            window.addEventListener('resize', scaleApp);
+            scaleApp();
         }
 
-        function playAudioChunk(pcmData) {
-            if (!audioCtx || audioCtx.state !== 'running') {
-                audioStat.textContent = 'Suspended';
+        function scaleApp() {
+            const container = document.getElementById('app-container');
+            const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            container.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            canvas.width = 1920;
+            canvas.height = 1080;
+        }
+
+        // === Start Receiver ===
+        let pendingWsUrl = null;
+
+        async function startReceiver(wsUrlOverride) {
+            document.getElementById('start-overlay').style.display = 'none';
+
+            // Init Audio Context
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: SAMPLE_RATE,
+                latencyHint: 'interactive'
+            });
+
+            // Create a simple buffer-based player if worklets aren't ready
+            audioStartTime = audioCtx.currentTime + 0.1;
+
+            document.getElementById('audio-status').textContent = 'READY';
+
+            // Get WebSocket URL from: 1) override, 2) Cast message, 3) URL param, 4) default
+            const params = new URLSearchParams(window.location.search);
+            const wsUrl = wsUrlOverride || pendingWsUrl || params.get('ws') || `ws://${window.location.hostname}:8090`;
+
+            console.log('🔌 Connecting to WebSocket:', wsUrl);
+            document.getElementById('status-text').textContent = 'CONNECTING...';
+
+            connect(wsUrl);
+        }
+
+        // === HYBRID BOOTSTRAP ===
+        // Supports both Chromecast (via Cast SDK message) and FCast (via URL params)
+        window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+
+            // Check if we have a ws= parameter (FCast or direct URL)
+            if (params.has('ws')) {
+                console.log('🚀 FCast Mode: Auto-starting (ws param found)');
+                startReceiver();
                 return;
             }
 
-            // PCM data is Float32 stereo interleaved (L,R,L,R...)
-            const float32 = new Float32Array(pcmData.buffer.slice(pcmData.byteOffset));
-            const numSamples = float32.length / 2; // Stereo
+            // Check if Cast SDK is available (Chromecast)
+            if (typeof cast !== 'undefined' && cast.framework) {
+                console.log('📺 Chromecast Mode: Initializing Cast Receiver SDK');
 
-            if (numSamples < 1) return;
+                const NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
+                const context = cast.framework.CastReceiverContext.getInstance();
 
-            // Create stereo buffer
-            const buffer = audioCtx.createBuffer(2, numSamples, audioCtx.sampleRate);
-            const left = buffer.getChannelData(0);
-            const right = buffer.getChannelData(1);
+                // Listen for custom message with WebSocket URL
+                context.addCustomMessageListener(NAMESPACE, (event) => {
+                    console.log('📩 Received Cast message:', event.data);
 
-            // Deinterleave
-            for (let i = 0; i < numSamples; i++) {
-                left[i] = float32[i * 2];
-                right[i] = float32[i * 2 + 1];
+                    if (event.data && event.data.type === 'connect' && event.data.wsUrl) {
+                        console.log('🔌 Got WebSocket URL from sender:', event.data.wsUrl);
+                        pendingWsUrl = event.data.wsUrl;
+
+                        // Start the receiver with the WebSocket URL
+                        startReceiver(event.data.wsUrl);
+                    }
+                });
+
+                // Start Cast receiver context
+                const options = new cast.framework.CastReceiverOptions();
+                options.disableIdleTimeout = true;
+                context.start(options);
+
+                document.getElementById('status-text').textContent = 'WAITING FOR SENDER...';
+                console.log('✅ Cast Receiver ready, waiting for sender message');
+            } else {
+                console.log('ℹ️ Browser Mode: Click Start to begin');
             }
+        });
 
-            // Schedule playback
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
+        // === WebSocket Logic ===
+        function connect(url) {
+            console.log("Connecting to", url);
+            ws = new WebSocket(url);
+            ws.binaryType = 'arraybuffer';
 
-            const now = audioCtx.currentTime;
-            if (nextAudioTime < now) {
-                nextAudioTime = now + 0.05; // 50ms buffer
-            }
+            ws.onopen = () => {
+                document.getElementById('status-text').textContent = 'CONNECTED';
+                document.getElementById('status-text').style.color = 'var(--green)';
+            };
 
-            source.start(nextAudioTime);
-            nextAudioTime += buffer.duration;
+            ws.onmessage = async (e) => {
+                const data = e.data;
+                if (!(data instanceof ArrayBuffer)) return;
 
-            audioStat.textContent = `Playing (${(nextAudioTime - now).toFixed(2)}s buf)`;
+                const view = new Uint8Array(data);
+                const type = view[0];
+                const content = data.slice(1);
+
+                switch (type) {
+                    case MSG_VIDEO:
+                        handleVideo(content);
+                        break;
+                    case MSG_AUDIO:
+                        handleAudio(content);
+                        break;
+                    case MSG_META:
+                        handleMeta(content);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                document.getElementById('status-text').textContent = 'RECONNECTING...';
+                document.getElementById('status-text').style.color = 'var(--red)';
+                setTimeout(() => connect(url), 2000);
+            };
         }
 
-        // === Video Rendering ===
-        function renderFrame(jpegData) {
-            const blob = new Blob([jpegData], { type: 'image/jpeg' });
+        // === Video Handler ===
+        function handleVideo(buffer) {
+            const blob = new Blob([buffer], { type: 'image/jpeg' });
             const url = URL.createObjectURL(blob);
-
             const img = new Image();
             img.onload = () => {
-                // Resize canvas if needed
-                if (canvas.width !== img.width || canvas.height !== img.height) {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    log(`📐 Canvas resized: ${img.width}x${img.height}`);
-                }
-
-                // Draw frame
-                ctx.drawImage(img, 0, 0);
+                ctx.drawImage(img, 0, 0, 1920, 1080);
                 URL.revokeObjectURL(url);
 
-                // Update FPS
                 frameCount++;
                 const now = performance.now();
-                if (now - lastFpsUpdate >= 1000) {
-                    fpsStat.textContent = frameCount;
+                if (now - lastFrameTime > 1000) {
+                    document.getElementById('fps').textContent = frameCount;
                     frameCount = 0;
-                    lastFpsUpdate = now;
+                    lastFrameTime = now;
                 }
             };
             img.src = url;
         }
 
-        // === WebSocket Connection ===
-        function connectWebSocket(wsUrl) {
-            if (ws) {
-                ws.close();
+        // === Audio Handler (PCM f32le 48kHz Stereo) ===
+        function handleAudio(buffer) {
+            const floats = new Float32Array(buffer);
+            const numFrames = floats.length / 2;
+
+            const audioBuffer = audioCtx.createBuffer(CHANNELS, numFrames, SAMPLE_RATE);
+            const left = audioBuffer.getChannelData(0);
+            const right = audioBuffer.getChannelData(1);
+
+            for (let i = 0; i < numFrames; i++) {
+                left[i] = floats[i * 2];
+                right[i] = floats[i * 2 + 1];
             }
 
-            log(`🔌 Connecting to ${wsUrl}...`);
-            statusMsg.textContent = 'Connecting...';
-            statusMsg.classList.add('connecting');
+            const source = audioCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioCtx.destination);
 
-            ws = new WebSocket(wsUrl);
-            ws.binaryType = 'arraybuffer';
+            // Scheduling to avoid clicks
+            const now = audioCtx.currentTime;
+            if (audioStartTime < now) audioStartTime = now + 0.05;
 
-            ws.onopen = () => {
-                isConnected = true;
-                log('✅ WebSocket connected!');
-                statusOverlay.style.display = 'none';
-                initAudio();
-            };
+            source.start(audioStartTime);
+            audioStartTime += audioBuffer.duration;
 
-            ws.onmessage = (event) => {
-                const data = new Uint8Array(event.data);
-                if (data.length < 2) return;
-
-                const msgType = data[0];
-                const payload = data.slice(1);
-
-                switch (msgType) {
-                    case MSG_VIDEO:
-                        renderFrame(payload);
-                        break;
-                    case MSG_AUDIO:
-                        playAudioChunk(payload);
-                        break;
-                    case MSG_META:
-                        const meta = JSON.parse(new TextDecoder().decode(payload));
-                        log(`📋 Metadata: ${JSON.stringify(meta)}`);
-                        if (meta.audioSampleRate) initAudio(meta.audioSampleRate);
-                        break;
-                }
-            };
-
-            ws.onerror = (e) => {
-                log(`❌ WebSocket error: ${e.message || 'Mixed content or network error'}`);
-                log('⚠️ Falling back to MJPEG stream...');
-
-                // Fall back to MJPEG mode
-                fallbackToMjpeg();
-            };
-
-            ws.onclose = () => {
-                isConnected = false;
-                log('🔌 WebSocket disconnected');
-
-                // If we never connected, try MJPEG fallback
-                if (!wsEverConnected) {
-                    log('⚠️ WS never connected - using MJPEG fallback');
-                    fallbackToMjpeg();
-                } else {
-                    statusOverlay.style.display = 'flex';
-                    statusMsg.textContent = 'Reconnecting...';
-                    statusMsg.classList.add('connecting');
-
-                    // Auto-reconnect after 2 seconds
-                    setTimeout(() => {
-                        if (senderUrl) connectWebSocket(senderUrl);
-                    }, 2000);
-                }
-            };
-
-            // Track if we ever successfully connected
-            let wsEverConnected = false;
-            ws.addEventListener('open', () => { wsEverConnected = true; });
+            document.getElementById('audio-status').textContent = 'PLAYING';
         }
 
-        // === HLS Fallback Mode (Video + Audio) ===
-        let hlsFallbackActive = false;
-
-        function fallbackToMjpeg() {
-            // RENAMED but kept for compatibility - actually uses HLS now
-            if (hlsFallbackActive) return;
-            hlsFallbackActive = true;
-
-            // Extract HTTP base URL from WS URL
-            let httpUrl = senderUrl?.replace('ws://', 'http://').replace(':8090', ':8089');
-            if (!httpUrl) {
-                log('❌ No fallback URL available');
-                statusMsg.textContent = 'Error: No stream URL';
-                return;
-            }
-
-            const hlsUrl = `${httpUrl}/hls/stream.m3u8`;
-            log(`🔄 HLS Fallback (with audio): ${hlsUrl}`);
-            statusMsg.textContent = 'Loading HLS stream...';
-
-            // Create video element for HLS playback (includes audio!)
-            const video = document.createElement('video');
-            video.id = 'hls-stream';
-            video.autoplay = true;
-            video.muted = false; // AUDIO ENABLED!
-            video.playsInline = true;
-            video.style.cssText = 'width: 100%; height: 100%; object-fit: contain; background: #000;';
-
-            // Add to canvas container
-            const container = document.getElementById('canvas-container');
-            container.innerHTML = '';
-            container.appendChild(video);
-
-            // Check if HLS.js is needed (Chromecast supports HLS natively)
-            if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Native HLS support (Safari, Chromecast)
-                log('📺 Using native HLS playback');
-                video.src = hlsUrl;
-            } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-                // Use HLS.js for other browsers
-                log('📺 Using HLS.js for playback');
-                const hls = new Hls({
-                    lowLatencyMode: true,
-                    backBufferLength: 30
-                });
-                hls.loadSource(hlsUrl);
-                hls.attachMedia(video);
-            } else {
-                // Fallback: try direct source anyway
-                log('⚠️ HLS support unclear, trying direct...');
-                video.src = hlsUrl;
-            }
-
-            video.onloadeddata = () => {
-                statusOverlay.style.display = 'none';
-                log('✅ HLS stream active (Video + Audio!)');
-                latencyStat.textContent = 'HLS ~8s';
-                audioStat.textContent = 'HLS Audio';
-            };
-
-            video.onplay = () => {
-                log('▶️ HLS playback started');
-            };
-
-            video.onerror = (e) => {
-                log(`❌ HLS stream error: ${e.message || 'unknown'}`);
-                statusMsg.textContent = 'Stream error - retrying...';
-
-                // Retry after 3 seconds
-                setTimeout(() => {
-                    if (hlsFallbackActive) {
-                        log('🔄 Retrying HLS...');
-                        video.src = `${hlsUrl}?t=${Date.now()}`;
-                        video.load();
-                    }
-                }, 3000);
-            };
-
-            // Auto-play with sound (may need user gesture on some platforms)
-            video.play().catch(e => {
-                log(`⚠️ Autoplay blocked: ${e.message}`);
-                // Chromecast should auto-play, but log if it doesn't
-            });
-        }
-
-        // === Cast SDK Integration ===
-        function initCastReceiver() {
+        // === Metadata Handler (JSON) ===
+        function handleMeta(buffer) {
+            const str = new TextDecoder().decode(buffer);
             try {
-                const context = cast.framework.CastReceiverContext.getInstance();
-                const playerManager = context.getPlayerManager();
-
-                // Listen for custom messages with WebSocket URL
-                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
-                    log(`📩 Cast message: ${JSON.stringify(event.data)}`);
-
-                    if (event.data && event.data.ws_url) {
-                        senderUrl = event.data.ws_url;
-                        connectWebSocket(senderUrl);
-                    }
-
-                    // Legacy: support old stream_url format but convert to WS port
-                    if (event.data && event.data.stream_url) {
-                        const baseUrl = event.data.stream_url;
-                        // Extract IP and convert to WS URL (port 8090)
-                        const match = baseUrl.match(/http:\/\/([^:]+):?(\d+)?/);
-                        if (match) {
-                            senderUrl = `ws://${match[1]}:8090`;
-                            connectWebSocket(senderUrl);
-                        }
-                    }
-                });
-
-                // Intercept LOAD to extract sender info
-                playerManager.setMessageInterceptor(
-                    cast.framework.messages.MessageType.LOAD,
-                    (loadRequestData) => {
-                        log('📥 LOAD intercepted');
-
-                        // Try to extract WS URL from media content
-                        if (loadRequestData.media && loadRequestData.media.contentId) {
-                            const contentId = loadRequestData.media.contentId;
-                            log(`Content ID: ${contentId}`);
-
-                            // If it's an HTTP URL, convert to WS
-                            if (contentId.startsWith('http://')) {
-                                const match = contentId.match(/http:\/\/([^:]+):?(\d+)?/);
-                                if (match) {
-                                    senderUrl = `ws://${match[1]}:8090`;
-                                    connectWebSocket(senderUrl);
-                                }
-                            } else if (contentId.startsWith('ws://')) {
-                                senderUrl = contentId;
-                                connectWebSocket(senderUrl);
-                            }
-                        }
-
-                        // Don't let CAF try to play as media
-                        return null;
-                    }
-                );
-
-                context.start();
-                log('✅ Cast SDK initialized');
-
+                const state = JSON.parse(str);
+                updateUI(state);
             } catch (e) {
-                log(`⚠️ Cast SDK not available: ${e.message}`);
-                log('Running in standalone mode');
-
-                // Standalone mode: check URL parameters
-                const params = new URLSearchParams(window.location.search);
-                const wsParam = params.get('ws');
-                if (wsParam) {
-                    senderUrl = wsParam;
-                    connectWebSocket(senderUrl);
-                }
+                console.error("Meta parse error", e);
             }
         }
 
-        // === Initialize ===
-        window.onload = () => {
-            log(`🚀 MXS-004 Receiver v${VERSION} initialized`);
-            initCastReceiver();
-        };
+        // === UI Update Logic ===
+        function updateUI(state) {
+            if (state.timestamp) {
+                document.getElementById('lat').textContent = Date.now() - state.timestamp;
+            }
+
+            // Update Cursor
+            if (state.cursor) {
+                const cursor = document.getElementById('remote-cursor');
+                cursor.style.display = state.cursor.visible ? 'block' : 'none';
+                cursor.style.left = (state.cursor.x * window.innerWidth) + 'px';
+                cursor.style.top = (state.cursor.y * window.innerHeight) + 'px';
+                cursor.classList.toggle('clicking', state.cursor.clicking);
+            }
+
+            // Update Tracks
+            if (state.tracks) {
+                state.tracks.forEach((t, i) => {
+                    document.getElementById(`m-l-${i}`).style.height = (t.meterL * 100) + '%';
+                    document.getElementById(`m-r-${i}`).style.height = (t.meterR * 100) + '%';
+                    document.getElementById(`f-${i}`).style.width = (t.volume * 100) + '%';
+
+                    const db = t.volume > 0 ? (20 * Math.log10(t.volume)).toFixed(0) : '-inf';
+                    document.getElementById(`v-${i}`).textContent = db + 'dB';
+
+                    document.getElementById(`btn-m-${i}`).classList.toggle('active', t.mute);
+                    document.getElementById(`btn-s-${i}`).classList.toggle('active', t.solo);
+                    document.getElementById(`btn-a-${i}`).classList.toggle('active', t.armed);
+                    document.getElementById(`btn-l-${i}`).classList.toggle('active', t.looping);
+
+                    const trackEl = document.getElementById(`track-${i}`);
+                    trackEl.classList.toggle('muted', t.mute);
+                    trackEl.classList.toggle('solo', t.solo);
+                    trackEl.classList.toggle('armed', t.armed);
+                    trackEl.classList.toggle('recording', t.recording);
+                });
+            }
+
+            // Master
+            if (state.master) {
+                document.getElementById('master-meter-l').style.height = (state.master.meterL * 100) + '%';
+                document.getElementById('master-meter-r').style.height = (state.master.meterR * 100) + '%';
+            }
+
+            // Transport
+            if (state.transport) {
+                document.getElementById('btn-play').classList.toggle('active', state.transport.playing);
+                document.getElementById('btn-rec').classList.toggle('recording', state.transport.recording);
+            }
+        }
+
+        // Init
+        initUI();
     </script>
 </body>
 
