@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Receiver v13 (Diagnostic)</title>
+    <title>MXS-004 Receiver v14 (SDK Ready Init)</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -66,12 +66,12 @@
             background: rgba(0, 0, 0, 0.85);
             padding: 10px;
             border-radius: 8px;
-            font-size: 12px;
-            max-height: 500px;
+            font-size: 14px;
+            max-height: 800px;
             overflow-y: auto;
             z-index: 1000;
             color: #0f0;
-            width: 500px;
+            width: 600px;
             border: 1px solid #0f0;
         }
 
@@ -82,39 +82,15 @@
 
         .debug-entry.error {
             color: #f00;
+            font-weight: bold;
         }
 
         .debug-entry.audio {
             color: #0ff;
         }
 
-        #overlay-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 2000;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .btn {
-            padding: 15px 30px;
-            font-size: 24px;
-            margin: 10px;
-            border: 2px solid var(--gold);
-            background: #000;
+        .debug-entry.cast {
             color: var(--gold);
-            cursor: pointer;
-        }
-
-        .btn:hover {
-            background: var(--gold);
-            color: #000;
         }
     </style>
 </head>
@@ -125,21 +101,12 @@
     </div>
 
     <div id="status-bar">
-        v13 | Start: <span id="start-state">WAITING</span> |
-        Audio: <span id="audio-state">INIT</span> |
-        Chunks: <span id="chunk-stats">0/0</span> |
-        Buf: <span id="buffer-val">0</span>ms
+        v14 | Cast: <span id="cast-state">INIT</span> |
+        Audio: <span id="audio-state">WAITING</span> |
+        WS: <span id="ws-state">...</span>
     </div>
 
     <div id="debug-log"></div>
-
-    <!-- User interaction overlay (hidden by default) -->
-    <div id="overlay-screen" style="display:none;">
-        <h1 style="color:var(--gold); margin-bottom:20px;">DIAGNOSTIC MODE</h1>
-        <button class="btn" onclick="playTestTone()">PLAY TEST TONE</button>
-        <button class="btn" onclick="startAudioContext()">START AUDIO CTX</button>
-        <button class="btn" onclick="document.getElementById('overlay-screen').style.display='none'">CLOSE</button>
-    </div>
 
     <script>
         // === CONFIG ===
@@ -147,18 +114,18 @@
         const MSG_AUDIO = 0x02;
         const MSG_META = 0x03;
         const SAMPLE_RATE = 48000;
-        const BUFFER_DELAY_MS = 250; 
-        
+        const BUFFER_DELAY_MS = 250;
+
         // === LOGGING ===
         const debugLog = document.getElementById('debug-log');
         function log(msg, type = 'info') {
-            const time = new Date().toISOString().split('T')[1].slice(0, 8);
+            const time = new Date().toISOString().split('T')[1].slice(0, 12);
             const entry = document.createElement('div');
             entry.className = `debug-entry ${type}`;
             entry.textContent = `[${time}] ${msg}`;
             debugLog.appendChild(entry);
             debugLog.scrollTop = debugLog.scrollHeight;
-            if (debugLog.children.length > 100) debugLog.removeChild(debugLog.firstChild);
+            while (debugLog.children.length > 200) debugLog.removeChild(debugLog.firstChild);
             console.log(`[${type}] ${msg}`);
         }
 
@@ -169,207 +136,216 @@
         let nextPlayTime = 0;
         let chunksRecv = 0;
         let chunksPlay = 0;
-        
-        // === AUDIO INIT ===
-        async function initAudio() {
-            if (audioCtx) return;
-            
+
+        // === AUDIO ENGINE ===
+        async function unlockAudioEngine() {
+            if (audioCtx) return audioCtx;
+
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'playback' });
-                log(`AudioContext created: ${audioCtx.state} @ ${audioCtx.sampleRate}Hz`, 'audio');
+                audioCtx = new AudioContext({
+                    sampleRate: SAMPLE_RATE,
+                    latencyHint: 'playback'
+                });
+
+                log(`AudioContext Created. State: ${audioCtx.state}`, 'audio');
+
+                // CRITICAL: Play silent buffer to unlock
+                const buf = audioCtx.createBuffer(1, 1, SAMPLE_RATE);
+                const src = audioCtx.createBufferSource();
+                src.buffer = buf;
+                src.connect(audioCtx.destination);
+                src.start(0);
+
+                if (audioCtx.state === 'suspended') {
+                    log('AudioContext suspended - calling resume()...', 'audio');
+                    await audioCtx.resume();
+                }
+
+                log(`Audio Unlock Result: ${audioCtx.state}`, audioCtx.state === 'running' ? 'success' : 'error');
                 updateStatus();
-                
-                // Keep-alive heartbeat
-                setInterval(() => {
-                    if (audioCtx) {
-                        if (audioCtx.state === 'suspended') {
-                            log('Heartbeat: CTX SUSPENDED - Attempting resume...', 'error');
-                            audioCtx.resume();
-                        } else if (audioCtx.state === 'running') {
-                            // verify with silent play
-                            // log('Heartbeat: CTX RUNNING', 'info'); 
-                        }
-                        updateStatus();
-                    }
-                }, 2000);
+
+                return audioCtx;
 
             } catch (e) {
-                log(`Audio Init Failed: ${e.message}`, 'error');
-            }
-        }
-        
-        function updateStatus() {
-            const state = audioCtx ? audioCtx.state.toUpperCase() : 'NULL';
-            document.getElementById('audio-state').textContent = state;
-            document.getElementById('chunk-stats').textContent = `${chunksRecv}/${chunksPlay}`;
-            
-            if (audioCtx && isAudioStarted) {
-                const buf = (nextPlayTime - audioCtx.currentTime) * 1000;
-                document.getElementById('buffer-val').textContent = Math.max(0, buf).toFixed(0);
+                log(`Audio Unlock Failed: ${e.message}`, 'error');
             }
         }
 
-        // === TEST TONE ===
-        function playTestTone() {
-            if (!audioCtx) initAudio();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            
-            const osc = audioCtx.createOscillator();
-            osc.frequency.value = 440;
-            osc.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 1);
-            log('Playing 1s test tone (440Hz)', 'audio');
-        }
-
-        function startAudioContext() {
-            if (!audioCtx) initAudio();
-            audioCtx.resume().then(() => {
-                log(`Manually resumed: ${audioCtx.state}`, 'audio');
-                playTestTone();
-            });
-        }
-
-        // === WS HANDLER ===
-        function connectWS(url) {
-            log(`Connecting WS: ${url}`);
-            
-            try {
-                ws = new WebSocket(url);
-                ws.binaryType = 'arraybuffer';
-                
-                ws.onopen = () => {
-                    log('WS Connected', 'success');
-                    document.getElementById('start-state').textContent = 'CONNECTED';
-                };
-                
-                ws.onmessage = async (e) => {
-                    if (e.data instanceof ArrayBuffer) {
-                        const view = new Uint8Array(e.data);
-                        const type = view[0];
-                        const payload = e.data.slice(1);
-                        
-                        if (type === MSG_VIDEO) {
-                            handleVideo(payload);
-                        } else if (type === MSG_AUDIO) {
-                            await handleAudio(payload);
-                        } else if (type === MSG_META) {
-                            handleMeta(payload);
-                        }
-                    }
-                };
-                
-                ws.onerror = (e) => log(`WS Error: ${e.message || 'unknown'}`, 'error');
-                ws.onclose = () => {
-                    log('WS Closed, retrying...', 'error');
-                    setTimeout(() => connectWS(url), 3000);
-                };
-                
-            } catch (e) {
-                log(`WS Exception: ${e.message}`, 'error');
-            }
-        }
-        
-        // === AUDIO PROCESSING ===
         async function handleAudio(buffer) {
             chunksRecv++;
-            
-            // Critical: Ensure context exists and is running
-            if (!audioCtx) await initAudio();
-            if (audioCtx.state !== 'running') {
-                log(`Received chunk but AudioContext is ${audioCtx.state} - Resuming`, 'error');
-                await audioCtx.resume();
+
+            if (!audioCtx || audioCtx.state !== 'running') {
+                log(`Chunk received but AudioContext is ${audioCtx ? audioCtx.state : 'null'}`, 'error');
+                await unlockAudioEngine();
             }
-            
+
+            if (audioCtx.state !== 'running') return;
+
             try {
                 const floatData = new Float32Array(buffer);
-                const numSamples = floatData.length / 2; // Stereo
-                
+                const numSamples = floatData.length / 2;
                 const audioBuf = audioCtx.createBuffer(2, numSamples, SAMPLE_RATE);
+
+                // Copy data (de-interleave)
                 const l = audioBuf.getChannelData(0);
                 const r = audioBuf.getChannelData(1);
-                
-                // De-interleave
-                for(let i=0; i<numSamples; i++) {
-                    l[i] = floatData[i*2];
-                    r[i] = floatData[i*2+1];
+                for (let i = 0; i < numSamples; i++) {
+                    l[i] = floatData[i * 2];
+                    r[i] = floatData[i * 2 + 1];
                 }
-                
-                // Timing logic
+
                 const now = audioCtx.currentTime;
+                // Sync Logic
                 if (!isAudioStarted || nextPlayTime < now) {
                     nextPlayTime = now + (BUFFER_DELAY_MS / 1000);
                     isAudioStarted = true;
-                    log(`Buffer Resync: Playing at ${nextPlayTime.toFixed(3)}s (Now: ${now.toFixed(3)}s)`, 'audio');
+                    log(`Sync: Play at ${nextPlayTime.toFixed(3)}s (Drift: ${(now - nextPlayTime).toFixed(3)}s)`, 'audio');
                 }
-                
+
                 const source = audioCtx.createBufferSource();
                 source.buffer = audioBuf;
                 source.connect(audioCtx.destination);
                 source.start(nextPlayTime);
-                
+
                 nextPlayTime += audioBuf.duration;
                 chunksPlay++;
-                
-                if (chunksPlay % 50 === 0) updateStatus();
-                
+
+                if (chunksPlay % 100 === 0) updateStatus();
+
             } catch (e) {
-                log(`Audio Decode Error: ${e.message}`, 'error');
+                log(`Decode Error: ${e.message}`, 'error');
             }
         }
 
-        // === VIDEO ===
+        function updateStatus() {
+            const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'NULL';
+            const castState = document.getElementById('cast-state').textContent;
+            document.getElementById('audio-state').textContent = `${ctxState} (${chunksPlay})`;
+        }
+
+        // === CAST SDK ===
+        function initCast() {
+            log('Initializing Cast Receiver SDK...', 'cast');
+            const ctx = cast.framework.CastReceiverContext.getInstance();
+            const options = new cast.framework.CastReceiverOptions();
+            options.disableIdleTimeout = true;
+            options.maxInactivity = 3600; // 1 hour
+
+            // 1. Listen for READY event - this is the "Blessed" moment
+            ctx.addEventListener(cast.framework.system.EventType.READY, async (event) => {
+                log(`Cast System READY`, 'cast');
+                document.getElementById('cast-state').textContent = 'READY';
+
+                // UNLOCK AUDIO NOW
+                await unlockAudioEngine();
+
+                // Play a audible chime to confirm to user
+                playChime();
+            });
+
+            // 2. Listen for SENDER_CONNECTED
+            ctx.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, (event) => {
+                log(`Sender Connected: ${event.senderId}`, 'cast');
+                document.getElementById('cast-state').textContent = 'CONNECTED';
+            });
+
+            // 3. Custom Message Bus for WebSocket Handshake
+            const NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
+            ctx.addCustomMessageListener(NAMESPACE, (event) => {
+                log(`Msg from ${event.senderId}: ${JSON.stringify(event.data)}`, 'cast');
+                if (event.data?.wsUrl) {
+                    connectWS(event.data.wsUrl);
+                }
+            });
+
+            ctx.start(options);
+            log('Cast Context Started', 'cast');
+        }
+
+        function playChime() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+
+            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.5);
+            log('Played Startup Chime', 'audio');
+        }
+
+        // === WEBSOCKET ===
+        function connectWS(url) {
+            if (ws) ws.close();
+            log(`WS Connecting: ${url}`, 'info');
+            document.getElementById('ws-state').textContent = 'CONNECTING';
+
+            ws = new WebSocket(url);
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                log('WS Open', 'success');
+                document.getElementById('ws-state').textContent = 'OPEN';
+            };
+
+            ws.onmessage = async (e) => {
+                if (e.data instanceof ArrayBuffer) {
+                    const view = new Uint8Array(e.data);
+                    const type = view[0];
+                    const payload = e.data.slice(1);
+
+                    if (type === MSG_VIDEO) renderVideo(payload);
+                    else if (type === MSG_AUDIO) await handleAudio(payload);
+                }
+            };
+
+            ws.onclose = () => {
+                log('WS Closed', 'error');
+                document.getElementById('ws-state').textContent = 'CLOSED';
+                setTimeout(() => connectWS(url), 3000);
+            };
+        }
+
+        // === VIDEO RENDER ===
         const canvas = document.getElementById('video-canvas');
         const ctx = canvas.getContext('2d');
-        let img = new Image();
-        
-        function handleVideo(buffer) {
-            const blob = new Blob([buffer], {type: 'image/jpeg'});
+        const img = new Image();
+        function renderVideo(buffer) {
+            const blob = new Blob([buffer], { type: 'image/jpeg' });
             const url = URL.createObjectURL(blob);
             img.onload = () => {
                 ctx.drawImage(img, 0, 0, 1920, 1080);
                 URL.revokeObjectURL(url);
             };
             img.src = url;
-            
-            // Also ensure audio context is active if we are receiving video
-            // This is a "keep alive" hack
-            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-        }
-
-        function handleMeta(buffer) {
-            // ... (cursor, etc)
-        }
-
-        // === STARTUP ===
-        window.onload = () => {
-            log('Receiver V13 Loaded');
-            
-            // Auto Start Audio immediately
-            initAudio();
-            
-            const params = new URLSearchParams(location.search);
-            const wsUrl = params.get('ws') || `ws://${location.hostname}:8090`;
-            
-            // Show overlay if ?debug=true
-            if (params.has('debug')) {
-               document.getElementById('overlay-screen').style.display = 'flex';
+            // Keep-alive hack
+            if (chunksRecv % 500 === 0 && audioCtx?.state === 'suspended') {
+                audioCtx.resume();
             }
-            
-            // Chromecast SDK
-             if (typeof cast !== 'undefined' && cast.framework) {
-                log('Cast SDK Detected');
-                const ctx = cast.framework.CastReceiverContext.getInstance();
-                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (e) => {
-                    log(`Cast Msg: ${JSON.stringify(e.data)}`);
-                    if (e.data.wsUrl) connectWS(e.data.wsUrl);
-                });
-                ctx.start({disableIdleTimeout: true});
-             } else {
-                 log('Browser Mode');
-                 connectWS(wsUrl);
-             }
+        }
+
+        // === BOOTSTRAP ===
+        window.onload = () => {
+            log('Receiver V14 Booting...');
+
+            // Check environment
+            if (typeof cast !== 'undefined' && cast.framework) {
+                initCast();
+            } else {
+                log('Running in Browser Mode (No Cast SDK)', 'info');
+                // Auto-connect for local testing
+                unlockAudioEngine();
+                const params = new URLSearchParams(location.search);
+                const wsUrl = params.get('ws') || `ws://${location.hostname}:8090`;
+                connectWS(wsUrl);
+            }
         };
     </script>
 </body>
