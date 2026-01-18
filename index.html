@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Receiver v14 (SDK Ready Init)</title>
+    <title>MXS-004 Receiver v15 (Fixed Layout)</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -26,71 +26,89 @@
             overflow: hidden;
             width: 100vw;
             height: 100vh;
+            /* Flex center properly */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         #app-container {
             width: 1920px;
             height: 1080px;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform-origin: center center;
+            position: relative;
+            /* Changed from absolute */
+            background: #111;
         }
 
         #video-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1;
+            display: block;
+        }
+
+        /* DIAGNOSTIC OVERLAYS */
+        #audio-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 50px;
+            height: 50px;
+            background: #333;
+            border-radius: 50%;
+            border: 2px solid #555;
+            transition: background 0.1s;
+        }
+
+        #audio-indicator.active {
+            background: #00ff00;
+            box-shadow: 0 0 20px #00ff00;
+        }
+
+        #audio-indicator.suspended {
+            background: #ff0000;
+            box-shadow: 0 0 20px #ff0000;
         }
 
         #status-bar {
-            position: fixed;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 16px;
-            z-index: 1000;
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-size: 24px;
             color: var(--gold);
-            border: 1px solid var(--gold);
+            border: 2px solid var(--gold);
+            text-align: center;
+            min-width: 600px;
         }
 
         #debug-log {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 10px;
-            border-radius: 8px;
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            width: 500px;
+            height: 800px;
+            background: rgba(0, 0, 0, 0.7);
+            overflow: hidden;
             font-size: 14px;
-            max-height: 800px;
-            overflow-y: auto;
-            z-index: 1000;
-            color: #0f0;
-            width: 600px;
-            border: 1px solid #0f0;
+            pointer-events: none;
+            color: #eee;
         }
 
-        .debug-entry {
-            margin-bottom: 2px;
+        .entry {
             border-bottom: 1px solid #333;
+            padding: 2px;
         }
 
-        .debug-entry.error {
-            color: #f00;
+        .entry.err {
+            color: #f55;
             font-weight: bold;
         }
 
-        .debug-entry.audio {
-            color: #0ff;
-        }
-
-        .debug-entry.cast {
-            color: var(--gold);
+        .entry.warn {
+            color: #fc0;
         }
     </style>
 </head>
@@ -98,59 +116,60 @@
 <body>
     <div id="app-container">
         <canvas id="video-canvas" width="1920" height="1080"></canvas>
+        <div id="audio-indicator"></div>
+        <div id="status-bar">Initialize...</div>
+        <div id="debug-log"></div>
     </div>
-
-    <div id="status-bar">
-        v14 | Cast: <span id="cast-state">INIT</span> |
-        Audio: <span id="audio-state">WAITING</span> |
-        WS: <span id="ws-state">...</span>
-    </div>
-
-    <div id="debug-log"></div>
 
     <script>
         // === CONFIG ===
-        const MSG_VIDEO = 0x01;
-        const MSG_AUDIO = 0x02;
-        const MSG_META = 0x03;
         const SAMPLE_RATE = 48000;
-        const BUFFER_DELAY_MS = 250;
+        const BUFFER_DELAY_MS = 300; // Increased to 300ms for safety
 
         // === LOGGING ===
-        const debugLog = document.getElementById('debug-log');
-        function log(msg, type = 'info') {
-            const time = new Date().toISOString().split('T')[1].slice(0, 12);
-            const entry = document.createElement('div');
-            entry.className = `debug-entry ${type}`;
-            entry.textContent = `[${time}] ${msg}`;
-            debugLog.appendChild(entry);
-            debugLog.scrollTop = debugLog.scrollHeight;
-            while (debugLog.children.length > 200) debugLog.removeChild(debugLog.firstChild);
-            console.log(`[${type}] ${msg}`);
+        const logEl = document.getElementById('debug-log');
+        function log(msg, type = '') {
+            const div = document.createElement('div');
+            div.className = 'entry ' + type;
+            div.textContent = `[${new Date().toISOString().substr(14, 9)}] ${msg}`;
+            logEl.prepend(div);
+            if (logEl.children.length > 50) logEl.lastChild.remove();
+            console.log(msg);
         }
 
         // === STATE ===
-        let ws = null;
-        let audioCtx = null;
+        let audioCtx;
+        let ws;
         let isAudioStarted = false;
         let nextPlayTime = 0;
-        let chunksRecv = 0;
-        let chunksPlay = 0;
+        let chunksProcessed = 0;
+
+        // === UI UPDATES ===
+        function updateUI(status) {
+            if (status) document.getElementById('status-bar').textContent = status;
+
+            const ind = document.getElementById('audio-indicator');
+            if (audioCtx) {
+                if (audioCtx.state === 'running') {
+                    // Flash green on activity, but keep green base
+                    ind.className = 'active';
+                } else {
+                    ind.className = 'suspended';
+                }
+            }
+        }
 
         // === AUDIO ENGINE ===
-        async function unlockAudioEngine() {
-            if (audioCtx) return audioCtx;
+        async function initAudio() {
+            if (audioCtx) return;
 
             try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AudioContext({
-                    sampleRate: SAMPLE_RATE,
-                    latencyHint: 'playback'
-                });
+                const AC = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AC({ latencyHint: 'playback', sampleRate: SAMPLE_RATE });
 
-                log(`AudioContext Created. State: ${audioCtx.state}`, 'audio');
+                log(`AudioCtx Init: ${audioCtx.state}`);
 
-                // CRITICAL: Play silent buffer to unlock
+                // Silent Unlock
                 const buf = audioCtx.createBuffer(1, 1, SAMPLE_RATE);
                 const src = audioCtx.createBufferSource();
                 src.buffer = buf;
@@ -158,195 +177,134 @@
                 src.start(0);
 
                 if (audioCtx.state === 'suspended') {
-                    log('AudioContext suspended - calling resume()...', 'audio');
+                    log('Resuming...');
                     await audioCtx.resume();
                 }
 
-                log(`Audio Unlock Result: ${audioCtx.state}`, audioCtx.state === 'running' ? 'success' : 'error');
-                updateStatus();
+                log(`AudioCtx Final: ${audioCtx.state}`);
+                updateUI(`Audio: ${audioCtx.state.toUpperCase()}`);
 
-                return audioCtx;
-
-            } catch (e) {
-                log(`Audio Unlock Failed: ${e.message}`, 'error');
-            }
-        }
-
-        async function handleAudio(buffer) {
-            chunksRecv++;
-
-            if (!audioCtx || audioCtx.state !== 'running') {
-                log(`Chunk received but AudioContext is ${audioCtx ? audioCtx.state : 'null'}`, 'error');
-                await unlockAudioEngine();
-            }
-
-            if (audioCtx.state !== 'running') return;
-
-            try {
-                const floatData = new Float32Array(buffer);
-                const numSamples = floatData.length / 2;
-                const audioBuf = audioCtx.createBuffer(2, numSamples, SAMPLE_RATE);
-
-                // Copy data (de-interleave)
-                const l = audioBuf.getChannelData(0);
-                const r = audioBuf.getChannelData(1);
-                for (let i = 0; i < numSamples; i++) {
-                    l[i] = floatData[i * 2];
-                    r[i] = floatData[i * 2 + 1];
-                }
-
-                const now = audioCtx.currentTime;
-                // Sync Logic
-                if (!isAudioStarted || nextPlayTime < now) {
-                    nextPlayTime = now + (BUFFER_DELAY_MS / 1000);
-                    isAudioStarted = true;
-                    log(`Sync: Play at ${nextPlayTime.toFixed(3)}s (Drift: ${(now - nextPlayTime).toFixed(3)}s)`, 'audio');
-                }
-
-                const source = audioCtx.createBufferSource();
-                source.buffer = audioBuf;
-                source.connect(audioCtx.destination);
-                source.start(nextPlayTime);
-
-                nextPlayTime += audioBuf.duration;
-                chunksPlay++;
-
-                if (chunksPlay % 100 === 0) updateStatus();
-
-            } catch (e) {
-                log(`Decode Error: ${e.message}`, 'error');
-            }
-        }
-
-        function updateStatus() {
-            const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'NULL';
-            const castState = document.getElementById('cast-state').textContent;
-            document.getElementById('audio-state').textContent = `${ctxState} (${chunksPlay})`;
-        }
-
-        // === CAST SDK ===
-        function initCast() {
-            log('Initializing Cast Receiver SDK...', 'cast');
-            const ctx = cast.framework.CastReceiverContext.getInstance();
-            const options = new cast.framework.CastReceiverOptions();
-            options.disableIdleTimeout = true;
-            options.maxInactivity = 3600; // 1 hour
-
-            // 1. Listen for READY event - this is the "Blessed" moment
-            ctx.addEventListener(cast.framework.system.EventType.READY, async (event) => {
-                log(`Cast System READY`, 'cast');
-                document.getElementById('cast-state').textContent = 'READY';
-
-                // UNLOCK AUDIO NOW
-                await unlockAudioEngine();
-
-                // Play a audible chime to confirm to user
+                // Play Chime
                 playChime();
-            });
 
-            // 2. Listen for SENDER_CONNECTED
-            ctx.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, (event) => {
-                log(`Sender Connected: ${event.senderId}`, 'cast');
-                document.getElementById('cast-state').textContent = 'CONNECTED';
-            });
-
-            // 3. Custom Message Bus for WebSocket Handshake
-            const NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-            ctx.addCustomMessageListener(NAMESPACE, (event) => {
-                log(`Msg from ${event.senderId}: ${JSON.stringify(event.data)}`, 'cast');
-                if (event.data?.wsUrl) {
-                    connectWS(event.data.wsUrl);
-                }
-            });
-
-            ctx.start(options);
-            log('Cast Context Started', 'cast');
+            } catch (e) {
+                log(`InitAudio Error: ${e.message}`, 'err');
+            }
         }
 
         function playChime() {
             if (!audioCtx) return;
             const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
+            const g = audioCtx.createGain();
+            osc.connect(g);
+            g.connect(audioCtx.destination);
             osc.frequency.setValueAtTime(440, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
-
-            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-
+            g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
             osc.start();
             osc.stop(audioCtx.currentTime + 0.5);
-            log('Played Startup Chime', 'audio');
+            log('Played Chime');
         }
 
-        // === WEBSOCKET ===
-        function connectWS(url) {
-            if (ws) ws.close();
-            log(`WS Connecting: ${url}`, 'info');
-            document.getElementById('ws-state').textContent = 'CONNECTING';
+        async function handleAudio(buffer) {
+            if (!audioCtx) await initAudio();
+            if (audioCtx.state !== 'running') audioCtx.resume();
 
-            ws = new WebSocket(url);
-            ws.binaryType = 'arraybuffer';
+            chunksProcessed++;
 
-            ws.onopen = () => {
-                log('WS Open', 'success');
-                document.getElementById('ws-state').textContent = 'OPEN';
-            };
+            // Visual Pulse every 10 chunks to confirm data flow
+            if (chunksProcessed % 10 === 0) {
+                const ind = document.getElementById('audio-indicator');
+                ind.style.opacity = ind.style.opacity === '0.5' ? '1' : '0.5';
+            }
 
-            ws.onmessage = async (e) => {
-                if (e.data instanceof ArrayBuffer) {
-                    const view = new Uint8Array(e.data);
-                    const type = view[0];
-                    const payload = e.data.slice(1);
-
-                    if (type === MSG_VIDEO) renderVideo(payload);
-                    else if (type === MSG_AUDIO) await handleAudio(payload);
+            try {
+                const f32 = new Float32Array(buffer);
+                // Stereo De-interleave
+                const samples = f32.length / 2;
+                const audioBuf = audioCtx.createBuffer(2, samples, SAMPLE_RATE);
+                const l = audioBuf.getChannelData(0);
+                const r = audioBuf.getChannelData(1);
+                for (let i = 0; i < samples; i++) {
+                    l[i] = f32[i * 2];
+                    r[i] = f32[i * 2 + 1];
                 }
-            };
 
-            ws.onclose = () => {
-                log('WS Closed', 'error');
-                document.getElementById('ws-state').textContent = 'CLOSED';
-                setTimeout(() => connectWS(url), 3000);
-            };
+                const now = audioCtx.currentTime;
+                // Simple sync (Reset if drift > 500ms)
+                if (!isAudioStarted || nextPlayTime < now || (nextPlayTime - now) > 0.5) {
+                    nextPlayTime = now + (BUFFER_DELAY_MS / 1000);
+                    isAudioStarted = true;
+                    log(`Sync Reset: Play @ +${BUFFER_DELAY_MS}ms`);
+                }
+
+                const src = audioCtx.createBufferSource();
+                src.buffer = audioBuf;
+                src.connect(audioCtx.destination);
+                src.start(nextPlayTime);
+                nextPlayTime += audioBuf.duration;
+
+            } catch (e) {
+                log(`Decode: ${e.message}`, 'err');
+            }
         }
 
-        // === VIDEO RENDER ===
-        const canvas = document.getElementById('video-canvas');
-        const ctx = canvas.getContext('2d');
+        // === VIDEO ===
+        const ctx = document.getElementById('video-canvas').getContext('2d');
         const img = new Image();
-        function renderVideo(buffer) {
-            const blob = new Blob([buffer], { type: 'image/jpeg' });
-            const url = URL.createObjectURL(blob);
+        function handleVideo(buf) {
+            const url = URL.createObjectURL(new Blob([buf]));
             img.onload = () => {
                 ctx.drawImage(img, 0, 0, 1920, 1080);
                 URL.revokeObjectURL(url);
             };
             img.src = url;
-            // Keep-alive hack
-            if (chunksRecv % 500 === 0 && audioCtx?.state === 'suspended') {
-                audioCtx.resume();
-            }
         }
 
-        // === BOOTSTRAP ===
+        // === CAST & WS ===
         window.onload = () => {
-            log('Receiver V14 Booting...');
+            // Center Check
+            log('V15 Loaded. Checking Layout...');
 
-            // Check environment
             if (typeof cast !== 'undefined' && cast.framework) {
-                initCast();
+                const context = cast.framework.CastReceiverContext.getInstance();
+                const opts = new cast.framework.CastReceiverOptions();
+                opts.disableIdleTimeout = true;
+
+                context.addEventListener(cast.framework.system.EventType.READY, async () => {
+                    log('CAST READY - UNLOCKING AUDIO');
+                    await initAudio();
+                });
+
+                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
+                    if (e.data.wsUrl) connectWS(e.data.wsUrl);
+                });
+
+                context.start(opts);
             } else {
-                log('Running in Browser Mode (No Cast SDK)', 'info');
-                // Auto-connect for local testing
-                unlockAudioEngine();
-                const params = new URLSearchParams(location.search);
-                const wsUrl = params.get('ws') || `ws://${location.hostname}:8090`;
+                // Manual test
+                initAudio();
+                const wsUrl = new URLSearchParams(location.search).get('ws') || `ws://${location.hostname}:8090`;
                 connectWS(wsUrl);
             }
         };
+
+        function connectWS(url) {
+            log(`WS: ${url}`);
+            if (ws) ws.close();
+            ws = new WebSocket(url);
+            ws.binaryType = 'arraybuffer';
+            ws.onopen = () => updateUI('WS Connected');
+            ws.onmessage = async (e) => {
+                if (!(e.data instanceof ArrayBuffer)) return;
+                const view = new Uint8Array(e.data);
+                const type = view[0];
+                const payload = e.data.slice(1);
+                if (type === 1) handleVideo(payload);
+                if (type === 2) handleAudio(payload);
+            };
+        }
     </script>
 </body>
 
