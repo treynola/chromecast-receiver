@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Receiver v12 (Auto-Start Audio)</title>
+    <title>MXS-004 Receiver v13 (Diagnostic)</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -67,63 +67,54 @@
             padding: 10px;
             border-radius: 8px;
             font-size: 12px;
-            max-height: 300px;
+            max-height: 500px;
             overflow-y: auto;
             z-index: 1000;
             color: #0f0;
-            width: 400px;
+            width: 500px;
             border: 1px solid #0f0;
         }
 
-        .overlay {
+        .debug-entry {
+            margin-bottom: 2px;
+            border-bottom: 1px solid #333;
+        }
+
+        .debug-entry.error {
+            color: #f00;
+        }
+
+        .debug-entry.audio {
+            color: #0ff;
+        }
+
+        #overlay-screen {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.95);
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
         }
 
-        .overlay-title {
-            font-size: 48px;
-            color: var(--gold);
-            margin-bottom: 20px;
-        }
-
-        .overlay-msg {
+        .btn {
+            padding: 15px 30px;
             font-size: 24px;
-            color: #aaa;
-            margin-bottom: 40px;
-        }
-
-        .start-btn {
-            padding: 20px 40px;
-            font-size: 32px;
-            background: var(--green);
-            color: white;
-            border: none;
-            border-radius: 10px;
+            margin: 10px;
+            border: 2px solid var(--gold);
+            background: #000;
+            color: var(--gold);
             cursor: pointer;
         }
 
-        #remote-cursor {
-            position: fixed;
-            pointer-events: none;
-            z-index: 10000;
-            width: 20px;
-            height: 20px;
-            border: 2px solid white;
+        .btn:hover {
             background: var(--gold);
-            border-radius: 50%;
-            margin-left: -10px;
-            margin-top: -10px;
-            display: none;
-            box-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+            color: #000;
         }
     </style>
 </head>
@@ -133,22 +124,21 @@
         <canvas id="video-canvas" width="1920" height="1080"></canvas>
     </div>
 
-    <div id="remote-cursor"></div>
-
     <div id="status-bar">
-        v12 | FPS: <span id="fps">0</span> |
-        Latency: <span id="lat">0</span>ms |
-        Audio: <span id="audio-status">INIT</span> |
-        Buffer: <span id="buffer-status">0ms</span> |
-        WS: <span id="ws-status">...</span>
+        v13 | Start: <span id="start-state">WAITING</span> |
+        Audio: <span id="audio-state">INIT</span> |
+        Chunks: <span id="chunk-stats">0/0</span> |
+        Buf: <span id="buffer-val">0</span>ms
     </div>
 
     <div id="debug-log"></div>
 
-    <div id="start-overlay" class="overlay" style="display:none;">
-        <div class="overlay-title">MXS-004 RECEIVER v12</div>
-        <div class="overlay-msg">Click to enable audio</div>
-        <button class="start-btn" onclick="userStartAudio()">ENABLE AUDIO</button>
+    <!-- User interaction overlay (hidden by default) -->
+    <div id="overlay-screen" style="display:none;">
+        <h1 style="color:var(--gold); margin-bottom:20px;">DIAGNOSTIC MODE</h1>
+        <button class="btn" onclick="playTestTone()">PLAY TEST TONE</button>
+        <button class="btn" onclick="startAudioContext()">START AUDIO CTX</button>
+        <button class="btn" onclick="document.getElementById('overlay-screen').style.display='none'">CLOSE</button>
     </div>
 
     <script>
@@ -157,314 +147,230 @@
         const MSG_AUDIO = 0x02;
         const MSG_META = 0x03;
         const SAMPLE_RATE = 48000;
-        const BUFFER_DELAY_MS = 150;
+        const BUFFER_DELAY_MS = 250; 
         
-        // === STATE ===
-        let ws = null;
-        let canvas, ctx;
-        let frameCount = 0;
-        let lastFrameTime = performance.now();
-        
-        // === AUDIO STATE ===
-        let audioCtx = null;
-        let nextPlayTime = 0;
-        let audioChunksReceived = 0;
-        let audioChunksPlayed = 0;
-        let isAudioStarted = false;
-        let audioResumeAttempts = 0;
-        
-        // === DEBUG LOG ===
+        // === LOGGING ===
         const debugLog = document.getElementById('debug-log');
-        function log(msg) {
-            const time = new Date().toLocaleTimeString();
+        function log(msg, type = 'info') {
+            const time = new Date().toISOString().split('T')[1].slice(0, 8);
             const entry = document.createElement('div');
+            entry.className = `debug-entry ${type}`;
             entry.textContent = `[${time}] ${msg}`;
             debugLog.appendChild(entry);
             debugLog.scrollTop = debugLog.scrollHeight;
-            if (debugLog.children.length > 50) debugLog.removeChild(debugLog.firstChild);
-            console.log(msg);
+            if (debugLog.children.length > 100) debugLog.removeChild(debugLog.firstChild);
+            console.log(`[${type}] ${msg}`);
         }
+
+        // === STATE ===
+        let ws = null;
+        let audioCtx = null;
+        let isAudioStarted = false;
+        let nextPlayTime = 0;
+        let chunksRecv = 0;
+        let chunksPlay = 0;
         
-        // === INIT ===
-        function initUI() {
-            canvas = document.getElementById('video-canvas');
-            ctx = canvas.getContext('2d');
-            window.addEventListener('resize', scaleApp);
-            scaleApp();
-            log('UI initialized');
-        }
-        
-        function scaleApp() {
-            const container = document.getElementById('app-container');
-            const scaleX = window.innerWidth / 1920;
-            const scaleY = window.innerHeight / 1080;
-            const scale = Math.min(scaleX, scaleY);
-            container.style.transform = `translate(-50%, -50%) scale(${scale})`;
-        }
-        
+        // === AUDIO INIT ===
         async function initAudio() {
-            if (audioCtx && audioCtx.state === 'running') {
-                log('AudioContext already running');
-                return true;
-            }
+            if (audioCtx) return;
             
             try {
-                // Create AudioContext
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: SAMPLE_RATE,
-                    latencyHint: 'playback'
-                });
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'playback' });
+                log(`AudioContext created: ${audioCtx.state} @ ${audioCtx.sampleRate}Hz`, 'audio');
+                updateStatus();
                 
-                log(`AudioContext created: state=${audioCtx.state}, sampleRate=${audioCtx.sampleRate}`);
+                // Keep-alive heartbeat
+                setInterval(() => {
+                    if (audioCtx) {
+                        if (audioCtx.state === 'suspended') {
+                            log('Heartbeat: CTX SUSPENDED - Attempting resume...', 'error');
+                            audioCtx.resume();
+                        } else if (audioCtx.state === 'running') {
+                            // verify with silent play
+                            // log('Heartbeat: CTX RUNNING', 'info'); 
+                        }
+                        updateStatus();
+                    }
+                }, 2000);
+
+            } catch (e) {
+                log(`Audio Init Failed: ${e.message}`, 'error');
+            }
+        }
+        
+        function updateStatus() {
+            const state = audioCtx ? audioCtx.state.toUpperCase() : 'NULL';
+            document.getElementById('audio-state').textContent = state;
+            document.getElementById('chunk-stats').textContent = `${chunksRecv}/${chunksPlay}`;
+            
+            if (audioCtx && isAudioStarted) {
+                const buf = (nextPlayTime - audioCtx.currentTime) * 1000;
+                document.getElementById('buffer-val').textContent = Math.max(0, buf).toFixed(0);
+            }
+        }
+
+        // === TEST TONE ===
+        function playTestTone() {
+            if (!audioCtx) initAudio();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            osc.frequency.value = 440;
+            osc.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 1);
+            log('Playing 1s test tone (440Hz)', 'audio');
+        }
+
+        function startAudioContext() {
+            if (!audioCtx) initAudio();
+            audioCtx.resume().then(() => {
+                log(`Manually resumed: ${audioCtx.state}`, 'audio');
+                playTestTone();
+            });
+        }
+
+        // === WS HANDLER ===
+        function connectWS(url) {
+            log(`Connecting WS: ${url}`);
+            
+            try {
+                ws = new WebSocket(url);
+                ws.binaryType = 'arraybuffer';
                 
-                // Try to resume immediately
-                if (audioCtx.state === 'suspended') {
-                    log('AudioContext suspended, attempting resume...');
-                    await audioCtx.resume();
-                    log(`After resume: state=${audioCtx.state}`);
-                }
+                ws.onopen = () => {
+                    log('WS Connected', 'success');
+                    document.getElementById('start-state').textContent = 'CONNECTED';
+                };
                 
-                // Create and play a silent buffer to unlock audio
-                const silentBuffer = audioCtx.createBuffer(1, 1, SAMPLE_RATE);
-                const source = audioCtx.createBufferSource();
-                source.buffer = silentBuffer;
-                source.connect(audioCtx.destination);
-                source.start(0);
-                log('Silent buffer played to unlock audio');
+                ws.onmessage = async (e) => {
+                    if (e.data instanceof ArrayBuffer) {
+                        const view = new Uint8Array(e.data);
+                        const type = view[0];
+                        const payload = e.data.slice(1);
+                        
+                        if (type === MSG_VIDEO) {
+                            handleVideo(payload);
+                        } else if (type === MSG_AUDIO) {
+                            await handleAudio(payload);
+                        } else if (type === MSG_META) {
+                            handleMeta(payload);
+                        }
+                    }
+                };
                 
-                document.getElementById('audio-status').textContent = audioCtx.state.toUpperCase();
-                return audioCtx.state === 'running';
+                ws.onerror = (e) => log(`WS Error: ${e.message || 'unknown'}`, 'error');
+                ws.onclose = () => {
+                    log('WS Closed, retrying...', 'error');
+                    setTimeout(() => connectWS(url), 3000);
+                };
                 
             } catch (e) {
-                log(`Audio init error: ${e.message}`);
-                return false;
+                log(`WS Exception: ${e.message}`, 'error');
             }
         }
         
-        function userStartAudio() {
-            document.getElementById('start-overlay').style.display = 'none';
-            initAudio();
-        }
-        
-        async function startReceiver(wsUrlOverride) {
-            log('Starting receiver...');
-            
-            // Try to init audio (may fail without user gesture on some platforms)
-            const audioOk = await initAudio();
-            if (!audioOk) {
-                log('Audio not ready - will retry on first audio chunk');
-            }
-            
-            const params = new URLSearchParams(window.location.search);
-            const wsUrl = wsUrlOverride || params.get('ws') || `ws://${window.location.hostname}:8090`;
-            
-            log(`Connecting to: ${wsUrl}`);
-            connect(wsUrl);
-        }
-        
-        // === BOOTSTRAP ===
-        window.addEventListener('load', () => {
-            initUI();
-            log('Page loaded');
-            
-            const params = new URLSearchParams(window.location.search);
-            
-            // Auto-start if ws param present
-            if (params.has('ws')) {
-                log('WS param found - auto-starting');
-                startReceiver();
-                return;
-            }
-            
-            // Chromecast mode
-            if (typeof cast !== 'undefined' && cast.framework) {
-                log('Chromecast mode detected');
-                const NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-                const context = cast.framework.CastReceiverContext.getInstance();
-                
-                context.addCustomMessageListener(NAMESPACE, (event) => {
-                    log(`Cast message: ${JSON.stringify(event.data)}`);
-                    if (event.data?.type === 'connect' && event.data.wsUrl) {
-                        startReceiver(event.data.wsUrl);
-                    }
-                });
-                
-                const options = new cast.framework.CastReceiverOptions();
-                options.disableIdleTimeout = true;
-                context.start(options);
-                log('Cast receiver context started');
-            } else {
-                // Browser testing - auto start
-                log('Browser mode - auto-starting');
-                startReceiver();
-            }
-        });
-        
-        // === WEBSOCKET ===
-        function connect(url) {
-            log(`WS connecting: ${url}`);
-            document.getElementById('ws-status').textContent = 'CONNECTING';
-            
-            ws = new WebSocket(url);
-            ws.binaryType = 'arraybuffer';
-            
-            ws.onopen = () => {
-                log('WS connected!');
-                document.getElementById('ws-status').textContent = 'CONNECTED';
-                document.getElementById('audio-status').textContent = audioCtx ? audioCtx.state.toUpperCase() : 'NO CTX';
-            };
-            
-            let msgCounts = { video: 0, audio: 0, meta: 0 };
-            
-            ws.onmessage = async (e) => {
-                const data = e.data;
-                if (!(data instanceof ArrayBuffer)) return;
-                
-                const view = new Uint8Array(data);
-                const type = view[0];
-                const content = data.slice(1);
-                
-                switch (type) {
-                    case MSG_VIDEO:
-                        msgCounts.video++;
-                        handleVideo(content);
-                        break;
-                    case MSG_AUDIO:
-                        msgCounts.audio++;
-                        await handleAudio(content);
-                        break;
-                    case MSG_META:
-                        msgCounts.meta++;
-                        handleMeta(content);
-                        break;
-                }
-                
-                // Log periodically
-                if ((msgCounts.video + msgCounts.audio) % 200 === 0) {
-                    log(`Stats: ${msgCounts.video} vid, ${msgCounts.audio} aud, ${msgCounts.meta} meta`);
-                }
-            };
-            
-            ws.onerror = (e) => {
-                log(`WS error: ${e.message || 'unknown'}`);
-                document.getElementById('ws-status').textContent = 'ERROR';
-            };
-            
-            ws.onclose = () => {
-                log('WS closed, reconnecting in 2s...');
-                document.getElementById('ws-status').textContent = 'RECONNECTING';
-                setTimeout(() => connect(url), 2000);
-            };
-        }
-        
-        // === VIDEO HANDLER ===
-        function handleVideo(buffer) {
-            const blob = new Blob([buffer], { type: 'image/jpeg' });
-            const url = URL.createObjectURL(blob);
-            const img = new Image();
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, 1920, 1080);
-                URL.revokeObjectURL(url);
-                
-                frameCount++;
-                const now = performance.now();
-                if (now - lastFrameTime > 1000) {
-                    document.getElementById('fps').textContent = frameCount;
-                    frameCount = 0;
-                    lastFrameTime = now;
-                }
-            };
-            img.src = url;
-        }
-        
-        // === AUDIO HANDLER ===
+        // === AUDIO PROCESSING ===
         async function handleAudio(buffer) {
-            audioChunksReceived++;
+            chunksRecv++;
             
-            // Try to init/resume audio if not ready
-            if (!audioCtx || audioCtx.state !== 'running') {
-                if (audioResumeAttempts < 10) {
-                    audioResumeAttempts++;
-                    log(`Audio not running (attempt ${audioResumeAttempts}), trying to resume...`);
-                    await initAudio();
-                }
-                
-                if (!audioCtx || audioCtx.state !== 'running') {
-                    if (audioChunksReceived % 100 === 0) {
-                        document.getElementById('audio-status').textContent = `SUSPENDED (${audioChunksReceived})`;
-                    }
-                    return;
-                }
+            // Critical: Ensure context exists and is running
+            if (!audioCtx) await initAudio();
+            if (audioCtx.state !== 'running') {
+                log(`Received chunk but AudioContext is ${audioCtx.state} - Resuming`, 'error');
+                await audioCtx.resume();
             }
             
             try {
-                // Convert bytes to Float32 samples
-                const floatView = new Float32Array(buffer);
-                const numSamples = floatView.length / 2;  // Stereo interleaved
+                const floatData = new Float32Array(buffer);
+                const numSamples = floatData.length / 2; // Stereo
                 
-                // Create audio buffer (stereo)
-                const audioBuffer = audioCtx.createBuffer(2, numSamples, SAMPLE_RATE);
-                const leftChannel = audioBuffer.getChannelData(0);
-                const rightChannel = audioBuffer.getChannelData(1);
+                const audioBuf = audioCtx.createBuffer(2, numSamples, SAMPLE_RATE);
+                const l = audioBuf.getChannelData(0);
+                const r = audioBuf.getChannelData(1);
                 
-                // Deinterleave stereo samples
-                for (let i = 0; i < numSamples; i++) {
-                    leftChannel[i] = floatView[i * 2];
-                    rightChannel[i] = floatView[i * 2 + 1];
+                // De-interleave
+                for(let i=0; i<numSamples; i++) {
+                    l[i] = floatData[i*2];
+                    r[i] = floatData[i*2+1];
                 }
                 
-                // Schedule playback
-                const currentTime = audioCtx.currentTime;
-                
-                if (!isAudioStarted || nextPlayTime < currentTime) {
-                    nextPlayTime = currentTime + (BUFFER_DELAY_MS / 1000);
+                // Timing logic
+                const now = audioCtx.currentTime;
+                if (!isAudioStarted || nextPlayTime < now) {
+                    nextPlayTime = now + (BUFFER_DELAY_MS / 1000);
                     isAudioStarted = true;
-                    log(`Audio playback started at ${nextPlayTime.toFixed(3)}`);
+                    log(`Buffer Resync: Playing at ${nextPlayTime.toFixed(3)}s (Now: ${now.toFixed(3)}s)`, 'audio');
                 }
                 
                 const source = audioCtx.createBufferSource();
-                source.buffer = audioBuffer;
+                source.buffer = audioBuf;
                 source.connect(audioCtx.destination);
                 source.start(nextPlayTime);
                 
-                nextPlayTime += audioBuffer.duration;
-                audioChunksPlayed++;
+                nextPlayTime += audioBuf.duration;
+                chunksPlay++;
                 
-                // Update status
-                if (audioChunksPlayed % 25 === 0) {
-                    const bufferMs = Math.max(0, (nextPlayTime - currentTime) * 1000).toFixed(0);
-                    document.getElementById('buffer-status').textContent = bufferMs + 'ms';
-                    document.getElementById('audio-status').textContent = `PLAYING (${audioChunksPlayed})`;
-                }
+                if (chunksPlay % 50 === 0) updateStatus();
                 
             } catch (e) {
-                if (audioChunksReceived % 50 === 0) {
-                    log(`Audio error: ${e.message}`);
-                }
+                log(`Audio Decode Error: ${e.message}`, 'error');
             }
         }
+
+        // === VIDEO ===
+        const canvas = document.getElementById('video-canvas');
+        const ctx = canvas.getContext('2d');
+        let img = new Image();
         
-        // === META HANDLER ===
-        function handleMeta(buffer) {
-            const str = new TextDecoder().decode(buffer);
-            try {
-                const state = JSON.parse(str);
-                
-                if (state.timestamp) {
-                    const lat = Date.now() - state.timestamp;
-                    document.getElementById('lat').textContent = lat;
-                }
-                
-                if (state.cursor) {
-                    const cursor = document.getElementById('remote-cursor');
-                    cursor.style.display = state.cursor.visible ? 'block' : 'none';
-                    cursor.style.left = (state.cursor.x * window.innerWidth) + 'px';
-                    cursor.style.top = (state.cursor.y * window.innerHeight) + 'px';
-                }
-            } catch (e) {}
+        function handleVideo(buffer) {
+            const blob = new Blob([buffer], {type: 'image/jpeg'});
+            const url = URL.createObjectURL(blob);
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0, 1920, 1080);
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+            
+            // Also ensure audio context is active if we are receiving video
+            // This is a "keep alive" hack
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         }
-        
-        log('🎬 MXS-004 Receiver v12 loaded');
+
+        function handleMeta(buffer) {
+            // ... (cursor, etc)
+        }
+
+        // === STARTUP ===
+        window.onload = () => {
+            log('Receiver V13 Loaded');
+            
+            // Auto Start Audio immediately
+            initAudio();
+            
+            const params = new URLSearchParams(location.search);
+            const wsUrl = params.get('ws') || `ws://${location.hostname}:8090`;
+            
+            // Show overlay if ?debug=true
+            if (params.has('debug')) {
+               document.getElementById('overlay-screen').style.display = 'flex';
+            }
+            
+            // Chromecast SDK
+             if (typeof cast !== 'undefined' && cast.framework) {
+                log('Cast SDK Detected');
+                const ctx = cast.framework.CastReceiverContext.getInstance();
+                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (e) => {
+                    log(`Cast Msg: ${JSON.stringify(e.data)}`);
+                    if (e.data.wsUrl) connectWS(e.data.wsUrl);
+                });
+                ctx.start({disableIdleTimeout: true});
+             } else {
+                 log('Browser Mode');
+                 connectWS(wsUrl);
+             }
+        };
     </script>
 </body>
 
