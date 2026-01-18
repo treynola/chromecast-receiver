@@ -564,9 +564,20 @@
                 document.getElementById('status-text').style.color = 'var(--green)';
             };
 
+            let msgCounts = { video: 0, audio: 0, meta: 0, unknown: 0 };
+
             ws.onmessage = async (e) => {
                 const data = e.data;
-                if (!(data instanceof ArrayBuffer)) return;
+
+                // Log message type for debugging
+                if (msgCounts.video + msgCounts.audio + msgCounts.meta === 0) {
+                    console.log('📥 First WS message received, type:', typeof data, 'instanceof ArrayBuffer:', data instanceof ArrayBuffer);
+                }
+
+                if (!(data instanceof ArrayBuffer)) {
+                    console.warn('⚠️ Non-binary message received:', typeof data);
+                    return;
+                }
 
                 const view = new Uint8Array(data);
                 const type = view[0];
@@ -574,14 +585,28 @@
 
                 switch (type) {
                     case MSG_VIDEO:
+                        msgCounts.video++;
                         handleVideo(content);
                         break;
                     case MSG_AUDIO:
+                        msgCounts.audio++;
                         handleAudio(content);
                         break;
                     case MSG_META:
+                        msgCounts.meta++;
                         handleMeta(content);
                         break;
+                    default:
+                        msgCounts.unknown++;
+                        if (msgCounts.unknown <= 5) {
+                            console.warn('❓ Unknown message type:', type);
+                        }
+                }
+
+                // Log stats every 100 messages
+                const total = msgCounts.video + msgCounts.audio + msgCounts.meta;
+                if (total % 100 === 0) {
+                    console.log(`📊 WS Stats: ${msgCounts.video} video, ${msgCounts.audio} audio, ${msgCounts.meta} meta`);
                 }
             };
 
