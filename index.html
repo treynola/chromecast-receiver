@@ -2,14 +2,14 @@
 <html>
 
 <head>
-    <title>MXS-004 Hybrid Receiver v9.7</title>
+    <title>MXS-004 Receiver v10 (Audio URL Sync)</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
-    <!-- Cast Receiver SDK - used ONLY to receive initial WebSocket URL from sender -->
-    <!-- All real-time data (video frames, audio, UI state) goes through WebSocket -->
+    <!-- Cast Receiver SDK for Chromecast bootstrap -->
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <!-- Tone.js for high-quality audio playback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.3.5/Tone.js"></script>
     <style>
-        /* === Reset & Base === */
         * {
             margin: 0;
             padding: 0;
@@ -21,35 +21,26 @@
             --dark-gold: #b38600;
             --green: #008000;
             --red: #FF0000;
-            --off-black: #1a1a1a;
-            --dark-gray: #2c2c2c;
-            --mid-gray: #444;
-            --text-color: #f0f0f0;
         }
 
         body {
             background: #000;
-            color: var(--text-color);
-            font-family: 'Courier New', Courier, monospace;
+            color: #f0f0f0;
+            font-family: 'Courier New', monospace;
             overflow: hidden;
             width: 100vw;
             height: 100vh;
         }
 
-        /* === App Container (Scales to fit) === */
         #app-container {
             width: 1920px;
             height: 1080px;
             position: absolute;
             top: 50%;
             left: 50%;
-            background: #000;
             transform-origin: center center;
-            display: flex;
-            flex-direction: column;
         }
 
-        /* === Video Layer (Background - FULL OPACITY for clear app view) === */
         #video-canvas {
             position: absolute;
             top: 0;
@@ -57,242 +48,20 @@
             width: 100%;
             height: 100%;
             z-index: 1;
-            opacity: 1;
-            /* Full opacity - the video IS the GUI */
-            background: #000;
         }
 
-        /* === UI Layer (Foreground) === */
-        #ui-layer {
-            position: relative;
-            z-index: 10;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            pointer-events: none;
-            /* UI is read-only for now */
-        }
-
-        /* === Mixer Layout (HIDDEN - video shows the full app) === */
-        #mixer {
-            display: none;
-            /* Video layer shows the actual app - this simplified mixer is redundant */
-        }
-
-        /* === Header === */
-        #header {
-            text-align: center;
-            padding: 5px 0 15px;
-            border-bottom: 2px solid var(--green);
-            margin-bottom: 20px;
-        }
-
-        #header h1 {
-            color: var(--gold);
-            font-size: 42px;
-            font-weight: bold;
-            letter-spacing: 2px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        }
-
-        #header h2 {
-            color: var(--dark-gold);
-            font-size: 20px;
-            margin-top: 5px;
-        }
-
-        /* === Tracks Container === */
-        #tracks-container {
-            display: grid;
-            grid-template-columns: repeat(8, 1fr);
-            gap: 12px;
-            flex: 1;
-            padding: 5px;
-        }
-
-        /* === Individual Track === */
-        .track {
-            background: rgba(26, 26, 26, 0.9);
-            border: 2px solid var(--green);
-            border-radius: 10px;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .track-header {
-            text-align: center;
-            color: var(--gold);
-            font-weight: bold;
-            font-size: 16px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid var(--mid-gray);
-        }
-
-        .track.muted {
-            opacity: 0.4;
-        }
-
-        .track.solo {
-            border-color: var(--gold);
-            box-shadow: 0 0 10px var(--gold);
-        }
-
-        .track.armed {
-            border-color: var(--red);
-        }
-
-        .track.recording {
-            background: rgba(139, 0, 0, 0.4);
-        }
-
-        /* === Meters === */
-        .meter-container {
-            display: flex;
-            gap: 4px;
-            height: 120px;
-            justify-content: center;
-            background: #111;
+        #status-bar {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 15px;
             border-radius: 5px;
-            padding: 4px;
-        }
-
-        .meter {
-            width: 16px;
-            background: #222;
-            border-radius: 2px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .meter-fill {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: linear-gradient(to top, var(--green) 0%, var(--gold) 75%, var(--red) 100%);
-            transition: height 0.04s ease-out;
-        }
-
-        /* === Fader === */
-        .fader-container {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .fader-track {
-            flex: 1;
-            height: 6px;
-            background: var(--mid-gray);
-            border-radius: 3px;
-            position: relative;
-        }
-
-        .fader-fill {
-            height: 100%;
-            background: var(--gold);
-            border-radius: 3px;
-            transition: width 0.1s;
-        }
-
-        .fader-value {
-            color: var(--gold);
-            font-size: 11px;
-            min-width: 35px;
-        }
-
-        /* === Track Buttons === */
-        .track-buttons {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 4px;
-        }
-
-        .track-btn {
-            height: 24px;
-            font-size: 11px;
-            font-weight: bold;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #333;
-            color: #888;
-            border: 1px solid #444;
-        }
-
-        .track-btn.active.mute {
-            background: var(--red);
-            color: #fff;
-        }
-
-        .track-btn.active.solo {
-            background: var(--gold);
-            color: #000;
-        }
-
-        .track-btn.active.arm {
-            background: var(--red);
-            color: #fff;
-        }
-
-        .track-btn.active.loop {
-            background: var(--green);
-            color: #fff;
-        }
-
-        /* === Master Section === */
-        #master-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 20px;
-            background: rgba(26, 26, 26, 0.95);
-            border-radius: 10px;
-            border: 2px solid var(--gold);
-            margin-top: 15px;
-        }
-
-        .master-meter {
-            display: flex;
-            gap: 8px;
-            height: 50px;
-        }
-
-        .master-meter .meter {
-            width: 25px;
-        }
-
-        /* === Transport === */
-        #transport {
-            display: flex;
-            gap: 10px;
-        }
-
-        .transport-btn {
-            padding: 8px 16px;
             font-size: 14px;
-            font-weight: bold;
-            border-radius: 6px;
-            border: 2px solid var(--gold);
-            background: #333;
+            z-index: 1000;
             color: var(--gold);
         }
 
-        .transport-btn.active {
-            background: var(--green);
-            color: #fff;
-        }
-
-        .transport-btn.recording {
-            background: var(--red);
-            color: #fff;
-        }
-
-        /* === Overlays === */
         .overlay {
             position: fixed;
             top: 0;
@@ -327,10 +96,8 @@
             border: none;
             border-radius: 10px;
             cursor: pointer;
-            box-shadow: 0 0 20px var(--green);
         }
 
-        /* === Virtual Cursor === */
         #remote-cursor {
             position: fixed;
             pointer-events: none;
@@ -343,241 +110,175 @@
             margin-left: -10px;
             margin-top: -10px;
             display: none;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
-        }
-
-        #remote-cursor.clicking {
-            transform: scale(0.7);
-            background: var(--red);
-        }
-
-        #stats {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            font-size: 12px;
-            color: #666;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 5px 10px;
-            border-radius: 5px;
-            z-index: 100;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
         }
     </style>
 </head>
 
 <body>
     <div id="app-container">
-        <!-- Video Canvas -->
-        <canvas id="video-canvas"></canvas>
-
-        <!-- UI Filter Overlay -->
-        <div id="ui-layer">
-            <div id="mixer">
-                <div id="header">
-                    <h1>NOWMULTIMEDIA MXS-004</h1>
-                    <h2>REAL-TIME HYBRID RECEIVER</h2>
-                </div>
-
-                <div id="tracks-container">
-                    <!-- Tracks generated dynamically -->
-                </div>
-
-                <div id="master-section">
-                    <div style="display: flex; align-items: center; gap: 20px;">
-                        <span style="color: var(--gold); font-weight: bold;">MASTER</span>
-                        <div class="master-meter">
-                            <div class="meter">
-                                <div class="meter-fill" id="master-meter-l"></div>
-                            </div>
-                            <div class="meter">
-                                <div class="meter-fill" id="master-meter-r"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="transport">
-                        <div class="transport-btn" id="btn-play">PLAY</div>
-                        <div class="transport-btn" id="btn-stop">STOP</div>
-                        <div class="transport-btn" id="btn-rec">REC</div>
-                    </div>
-
-                    <div style="color: #666; font-size: 12px;" id="status-text">
-                        WAITING FOR STREAM...
-                    </div>
-                </div>
-            </div>
-        </div>
+        <canvas id="video-canvas" width="1920" height="1080"></canvas>
     </div>
 
-    <!-- Cursor -->
     <div id="remote-cursor"></div>
 
-    <!-- Initial Overlay (Bypass Audio Policy) -->
+    <div id="status-bar">
+        FPS: <span id="fps">0</span> |
+        Latency: <span id="lat">0</span>ms |
+        Audio: <span id="audio-status">OFF</span> |
+        Tracks: <span id="track-status">0/0</span>
+    </div>
+
     <div id="start-overlay" class="overlay">
-        <div class="overlay-title">MXS-004 STUDIO</div>
-        <div class="overlay-msg">Ultra-Low Latency FCast Receiver</div>
+        <div class="overlay-title">MXS-004 RECEIVER v10</div>
+        <div class="overlay-msg">Audio URL Sync Mode (Low Bandwidth)</div>
         <button class="start-btn" onclick="startReceiver()">START MONITORING</button>
     </div>
 
-    <div id="stats">
-        FPS: <span id="fps">0</span> | Latency: <span id="lat">0</span>ms | Audio: <span id="audio-status">OFF</span>
-    </div>
-
     <script>
-        // === Constants ===
+        // === CONFIG ===
         const MSG_VIDEO = 0x01;
-        const MSG_AUDIO = 0x02;
-        const MSG_META = 0x03;
+        const MSG_AUDIO = 0x02;  // Legacy PCM (won't use)
+        const MSG_META = 0x03;   // JSON state
 
-        // === State ===
+        // === STATE ===
         let ws = null;
-        let audioCtx = null;
-        let workletNode = null;
-        let canvas = document.getElementById('video-canvas');
-        let ctx = canvas.getContext('2d');
+        let canvas, ctx;
         let frameCount = 0;
         let lastFrameTime = performance.now();
-        let audioStartTime = 0;
-        let audioBufferSize = 0;
+        let serverBaseUrl = '';
 
-        // Settings
-        const SAMPLE_RATE = 48000;
-        const CHANNELS = 2;
+        // === AUDIO STATE (Tone.js) ===
+        const trackPlayers = [];
+        const trackStates = [];
+        let masterVolume;
+        let audioInitialized = false;
 
-        // === Initialize UI ===
+        // === INIT ===
         function initUI() {
-            const container = document.getElementById('tracks-container');
-            let html = '';
-            for (let i = 0; i < 8; i++) {
-                html += `
-                    <div class="track" id="track-${i}">
-                        <div class="track-header">TRK ${i + 1}</div>
-                        <div class="meter-container">
-                            <div class="meter"><div class="meter-fill" id="m-l-${i}"></div></div>
-                            <div class="meter"><div class="meter-fill" id="m-r-${i}"></div></div>
-                        </div>
-                        <div class="fader-container">
-                            <div class="fader-track"><div class="fader-fill" id="f-${i}" style="width: 70%"></div></div>
-                            <div class="fader-value" id="v-${i}">-6dB</div>
-                        </div>
-                        <div class="track-buttons">
-                            <div class="track-btn mute" id="btn-m-${i}">M</div>
-                            <div class="track-btn solo" id="btn-s-${i}">S</div>
-                            <div class="track-btn arm" id="btn-a-${i}">R</div>
-                            <div class="track-btn loop" id="btn-l-${i}">L</div>
-                        </div>
-                    </div>
-                `;
-            }
-            container.innerHTML = html;
+            canvas = document.getElementById('video-canvas');
+            ctx = canvas.getContext('2d');
             window.addEventListener('resize', scaleApp);
             scaleApp();
         }
 
         function scaleApp() {
             const container = document.getElementById('app-container');
-            const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            const scaleX = window.innerWidth / 1920;
+            const scaleY = window.innerHeight / 1080;
+            const scale = Math.min(scaleX, scaleY);
             container.style.transform = `translate(-50%, -50%) scale(${scale})`;
-            canvas.width = 1920;
-            canvas.height = 1080;
         }
 
-        // === Start Receiver ===
-        let pendingWsUrl = null;
+        async function initAudio() {
+            if (audioInitialized) return;
+
+            await Tone.start();
+            console.log('🔊 Tone.js AudioContext started');
+
+            // Create master volume
+            masterVolume = new Tone.Volume(0).toDestination();
+
+            // Create 8 track players
+            for (let i = 0; i < 8; i++) {
+                const player = new Tone.Player({
+                    fadeIn: 0.01,
+                    fadeOut: 0.01,
+                    loop: true
+                });
+                const volume = new Tone.Volume(0);
+                const panner = new Tone.Panner(0);
+
+                player.connect(volume).connect(panner).connect(masterVolume);
+
+                trackPlayers.push({
+                    player,
+                    volume,
+                    panner,
+                    loadedUrl: null,
+                    isPlaying: false
+                });
+
+                trackStates.push({
+                    volume: 0.7,
+                    pan: 0,
+                    mute: false,
+                    solo: false,
+                    playing: false,
+                    position: 0,
+                    audioUrl: null
+                });
+            }
+
+            audioInitialized = true;
+            document.getElementById('audio-status').textContent = 'READY';
+            console.log('✅ Audio system initialized (8 tracks)');
+        }
 
         async function startReceiver(wsUrlOverride) {
             document.getElementById('start-overlay').style.display = 'none';
 
-            // Init Audio Context
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: SAMPLE_RATE,
-                latencyHint: 'interactive'
-            });
+            // Init audio
+            await initAudio();
 
-            // Create a simple buffer-based player if worklets aren't ready
-            audioStartTime = audioCtx.currentTime + 0.1;
-
-            document.getElementById('audio-status').textContent = 'READY';
-
-            // Get WebSocket URL from: 1) override, 2) Cast message, 3) URL param, 4) default
+            // Get WebSocket URL
             const params = new URLSearchParams(window.location.search);
-            const wsUrl = wsUrlOverride || pendingWsUrl || params.get('ws') || `ws://${window.location.hostname}:8090`;
+            const wsUrl = wsUrlOverride || params.get('ws') || `ws://${window.location.hostname}:8090`;
 
-            console.log('🔌 Connecting to WebSocket:', wsUrl);
-            document.getElementById('status-text').textContent = 'CONNECTING...';
+            // Extract server base URL for audio files
+            const wsHost = new URL(wsUrl).hostname;
+            serverBaseUrl = `http://${wsHost}:8089`;
+            console.log('📡 Server base URL:', serverBaseUrl);
 
             connect(wsUrl);
         }
 
         // === HYBRID BOOTSTRAP ===
-        // Supports both Chromecast (via Cast SDK message) and FCast (via URL params)
+        let pendingWsUrl = null;
         window.addEventListener('load', () => {
-            const params = new URLSearchParams(window.location.search);
+            initUI();
 
-            // Check if we have a ws= parameter (FCast or direct URL)
+            const params = new URLSearchParams(window.location.search);
             if (params.has('ws')) {
-                console.log('🚀 FCast Mode: Auto-starting (ws param found)');
+                console.log('🚀 Auto-starting (ws param found)');
                 startReceiver();
                 return;
             }
 
-            // Check if Cast SDK is available (Chromecast)
             if (typeof cast !== 'undefined' && cast.framework) {
-                console.log('📺 Chromecast Mode: Initializing Cast Receiver SDK');
-
+                console.log('📺 Chromecast Mode: Initializing Cast SDK');
                 const NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
                 const context = cast.framework.CastReceiverContext.getInstance();
 
-                // Listen for custom message with WebSocket URL
                 context.addCustomMessageListener(NAMESPACE, (event) => {
-                    console.log('📩 Received Cast message:', event.data);
-
-                    if (event.data && event.data.type === 'connect' && event.data.wsUrl) {
-                        console.log('🔌 Got WebSocket URL from sender:', event.data.wsUrl);
-                        pendingWsUrl = event.data.wsUrl;
-
-                        // Start the receiver with the WebSocket URL
+                    console.log('📩 Cast message:', event.data);
+                    if (event.data?.type === 'connect' && event.data.wsUrl) {
                         startReceiver(event.data.wsUrl);
                     }
                 });
 
-                // Start Cast receiver context
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
                 context.start(options);
-
-                document.getElementById('status-text').textContent = 'WAITING FOR SENDER...';
-                console.log('✅ Cast Receiver ready, waiting for sender message');
-            } else {
-                console.log('ℹ️ Browser Mode: Click Start to begin');
             }
         });
 
-        // === WebSocket Logic ===
+        // === WEBSOCKET ===
         function connect(url) {
-            console.log("Connecting to", url);
+            console.log('🔌 Connecting to:', url);
             ws = new WebSocket(url);
             ws.binaryType = 'arraybuffer';
 
             ws.onopen = () => {
-                document.getElementById('status-text').textContent = 'CONNECTED';
-                document.getElementById('status-text').style.color = 'var(--green)';
+                document.getElementById('audio-status').textContent = 'CONNECTED';
+                console.log('✅ WebSocket connected');
             };
 
-            let msgCounts = { video: 0, audio: 0, meta: 0, unknown: 0 };
+            let msgCounts = { video: 0, meta: 0 };
 
             ws.onmessage = async (e) => {
                 const data = e.data;
-
-                // Log message type for debugging
-                if (msgCounts.video + msgCounts.audio + msgCounts.meta === 0) {
-                    console.log('📥 First WS message received, type:', typeof data, 'instanceof ArrayBuffer:', data instanceof ArrayBuffer);
-                }
-
-                if (!(data instanceof ArrayBuffer)) {
-                    console.warn('⚠️ Non-binary message received:', typeof data);
-                    return;
-                }
+                if (!(data instanceof ArrayBuffer)) return;
 
                 const view = new Uint8Array(data);
                 const type = view[0];
@@ -588,36 +289,25 @@
                         msgCounts.video++;
                         handleVideo(content);
                         break;
-                    case MSG_AUDIO:
-                        msgCounts.audio++;
-                        handleAudio(content);
-                        break;
                     case MSG_META:
                         msgCounts.meta++;
                         handleMeta(content);
                         break;
-                    default:
-                        msgCounts.unknown++;
-                        if (msgCounts.unknown <= 5) {
-                            console.warn('❓ Unknown message type:', type);
-                        }
+                    // MSG_AUDIO (0x02) is ignored - we use URL-based playback
                 }
 
-                // Log stats every 100 messages
-                const total = msgCounts.video + msgCounts.audio + msgCounts.meta;
-                if (total % 100 === 0) {
-                    console.log(`📊 WS Stats: ${msgCounts.video} video, ${msgCounts.audio} audio, ${msgCounts.meta} meta`);
+                if ((msgCounts.video + msgCounts.meta) % 100 === 0) {
+                    console.log(`📊 WS: ${msgCounts.video} video, ${msgCounts.meta} meta`);
                 }
             };
 
             ws.onclose = () => {
-                document.getElementById('status-text').textContent = 'RECONNECTING...';
-                document.getElementById('status-text').style.color = 'var(--red)';
+                console.log('🔌 Connection lost, reconnecting...');
                 setTimeout(() => connect(url), 2000);
             };
         }
 
-        // === Video Handler ===
+        // === VIDEO HANDLER ===
         function handleVideo(buffer) {
             const blob = new Blob([buffer], { type: 'image/jpeg' });
             const url = URL.createObjectURL(blob);
@@ -637,110 +327,91 @@
             img.src = url;
         }
 
-        // === Audio Handler (PCM f32le 48kHz Stereo) ===
-        let audioChunkCount = 0;
-        function handleAudio(buffer) {
-            // Ensure AudioContext is running (Chromecast autoplay fix)
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-                console.log('📢 AudioContext resumed from suspended state');
-            }
-
-            const floats = new Float32Array(buffer);
-            const numFrames = floats.length / 2;
-
-            audioChunkCount++;
-            if (audioChunkCount % 100 === 1) {
-                console.log(`🔊 Audio chunk ${audioChunkCount}: ${numFrames} frames, ${floats.length * 4} bytes`);
-            }
-
-            const audioBuffer = audioCtx.createBuffer(CHANNELS, numFrames, SAMPLE_RATE);
-            const left = audioBuffer.getChannelData(0);
-            const right = audioBuffer.getChannelData(1);
-
-            for (let i = 0; i < numFrames; i++) {
-                left[i] = floats[i * 2];
-                right[i] = floats[i * 2 + 1];
-            }
-
-            const source = audioCtx.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioCtx.destination);
-
-            // Scheduling to avoid clicks
-            const now = audioCtx.currentTime;
-            if (audioStartTime < now) audioStartTime = now + 0.05;
-
-            source.start(audioStartTime);
-            audioStartTime += audioBuffer.duration;
-
-            document.getElementById('audio-status').textContent = `PLAYING (${audioChunkCount})`;
-        }
-
-        // === Metadata Handler (JSON) ===
+        // === META HANDLER (JSON State) ===
         function handleMeta(buffer) {
             const str = new TextDecoder().decode(buffer);
             try {
                 const state = JSON.parse(str);
-                updateUI(state);
+                updateState(state);
             } catch (e) {
-                console.error("Meta parse error", e);
+                console.error('Meta parse error:', e);
             }
         }
 
-        // === UI Update Logic ===
-        function updateUI(state) {
+        // === STATE UPDATE ===
+        async function updateState(state) {
             if (state.timestamp) {
                 document.getElementById('lat').textContent = Date.now() - state.timestamp;
             }
 
-            // Update Cursor
+            // Update cursor
             if (state.cursor) {
                 const cursor = document.getElementById('remote-cursor');
                 cursor.style.display = state.cursor.visible ? 'block' : 'none';
                 cursor.style.left = (state.cursor.x * window.innerWidth) + 'px';
                 cursor.style.top = (state.cursor.y * window.innerHeight) + 'px';
-                cursor.classList.toggle('clicking', state.cursor.clicking);
             }
 
-            // Update Tracks
-            if (state.tracks) {
-                state.tracks.forEach((t, i) => {
-                    document.getElementById(`m-l-${i}`).style.height = (t.meterL * 100) + '%';
-                    document.getElementById(`m-r-${i}`).style.height = (t.meterR * 100) + '%';
-                    document.getElementById(`f-${i}`).style.width = (t.volume * 100) + '%';
+            // Update tracks
+            if (state.tracks && audioInitialized) {
+                let playingCount = 0;
+                let loadedCount = 0;
 
-                    const db = t.volume > 0 ? (20 * Math.log10(t.volume)).toFixed(0) : '-inf';
-                    document.getElementById(`v-${i}`).textContent = db + 'dB';
+                for (let i = 0; i < Math.min(state.tracks.length, 8); i++) {
+                    const t = state.tracks[i];
+                    const tp = trackPlayers[i];
 
-                    document.getElementById(`btn-m-${i}`).classList.toggle('active', t.mute);
-                    document.getElementById(`btn-s-${i}`).classList.toggle('active', t.solo);
-                    document.getElementById(`btn-a-${i}`).classList.toggle('active', t.armed);
-                    document.getElementById(`btn-l-${i}`).classList.toggle('active', t.looping);
+                    if (!tp) continue;
 
-                    const trackEl = document.getElementById(`track-${i}`);
-                    trackEl.classList.toggle('muted', t.mute);
-                    trackEl.classList.toggle('solo', t.solo);
-                    trackEl.classList.toggle('armed', t.armed);
-                    trackEl.classList.toggle('recording', t.recording);
-                });
+                    // Update volume (convert gain 0-1 to dB)
+                    const dbVol = t.mute ? -Infinity : (20 * Math.log10(Math.max(t.volume, 0.0001)));
+                    tp.volume.volume.value = dbVol;
+
+                    // Update pan
+                    tp.panner.pan.value = t.pan || 0;
+
+                    // Load audio URL if changed
+                    if (t.audioUrl && t.audioUrl !== tp.loadedUrl) {
+                        try {
+                            console.log(`🎵 Track ${i}: Loading ${t.audioUrl}`);
+                            await tp.player.load(t.audioUrl);
+                            tp.loadedUrl = t.audioUrl;
+                            loadedCount++;
+                        } catch (e) {
+                            console.error(`Failed to load track ${i}:`, e);
+                        }
+                    }
+
+                    // Sync playback
+                    if (t.playing && tp.player.loaded) {
+                        if (!tp.isPlaying) {
+                            tp.player.start(undefined, t.position || 0);
+                            tp.isPlaying = true;
+                            console.log(`▶️ Track ${i}: Started at ${t.position}s`);
+                        }
+                        playingCount++;
+                    } else if (!t.playing && tp.isPlaying) {
+                        tp.player.stop();
+                        tp.isPlaying = false;
+                        console.log(`⏹️ Track ${i}: Stopped`);
+                    }
+                }
+
+                document.getElementById('track-status').textContent = `${playingCount}/8`;
+                if (playingCount > 0) {
+                    document.getElementById('audio-status').textContent = `PLAYING (${playingCount})`;
+                }
             }
 
-            // Master
-            if (state.master) {
-                document.getElementById('master-meter-l').style.height = (state.master.meterL * 100) + '%';
-                document.getElementById('master-meter-r').style.height = (state.master.meterR * 100) + '%';
-            }
-
-            // Transport
-            if (state.transport) {
-                document.getElementById('btn-play').classList.toggle('active', state.transport.playing);
-                document.getElementById('btn-rec').classList.toggle('recording', state.transport.recording);
+            // Update master
+            if (state.master && masterVolume) {
+                const dbVol = 20 * Math.log10(Math.max(state.master.volume, 0.0001));
+                masterVolume.volume.value = dbVol;
             }
         }
 
         // Init
-        initUI();
+        console.log('🎬 MXS-004 Receiver v10 loaded');
     </script>
 </body>
 
