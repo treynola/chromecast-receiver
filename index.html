@@ -49,7 +49,7 @@
             flex-direction: column;
         }
 
-        /* === Video Layer (Background) === */
+        /* === Video Layer (Background - FULL OPACITY for clear app view) === */
         #video-canvas {
             position: absolute;
             top: 0;
@@ -57,8 +57,8 @@
             width: 100%;
             height: 100%;
             z-index: 1;
-            opacity: 0.6;
-            /* Balanced for UI visibility */
+            opacity: 1;
+            /* Full opacity - the video IS the GUI */
             background: #000;
         }
 
@@ -74,17 +74,10 @@
             /* UI is read-only for now */
         }
 
-        /* === Mixer Layout === */
+        /* === Mixer Layout (HIDDEN - video shows the full app) === */
         #mixer {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: rgba(44, 44, 44, 0.85);
-            /* Semi-transparent */
-            border-radius: 15px;
-            padding: 20px;
-            border: 3px solid var(--green);
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            display: none;
+            /* Video layer shows the actual app - this simplified mixer is redundant */
         }
 
         /* === Header === */
