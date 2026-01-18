@@ -613,9 +613,21 @@
         }
 
         // === Audio Handler (PCM f32le 48kHz Stereo) ===
+        let audioChunkCount = 0;
         function handleAudio(buffer) {
+            // Ensure AudioContext is running (Chromecast autoplay fix)
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+                console.log('📢 AudioContext resumed from suspended state');
+            }
+
             const floats = new Float32Array(buffer);
             const numFrames = floats.length / 2;
+
+            audioChunkCount++;
+            if (audioChunkCount % 100 === 1) {
+                console.log(`🔊 Audio chunk ${audioChunkCount}: ${numFrames} frames, ${floats.length * 4} bytes`);
+            }
 
             const audioBuffer = audioCtx.createBuffer(CHANNELS, numFrames, SAMPLE_RATE);
             const left = audioBuffer.getChannelData(0);
@@ -637,7 +649,7 @@
             source.start(audioStartTime);
             audioStartTime += audioBuffer.duration;
 
-            document.getElementById('audio-status').textContent = 'PLAYING';
+            document.getElementById('audio-status').textContent = `PLAYING (${audioChunkCount})`;
         }
 
         // === Metadata Handler (JSON) ===
