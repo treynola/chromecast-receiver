@@ -428,20 +428,28 @@
         window.onload = () => {
             logStatus("V9.3 Script Loaded", "#888");
 
+            // 1. Check for immediate 'ws' parameter (Direct local load/redirect)
+            const wsUrl = new URLSearchParams(location.search).get('ws');
+            if (wsUrl) {
+                logStatus("Found 'ws' param: " + wsUrl, "#0f0");
+                connectWS(wsUrl);
+            }
+
+            // 2. Setup Google CAF Framework
             if (typeof cast !== 'undefined' && cast.framework) {
                 logStatus("CAF Framework Detected", "#888");
                 const ctx = cast.framework.CastReceiverContext.getInstance();
                 ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
                     logStatus("Custom Message Received", "#0f0");
-                    if (e.data.wsUrl) connectWS(e.data.wsUrl);
+                    // Handle both {wsUrl: "..."} and direct string
+                    const url = e.data.wsUrl || (typeof e.data === 'string' ? e.data : null);
+                    if (url) connectWS(url);
                 });
                 ctx.start({ disableIdleTimeout: true });
-                logStatus("Receiver Started - Waiting for Sender...", "#ff0");
-            } else {
-                logStatus("Direct Mode (No CAF)", "#888");
-                const wsUrl = new URLSearchParams(location.search).get('ws');
-                if (wsUrl) connectWS(wsUrl);
-                else logStatus("Error: No 'ws' parameter", "#f00");
+                if (!wsUrl) logStatus("Receiver Started - Waiting for Sender...", "#ff0");
+            } else if (!wsUrl) {
+                logStatus("Direct Mode (No CAF / No WS)", "#f00");
+                logStatus("Error: No 'ws' parameter", "#f00");
             }
         };
     </script>
