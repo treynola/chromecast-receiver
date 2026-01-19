@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>MXS-004 Receiver v15 (Fixed Layout)</title>
+    <title>MXS-004 PRO MONITOR V9.3</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -15,296 +15,388 @@
 
         :root {
             --gold: #FAD78E;
-            --green: #008000;
-            --red: #FF0000;
+            --bg-dark: #121212;
+            --bg-track: #1e1e1e;
+            --text: #f0f0f0;
         }
 
         body {
             background: #000;
-            color: #f0f0f0;
-            font-family: 'Courier New', monospace;
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
             overflow: hidden;
-            width: 100vw;
-            height: 100vh;
-            /* Flex center properly */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #app-container {
             width: 1920px;
             height: 1080px;
-            position: relative;
-            /* Changed from absolute */
-            background: #111;
+            border: 10px solid #00ff00;
+            /* BRIGHT GREEN BORDER V9.3 */
         }
 
-        #video-canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        /* DIAGNOSTIC OVERLAYS */
-        #audio-indicator {
+        #mirror-ui {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 0;
+            left: 0;
+            width: 1920px;
+            height: 1080px;
+            z-index: 100;
+            background: var(--bg-dark);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #header {
+            height: 90px;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            border-bottom: 2px solid var(--gold);
+        }
+
+        #header h1 {
+            color: var(--gold);
+            font-size: 36px;
+        }
+
+        #version-tag {
+            background: #00ff00;
+            color: #000;
+            padding: 8px 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            font-size: 20px;
+        }
+
+        #tracks-container {
+            flex: 1;
+            display: flex;
+            padding: 30px;
+            gap: 20px;
+            background: #0a0a0a;
+        }
+
+        .track {
+            flex: 1;
+            background: var(--bg-track);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            border: 1px solid #333;
+        }
+
+        .track-header {
+            text-align: center;
+            color: var(--gold);
+            font-weight: 800;
+            font-size: 20px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+        }
+
+        .meter-container {
+            height: 400px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 15px;
+            background: #111;
+            border-radius: 8px;
+        }
+
+        .meter-bar {
+            width: 30px;
+            background: #222;
+            position: relative;
+            overflow: hidden;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+
+        .meter-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(0deg, #00ff00 0%, #ffff00 70%, #ff0000 100%);
+            transition: height 0.05s linear;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 15px;
+            background: #151515;
+            border-radius: 8px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+            font-weight: bold;
+            color: #888;
+        }
+
+        .control-row span.val {
+            color: var(--gold);
+        }
+
+        .status-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #333;
+        }
+
+        .status-dot.active {
+            background: #00ff00;
+            box-shadow: 0 0 15px #00ff00;
+        }
+
+        .status-dot.armed {
+            background: #ff0000;
+            box-shadow: 0 0 15px #ff0000;
+        }
+
+        .status-dot.playing {
+            background: #0088ff;
+            box-shadow: 0 0 15px #0088ff;
+        }
+
+        #footer {
+            height: 80px;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+        }
+
+        #transport {
+            font-family: monospace;
+            font-size: 28px;
+            color: var(--gold);
+        }
+
+        #cursor {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 50px;
             height: 50px;
-            background: #333;
-            border-radius: 50%;
-            border: 2px solid #555;
-            transition: background 0.1s;
-        }
-
-        #audio-indicator.active {
-            background: #00ff00;
-            box-shadow: 0 0 20px #00ff00;
-        }
-
-        #audio-indicator.suspended {
-            background: #ff0000;
-            box-shadow: 0 0 20px #ff0000;
-        }
-
-        #status-bar {
-            position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 30px;
-            border-radius: 12px;
-            font-size: 24px;
-            color: var(--gold);
-            border: 2px solid var(--gold);
-            text-align: center;
-            min-width: 600px;
-        }
-
-        #debug-log {
-            position: absolute;
-            top: 100px;
-            right: 20px;
-            width: 500px;
-            height: 800px;
-            background: rgba(0, 0, 0, 0.7);
-            overflow: hidden;
-            font-size: 14px;
+            z-index: 10000;
+            display: none;
             pointer-events: none;
-            color: #eee;
         }
 
-        .entry {
-            border-bottom: 1px solid #333;
-            padding: 2px;
+        #cursor-arrow {
+            width: 0;
+            height: 0;
+            border-left: 18px solid transparent;
+            border-right: 18px solid transparent;
+            border-bottom: 36px solid #fff;
+            filter: drop-shadow(0 0 10px var(--gold));
+            transform: rotate(-30deg);
         }
 
-        .entry.err {
-            color: #f55;
+        #cursor-label {
+            position: absolute;
+            top: 40px;
+            left: 15px;
+            background: var(--gold);
+            color: #000;
+            padding: 4px 10px;
             font-weight: bold;
+            border-radius: 4px;
+            font-size: 14px;
         }
 
-        .entry.warn {
-            color: #fc0;
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 60px;
+            color: var(--gold);
+        }
+
+        #start-button {
+            margin-top: 40px;
+            padding: 20px 60px;
+            background: var(--gold);
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            font-size: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            display: none;
         }
     </style>
 </head>
 
 <body>
-    <div id="app-container">
-        <canvas id="video-canvas" width="1920" height="1080"></canvas>
-        <div id="audio-indicator"></div>
-        <div id="status-bar">Initialize...</div>
-        <div id="debug-log"></div>
+    <div id="loading-overlay">
+        MXS-004 V9.3 BOOTING...
+        <button id="start-button">START AUDIO ENGINE</button>
+    </div>
+
+    <div id="mirror-ui" style="display:none;">
+        <div id="header">
+            <h1 id="title-tag">MXS-004 PRO V9.3</h1>
+            <div id="version-tag">STABLE MIRROR</div>
+        </div>
+        <div id="tracks-container"></div>
+        <div id="footer">
+            <div id="status" style="color:#0f0; font-size:24px;">CONNECTED</div>
+            <div id="transport">00:00:00</div>
+            <div id="audio-indicator"
+                style="width:24px; height:24px; border-radius:50%; background:#222; border: 2px solid #444;"></div>
+        </div>
+    </div>
+
+    <div id="cursor">
+        <div id="cursor-arrow"></div>
+        <div id="cursor-label">REMOTE</div>
     </div>
 
     <script>
-        // === CONFIG ===
-        const SAMPLE_RATE = 48000;
-        const BUFFER_DELAY_MS = 300; // Increased to 300ms for safety
+        const FORCE_SAMPLE_RATE = 48000;
+        let audioCtx, ws, nextPlayTime = 0, tracksInited = false;
 
-        // === LOGGING ===
-        const logEl = document.getElementById('debug-log');
-        function log(msg, type = '') {
-            const div = document.createElement('div');
-            div.className = 'entry ' + type;
-            div.textContent = `[${new Date().toISOString().substr(14, 9)}] ${msg}`;
-            logEl.prepend(div);
-            if (logEl.children.length > 50) logEl.lastChild.remove();
-            console.log(msg);
-        }
-
-        // === STATE ===
-        let audioCtx;
-        let ws;
-        let isAudioStarted = false;
-        let nextPlayTime = 0;
-        let chunksProcessed = 0;
-
-        // === UI UPDATES ===
-        function updateUI(status) {
-            if (status) document.getElementById('status-bar').textContent = status;
-
-            const ind = document.getElementById('audio-indicator');
-            if (audioCtx) {
-                if (audioCtx.state === 'running') {
-                    // Flash green on activity, but keep green base
-                    ind.className = 'active';
-                } else {
-                    ind.className = 'suspended';
-                }
+        function initMirrorUI() {
+            if (tracksInited) return;
+            const container = document.getElementById('tracks-container');
+            container.innerHTML = '';
+            for (let i = 0; i < 8; i++) {
+                const t = document.createElement('div'); t.className = 'track';
+                t.innerHTML = `
+                    <div class="track-header">TRACK ${i + 1}</div>
+                    <div class="meter-container">
+                        <div class="meter-bar"><div id="m-l-${i}" class="meter-fill" style="height:0%"></div></div>
+                        <div class="meter-bar"><div id="m-r-${i}" class="meter-fill" style="height:0%"></div></div>
+                    </div>
+                    <div class="controls">
+                        <div class="control-row"><span>VOL</span><span id="v-${i}" class="val">-inf</span></div>
+                        <div class="control-row"><span>ARM</span><div id="a-${i}" class="status-dot"></div></div>
+                        <div class="control-row"><span>PL/SO</span><div id="p-${i}" class="status-dot"></div></div>
+                    </div>
+                `;
+                container.appendChild(t);
             }
+            tracksInited = true;
+            document.getElementById('loading-overlay').style.display = 'none';
+            document.getElementById('mirror-ui').style.display = 'flex';
         }
 
-        // === AUDIO ENGINE ===
         async function initAudio() {
             if (audioCtx) return;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AC({ sampleRate: FORCE_SAMPLE_RATE });
+            if (audioCtx.state === 'suspended') await audioCtx.resume();
+            console.log("🔊 V9.3 Audio Engine Active");
+        }
 
-            try {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AC({ latencyHint: 'playback', sampleRate: SAMPLE_RATE });
-
-                log(`AudioCtx Init: ${audioCtx.state}`);
-
-                // Silent Unlock
-                const buf = audioCtx.createBuffer(1, 1, SAMPLE_RATE);
-                const src = audioCtx.createBufferSource();
-                src.buffer = buf;
-                src.connect(audioCtx.destination);
-                src.start(0);
-
-                if (audioCtx.state === 'suspended') {
-                    log('Resuming...');
-                    await audioCtx.resume();
-                }
-
-                log(`AudioCtx Final: ${audioCtx.state}`);
-                updateUI(`Audio: ${audioCtx.state.toUpperCase()}`);
-
-                // Play Chime
-                playChime();
-
-            } catch (e) {
-                log(`InitAudio Error: ${e.message}`, 'err');
+        function handleAudio(buf) {
+            if (!audioCtx) {
+                // Show start button if audio context isn't started
+                document.getElementById('start-button').style.display = 'block';
+                return;
             }
-        }
+            document.getElementById('audio-indicator').style.background = '#0f0';
 
-        function playChime() {
-            if (!audioCtx) return;
-            const osc = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            osc.connect(g);
-            g.connect(audioCtx.destination);
-            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
-            g.gain.setValueAtTime(0.2, audioCtx.currentTime);
-            g.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.5);
-            log('Played Chime');
-        }
+            const f32 = new Float32Array(buf);
+            const samples = f32.length / 2;
+            const audioBuf = audioCtx.createBuffer(2, samples, FORCE_SAMPLE_RATE);
+            const l = audioBuf.getChannelData(0), r = audioBuf.getChannelData(1);
 
-        async function handleAudio(buffer) {
-            if (!audioCtx) await initAudio();
-            if (audioCtx.state !== 'running') audioCtx.resume();
-
-            chunksProcessed++;
-
-            // Visual Pulse every 10 chunks to confirm data flow
-            if (chunksProcessed % 10 === 0) {
-                const ind = document.getElementById('audio-indicator');
-                ind.style.opacity = ind.style.opacity === '0.5' ? '1' : '0.5';
+            for (let i = 0; i < samples; i++) {
+                l[i] = f32[i * 2];
+                r[i] = f32[i * 2 + 1];
             }
 
-            try {
-                const f32 = new Float32Array(buffer);
-                // Stereo De-interleave
-                const samples = f32.length / 2;
-                const audioBuf = audioCtx.createBuffer(2, samples, SAMPLE_RATE);
-                const l = audioBuf.getChannelData(0);
-                const r = audioBuf.getChannelData(1);
-                for (let i = 0; i < samples; i++) {
-                    l[i] = f32[i * 2];
-                    r[i] = f32[i * 2 + 1];
-                }
-
-                const now = audioCtx.currentTime;
-                // Simple sync (Reset if drift > 500ms)
-                if (!isAudioStarted || nextPlayTime < now || (nextPlayTime - now) > 0.5) {
-                    nextPlayTime = now + (BUFFER_DELAY_MS / 1000);
-                    isAudioStarted = true;
-                    log(`Sync Reset: Play @ +${BUFFER_DELAY_MS}ms`);
-                }
-
-                const src = audioCtx.createBufferSource();
-                src.buffer = audioBuf;
-                src.connect(audioCtx.destination);
-                src.start(nextPlayTime);
-                nextPlayTime += audioBuf.duration;
-
-            } catch (e) {
-                log(`Decode: ${e.message}`, 'err');
+            const now = audioCtx.currentTime;
+            // Target buffer: 400ms for High Wi-Fi Stability V9.3
+            if (nextPlayTime < now || (nextPlayTime - now) > 1.2) {
+                nextPlayTime = now + 0.4;
             }
+
+            const src = audioCtx.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(audioCtx.destination);
+            src.start(nextPlayTime);
+            nextPlayTime += audioBuf.duration;
         }
 
-        // === VIDEO ===
-        const ctx = document.getElementById('video-canvas').getContext('2d');
-        const img = new Image();
-        function handleVideo(buf) {
-            const url = URL.createObjectURL(new Blob([buf]));
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, 1920, 1080);
-                URL.revokeObjectURL(url);
-            };
-            img.src = url;
-        }
-
-        // === CAST & WS ===
-        window.onload = () => {
-            // Center Check
-            log('V15 Loaded. Checking Layout...');
-
-            if (typeof cast !== 'undefined' && cast.framework) {
-                const context = cast.framework.CastReceiverContext.getInstance();
-                const opts = new cast.framework.CastReceiverOptions();
-                opts.disableIdleTimeout = true;
-
-                context.addEventListener(cast.framework.system.EventType.READY, async () => {
-                    log('CAST READY - UNLOCKING AUDIO');
-                    await initAudio();
+        function applyState(state) {
+            initMirrorUI();
+            if (state.tracks) {
+                state.tracks.forEach(t => {
+                    const vol = document.getElementById(`v-${t.id}`); if (vol) vol.textContent = t.volume.toFixed(1);
+                    const arm = document.getElementById(`a-${t.id}`); if (arm) arm.className = 'status-dot' + (t.armed ? ' armed' : '');
+                    const play = document.getElementById(`p-${t.id}`); if (play) play.className = 'status-dot' + (t.isPlaying ? ' playing' : '');
+                    if (t.meters) {
+                        const ml = document.getElementById(`m-l-${t.id}`); if (ml) ml.style.height = (Math.max(0, Math.min(1, t.meters.l)) * 100) + '%';
+                        const mr = document.getElementById(`m-r-${t.id}`); if (mr) mr.style.height = (Math.max(0, Math.min(1, t.meters.r)) * 100) + '%';
+                    }
                 });
-
-                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
-                    if (e.data.wsUrl) connectWS(e.data.wsUrl);
-                });
-
-                context.start(opts);
-            } else {
-                // Manual test
-                initAudio();
-                const wsUrl = new URLSearchParams(location.search).get('ws') || `ws://${location.hostname}:8090`;
-                connectWS(wsUrl);
             }
-        };
+            if (state.transport) document.getElementById('transport').textContent = state.transport.position || "00:00:00";
+        }
 
         function connectWS(url) {
-            log(`WS: ${url}`);
-            if (ws) ws.close();
-            ws = new WebSocket(url);
-            ws.binaryType = 'arraybuffer';
-            ws.onopen = () => updateUI('WS Connected');
-            ws.onmessage = async (e) => {
-                if (!(e.data instanceof ArrayBuffer)) return;
-                const view = new Uint8Array(e.data);
-                const type = view[0];
-                const payload = e.data.slice(1);
-                if (type === 1) handleVideo(payload);
+            // HYBRID REDIRECT LOGIC V9.3
+            if (url.startsWith('http')) {
+                console.log("🚀 Redirecting to Local HTML: " + url);
+                window.location.href = url;
+                return;
+            }
+
+            console.log("📡 V9.3 Connecting to Socket: " + url);
+            ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
+            ws.onopen = () => { document.getElementById('status').textContent = 'V9.3 LIVE'; initAudio(); };
+            ws.onmessage = (e) => {
+                const view = new Uint8Array(e.data), type = view[0], payload = e.data.slice(1);
                 if (type === 2) handleAudio(payload);
+                else if (type === 3) {
+                    try {
+                        const json = JSON.parse(new TextDecoder().decode(payload));
+                        if (json.type === 'state') applyState(json);
+                        else if (json.type === 'cursor') {
+                            const c = document.getElementById('cursor');
+                            c.style.display = 'block';
+                            c.style.transform = `translate(${json.x * 1920}px, ${json.y * 1080}px)`;
+                        }
+                    } catch (err) { }
+                }
             };
+            ws.onclose = () => { setTimeout(() => connectWS(url), 1000); };
         }
+
+        document.getElementById('start-button').onclick = () => {
+            initAudio();
+            document.getElementById('start-button').style.display = 'none';
+        };
+
+        window.onload = () => {
+            if (typeof cast !== 'undefined' && cast.framework) {
+                const ctx = cast.framework.CastReceiverContext.getInstance();
+                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => e.data.wsUrl && connectWS(e.data.wsUrl));
+                ctx.start({ disableIdleTimeout: true });
+            } else {
+                const wsUrl = new URLSearchParams(location.search).get('ws');
+                if (wsUrl) connectWS(wsUrl);
+            }
+        };
     </script>
 </body>
 
