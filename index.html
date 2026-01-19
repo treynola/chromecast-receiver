@@ -27,8 +27,9 @@
             overflow: hidden;
             width: 1920px;
             height: 1080px;
-            border: 10px solid #00ff00;
-            /* BRIGHT GREEN BORDER V9.3 */
+            border: 10px solid #555;
+            /* Neutral before connect */
+            transition: border-color 0.5s ease;
         }
 
         #mirror-ui {
@@ -225,28 +226,39 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 60px;
+            font-size: 40px;
             color: var(--gold);
+            text-align: center;
+            padding: 20px;
+        }
+
+        #boot-status {
+            font-size: 24px;
+            color: #888;
+            margin-top: 20px;
+            font-family: monospace;
         }
 
         #start-button {
             margin-top: 40px;
             padding: 20px 60px;
-            background: var(--gold);
-            color: #000;
+            background: #ff0000;
+            color: #fff;
             border: none;
             border-radius: 10px;
             font-size: 30px;
             font-weight: bold;
             cursor: pointer;
             display: none;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
         }
     </style>
 </head>
 
 <body>
     <div id="loading-overlay">
-        MXS-004 V9.3 BOOTING...
+        <div>MXS-004 V9.3 BOOTING...</div>
+        <div id="boot-status">Wating for Signal...</div>
         <button id="start-button">START AUDIO ENGINE</button>
     </div>
 
@@ -273,6 +285,13 @@
         const FORCE_SAMPLE_RATE = 48000;
         let audioCtx, ws, nextPlayTime = 0, tracksInited = false;
 
+        function logStatus(msg, color) {
+            const el = document.getElementById('boot-status');
+            el.textContent = `> ${msg}`;
+            if (color) el.style.color = color;
+            console.log(`[BOOT] ${msg}`);
+        }
+
         function initMirrorUI() {
             if (tracksInited) return;
             const container = document.getElementById('tracks-container');
@@ -296,19 +315,24 @@
             tracksInited = true;
             document.getElementById('loading-overlay').style.display = 'none';
             document.getElementById('mirror-ui').style.display = 'flex';
+            document.body.style.borderColor = '#00ff00'; // Success Border V9.3
         }
 
         async function initAudio() {
             if (audioCtx) return;
-            const AC = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AC({ sampleRate: FORCE_SAMPLE_RATE });
-            if (audioCtx.state === 'suspended') await audioCtx.resume();
-            console.log("🔊 V9.3 Audio Engine Active");
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AC({ sampleRate: FORCE_SAMPLE_RATE });
+                if (audioCtx.state === 'suspended') await audioCtx.resume();
+                logStatus("Audio Context Active", "#0f0");
+                document.getElementById('audio-indicator').style.background = '#0f0';
+            } catch (e) {
+                logStatus("Audio Init Failed: " + e.message, "#f00");
+            }
         }
 
         function handleAudio(buf) {
             if (!audioCtx) {
-                // Show start button if audio context isn't started
                 document.getElementById('start-button').style.display = 'block';
                 return;
             }
@@ -325,7 +349,6 @@
             }
 
             const now = audioCtx.currentTime;
-            // Target buffer: 400ms for High Wi-Fi Stability V9.3
             if (nextPlayTime < now || (nextPlayTime - now) > 1.2) {
                 nextPlayTime = now + 0.4;
             }
@@ -354,16 +377,28 @@
         }
 
         function connectWS(url) {
-            // HYBRID REDIRECT LOGIC V9.3
             if (url.startsWith('http')) {
-                console.log("🚀 Redirecting to Local HTML: " + url);
-                window.location.href = url;
+                logStatus("Redirecting to: " + url, "#ff0");
+                setTimeout(() => window.location.href = url, 500);
                 return;
             }
 
-            console.log("📡 V9.3 Connecting to Socket: " + url);
-            ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
-            ws.onopen = () => { document.getElementById('status').textContent = 'V9.3 LIVE'; initAudio(); };
+            logStatus("Connecting: " + url, "#88f");
+            document.body.style.borderColor = "#0000ff"; // Connecting Border
+
+            ws = new WebSocket(url);
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                logStatus("WebSocket Connected", "#0f0");
+                document.getElementById('status').textContent = 'V9.3 LIVE';
+                initAudio();
+            };
+
+            ws.onerror = (e) => {
+                logStatus("WS Error (Check IP/Port)", "#f00");
+            };
+
             ws.onmessage = (e) => {
                 const view = new Uint8Array(e.data), type = view[0], payload = e.data.slice(1);
                 if (type === 2) handleAudio(payload);
@@ -379,7 +414,10 @@
                     } catch (err) { }
                 }
             };
-            ws.onclose = () => { setTimeout(() => connectWS(url), 1000); };
+            ws.onclose = () => {
+                logStatus("Connection Closed. Retrying...", "#f00");
+                setTimeout(() => connectWS(url), 2000);
+            };
         }
 
         document.getElementById('start-button').onclick = () => {
@@ -388,13 +426,22 @@
         };
 
         window.onload = () => {
+            logStatus("V9.3 Script Loaded", "#888");
+
             if (typeof cast !== 'undefined' && cast.framework) {
+                logStatus("CAF Framework Detected", "#888");
                 const ctx = cast.framework.CastReceiverContext.getInstance();
-                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => e.data.wsUrl && connectWS(e.data.wsUrl));
+                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
+                    logStatus("Custom Message Received", "#0f0");
+                    if (e.data.wsUrl) connectWS(e.data.wsUrl);
+                });
                 ctx.start({ disableIdleTimeout: true });
+                logStatus("Receiver Started - Waiting for Sender...", "#ff0");
             } else {
+                logStatus("Direct Mode (No CAF)", "#888");
                 const wsUrl = new URLSearchParams(location.search).get('ws');
                 if (wsUrl) connectWS(wsUrl);
+                else logStatus("Error: No 'ws' parameter", "#f00");
             }
         };
     </script>
