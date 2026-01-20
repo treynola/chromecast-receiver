@@ -1,456 +1,391 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <title>MXS-004 PRO MONITOR V9.4</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        :root {
-            --gold: #FAD78E;
-            --bg-dark: #121212;
-            --bg-track: #1e1e1e;
-            --text: #f0f0f0;
-        }
-
         body {
-            background: #000;
-            color: var(--text);
-            font-family: 'Inter', sans-serif;
-            overflow: hidden;
-            width: 1920px;
-            height: 1080px;
-            border: 10px solid #555;
-            /* Neutral before connect */
-            transition: border-color 0.5s ease;
+            background-color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            overflow: hidden !important;
         }
 
-        #mirror-ui {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 1920px;
-            height: 1080px;
-            z-index: 100;
-            background: var(--bg-dark);
-            display: flex;
-            flex-direction: column;
+        .container {
+            width: 98vw !important;
+            height: 96vh !important;
+            max-width: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            padding: 15px !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            box-shadow: 0 0 0 5px var(--green), 0 0 0 10px var(--gold), 0 0 0 15px var(--red), 0 10px 40px rgba(0, 0, 0, 0.8) !important;
+            border-radius: 15px !important;
+            background-color: var(--dark-gray) !important;
         }
 
-        #header {
-            height: 90px;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 40px;
-            border-bottom: 2px solid var(--gold);
+        /* Essential Layout Mirroring */
+        .header {
+            margin-bottom: 10px !important;
+            flex-shrink: 0;
         }
 
-        #header h1 {
-            color: var(--gold);
-            font-size: 36px;
+        .master-controls {
+            flex-shrink: 0 !important;
+            margin-bottom: 15px !important;
+            height: 180px;
         }
 
-        #version-tag {
-            background: #00ff00;
-            color: #000;
-            padding: 8px 16px;
-            font-weight: bold;
-            border-radius: 4px;
-            font-size: 20px;
-        }
-
-        #tracks-container {
-            flex: 1;
-            display: flex;
-            padding: 30px;
-            gap: 20px;
-            background: #0a0a0a;
+        .tracks-container {
+            flex: 1 !important;
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr) !important;
+            grid-template-rows: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            overflow: hidden !important;
         }
 
         .track {
-            flex: 1;
-            background: var(--bg-track);
-            border-radius: 12px;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            border: 1px solid #333;
+            height: 100% !important;
+            transform: scale(0.97);
+            transform-origin: center;
+            border: 1px solid var(--green) !important;
         }
 
-        .track-header {
-            text-align: center;
-            color: var(--gold);
-            font-weight: 800;
-            font-size: 20px;
-            border-bottom: 1px solid #444;
-            padding-bottom: 10px;
+        /* Disable Interactivity on Receiver */
+        input[type="range"] {
+            pointer-events: none !important;
         }
 
-        .meter-container {
-            height: 400px;
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            padding: 15px;
-            background: #111;
-            border-radius: 8px;
-        }
-
-        .meter-bar {
-            width: 30px;
-            background: #222;
-            position: relative;
-            overflow: hidden;
-            border-radius: 4px;
-            border: 1px solid #333;
-        }
-
-        .meter-fill {
-            position: absolute;
-            bottom: 0;
-            width: 100%;
-            background: linear-gradient(0deg, #00ff00 0%, #ffff00 70%, #ff0000 100%);
-            transition: height 0.05s linear;
-        }
-
-        .controls {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            padding: 15px;
-            background: #151515;
-            border-radius: 8px;
-        }
-
-        .control-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 16px;
-            font-weight: bold;
-            color: #888;
-        }
-
-        .control-row span.val {
-            color: var(--gold);
-        }
-
-        .status-dot {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: #333;
-        }
-
-        .status-dot.active {
-            background: #00ff00;
-            box-shadow: 0 0 15px #00ff00;
-        }
-
-        .status-dot.armed {
-            background: #ff0000;
-            box-shadow: 0 0 15px #ff0000;
-        }
-
-        .status-dot.playing {
-            background: #0088ff;
-            box-shadow: 0 0 15px #0088ff;
-        }
-
-        #footer {
-            height: 80px;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 40px;
-        }
-
-        #transport {
-            font-family: monospace;
-            font-size: 28px;
-            color: var(--gold);
+        button,
+        select {
+            pointer-events: none !important;
+            cursor: default !important;
         }
 
         #cursor {
             position: fixed;
             top: 0;
             left: 0;
-            width: 50px;
-            height: 50px;
-            z-index: 10000;
+            width: 20px;
+            height: 20px;
+            z-index: 20000;
             display: none;
             pointer-events: none;
-        }
-
-        #cursor-arrow {
-            width: 0;
-            height: 0;
-            border-left: 18px solid transparent;
-            border-right: 18px solid transparent;
-            border-bottom: 36px solid #fff;
-            filter: drop-shadow(0 0 10px var(--gold));
-            transform: rotate(-30deg);
-        }
-
-        #cursor-label {
-            position: absolute;
-            top: 40px;
-            left: 15px;
-            background: var(--gold);
-            color: #000;
-            padding: 4px 10px;
-            font-weight: bold;
-            border-radius: 4px;
-            font-size: 14px;
+            background: rgba(255, 255, 0, 0.5);
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 15px yellow;
         }
 
         #loading-overlay {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background: #000;
-            z-index: 1000;
+            z-index: 10000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 40px;
             color: var(--gold);
-            text-align: center;
-            padding: 20px;
+            font-family: 'Mexcellent', sans-serif;
         }
 
-        #boot-status {
-            font-size: 24px;
-            color: #888;
-            margin-top: 20px;
-            font-family: monospace;
+        .loader {
+            border: 8px solid #333;
+            border-top: 8px solid var(--gold);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
         }
 
-        #start-button {
-            margin-top: 40px;
-            padding: 20px 60px;
-            background: #ff0000;
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            font-size: 30px;
-            font-weight: bold;
-            cursor: pointer;
-            display: none;
-            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
 
 <body>
     <div id="loading-overlay">
-        <div>MXS-004 V9.4 BOOTING...</div>
-        <div id="boot-status">Wating for Signal...</div>
-        <button id="start-button">START AUDIO ENGINE</button>
-    </div>
-
-    <div id="mirror-ui" style="display:none;">
-        <div id="header">
-            <h1 id="title-tag">MXS-004 PRO V9.4</h1>
-            <div id="version-tag">STABLE MIRROR</div>
-        </div>
-        <div id="tracks-container"></div>
-        <div id="footer">
-            <div id="status" style="color:#0f0; font-size:24px;">CONNECTED</div>
-            <div id="transport">00:00:00</div>
-            <div id="audio-indicator"
-                style="width:24px; height:24px; border-radius:50%; background:#222; border: 2px solid #444;"></div>
+        <div class="loader"></div>
+        <h1 style="font-size: 3em;">NOWMULTIMEDIA MXS-004</h1>
+        <div id="boot-status" style="font-family: monospace; color: #888;">Synchronizing UI...</div>
+        <div id="ws-status"
+            style="font-family: monospace; font-size: 1.2em; color: #555; margin-top: 10px; background: rgba(20,20,20,0.8); padding: 5px;">
+            Waiting for signal...</div>
+        <div id="debug-info"
+            style="font-family: monospace; font-size: 0.8em; color: #444; margin-top: 20px; max-width: 80%; word-break: break-all;">
         </div>
     </div>
 
-    <div id="cursor">
-        <div id="cursor-arrow"></div>
-        <div id="cursor-label">REMOTE</div>
+    <div class="container" id="mirror-ui" style="display:none;">
+        <div class="header">
+            <h1>NOWMULTIMEDIA MXS-004</h1><br>
+            <h2> Mix N Studio 004</h2>
+        </div>
+
+        <div class="master-controls">
+            <!-- Col 1: Master Vol & Waveform Placeholder -->
+            <div class="control-column">
+                <div class="control-group">
+                    <div class="label-value-container full-width-flex">
+                        <label for="master-volume">Master Volume</label>
+                        <span id="master-volume-value">0.0 dB</span>
+                    </div>
+                    <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
+                </div>
+                <div class="control-group"
+                    style="height: 60px; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: #666;">
+                    MASTER WAVEFORM MONITOR
+                </div>
+            </div>
+
+            <!-- Col 2: Clock & Rec -->
+            <div class="control-column">
+                <div class="control-group tight-bottom">
+                    <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                </div>
+                <div class="control-group master-rec-group" style="display: flex; gap: 5px; justify-content: center;">
+                    <button id="master-record-button" class="app-button"
+                        style="width: 50%; height: 24px !important;">REC</button>
+                    <div
+                        style="font-size: 0.7em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px;">
+                        STEREO (WAV)</div>
+                </div>
+                <div class="control-group">
+                    <div class="label-value-container full-width-flex">
+                        <label for="loop-length">Loop Length (s)</label>
+                        <span id="loop-length-value">4.0s</span>
+                    </div>
+                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                </div>
+            </div>
+
+            <!-- Col 3: LFO 1 -->
+            <div class="control-column">
+                <div class="control-group">
+                    <button id="lfo-toggle" class="app-button" style="width: 80%; margin: 0 auto;">LFO 1</button>
+                    <div class="meter-container lfo-meter" style="margin-top: 10px;">
+                        <div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <div class="label-value-container full-width-flex" style="font-size: 0.7em;">
+                        <label>Sweep 1</label>
+                        <span id="lfo-time-value">1.8s</span>
+                    </div>
+                    <input type="range" id="lfo-time" min="0.1" max="20" value="1.8">
+                </div>
+            </div>
+
+            <!-- Col 4: LFO 2 -->
+            <div class="control-column">
+                <div class="control-group">
+                    <button id="lfo2-toggle" class="app-button" style="width: 80%; margin: 0 auto;">LFO 2</button>
+                    <div class="meter-container lfo-meter" style="margin-top: 10px;">
+                        <div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <div class="label-value-container full-width-flex" style="font-size: 0.7em;">
+                        <label>Sweep 2</label>
+                        <span id="lfo2-time-value">1.8s</span>
+                    </div>
+                    <input type="range" id="lfo2-time" min="0.1" max="20" value="1.8">
+                </div>
+            </div>
+        </div>
+
+        <div class="tracks-container" id="tracks-container"></div>
     </div>
 
+    <div id="cursor"></div>
+
+    <script src="src/ui/TrackView.js"></script>
     <script>
-        const VERSION = "V9.4";
-        const FORCE_SAMPLE_RATE = 48000;
-        let audioCtx, ws, nextPlayTime = 0, tracksInited = false;
-
-        function logStatus(msg, color) {
-            const el = document.getElementById('boot-status');
-            el.textContent = `> ${msg}`;
-            if (color) el.style.color = color;
-            console.log(`[BOOT] ${msg}`);
-        }
-
-        function initMirrorUI() {
-            if (tracksInited) return;
-            const container = document.getElementById('tracks-container');
-            container.innerHTML = '';
-            for (let i = 0; i < 8; i++) {
-                const t = document.createElement('div'); t.className = 'track';
-                t.innerHTML = `
-                    <div class="track-header">TRACK ${i + 1}</div>
-                    <div class="meter-container">
-                        <div class="meter-bar"><div id="m-l-${i}" class="meter-fill" style="height:0%"></div></div>
-                        <div class="meter-bar"><div id="m-r-${i}" class="meter-fill" style="height:0%"></div></div>
-                    </div>
-                    <div class="controls">
-                        <div class="control-row"><span>VOL</span><span id="v-${i}" class="val">-inf</span></div>
-                        <div class="control-row"><span>ARM</span><div id="a-${i}" class="status-dot"></div></div>
-                        <div class="control-row"><span>PL/SO</span><div id="p-${i}" class="status-dot"></div></div>
-                    </div>
-                `;
-                container.appendChild(t);
-            }
-            tracksInited = true;
-            document.getElementById('loading-overlay').style.display = 'none';
-            document.getElementById('mirror-ui').style.display = 'flex';
-            document.body.style.borderColor = '#00ff00'; // Success Border V9.3
-        }
-
-        async function initAudio() {
-            if (audioCtx) return;
-            try {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AC({ sampleRate: FORCE_SAMPLE_RATE });
-                if (audioCtx.state === 'suspended') await audioCtx.resume();
-                logStatus("Audio Context Active", "#0f0");
-                document.getElementById('audio-indicator').style.background = '#0f0';
-            } catch (e) {
-                logStatus("Audio Init Failed: " + e.message, "#f00");
-            }
-        }
-
-        function handleAudio(buf) {
-            if (!audioCtx) {
-                document.getElementById('start-button').style.display = 'block';
-                return;
-            }
-            document.getElementById('audio-indicator').style.background = '#0f0';
-
-            const f32 = new Float32Array(buf);
-            const samples = f32.length / 2;
-            const audioBuf = audioCtx.createBuffer(2, samples, FORCE_SAMPLE_RATE);
-            const l = audioBuf.getChannelData(0), r = audioBuf.getChannelData(1);
-
-            for (let i = 0; i < samples; i++) {
-                l[i] = f32[i * 2];
-                r[i] = f32[i * 2 + 1];
-            }
-
-            const now = audioCtx.currentTime;
-            if (nextPlayTime < now || (nextPlayTime - now) > 1.2) {
-                nextPlayTime = now + 0.4;
-            }
-
-            const src = audioCtx.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(audioCtx.destination);
-            src.start(nextPlayTime);
-            nextPlayTime += audioBuf.duration;
-        }
+        let trackViews = [];
+        let tracksInited = false;
 
         function applyState(state) {
-            initMirrorUI();
-            if (state.tracks) {
+            if (!tracksInited) {
+                const container = document.getElementById('tracks-container');
+                container.innerHTML = '';
+                for (let i = 0; i < 8; i++) {
+                    const tv = new window.TrackView(i);
+                    container.appendChild(tv.buildElement());
+                    trackViews.push(tv);
+                }
+                tracksInited = true;
+                document.getElementById('loading-overlay').style.display = 'none';
+                document.getElementById('mirror-ui').style.display = 'flex';
+            }
+
+            // Master Update
+            if (state.master) {
+                const volS = document.getElementById('master-volume');
+                const volV = document.getElementById('master-volume-value');
+                const lenS = document.getElementById('loop-length');
+                const lenV = document.getElementById('loop-length-value');
+                const recB = document.getElementById('master-record-button');
+
+                if (volS) volS.value = state.master.volume;
+                if (volV) volV.textContent = (state.master.volume || 0).toFixed(1) + " dB";
+                if (lenS) lenS.value = state.master.loopLength;
+                if (lenV) lenV.textContent = (state.master.loopLength || 0).toFixed(1) + "s";
+                if (recB) recB.classList.toggle('recording', state.master.isRecording);
+
+                document.getElementById('lfo-meter-bar').style.width = (state.master.lfo1Meter * 100) + "%";
+                document.getElementById('lfo2-meter-bar').style.width = (state.master.lfo2Meter * 100) + "%";
+                document.getElementById('lfo-toggle').classList.toggle('sweeping', state.master.lfo1Active);
+                document.getElementById('lfo2-toggle').classList.toggle('sweeping', state.master.lfo2Active);
+            }
+
+            if (state.transport) {
+                document.getElementById('recording-time-display').textContent = state.transport.position || "00:00:00";
+            }
+
+            // Tracks Update
+            if (state.tracks && trackViews.length > 0) {
                 state.tracks.forEach(t => {
-                    const vol = document.getElementById(`v-${t.id}`); if (vol) vol.textContent = t.volume.toFixed(1);
-                    const arm = document.getElementById(`a-${t.id}`); if (arm) arm.className = 'status-dot' + (t.armed ? ' armed' : '');
-                    const play = document.getElementById(`p-${t.id}`); if (play) play.className = 'status-dot' + (t.isPlaying ? ' playing' : '');
-                    if (t.meters) {
-                        const ml = document.getElementById(`m-l-${t.id}`); if (ml) ml.style.height = (Math.max(0, Math.min(1, t.meters.l)) * 100) + '%';
-                        const mr = document.getElementById(`m-r-${t.id}`); if (mr) mr.style.height = (Math.max(0, Math.min(1, t.meters.r)) * 100) + '%';
+                    const tv = trackViews[t.id];
+                    if (!tv) return;
+
+                    // Sync sliders
+                    const params = ['vol', 'pan', 'pitch', 'treble', 'mid_gain', 'bass'];
+                    params.forEach(p => {
+                        const val = t[p === 'mid_gain' ? 'midGain' : p];
+                        if (tv.elements.knobs[p]) tv.elements.knobs[p].value = val;
+                        if (tv.elements.valueDisplays[p]) tv.elements.valueDisplays[p].textContent = parseFloat(val).toFixed(1);
+                    });
+
+                    // Sync status & buttons
+                    if (t.armed) tv.setStatus('Recording', 'recording');
+                    else if (t.isPlaying) tv.setStatus('Playing', 'playing');
+                    else tv.setStatus('Ready', 'ready');
+
+                    if (tv.elements.recBtn) tv.elements.recBtn.classList.toggle('recording', t.armed);
+                    if (tv.elements.playBtn) tv.elements.playBtn.classList.toggle('playing', t.isPlaying);
+
+                    // Meter Update (Hack for receiver display)
+                    if (tv.elements.waveformCanvasL) {
+                        // Use the canvas area as a meter bar for the receiver since we don't have real-time waveform data
+                        const ctx = tv.elements.waveformCanvasL.getContext('2d');
+                        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
+                        ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters.l || 0), 100);
                     }
                 });
             }
-            if (state.transport) document.getElementById('transport').textContent = state.transport.position || "00:00:00";
         }
 
         function connectWS(url) {
-            if (url.startsWith('http')) {
-                logStatus("Redirecting to: " + url, "#ff0");
-                setTimeout(() => window.location.href = url, 500);
-                return;
-            }
+            console.log("Connecting to WS:", url);
+            const statusEl = document.getElementById('ws-status');
+            const debugEl = document.getElementById('debug-info');
 
-            logStatus("Connecting: " + url, "#88f");
-            document.body.style.borderColor = "#0000ff"; // Connecting Border
+            if (statusEl) statusEl.textContent = "Connecting to " + url + "...";
+            if (debugEl) debugEl.textContent = "Target: " + url;
 
-            ws = new WebSocket(url);
+            const ws = new WebSocket(url);
             ws.binaryType = 'arraybuffer';
-
             ws.onopen = () => {
-                logStatus("WebSocket Connected", "#0f0");
-                document.getElementById('status').textContent = 'V9.3 LIVE';
-                initAudio();
+                console.log("WS Connected");
+                if (statusEl) {
+                    statusEl.textContent = "✅ WS Connected - Waiting for state...";
+                    statusEl.style.color = "#4CAF50";
+                }
             };
-
-            ws.onerror = (e) => {
-                logStatus("WS Error (Check IP/Port)", "#f00");
+            ws.onerror = (err) => {
+                console.error("WS Error:", err);
+                if (statusEl) {
+                    statusEl.textContent = "❌ WS Connection Failed";
+                    statusEl.style.color = "#f44336";
+                }
+                if (debugEl) debugEl.textContent += " [ERR]";
             };
-
             ws.onmessage = (e) => {
-                const view = new Uint8Array(e.data), type = view[0], payload = e.data.slice(1);
-                if (type === 2) handleAudio(payload);
-                else if (type === 3) {
-                    try {
-                        const json = JSON.parse(new TextDecoder().decode(payload));
-                        if (json.type === 'state') applyState(json);
-                        else if (json.type === 'cursor') {
-                            const c = document.getElementById('cursor');
-                            c.style.display = 'block';
-                            c.style.transform = `translate(${json.x * 1920}px, ${json.y * 1080}px)`;
+                const debugEl = document.getElementById('debug-info');
+                
+                if (typeof e.data === 'string') {
+                    // console.log("Rx String:", e.data);
+                    return;
+                }
+                try {
+                    const view = new Uint8Array(e.data);
+                    // if (debugEl) debugEl.textContent = `Rx: ${e.data.byteLength}b [${view[0]}]`;
+                    
+                    if (view[0] === 3) {
+                        // if (debugEl) debugEl.textContent += " JSON";
+                        const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+                        if (json.type === 'state') {
+                             applyState(json);
+                             // Clear debug text on success to keep clean
+                             if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
                         }
-                    } catch (err) { }
+                        else if (json.type === 'cursor') {
+                            const cur = document.getElementById('cursor');
+                            cur.style.display = 'block';
+                            cur.style.left = (json.x * 100) + "vw";
+                            cur.style.top = (json.y * 100) + "vh";
+                        }
+                    } else if (view[0] === 1) {
+                         // Video frame - ignore for log
+                    } else {
+                        if (debugEl) debugEl.textContent = `Rx Unknown [${view[0]}] len=${e.data.byteLength}`;
+                    }
+                } catch (err) {
+                    console.error("Parse Error:", err);
+                    if (debugEl) debugEl.textContent = `Rx Error: ${err.message}`;
+                }
+            };
+                        else if (json.type === 'cursor') {
+                            const cur = document.getElementById('cursor');
+                            cur.style.display = 'block';
+                            cur.style.left = (json.x * 100) + "vw";
+                            cur.style.top = (json.y * 100) + "vh";
+                        }
+                    }
+                } catch (err) {
+                    console.error("Parse Error:", err);
                 }
             };
             ws.onclose = () => {
-                logStatus("Connection Closed. Retrying...", "#f00");
+                console.log("WS Closed, retrying...");
                 setTimeout(() => connectWS(url), 2000);
             };
         }
 
-        document.getElementById('start-button').onclick = () => {
-            initAudio();
-            document.getElementById('start-button').style.display = 'none';
-        };
-
         window.onload = () => {
-            logStatus("V9.3 Script Loaded", "#888");
-
-            // 1. Check for immediate 'ws' parameter (Direct local load/redirect)
-            const wsUrl = new URLSearchParams(location.search).get('ws');
-            if (wsUrl) {
-                logStatus("Found 'ws' param: " + wsUrl, "#0f0");
-                connectWS(wsUrl);
-            }
-
-            // 2. Setup Google CAF Framework
-            if (typeof cast !== 'undefined' && cast.framework) {
-                logStatus("CAF Framework Detected", "#888");
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('ws')) connectWS(params.get('ws'));
+            if (typeof cast !== 'undefined') {
                 const ctx = cast.framework.CastReceiverContext.getInstance();
                 ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
-                    logStatus("Custom Message Received", "#0f0");
-                    // Handle both {wsUrl: "..."} and direct string
-                    const url = e.data.wsUrl || (typeof e.data === 'string' ? e.data : null);
+                    const url = e.data.wsUrl || e.data;
                     if (url) connectWS(url);
                 });
-                ctx.start({ disableIdleTimeout: true });
-                if (!wsUrl) logStatus("Receiver Started - Waiting for Sender...", "#ff0");
-            } else if (!wsUrl) {
-                logStatus("Direct Mode (No CAF / No WS)", "#f00");
-                logStatus("Error: No 'ws' parameter", "#f00");
+                ctx.start();
             }
         };
     </script>
