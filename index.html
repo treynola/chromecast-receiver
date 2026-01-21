@@ -8,7 +8,7 @@
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -72,17 +72,23 @@
         }
 
         .master-label,
+        .track-header {
+            font-family: 'Mexcellent', sans-serif !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8em !important;
+            color: var(--gold) !important;
+        }
+
         .param-value,
         .master-value,
         label,
-        .track-header,
         .status-indicator,
         .button,
         button,
         select {
-            font-family: 'Orbitron', sans-serif !important;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-family: 'Courier New', Courier, monospace !important;
+            font-weight: bold;
         }
 
         .master-spacer {
@@ -331,7 +337,8 @@
     </div>
 
     <div id="cursor"></div>
-    <div id="ws-active-status">Waiting...</div>
+    <div id="ws-active-status">Waiting for data...</div>
+    <button id="audio-unmute-btn" onclick="startAudioManually()">START AUDIO MONITOR</button>
 
     <script src="TrackView.js"></script>
     <script>
@@ -422,6 +429,11 @@
             audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
             console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
 
+            const unmuteBtn = document.getElementById('audio-unmute-btn');
+            if (audioCtx.state === 'suspended') {
+                if (unmuteBtn) unmuteBtn.classList.add('visible');
+            }
+
             // Create ScriptProcessor for real-time playback
             const processor = audioCtx.createScriptProcessor(BUFFER_SIZE, 0, CHANNELS);
             processor.onaudioprocess = (e) => {
@@ -432,15 +444,19 @@
                 let samplesNeeded = BUFFER_SIZE;
                 let offset = 0;
 
+                let maxPeak = 0;
                 while (samplesNeeded > 0 && audioQueue.length > 0) {
                     const chunk = audioQueue[0];
-                    const available = chunk.length / 2 - chunk.offset;
+                    const available = chunk.data.length / 2 - chunk.offset;
                     const toRead = Math.min(samplesNeeded, available);
 
                     for (let i = 0; i < toRead; i++) {
                         const idx = (chunk.offset + i) * 2;
-                        left[offset + i] = chunk.data[idx] || 0;
-                        right[offset + i] = chunk.data[idx + 1] || 0;
+                        const sL = chunk.data[idx] || 0;
+                        const sR = chunk.data[idx + 1] || 0;
+                        left[offset + i] = sL;
+                        right[offset + i] = sR;
+                        maxPeak = Math.max(maxPeak, Math.abs(sL), Math.abs(sR));
                     }
 
                     chunk.offset += toRead;
@@ -451,6 +467,8 @@
                         audioQueue.shift();
                     }
                 }
+
+                if (offset > 0) window._lastAudioPeak = maxPeak;
 
                 // Fill remaining with silence
                 for (let i = offset; i < BUFFER_SIZE; i++) {
@@ -466,12 +484,14 @@
         function handleAudioChunk(pcmData) {
             if (!audioCtx) initAudioPlayback();
 
-            // CRITICAL: Float32Array MUST be 4-byte aligned. 
-            // pcmData.buffer starting at offset 1 is NOT aligned.
-            // Using slice(1) creates a new aligned ArrayBuffer copy.
+            // NEW: 4-byte padding header in backend ensures alignment.
+            // We use the buffer starting at offset 4.
             try {
-                const actualData = pcmData.buffer.slice(pcmData.byteOffset);
-                const floatView = new Float32Array(actualData);
+                // pcmData is a Uint8Array(e.data, 4) if we use the new alignment.
+                // Wait, in onmessage we do: const pcmData = new Uint8Array(e.data, 4);
+                // Then floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
+                // This is perfectly aligned.
+                const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
 
                 // Add to queue with read offset
                 audioQueue.push({ data: floatView, offset: 0 });
@@ -483,6 +503,16 @@
                 }
             } catch (e) {
                 console.error("Audio Alignment Error:", e);
+            }
+        }
+
+        function startAudioManually() {
+            if (audioCtx) {
+                audioCtx.resume().then(() => {
+                    console.log("🔊 Audio Context Resumed Manually");
+                    const btn = document.getElementById('audio-unmute-btn');
+                    if (btn) btn.classList.remove('visible');
+                });
             }
         }
 
@@ -512,11 +542,16 @@
                 if (debugEl) debugEl.textContent += " [ERR]";
             };
             let msgCount = 0;
+            let audioCount = 0;
             ws.onmessage = (e) => {
                 msgCount++;
                 const debugEl = document.getElementById('debug-info');
                 const activeEl = document.getElementById('ws-active-status');
-                if (activeEl && msgCount % 20 === 0) activeEl.textContent = `Rx: ${msgCount} | Bytes: ${e.data.byteLength}`;
+
+                if (activeEl && msgCount % 20 === 0) {
+                    const peak = (window._lastAudioPeak || 0).toFixed(3);
+                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Bytes: ${e.data.byteLength}`;
+                }
 
                 if (typeof e.data === 'string') {
                     return;
@@ -527,7 +562,10 @@
                     if (view[0] === 3) {
                         const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
                         if (json.type === 'state') {
-                            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                            if (audioCtx && audioCtx.state === 'suspended') {
+                                // Background resume attempt
+                                audioCtx.resume();
+                            }
                             applyState(json);
                             if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
                         }
@@ -541,7 +579,9 @@
                         }
                     } else if (view[0] === 2) {
                         // Audio chunk - f32le stereo PCM
-                        const pcmData = new Uint8Array(e.data, 1);
+                        // Use 4-byte offset for alignment
+                        audioCount++;
+                        const pcmData = new Uint8Array(e.data, 4);
                         handleAudioChunk(pcmData);
                     }
                 } catch (err) {

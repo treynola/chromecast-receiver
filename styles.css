@@ -2615,7 +2615,7 @@ select option {
 .modal-content h2 {
     color: var(--gold);
     margin-top: 0;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Mexcellent', sans-serif;
     letter-spacing: 2px;
 }
 
@@ -3155,7 +3155,7 @@ select option {
     width: 400px;
     box-shadow: 0 0 30px rgba(179, 134, 0, 0.3);
     position: relative;
-    font-family: "Orbitron", sans-serif;
+    font-family: 'Courier New', Courier, monospace;
 }
 
 #cast-device-list {
