@@ -383,26 +383,45 @@
     <div id="ws-active-status">Waiting for data...</div>
     <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
 
-    <script src="TrackView.js"></script>
+    <script>
+        function handleScriptError(src) {
+            const status = document.getElementById('ws-active-status');
+            if (status) {
+                status.innerHTML = `<span style="color:#f44336">❌ Failed to load ${src}. Attempting fallback...</span>`;
+            }
+            if (src === 'TrackView.js') {
+                const s = document.createElement('script');
+                s.src = 'src/ui/TrackView.js';
+                document.head.appendChild(s);
+            }
+        }
+    </script>
+    <script src="TrackView.js" onerror="handleScriptError('TrackView.js')"></script>
     <script>
         let trackViews = [];
         let tracksInited = false;
 
         function applyState(state) {
-            if (!tracksInited && state.tracks) {
+            // FIX: Only initialize tracks if they are present in the state AND not already inited
+            if (!tracksInited && state.tracks && state.tracks.length > 0) {
                 if (typeof TrackView === 'undefined') {
-                    console.warn("⏳ TrackView.js not loaded yet...");
+                    console.warn("⏳ TrackView.js not loaded yet (or failed)...");
+                    const activeEl = document.getElementById('ws-active-status');
+                    if (activeEl) activeEl.textContent = "⏳ Waiting for TrackView.js...";
                     return;
                 }
                 const container = document.getElementById('tracks-container');
                 container.innerHTML = '';
                 trackViews = [];
-                // Dynamically build based on incoming state
-                state.tracks.forEach((t, i) => {
-                    const tv = new TrackView(i);
+
+                console.log(`📡 Building Receiver UI for ${state.tracks.length} tracks...`);
+
+                state.tracks.forEach((t) => {
+                    const tv = new TrackView(t.id);
                     container.appendChild(tv.buildElement());
                     trackViews.push(tv);
                 });
+
                 tracksInited = true;
                 document.getElementById('loading-overlay').style.display = 'none';
                 document.getElementById('mirror-ui').style.display = 'flex';
