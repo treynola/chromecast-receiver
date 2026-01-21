@@ -389,7 +389,7 @@
         let tracksInited = false;
 
         function applyState(state) {
-            if (!tracksInited) {
+            if (!tracksInited && state.tracks) {
                 if (typeof TrackView === 'undefined') {
                     console.warn("⏳ TrackView.js not loaded yet...");
                     return;
@@ -397,13 +397,16 @@
                 const container = document.getElementById('tracks-container');
                 container.innerHTML = '';
                 trackViews = [];
-                for (let i = 0; i < 4; i++) {
-                    const tv = new TrackView(i, container);
+                // Dynamically build based on incoming state
+                state.tracks.forEach((t, i) => {
+                    const tv = new TrackView(i);
+                    container.appendChild(tv.buildElement());
                     trackViews.push(tv);
-                }
+                });
                 tracksInited = true;
                 document.getElementById('loading-overlay').style.display = 'none';
                 document.getElementById('mirror-ui').style.display = 'flex';
+                console.log(`✅ Receiver UI Initialized with ${trackViews.length} tracks.`);
             }
 
             // Master Update
@@ -469,7 +472,7 @@
         let isAudioPlaying = false;
         const SAMPLE_RATE = 48000;
         const CHANNELS = 2;
-        const BUFFER_SIZE = 4096;
+        const BUFFER_SIZE = 8192; // Increased for better stability over wifi
 
         function initAudioPlayback() {
             if (audioCtx) return;
@@ -492,13 +495,13 @@
                 let offset = 0;
 
                 // NEW: Jitter / Lag Management
-                // If queue is too large (> 200ms), drain it slightly to catch up
-                const maxSamplesInQueue = SAMPLE_RATE * 0.2; // 200ms
+                // Only skip if EXTREMELY lagged (> 500ms)
+                const maxSamplesInQueue = SAMPLE_RATE * 0.5;
                 let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
 
                 if (totalBuffered > maxSamplesInQueue) {
-                    // Skip 50ms to reduce latency
-                    let skipSamples = SAMPLE_RATE * 0.05;
+                    console.warn("⚠️ Audio lag detected, skipping 100ms to catch up...");
+                    let skipSamples = SAMPLE_RATE * 0.1; // Skip 100ms
                     while (skipSamples > 0 && audioQueue.length > 0) {
                         const chunk = audioQueue[0];
                         const available = chunk.data.length / 2 - chunk.offset;
