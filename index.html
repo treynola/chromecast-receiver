@@ -118,6 +118,20 @@
             box-shadow: 0 0 15px yellow;
         }
 
+        @font-face {
+            font-family: 'Mexcellent';
+            src: url('fonts/MexcellentRg.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'Mexcellent 3D';
+            src: url('fonts/Mexcellent3d.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
         #loading-overlay {
             position: fixed;
             top: 0;
@@ -132,6 +146,16 @@
             justify-content: center;
             color: var(--gold);
             font-family: 'Mexcellent', sans-serif;
+        }
+
+        #ws-active-status {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 0.6em;
+            color: rgba(255, 255, 255, 0.3);
+            font-family: monospace;
+            z-index: 100;
         }
 
         .loader {
@@ -295,6 +319,7 @@
     </div>
 
     <div id="cursor"></div>
+    <div id="ws-active-status">Waiting...</div>
 
     <script src="TrackView.js"></script>
     <script>
@@ -428,18 +453,24 @@
 
         function handleAudioChunk(pcmData) {
             if (!audioCtx) initAudioPlayback();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
 
-            // PCM is f32le stereo interleaved
-            const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
+            // CRITICAL: Float32Array MUST be 4-byte aligned. 
+            // pcmData.buffer starting at offset 1 is NOT aligned.
+            // Using slice(1) creates a new aligned ArrayBuffer copy.
+            try {
+                const actualData = pcmData.buffer.slice(pcmData.byteOffset);
+                const floatView = new Float32Array(actualData);
 
-            // Add to queue with read offset
-            audioQueue.push({ data: floatView, offset: 0 });
+                // Add to queue with read offset
+                audioQueue.push({ data: floatView, offset: 0 });
 
-            // Limit queue to ~500ms of audio
-            const maxChunks = Math.ceil((SAMPLE_RATE * 0.5) / (BUFFER_SIZE / 2));
-            while (audioQueue.length > maxChunks) {
-                audioQueue.shift();
+                // Limit queue to ~500ms of audio
+                const maxChunks = Math.ceil((SAMPLE_RATE * 0.5) / (BUFFER_SIZE / 2));
+                while (audioQueue.length > maxChunks) {
+                    audioQueue.shift();
+                }
+            } catch (e) {
+                console.error("Audio Alignment Error:", e);
             }
         }
 
@@ -468,39 +499,38 @@
                 }
                 if (debugEl) debugEl.textContent += " [ERR]";
             };
+            let msgCount = 0;
             ws.onmessage = (e) => {
+                msgCount++;
                 const debugEl = document.getElementById('debug-info');
+                const activeEl = document.getElementById('ws-active-status');
+                if (activeEl && msgCount % 20 === 0) activeEl.textContent = `Rx: ${msgCount} | Bytes: ${e.data.byteLength}`;
 
                 if (typeof e.data === 'string') {
-                    // console.log("Rx String:", e.data);
                     return;
                 }
                 try {
                     const view = new Uint8Array(e.data);
-                    // if (debugEl) debugEl.textContent = `Rx: ${e.data.byteLength}b [${view[0]}]`;
 
                     if (view[0] === 3) {
-                        // if (debugEl) debugEl.textContent += " JSON";
                         const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
                         if (json.type === 'state') {
+                            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
                             applyState(json);
-                            // Clear debug text on success to keep clean
                             if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
                         }
                         else if (json.type === 'cursor') {
                             const cur = document.getElementById('cursor');
-                            cur.style.display = 'block';
-                            cur.style.left = (json.x * 100) + "vw";
-                            cur.style.top = (json.y * 100) + "vh";
+                            if (cur) {
+                                cur.style.display = 'block';
+                                cur.style.left = (json.x * 100) + "vw";
+                                cur.style.top = (json.y * 100) + "vh";
+                            }
                         }
                     } else if (view[0] === 2) {
                         // Audio chunk - f32le stereo PCM
                         const pcmData = new Uint8Array(e.data, 1);
                         handleAudioChunk(pcmData);
-                    } else if (view[0] === 1) {
-                        // Video frame - ignore for log
-                    } else {
-                        if (debugEl) debugEl.textContent = `Rx Unknown [${view[0]}] len=${e.data.byteLength}`;
                     }
                 } catch (err) {
                     console.error("Parse Error:", err);
