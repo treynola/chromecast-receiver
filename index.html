@@ -326,7 +326,7 @@
             };
             ws.onmessage = (e) => {
                 const debugEl = document.getElementById('debug-info');
-                
+
                 if (typeof e.data === 'string') {
                     // console.log("Rx String:", e.data);
                     return;
@@ -334,14 +334,14 @@
                 try {
                     const view = new Uint8Array(e.data);
                     // if (debugEl) debugEl.textContent = `Rx: ${e.data.byteLength}b [${view[0]}]`;
-                    
+
                     if (view[0] === 3) {
                         // if (debugEl) debugEl.textContent += " JSON";
                         const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
                         if (json.type === 'state') {
-                             applyState(json);
-                             // Clear debug text on success to keep clean
-                             if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
+                            applyState(json);
+                            // Clear debug text on success to keep clean
+                            if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
                         }
                         else if (json.type === 'cursor') {
                             const cur = document.getElementById('cursor');
@@ -350,7 +350,7 @@
                             cur.style.top = (json.y * 100) + "vh";
                         }
                     } else if (view[0] === 1) {
-                         // Video frame - ignore for log
+                        // Video frame - ignore for log
                     } else {
                         if (debugEl) debugEl.textContent = `Rx Unknown [${view[0]}] len=${e.data.byteLength}`;
                     }
