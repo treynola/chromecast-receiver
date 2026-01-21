@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
     <style>
@@ -41,29 +44,42 @@
             flex-shrink: 0;
         }
 
-        /* NEW: 5-Column Layout */
+        /* NEW: 5-Column Layout mirrored from app */
         .main-content {
             flex: 1 !important;
             display: grid !important;
-            grid-template-columns: 150px 1fr !important;
-            gap: 15px !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 10px !important;
+            padding: 8px !important;
             overflow: hidden !important;
         }
 
         .master-column {
+            grid-row: span 2 !important;
             display: flex !important;
             flex-direction: column !important;
-            gap: 3px !important;
+            gap: 4px !important;
             overflow-y: auto !important;
-            padding: 5px !important;
-            background: rgba(0, 0, 0, 0.3) !important;
-            border-radius: 8px !important;
+            padding: 6px !important;
+            background-color: var(--dark-gray) !important;
+            border-radius: 10px !important;
             border: 1px solid var(--green) !important;
         }
 
         .master-item {
             flex-shrink: 0 !important;
             padding: 3px !important;
+        }
+
+        .master-label,
+        .param-value,
+        .master-value,
+        label,
+        .track-header,
+        .status-indicator {
+            font-family: 'Orbitron', sans-serif !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
         .master-spacer {
@@ -77,18 +93,11 @@
         }
 
         .tracks-container {
-            flex: 1 !important;
-            display: grid !important;
-            grid-template-columns: repeat(4, 1fr) !important;
-            grid-template-rows: repeat(2, 1fr) !important;
-            gap: 10px !important;
-            overflow: hidden !important;
+            display: contents !important;
         }
 
         .track {
             height: 100% !important;
-            transform: scale(0.97);
-            transform-origin: center;
             border: 1px solid var(--green) !important;
         }
 
