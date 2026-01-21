@@ -299,6 +299,77 @@
             }
         }
 
+        // ============= AUDIO STREAMING PLAYBACK =============
+        let audioCtx = null;
+        let audioQueue = [];
+        let isAudioPlaying = false;
+        const SAMPLE_RATE = 48000;
+        const CHANNELS = 2;
+        const BUFFER_SIZE = 4096;
+
+        function initAudioPlayback() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+            console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
+
+            // Create ScriptProcessor for real-time playback
+            const processor = audioCtx.createScriptProcessor(BUFFER_SIZE, 0, CHANNELS);
+            processor.onaudioprocess = (e) => {
+                const left = e.outputBuffer.getChannelData(0);
+                const right = e.outputBuffer.getChannelData(1);
+
+                // Fill from queue
+                let samplesNeeded = BUFFER_SIZE;
+                let offset = 0;
+
+                while (samplesNeeded > 0 && audioQueue.length > 0) {
+                    const chunk = audioQueue[0];
+                    const available = chunk.length / 2 - chunk.offset;
+                    const toRead = Math.min(samplesNeeded, available);
+
+                    for (let i = 0; i < toRead; i++) {
+                        const idx = (chunk.offset + i) * 2;
+                        left[offset + i] = chunk.data[idx] || 0;
+                        right[offset + i] = chunk.data[idx + 1] || 0;
+                    }
+
+                    chunk.offset += toRead;
+                    offset += toRead;
+                    samplesNeeded -= toRead;
+
+                    if (chunk.offset * 2 >= chunk.data.length) {
+                        audioQueue.shift();
+                    }
+                }
+
+                // Fill remaining with silence
+                for (let i = offset; i < BUFFER_SIZE; i++) {
+                    left[i] = 0;
+                    right[i] = 0;
+                }
+            };
+
+            processor.connect(audioCtx.destination);
+            isAudioPlaying = true;
+        }
+
+        function handleAudioChunk(pcmData) {
+            if (!audioCtx) initAudioPlayback();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            // PCM is f32le stereo interleaved
+            const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
+
+            // Add to queue with read offset
+            audioQueue.push({ data: floatView, offset: 0 });
+
+            // Limit queue to ~500ms of audio
+            const maxChunks = Math.ceil((SAMPLE_RATE * 0.5) / (BUFFER_SIZE / 2));
+            while (audioQueue.length > maxChunks) {
+                audioQueue.shift();
+            }
+        }
+
         function connectWS(url) {
             console.log("Connecting to WS:", url);
             const statusEl = document.getElementById('ws-status');
@@ -349,6 +420,10 @@
                             cur.style.left = (json.x * 100) + "vw";
                             cur.style.top = (json.y * 100) + "vh";
                         }
+                    } else if (view[0] === 2) {
+                        // Audio chunk - f32le stereo PCM
+                        const pcmData = new Uint8Array(e.data, 1);
+                        handleAudioChunk(pcmData);
                     } else if (view[0] === 1) {
                         // Video frame - ignore for log
                     } else {
