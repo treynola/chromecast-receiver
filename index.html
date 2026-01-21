@@ -359,17 +359,6 @@
                     if (debugEl) debugEl.textContent = `Rx Error: ${err.message}`;
                 }
             };
-                        else if (json.type === 'cursor') {
-                            const cur = document.getElementById('cursor');
-                            cur.style.display = 'block';
-                            cur.style.left = (json.x * 100) + "vw";
-                            cur.style.top = (json.y * 100) + "vh";
-                        }
-                    }
-                } catch (err) {
-                    console.error("Parse Error:", err);
-                }
-            };
             ws.onclose = () => {
                 console.log("WS Closed, retrying...");
                 setTimeout(() => connectWS(url), 2000);
