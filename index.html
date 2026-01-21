@@ -170,10 +170,53 @@
             position: fixed;
             bottom: 10px;
             right: 10px;
-            font-size: 0.6em;
-            color: rgba(255, 255, 255, 0.3);
-            font-family: monospace;
+            font-size: 0.7em;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: 'Courier New', monospace;
             z-index: 100;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--green);
+        }
+
+        #audio-unmute-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 30px;
+            background: var(--red);
+            color: #fff;
+            border: 3px solid var(--gold);
+            font-family: 'Mexcellent', sans-serif;
+            font-size: 1.5em;
+            cursor: pointer;
+            z-index: 10001;
+            display: none;
+            border-radius: 8px;
+            box-shadow: 0 0 25px var(--red);
+            animation: pulse 2s infinite;
+        }
+
+        #audio-unmute-btn.visible {
+            display: block;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
         }
 
         .loader {
@@ -338,7 +381,7 @@
 
     <div id="cursor"></div>
     <div id="ws-active-status">Waiting for data...</div>
-    <button id="audio-unmute-btn" onclick="startAudioManually()">START AUDIO MONITOR</button>
+    <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
 
     <script src="TrackView.js"></script>
     <script>
@@ -347,11 +390,15 @@
 
         function applyState(state) {
             if (!tracksInited) {
+                if (typeof TrackView === 'undefined') {
+                    console.warn("⏳ TrackView.js not loaded yet...");
+                    return;
+                }
                 const container = document.getElementById('tracks-container');
                 container.innerHTML = '';
-                for (let i = 0; i < 8; i++) {
-                    const tv = new window.TrackView(i);
-                    container.appendChild(tv.buildElement());
+                trackViews = [];
+                for (let i = 0; i < 4; i++) {
+                    const tv = new TrackView(i, container);
                     trackViews.push(tv);
                 }
                 tracksInited = true;
@@ -444,6 +491,24 @@
                 let samplesNeeded = BUFFER_SIZE;
                 let offset = 0;
 
+                // NEW: Jitter / Lag Management
+                // If queue is too large (> 200ms), drain it slightly to catch up
+                const maxSamplesInQueue = SAMPLE_RATE * 0.2; // 200ms
+                let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
+
+                if (totalBuffered > maxSamplesInQueue) {
+                    // Skip 50ms to reduce latency
+                    let skipSamples = SAMPLE_RATE * 0.05;
+                    while (skipSamples > 0 && audioQueue.length > 0) {
+                        const chunk = audioQueue[0];
+                        const available = chunk.data.length / 2 - chunk.offset;
+                        const toSkip = Math.min(skipSamples, available);
+                        chunk.offset += toSkip;
+                        skipSamples -= toSkip;
+                        if (chunk.offset * 2 >= chunk.data.length) audioQueue.shift();
+                    }
+                }
+
                 let maxPeak = 0;
                 while (samplesNeeded > 0 && audioQueue.length > 0) {
                     const chunk = audioQueue[0];
@@ -452,11 +517,13 @@
 
                     for (let i = 0; i < toRead; i++) {
                         const idx = (chunk.offset + i) * 2;
-                        const sL = chunk.data[idx] || 0;
-                        const sR = chunk.data[idx + 1] || 0;
-                        left[offset + i] = sL;
-                        right[offset + i] = sR;
-                        maxPeak = Math.max(maxPeak, Math.abs(sL), Math.abs(sR));
+                        left[offset + i] = chunk.data[idx] || 0;
+                        right[offset + i] = chunk.data[idx + 1] || 0;
+                    }
+
+                    // Throttled Peak Check (per chunk rather than per sample if possible, or just once)
+                    if (toRead > 0) {
+                        maxPeak = Math.max(maxPeak, Math.abs(chunk.data[chunk.offset * 2]));
                     }
 
                     chunk.offset += toRead;
