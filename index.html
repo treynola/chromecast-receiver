@@ -49,21 +49,58 @@
             flex: 1 !important;
             display: grid !important;
             grid-template-columns: repeat(5, 280px) !important;
-            gap: 10px !important;
-            padding: 8px !important;
+            gap: 8px !important;
+            padding: 0 4px !important;
+            /* Fits 1440px exactly */
             overflow: hidden !important;
         }
 
         .master-column {
-            grid-row: span 2 !important;
             display: flex !important;
             flex-direction: column !important;
             gap: 4px !important;
-            overflow-y: auto !important;
+            overflow: hidden !important;
             padding: 6px !important;
             background-color: var(--dark-gray) !important;
             border-radius: 10px !important;
             border: 1px solid var(--green) !important;
+            position: relative !important;
+            top: 5px !important;
+        }
+
+        .master-recording-area {
+            margin-top: 5px !important;
+        }
+
+        /* Combined REC and Format look */
+        .master-rec-row {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 5px !important;
+            width: 95% !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 2px auto !important;
+        }
+
+        .master-rec-row button,
+        .master-rec-row select {
+            flex: 1 !important;
+            font-size: 0.8em !important;
+        }
+
+        /* Tighten LFO spacing */
+        .lfo-button-item {
+            margin-bottom: -5px !important;
+        }
+
+        .lfo-meter-item {
+            padding-top: 0 !important;
+        }
+
+        .master-waveform-item {
+            margin-top: 10px !important;
+            /* Align with tracks */
         }
 
         .master-item {
@@ -264,23 +301,16 @@
             <!-- Column 1: Master Controls -->
             <div class="master-column">
                 <!-- 1. Master Recording -->
-                <div class="master-item">
+                <div class="master-item master-recording-area" style="margin-left: 5px;">
                     <div class="track-header">Master Recording:</div>
                     <div id="recording-time-display" class="track-time-display">00:00:00</div>
                 </div>
 
-                <!-- 2. Loop Length -->
-                <div class="master-item">
-                    <div class="track-header">Loop Length</div>
-                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
-                    <span id="loop-length-value" class="master-value">4.0s</span>
-                </div>
-
-                <!-- 3. Master Waveform -->
-                <div class="master-item">
+                <!-- 2. Master Waveform -->
+                <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels">
-                            <div class="waveform-label-external">L</div>
+                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
                             <div class="waveform-label-external">R</div>
                         </div>
                         <div id="master-waveform-container" class="flex-grow">
@@ -290,47 +320,42 @@
                     </div>
                 </div>
 
-                <!-- Spacer -->
-                <div class="master-spacer"></div>
-
-                <!-- 4. Master Volume -->
-                <div class="master-item">
-                    <div class="track-header">Master Volume</div>
-                    <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
-                    <span id="master-volume-value" class="master-value">0.0 dB</span>
+                <!-- 3. Loop Length -->
+                <div class="master-item" style="padding: 5px 0;">
+                    <div class="track-header">Loop Length</div>
+                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="master-value">4.0s</span>
                 </div>
 
                 <!-- Spacer -->
-                <div class="master-spacer-invisible"></div>
+                <div class="master-spacer"></div>
 
-                <!-- 5. REC Button -->
+                <!-- 4. Combined REC and Format -->
                 <div class="master-item master-bottom-item">
-                    <button id="master-record-button" class="button">REC</button>
-                </div>
-
-                <!-- 6. Recording Format -->
-                <div class="master-item">
-                    <div id="record-format-display"
-                        style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center;">
-                        Stereo (WAV)</div>
+                    <div class="master-rec-row">
+                        <button id="master-record-button" class="button">REC</button>
+                        <div id="record-format-display"
+                            style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
+                            Stereo (WAV)</div>
+                    </div>
                 </div>
 
                 <!-- Spacer -->
                 <div class="master-spacer"></div>
 
-                <!-- 7. LFO 1 -->
-                <div class="master-item">
+                <!-- 5. LFO 1 -->
+                <div class="master-item lfo-button-item">
                     <button id="lfo-toggle">LFO 1</button>
                 </div>
 
-                <!-- 8. LFO 1 Meter -->
-                <div class="master-item">
+                <!-- 6. LFO 1 Meter -->
+                <div class="master-item lfo-meter-item">
                     <div class="meter-container lfo-meter">
                         <div id="lfo-meter-bar" class="meter-bar"></div>
                     </div>
                 </div>
 
-                <!-- 9. Sweep 1 -->
+                <!-- 7. Sweep 1 -->
                 <div class="master-item">
                     <label for="lfo-time" class="master-label">Sweep 1 (s)</label>
                     <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
@@ -340,19 +365,19 @@
                 <!-- Spacer -->
                 <div class="master-spacer"></div>
 
-                <!-- 10. LFO 2 -->
-                <div class="master-item">
+                <!-- 8. LFO 2 -->
+                <div class="master-item lfo-button-item">
                     <button id="lfo2-toggle">LFO 2</button>
                 </div>
 
-                <!-- 11. LFO 2 Meter -->
-                <div class="master-item">
+                <!-- 9. LFO 2 Meter -->
+                <div class="master-item lfo-meter-item">
                     <div class="meter-container lfo-meter">
                         <div id="lfo2-meter-bar" class="meter-bar"></div>
                     </div>
                 </div>
 
-                <!-- 12. Sweep 2 -->
+                <!-- 10. Sweep 2 -->
                 <div class="master-item">
                     <label for="lfo2-time" class="master-label">Sweep 2 (s)</label>
                     <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
@@ -362,15 +387,17 @@
                 <!-- Spacer -->
                 <div class="master-spacer"></div>
 
-                <!-- 13. Import Button -->
-                <div class="master-item">
-                    <button id="import-files-button" class="button"><i class="fa-solid fa-file-import"></i>
-                        IMPORT</button>
+                <!-- 11. Master Volume (Push down 5px via inline/CSS) -->
+                <div class="master-item" style="margin-top: 5px;">
+                    <div class="track-header">Master Volume</div>
+                    <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
+                    <span id="master-volume-value" class="master-value">0.0 dB</span>
                 </div>
 
-                <!-- 14. Docs Button -->
-                <div class="master-item">
-                    <button id="show-docs-button"><i class="fa-solid fa-book"></i> DOCS</button>
+                <!-- 12. Bottom Buttons -->
+                <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
+                    <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
+                    <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
                 </div>
             </div>
 
