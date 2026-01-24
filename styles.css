@@ -508,11 +508,14 @@ img {
 .main-content {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
+    /* Guarantees 5 equal columns */
     gap: 8px;
-    padding: 8px;
+    padding: 0 4px;
+    /* Fit 1440px exactly */
+    width: 100%;
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
 }
 
 .master-column {
@@ -523,7 +526,16 @@ img {
     border-radius: 10px;
     padding: 6px;
     background-color: var(--dark-gray);
-    overflow-y: auto;
+    overflow: hidden;
+    position: relative;
+    top: 5px;
+    /* Push whole column down specifically for alignment if needed? No, user wanted specific shifts. */
+}
+
+/* QA: Align Master Recording with tracks */
+.master-recording-area {
+    margin-top: 0 !important;
+    /* Reset, using ghost spacer instead */
 }
 
 /* Equal-height master items */
@@ -595,17 +607,43 @@ img {
 }
 
 /* Style master column buttons */
-.master-buttons {
+.master-buttons,
+.master-rec-row,
+.master-bottom-buttons {
     display: flex;
     flex-direction: row;
-    gap: 4px;
+    gap: 5px;
+    width: 95%;
     justify-content: center;
+    align-items: center;
+    margin: 2px auto;
 }
 
-.master-buttons button {
+.master-rec-row button,
+.master-bottom-buttons button {
     flex: 1;
-    font-size: 0.7em;
-    padding: 4px 6px;
+}
+
+.master-rec-row select {
+    flex: 1.5;
+}
+
+/* Tighten LFO spacing */
+.lfo-button-item {
+    margin-bottom: -5px !important;
+}
+
+.lfo-meter-item {
+    padding-top: 0 !important;
+}
+
+.master-waveform-item {
+    margin-top: 10px !important;
+    /* Push down to match track visualizer level */
+}
+
+.master-bottom-buttons {
+    margin-top: 10px;
 }
 
 .control-column {

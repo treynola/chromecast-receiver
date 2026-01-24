@@ -1,312 +1,113 @@
+<!--
+ * Filename: index.html
+ * Version: NOV25_AntiGravity Version 1.0
+ * Date: November 25, 2025
+ * Time: 16:28 CST
+ * Description: Main HTML structure for the 8-Track Loop De Loup application.
+ -->
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <title>MXS-004 PRO MONITOR V9.4</title>
-    <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
-    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOWMULTIMEDIA MXS-004</title>
+    <!-- FCast SDK - No external scripts needed (handled via Tauri backend) -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.3.5/Tone.js"></script> -->
+    <!-- Tone.js -->
+    <script src="Tone.js"></script>
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script> -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
-    <style>
-        body {
-            background-color: #000000 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            overflow: hidden !important;
-        }
+    <link rel="icon" type="image/png" href="src-tauri/icons/32x32.png">
 
-        .container {
-            width: 98vw !important;
-            height: 96vh !important;
-            max-width: none !important;
-            display: flex !important;
-            flex-direction: column !important;
-            padding: 15px !important;
-            margin: 0 !important;
-            box-sizing: border-box !important;
-            box-shadow: 0 0 0 5px var(--green), 0 0 0 10px var(--gold), 0 0 0 15px var(--red), 0 10px 40px rgba(0, 0, 0, 0.8) !important;
-            border-radius: 15px !important;
-            background-color: var(--dark-gray) !important;
-        }
+    <!-- Internal styles removed, now purely in styles.css -->
 
-        /* Essential Layout Mirroring */
-        .header {
-            margin-bottom: 10px !important;
-            flex-shrink: 0;
-        }
+    <link rel="stylesheet" href="styles.css?v=cache_bust_7004">
 
-        /* NEW: 5-Column Layout mirrored from app */
-        .main-content {
-            flex: 1 !important;
-            display: grid !important;
-            grid-template-columns: repeat(5, 280px) !important;
-            gap: 8px !important;
-            padding: 0 4px !important;
-            /* Fits 1440px exactly */
-            overflow: hidden !important;
-        }
+    <!-- CRITICAL: Inline failsafe - MUST run immediately to prevent stuck screen -->
+    <script>
+        // Version marker for debugging cache issues
+        console.log('🚀 MXS-004 v54.1 - Inline Failsafe Active');
 
-        .master-column {
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 4px !important;
-            overflow: hidden !important;
-            padding: 6px !important;
-            background-color: var(--dark-gray) !important;
-            border-radius: 10px !important;
-            border: 1px solid var(--green) !important;
-            position: relative !important;
-            top: 5px !important;
-        }
+        // IMMEDIATE failsafe - shows app after 3 seconds no matter what
+        window._appStartTime = Date.now();
+        setTimeout(function () {
+            console.log('⏰ 3-second failsafe triggered');
+            var curtain = document.getElementById('app-curtain');
+            var container = document.querySelector('.container');
 
-        .master-recording-area {
-            margin-top: 5px !important;
-        }
-
-        /* Combined REC and Format look */
-        .master-rec-row {
-            display: flex !important;
-            flex-direction: row !important;
-            gap: 5px !important;
-            width: 95% !important;
-            justify-content: center !important;
-            align-items: center !important;
-            margin: 2px auto !important;
-        }
-
-        .master-rec-row button,
-        .master-rec-row select {
-            flex: 1 !important;
-            font-size: 0.8em !important;
-        }
-
-        /* Tighten LFO spacing */
-        .lfo-button-item {
-            margin-bottom: -5px !important;
-        }
-
-        .lfo-meter-item {
-            padding-top: 0 !important;
-        }
-
-        .master-waveform-item {
-            margin-top: 10px !important;
-            /* Align with tracks */
-        }
-
-        .master-item {
-            flex-shrink: 0 !important;
-            padding: 3px !important;
-        }
-
-        .master-label,
-        .track-header {
-            font-family: 'Mexcellent', sans-serif !important;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-size: 0.8em !important;
-            color: var(--gold) !important;
-        }
-
-        .param-value,
-        .master-value,
-        label,
-        .status-indicator,
-        .button,
-        button,
-        select {
-            font-family: 'Courier New', Courier, monospace !important;
-            font-weight: bold;
-        }
-
-        .master-spacer {
-            height: 1px !important;
-            background: linear-gradient(to right, transparent, var(--gold), transparent) !important;
-            margin: 5px 0 !important;
-        }
-
-        .master-spacer-invisible {
-            height: 5px !important;
-        }
-
-        .tracks-container {
-            display: contents !important;
-        }
-
-        .track {
-            height: 100% !important;
-            border: 1px solid var(--green) !important;
-        }
-
-        /* Disable Interactivity on Receiver */
-        input[type="range"] {
-            pointer-events: none !important;
-        }
-
-        button,
-        select {
-            pointer-events: none !important;
-            cursor: default !important;
-        }
-
-        #cursor {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 20px;
-            height: 20px;
-            z-index: 20000;
-            display: none;
-            pointer-events: none;
-            background: rgba(255, 255, 0, 0.5);
-            border: 2px solid white;
-            border-radius: 50%;
-            box-shadow: 0 0 15px yellow;
-        }
-
-        @font-face {
-            font-family: 'Mexcellent';
-            src: url('fonts/MexcellentRg.otf') format('opentype');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'Mexcellent 3D';
-            src: url('fonts/Mexcellent3d.otf') format('opentype');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        #loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            z-index: 10000;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--gold);
-            font-family: 'Mexcellent', sans-serif;
-        }
-
-        #ws-active-status {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            font-size: 0.7em;
-            color: rgba(255, 255, 255, 0.5);
-            font-family: 'Courier New', monospace;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid var(--green);
-        }
-
-        #audio-unmute-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 30px;
-            background: var(--red);
-            color: #fff;
-            border: 3px solid var(--gold);
-            font-family: 'Mexcellent', sans-serif;
-            font-size: 1.5em;
-            cursor: pointer;
-            z-index: 10001;
-            display: none;
-            border-radius: 8px;
-            box-shadow: 0 0 25px var(--red);
-            animation: pulse 2s infinite;
-        }
-
-        #audio-unmute-btn.visible {
-            display: block;
-        }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 1;
+            if (curtain) {
+                curtain.style.opacity = '0';
+                setTimeout(function () {
+                    if (curtain.parentNode) curtain.parentNode.removeChild(curtain);
+                }, 500);
+                console.log('✅ Failsafe: Curtain removed');
             }
 
-            50% {
-                transform: scale(1.05);
-                opacity: 0.8;
+            if (container && container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                console.log('✅ Failsafe: Container shown');
             }
+        }, 3000);
 
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        .loader {
-            border: 8px solid #333;
-            border-top: 8px solid var(--gold);
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-    </style>
+        // Global error handler to catch any script failures
+        window.onerror = function (msg, url, line) {
+            console.error('❌ Script error:', msg, 'at', url, 'line', line);
+            // Force show app on error
+            var curtain = document.getElementById('app-curtain');
+            var container = document.querySelector('.container');
+            if (curtain) curtain.style.display = 'none';
+            if (container) container.classList.remove('hidden');
+            return false;
+        };
+    </script>
 </head>
 
 <body>
-    <div id="loading-overlay">
-        <div class="loader"></div>
-        <h1 style="font-size: 3em;">NOWMULTIMEDIA MXS-004</h1>
-        <div id="boot-status" style="font-family: monospace; color: #888;">Synchronizing UI...</div>
-        <div id="ws-status"
-            style="font-family: monospace; font-size: 1.2em; color: #555; margin-top: 10px; background: rgba(20,20,20,0.8); padding: 5px;">
-            Waiting for signal...</div>
-        <div id="debug-info"
-            style="font-family: monospace; font-size: 0.8em; color: #444; margin-top: 20px; max-width: 80%; word-break: break-all;">
+    <!-- Global Hidden Inputs for File/Directory Import -->
+    <!-- Global Hidden Inputs for File/Directory Import -->
+    <div id="global-hidden-container" class="layout-hider">
+        <input type="file" id="global-file-input" multiple accept="audio/*,video/mp4,.mp3,.raw,.flac,.wav">
+        <input type="file" id="global-dir-input" webkitdirectory directory multiple>
+    </div>
+
+    <div id="app-curtain">
+        <div class="loader-container">
+            <div class="loader"></div>
+            <h1>LOADING...</h1>
         </div>
     </div>
 
-    <div class="container" id="mirror-ui" style="display:none;">
+    <!-- Cast Modal removed - using simplified cast-dialog for Chromecast only -->
+
+    <div class="container hidden">
         <div class="header">
-            <h1>NOWMULTIMEDIA MXS-004</h1><br>
-            <h2> Mix N Studio 004</h2>
+            <h1>NOWMULTIMEDIA MXS-004</h1>
+            <div class="header-right">
+                <button id="cast-btn" title="Cast Screen">
+                    <i class="fa-brands fa-chromecast"></i>
+                </button>
+                <h2>Mix Studio-004</h2>
+            </div>
         </div>
+
         <!-- NEW: 5-Column Main Content (Master + 4 Tracks) -->
         <div class="main-content">
             <!-- Column 1: Master Controls -->
             <div class="master-column">
-                <!-- 1. Master Recording -->
-                <div class="master-item master-recording-area" style="margin-left: 5px;">
+                <!-- 1. Master Recording (styled like track title) -->
+                <div class="master-item master-recording-area" style="margin-left: 0;">
                     <div class="track-header">Master Recording:</div>
                     <div id="recording-time-display" class="track-time-display">00:00:00</div>
                 </div>
 
-                <!-- 2. Master Waveform -->
+                <!-- Ghost "Status" to align with Tracks -->
+                <div class="status-indicator" style="visibility: hidden;">Placeholder</div>
+
+                <!-- 2. Master Waveform (Shifted to match track visualizer level) -->
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels">
@@ -320,27 +121,30 @@
                     </div>
                 </div>
 
-                <!-- 3. Loop Length -->
+                <!-- 3. Loop Length (Moved up, with 5px padding) -->
                 <div class="master-item" style="padding: 5px 0;">
                     <div class="track-header">Loop Length</div>
                     <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
                     <span id="loop-length-value" class="master-value">4.0s</span>
                 </div>
 
-                <!-- Spacer -->
+                <!-- Spacer above Master Volume -->
                 <div class="master-spacer"></div>
 
                 <!-- 4. Combined REC and Format -->
                 <div class="master-item master-bottom-item">
                     <div class="master-rec-row">
                         <button id="master-record-button" class="button">REC</button>
-                        <div id="record-format-display"
-                            style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
-                            Stereo (WAV)</div>
+                        <select id="record-as-select" class="font-small">
+                            <option value="stereo" data-format="wav">Stereo (WAV)</option>
+                            <option value="stereo" data-format="mp4">Stereo (MP4)</option>
+                            <option value="stereo" data-format="alac">Stereo (ALAC)</option>
+                            <option value="stems" data-format="wav">Stems (WAV)</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Spacer -->
+                <!-- Spacer 1 -->
                 <div class="master-spacer"></div>
 
                 <!-- 5. LFO 1 -->
@@ -362,7 +166,7 @@
                     <span id="lfo-time-value" class="master-value">1.8s</span>
                 </div>
 
-                <!-- Spacer -->
+                <!-- Spacer 2 -->
                 <div class="master-spacer"></div>
 
                 <!-- 8. LFO 2 -->
@@ -384,346 +188,130 @@
                     <span id="lfo2-time-value" class="master-value">1.8s</span>
                 </div>
 
-                <!-- Spacer -->
+                <!-- Spacer 3 -->
                 <div class="master-spacer"></div>
 
-                <!-- 11. Master Volume (Push down 5px via inline/CSS) -->
+                <!-- 11. Master Volume (Moved down, with 5px push down) -->
                 <div class="master-item" style="margin-top: 5px;">
                     <div class="track-header">Master Volume</div>
                     <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
                     <span id="master-volume-value" class="master-value">0.0 dB</span>
                 </div>
 
-                <!-- 12. Bottom Buttons -->
-                <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
-                    <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
-                    <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
+                <!-- 12. Import Button -->
+                <div class="master-item master-bottom-buttons">
+                    <button id="import-files-button" class="button"><i class="fa-solid fa-file-import"></i>
+                        IMPORT</button>
+                    <button id="show-docs-button"><i class="fa-solid fa-book"></i> DOCS</button>
                 </div>
             </div>
 
             <!-- Columns 2-5: Tracks -->
-            <div class="tracks-container" id="tracks-container"></div>
+            <div class="tracks-container"></div>
+        </div>
+
+
+        <div id="recordings-section">
+            <div class="sessions-header">
+                <h2 id="sessions-media-title" class="bold display-none">SESSIONS & MEDIA:</h2>
+                <button id="import-files-button" class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
+                <button id="show-docs-button"><i class="fa-solid fa-book"></i> DOCS</button>
+            </div>
+            <hr>
+            <div id="recordings-list"></div>
+
         </div>
     </div>
 
-    <div id="cursor"></div>
-    <div id="ws-active-status">Waiting for data...</div>
-    <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
+    <dialog id="docs-dialog">
+        <div class="docs-content-wrapper">
+            <button id="close-docs-button">X</button>
+            <pre></pre>
+        </div>
+    </dialog>
 
-    <script>
-        function handleScriptError(src) {
-            const status = document.getElementById('ws-active-status');
-            if (status) {
-                status.innerHTML = `<span style="color:#f44336">❌ Failed to load ${src}. Attempting fallback...</span>`;
-            }
-            if (src === 'TrackView.js') {
-                const s = document.createElement('script');
-                s.src = 'src/ui/TrackView.js';
-                document.head.appendChild(s);
-            }
-        }
-    </script>
-    <script src="TrackView.js" onerror="handleScriptError('TrackView.js')"></script>
-    <script>
-        let trackViews = [];
-        let tracksInited = false;
+    <dialog id="qa-dialog">
+        <div class="qa-content-wrapper">
+            <button id="close-qa-button">X</button>
+            <h2 class="color-gold text-center margin-top-0">QA Build Customizer</h2>
+            <div id="qa-effects-list"></div>
+            <div class="qa-controls">
+                <button id="save-project-btn" class="control-btn" title="Save Project">💾 Save</button>
+                <button id="load-project-btn" class="control-btn" title="Load Project">📂 Load</button>
+                <button id="debug-audio-btn" class="control-btn bg-dark" title="Debug Audio Devices">🐞 Audio
+                    Debug</button>
+                <button id="qa-check-all">Select All / None</button>
+                <button id="qa-launch-button">Launch with Selection</button>
+                <div class="ship-build-container">
+                    <input type="text" id="build-name-input" placeholder="Enter Build Name (e.g., v1.2-beta)">
+                    <button id="qa-ship-button">Ship Customized Build</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
 
-        function applyState(state) {
-            // FIX: Only initialize tracks if they are present in the state AND not already inited
-            if (!tracksInited && state.tracks && state.tracks.length > 0) {
-                if (typeof TrackView === 'undefined') {
-                    console.warn("⏳ TrackView.js not loaded yet (or failed)...");
-                    const activeEl = document.getElementById('ws-active-status');
-                    if (activeEl) activeEl.textContent = "⏳ Waiting for TrackView.js...";
-                    return;
-                }
-                const container = document.getElementById('tracks-container');
-                container.innerHTML = '';
-                trackViews = [];
+    <dialog id="cast-dialog">
+        <div class="cast-content-wrapper">
+            <button id="close-cast-button">X</button>
+            <h2 class="color-gold text-center margin-top-0">Cast to Device</h2>
+            <div id="cast-device-list" class="cast-device-list">
+                <p class="text-center">Searching for devices...</p>
+            </div>
+            <div class="cast-controls text-center margin-top-10">
+                <button id="refresh-cast-btn" class="control-btn">🔄 Refresh</button>
+            </div>
+            <!-- Manual IP Entry -->
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444;">
+                <p style="font-size: 0.85em; opacity: 0.7; margin-bottom: 8px;">Or enter Chromecast IP manually:</p>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="manual-cast-ip" placeholder="192.168.1.x"
+                        style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #2a2a2a; color: #fff;">
+                    <button id="manual-cast-btn" class="control-btn" style="padding: 8px 16px;">Connect</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
 
-                console.log(`📡 Building Receiver UI for ${state.tracks.length} tracks...`);
+    <script src="effects.js" defer></script>
+    <script src="effects_chorus.js" defer></script>
+    <script src="effects_compressor.js" defer></script>
+    <script src="effects_delay.js" defer></script>
+    <script src="effects_distortion.js" defer></script>
+    <script src="effects_eq.js" defer></script>
+    <script src="effects_flanger.js" defer></script>
+    <script src="effects_mod_pitch_filter.js" defer></script>
+    <script src="effects_phaser.js" defer></script>
+    <script src="effects_reverb.js" defer></script>
+    <script src="effects_experimental.js" defer></script>
+    <script src="effects_microphone.js" defer></script>
+    <script src="effects_lespeakers.js" defer></script>
+    <script src="docs.js" defer></script>
+    <script src="build_source.js" defer></script>
+    <dialog id="audio-files-modal">
+        <div class="audio-files-modal-content">
+            <h2>Select an Audio File</h2>
+            <ul id="audio-files-list"></ul>
+            <button id="close-audio-files-modal">X</button>
+        </div>
+    </dialog>
 
-                state.tracks.forEach((t) => {
-                    const tv = new TrackView(t.id);
-                    container.appendChild(tv.buildElement());
-                    trackViews.push(tv);
-                });
-
-                tracksInited = true;
-                document.getElementById('loading-overlay').style.display = 'none';
-                document.getElementById('mirror-ui').style.display = 'flex';
-                console.log(`✅ Receiver UI Initialized with ${trackViews.length} tracks.`);
-            }
-
-            // Master Update
-            if (state.master) {
-                const volS = document.getElementById('master-volume');
-                const volV = document.getElementById('master-volume-value');
-                const lenS = document.getElementById('loop-length');
-                const lenV = document.getElementById('loop-length-value');
-                const recB = document.getElementById('master-record-button');
-
-                if (volS) volS.value = state.master.volume;
-                if (volV) volV.textContent = (state.master.volume || 0).toFixed(1) + " dB";
-                if (lenS) lenS.value = state.master.loopLength;
-                if (lenV) lenV.textContent = (state.master.loopLength || 0).toFixed(1) + "s";
-                if (recB) recB.classList.toggle('recording', state.master.isRecording);
-
-                document.getElementById('lfo-meter-bar').style.width = (state.master.lfo1Meter * 100) + "%";
-                document.getElementById('lfo2-meter-bar').style.width = (state.master.lfo2Meter * 100) + "%";
-                document.getElementById('lfo-toggle').classList.toggle('sweeping', state.master.lfo1Active);
-                document.getElementById('lfo2-toggle').classList.toggle('sweeping', state.master.lfo2Active);
-            }
-
-            if (state.transport) {
-                document.getElementById('recording-time-display').textContent = state.transport.position || "00:00:00";
-            }
-
-            // Tracks Update
-            if (state.tracks && trackViews.length > 0) {
-                state.tracks.forEach(t => {
-                    const tv = trackViews[t.id];
-                    if (!tv) return;
-
-                    // Sync sliders
-                    const params = ['vol', 'pan', 'pitch', 'treble', 'mid_gain', 'bass'];
-                    params.forEach(p => {
-                        const val = t[p === 'mid_gain' ? 'midGain' : p];
-                        if (tv.elements.knobs[p]) tv.elements.knobs[p].value = val;
-                        if (tv.elements.valueDisplays[p]) tv.elements.valueDisplays[p].textContent = parseFloat(val).toFixed(1);
-                    });
-
-                    // Sync status & buttons
-                    if (t.armed) tv.setStatus('Recording', 'recording');
-                    else if (t.isPlaying) tv.setStatus('Playing', 'playing');
-                    else tv.setStatus('Ready', 'ready');
-
-                    if (tv.elements.recBtn) tv.elements.recBtn.classList.toggle('recording', t.armed);
-                    if (tv.elements.playBtn) tv.elements.playBtn.classList.toggle('playing', t.isPlaying);
-
-                    // Meter Update (Hack for receiver display)
-                    if (tv.elements.waveformCanvasL) {
-                        // Use the canvas area as a meter bar for the receiver since we don't have real-time waveform data
-                        const ctx = tv.elements.waveformCanvasL.getContext('2d');
-                        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
-                        ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters.l || 0), 100);
-                    }
-                });
-            }
-        }
-
-        // ============= AUDIO STREAMING PLAYBACK =============
-        let audioCtx = null;
-        let audioQueue = [];
-        let isAudioPlaying = false;
-        const SAMPLE_RATE = 48000;
-        const CHANNELS = 2;
-        const BUFFER_SIZE = 8192; // Increased for better stability over wifi
-
-        function initAudioPlayback() {
-            if (audioCtx) return;
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-            console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
-
-            const unmuteBtn = document.getElementById('audio-unmute-btn');
-            if (audioCtx.state === 'suspended') {
-                if (unmuteBtn) unmuteBtn.classList.add('visible');
-            }
-
-            // Create ScriptProcessor for real-time playback
-            const processor = audioCtx.createScriptProcessor(BUFFER_SIZE, 0, CHANNELS);
-            processor.onaudioprocess = (e) => {
-                const left = e.outputBuffer.getChannelData(0);
-                const right = e.outputBuffer.getChannelData(1);
-
-                // Fill from queue
-                let samplesNeeded = BUFFER_SIZE;
-                let offset = 0;
-
-                // NEW: Jitter / Lag Management
-                // Only skip if EXTREMELY lagged (> 500ms)
-                const maxSamplesInQueue = SAMPLE_RATE * 0.5;
-                let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
-
-                if (totalBuffered > maxSamplesInQueue) {
-                    console.warn("⚠️ Audio lag detected, skipping 100ms to catch up...");
-                    let skipSamples = SAMPLE_RATE * 0.1; // Skip 100ms
-                    while (skipSamples > 0 && audioQueue.length > 0) {
-                        const chunk = audioQueue[0];
-                        const available = chunk.data.length / 2 - chunk.offset;
-                        const toSkip = Math.min(skipSamples, available);
-                        chunk.offset += toSkip;
-                        skipSamples -= toSkip;
-                        if (chunk.offset * 2 >= chunk.data.length) audioQueue.shift();
-                    }
-                }
-
-                let maxPeak = 0;
-                while (samplesNeeded > 0 && audioQueue.length > 0) {
-                    const chunk = audioQueue[0];
-                    const available = chunk.data.length / 2 - chunk.offset;
-                    const toRead = Math.min(samplesNeeded, available);
-
-                    for (let i = 0; i < toRead; i++) {
-                        const idx = (chunk.offset + i) * 2;
-                        left[offset + i] = chunk.data[idx] || 0;
-                        right[offset + i] = chunk.data[idx + 1] || 0;
-                    }
-
-                    // Throttled Peak Check (per chunk rather than per sample if possible, or just once)
-                    if (toRead > 0) {
-                        maxPeak = Math.max(maxPeak, Math.abs(chunk.data[chunk.offset * 2]));
-                    }
-
-                    chunk.offset += toRead;
-                    offset += toRead;
-                    samplesNeeded -= toRead;
-
-                    if (chunk.offset * 2 >= chunk.data.length) {
-                        audioQueue.shift();
-                    }
-                }
-
-                if (offset > 0) window._lastAudioPeak = maxPeak;
-
-                // Fill remaining with silence
-                for (let i = offset; i < BUFFER_SIZE; i++) {
-                    left[i] = 0;
-                    right[i] = 0;
-                }
-            };
-
-            processor.connect(audioCtx.destination);
-            isAudioPlaying = true;
-        }
-
-        function handleAudioChunk(pcmData) {
-            if (!audioCtx) initAudioPlayback();
-
-            // NEW: 4-byte padding header in backend ensures alignment.
-            // We use the buffer starting at offset 4.
-            try {
-                // pcmData is a Uint8Array(e.data, 4) if we use the new alignment.
-                // Wait, in onmessage we do: const pcmData = new Uint8Array(e.data, 4);
-                // Then floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
-                // This is perfectly aligned.
-                const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
-
-                // Add to queue with read offset
-                audioQueue.push({ data: floatView, offset: 0 });
-
-                // Limit queue to ~500ms of audio
-                const maxChunks = Math.ceil((SAMPLE_RATE * 0.5) / (BUFFER_SIZE / 2));
-                while (audioQueue.length > maxChunks) {
-                    audioQueue.shift();
-                }
-            } catch (e) {
-                console.error("Audio Alignment Error:", e);
-            }
-        }
-
-        function startAudioManually() {
-            if (audioCtx) {
-                audioCtx.resume().then(() => {
-                    console.log("🔊 Audio Context Resumed Manually");
-                    const btn = document.getElementById('audio-unmute-btn');
-                    if (btn) btn.classList.remove('visible');
-                });
-            }
-        }
-
-        function connectWS(url) {
-            console.log("Connecting to WS:", url);
-            const statusEl = document.getElementById('ws-status');
-            const debugEl = document.getElementById('debug-info');
-
-            if (statusEl) statusEl.textContent = "Connecting to " + url + "...";
-            if (debugEl) debugEl.textContent = "Target: " + url;
-
-            const ws = new WebSocket(url);
-            ws.binaryType = 'arraybuffer';
-            ws.onopen = () => {
-                console.log("WS Connected");
-                if (statusEl) {
-                    statusEl.textContent = "✅ WS Connected - Waiting for state...";
-                    statusEl.style.color = "#4CAF50";
-                }
-            };
-            ws.onerror = (err) => {
-                console.error("WS Error:", err);
-                if (statusEl) {
-                    statusEl.textContent = "❌ WS Connection Failed";
-                    statusEl.style.color = "#f44336";
-                }
-                if (debugEl) debugEl.textContent += " [ERR]";
-            };
-            let msgCount = 0;
-            let audioCount = 0;
-            ws.onmessage = (e) => {
-                msgCount++;
-                const debugEl = document.getElementById('debug-info');
-                const activeEl = document.getElementById('ws-active-status');
-
-                if (activeEl && msgCount % 20 === 0) {
-                    const peak = (window._lastAudioPeak || 0).toFixed(3);
-                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Bytes: ${e.data.byteLength}`;
-                }
-
-                if (typeof e.data === 'string') {
-                    return;
-                }
-                try {
-                    const view = new Uint8Array(e.data);
-
-                    if (view[0] === 3) {
-                        const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
-                        if (json.type === 'state') {
-                            if (audioCtx && audioCtx.state === 'suspended') {
-                                // Background resume attempt
-                                audioCtx.resume();
-                            }
-                            applyState(json);
-                            if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
-                        }
-                        else if (json.type === 'cursor') {
-                            const cur = document.getElementById('cursor');
-                            if (cur) {
-                                cur.style.display = 'block';
-                                cur.style.left = (json.x * 100) + "vw";
-                                cur.style.top = (json.y * 100) + "vh";
-                            }
-                        }
-                    } else if (view[0] === 2) {
-                        // Audio chunk - f32le stereo PCM
-                        // Use 4-byte offset for alignment
-                        audioCount++;
-                        const pcmData = new Uint8Array(e.data, 4);
-                        handleAudioChunk(pcmData);
-                    }
-                } catch (err) {
-                    console.error("Parse Error:", err);
-                    if (debugEl) debugEl.textContent = `Rx Error: ${err.message}`;
-                }
-            };
-            ws.onclose = () => {
-                console.log("WS Closed, retrying...");
-                setTimeout(() => connectWS(url), 2000);
-            };
-        }
-
-        window.onload = () => {
-            const params = new URLSearchParams(window.location.search);
-            if (params.has('ws')) connectWS(params.get('ws'));
-            if (typeof cast !== 'undefined') {
-                const ctx = cast.framework.CastReceiverContext.getInstance();
-                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
-                    const url = e.data.wsUrl || e.data;
-                    if (url) connectWS(url);
-                });
-                ctx.start();
-            }
-        };
-    </script>
+    <!-- Audio Engine & App Logic (Cache Busted) -->
+    <!-- Audio Engine & App Logic (Cache Busted) -->
+    <script src="src/utils/AudioUtils.js?v=cache_bust_7004"></script>
+    <script src="src/utils/Helpers.js?v=cache_bust_7004"></script>
+    <script src="src/utils/TauriUtils.js?v=cache_bust_7004"></script>
+    <script src="src/config/Config.js?v=cache_bust_7004"></script>
+    <script src="src/ui/TrackView.js?v=cache_bust_7004"></script>
+    <script src="src/ui/RecordingUI.js?v=cache_bust_7004"></script>
+    <script src="src/ui/FileSelectionUI.js?v=cache_bust_7004"></script>
+    <script src="src/audio/AudioContextManager.js?v=cache_bust_7004"></script>
+    <script src="src/audio/TrackAudio.js?v=cache_bust_7004"></script>
+    <script src="src/audio/EffectsService.js?v=cache_bust_7004"></script>
+    <script src="src/services/PersistenceService.js?v=cache_bust_7004"></script>
+    <script src="audio_service_v52.js?v=cache_bust_7004"></script>
+    <script src="HybridCastSender.js?v=cache_bust_7004"></script>
+    <script src="CastStateBroadcaster.js?v=cache_bust_7004"></script>
+    <script src="scripts.js?v=cache_bust_7004"></script>
 </body>
 
 </html>
