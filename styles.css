@@ -638,8 +638,37 @@ img {
 }
 
 .master-waveform-item {
-    margin-top: 10px !important;
-    /* Push down to match track visualizer level */
+    margin-top: 0 !important;
+    /* Reset, volume control now provides spacing */
+}
+
+/* Master Volume Aligned (Row Layout to fit 30px height) */
+.master-volume-aligned {
+    flex-direction: row !important;
+    height: 30px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 0 !important;
+    padding: 0 5px !important;
+}
+
+.master-volume-aligned input[type="range"] {
+    flex: 1;
+    height: 4px;
+    margin: 0;
+}
+
+.master-volume-aligned .track-header {
+    font-size: 0.7em;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.master-volume-aligned .master-value {
+    font-size: 0.7em;
+    min-width: 35px;
+    text-align: right;
 }
 
 /* LFO Side-by-Side Layout */

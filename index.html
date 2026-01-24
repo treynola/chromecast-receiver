@@ -308,7 +308,12 @@
                 </div>
 
                 <!-- Ghost "Status" to align with Tracks -->
-                <div class="status-indicator" style="visibility: hidden;">Placeholder</div>
+                <!-- Replaced by Master Volume on Line 3 -->
+                <div class="master-item master-volume-aligned">
+                    <div class="track-header">Vol</div>
+                    <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
+                    <span id="master-volume-value" class="master-value">0.0 dB</span>
+                </div>
 
                 <!-- 2. Master Waveform -->
                 <div class="master-item master-waveform-item">
@@ -390,12 +395,8 @@
                 <!-- Spacer 3 (Now bottom border of LFO block) -->
                 <!-- <div class="master-spacer"></div> -->
 
-                <!-- 11. Master Volume (Push down 5px via inline/CSS) -->
-                <div class="master-item" style="margin-top: 5px;">
-                    <div class="track-header">Master Volume</div>
-                    <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
-                    <span id="master-volume-value" class="master-value">0.0 dB</span>
-                </div>
+                <!-- 11. Master Volume (Moved up to Line 3) -->
+                <!-- Removed from here -->
 
                 <!-- 12. Bottom Buttons -->
                 <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
