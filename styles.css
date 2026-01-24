@@ -642,8 +642,62 @@ img {
     /* Push down to match track visualizer level */
 }
 
-.master-bottom-buttons {
-    margin-top: 10px;
+/* LFO Side-by-Side Layout */
+.lfo-side-by-side-container {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    align-items: flex-start;
+    border-top: 1px solid var(--mid-gray);
+    border-bottom: 1px solid var(--mid-gray);
+    padding: 4px 0;
+    margin: 5px 0;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.lfo-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+/* Vertical Separator */
+.lfo-separator {
+    width: 1px;
+    background-color: var(--mid-gray);
+    align-self: stretch;
+    margin: 0 2px;
+}
+
+/* Overrides for compact look in side-by-side */
+.lfo-column .master-item {
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.lfo-column .lfo-button-item button {
+    font-size: 0.65em;
+    padding: 2px 4px;
+    width: 90%;
+}
+
+.lfo-column .lfo-meter-item .meter-container {
+    height: 6px;
+    /* Thinner meters */
+    width: 90%;
+}
+
+.lfo-column input[type="range"] {
+    height: 10px;
+    /* Smaller sliders */
+}
+
+/* Hide original individual spacers since we wrap the whole block */
+.lfo-hidden-spacer {
+    display: none;
 }
 
 .control-column {
