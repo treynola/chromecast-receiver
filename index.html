@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles_main.css">
     <style>
         body {
             background-color: #000000 !important;
@@ -300,12 +300,9 @@
         <div class="main-content">
             <!-- Column 1: Master Controls -->
             <div class="master-column">
-                <!-- 1. Master Recording -->
-                <!-- 1. Master Recording -->
-                <div class="master-item master-recording-area" style="margin-left: 0;">
-                    <div class="track-header">Master Recording:</div>
-                    <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                </div>
+                <!-- 1. Master Recording (Direct children to match main app) -->
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
 
                 <!-- Ghost "Status" to align with Tracks -->
                 <!-- Replaced by Master Volume on Line 3 -->
@@ -330,14 +327,16 @@
                 </div>
 
                 <!-- 3. Loop Length -->
-                <div class="master-item" style="padding: 5px 0;">
+                <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
+                <!-- 3. Loop Length (Top, Compact Row) -->
+                <div class="master-item master-row-layout">
                     <div class="track-header">Loop Length</div>
                     <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
                     <span id="loop-length-value" class="master-value">4.0s</span>
                 </div>
 
-                <!-- Spacer -->
-                <div class="master-spacer"></div>
+                <!-- Spacer removed -->
+                <!-- <div class="master-spacer"></div> -->
 
                 <!-- 4. Combined REC and Format -->
                 <div class="master-item master-bottom-item">
@@ -353,6 +352,8 @@
                 <!-- <div class="master-spacer"></div> -->
 
                 <!-- NEW: Side-by-Side LFO Container -->
+                <!-- 3. Loop Length (Moved down, Compact Row) -->
+                <!-- Side-by-Side LFO Container (Bottom) -->
                 <div class="lfo-side-by-side-container">
                     <!-- Column Left: LFO 1 -->
                     <div class="lfo-column">
@@ -522,11 +523,12 @@
         let isAudioPlaying = false;
         const SAMPLE_RATE = 48000;
         const CHANNELS = 2;
-        const BUFFER_SIZE = 8192; // Increased for better stability over wifi
+        // REDUCED BUFFER FOR LOWER LATENCY (was 8192)
+        const BUFFER_SIZE = 4096;
 
         function initAudioPlayback() {
             if (audioCtx) return;
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
             console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
 
             const unmuteBtn = document.getElementById('audio-unmute-btn');
@@ -545,13 +547,13 @@
                 let offset = 0;
 
                 // NEW: Jitter / Lag Management
-                // Only skip if EXTREMELY lagged (> 500ms)
-                const maxSamplesInQueue = SAMPLE_RATE * 0.5;
+                // Tightened logic: skip if queue > 150ms (was 500ms) to force low latency
+                const maxSamplesInQueue = SAMPLE_RATE * 0.15;
                 let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
 
                 if (totalBuffered > maxSamplesInQueue) {
-                    console.warn("⚠️ Audio lag detected, skipping 100ms to catch up...");
-                    let skipSamples = SAMPLE_RATE * 0.1; // Skip 100ms
+                    console.warn("⚠️ Audio lag detected (>150ms), skipping to catch up...");
+                    let skipSamples = SAMPLE_RATE * 0.05; // Skip 50ms chunks
                     while (skipSamples > 0 && audioQueue.length > 0) {
                         const chunk = audioQueue[0];
                         const available = chunk.data.length / 2 - chunk.offset;
@@ -574,9 +576,12 @@
                         right[offset + i] = chunk.data[idx + 1] || 0;
                     }
 
-                    // Throttled Peak Check (per chunk rather than per sample if possible, or just once)
                     if (toRead > 0) {
-                        maxPeak = Math.max(maxPeak, Math.abs(chunk.data[chunk.offset * 2]));
+                        // Optimizing peak check: check every 64th sample
+                        for (let k = 0; k < toRead; k += 64) {
+                            const val = Math.abs(chunk.data[(chunk.offset + k) * 2]);
+                            if (val > maxPeak) maxPeak = val;
+                        }
                     }
 
                     chunk.offset += toRead;
