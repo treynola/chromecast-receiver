@@ -3506,21 +3506,15 @@ select option {
 /* Sample Center Updates */
 .sample-btn {
     /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
-    /* Normal State: Light Gold BG, Lighter Green Text/Border */
-    /* Normal State: Light Gold BG, Lighter Green Text/Border */
-    background-color: rgba(250, 215, 142, 0.15) !important;
-    /* Light Gold hint */
+    /* Normal State: Match REV Button Scheme */
+    background-color: var(--gold) !important;
+    color: var(--green) !important;
+    border: 2px solid var(--green) !important;
 
-    /* Lighter lime green */
-    border: 2px solid #32CD32 !important;
-    /* Lime Green */
-
-    /* Lighter Green Text */
-    color: #32CD32 !important;
     font-family: 'Mexcellent', sans-serif !important;
     font-size: 1.8em !important;
-    /* Increased Size */
-    font-weight: normal !important;
+    font-weight: 720 !important;
+    /* Match REV weight */
     letter-spacing: 1px !important;
 
     /* Reduced Size Further */
@@ -3532,7 +3526,8 @@ select option {
     display: flex;
     align-items: center;
     justify-content: center;
-    text-shadow: 1px 1px 0px #000;
+    text-shadow: none;
+    /* Removed shadow */
     position: relative;
     z-index: 5;
 }
