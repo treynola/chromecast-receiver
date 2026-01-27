@@ -3517,9 +3517,11 @@ select option {
     padding: 1px;
 
     font-family: 'Mexcellent', sans-serif !important;
-    font-size: 1.0em;
-    /* Reduced from 1.4em */
-    /* font-weight: bold; */
+    font-size: 1.2em;
+    /* Increase size slightly for visibility */
+    font-weight: normal !important;
+    /* Required for display font */
+    letter-spacing: 1px;
     cursor: pointer;
     border-radius: 12px;
     transition: all 0.1s ease;
