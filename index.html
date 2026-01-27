@@ -394,6 +394,36 @@
                 </div>
 
                 <!-- Spacer 3 (Now bottom border of LFO block) -->
+                <div class="master-spacer"></div>
+
+                <!-- 4. Sample Station (Mirrored) -->
+                <div class="master-item sample-center-container">
+                    <div class="track-header">Sample Station</div>
+                    <div class="sample-grid">
+                        <button class="sample-btn" data-sample="1">1</button>
+                        <button class="sample-btn" data-sample="2">2</button>
+                        <button class="sample-btn" data-sample="3">3</button>
+                        <button class="sample-btn" data-sample="4">4</button>
+                        <button class="sample-btn" data-sample="5">5</button>
+                        <button class="sample-btn" data-sample="6">6</button>
+                        <button class="sample-btn" data-sample="7">7</button>
+                        <button class="sample-btn" data-sample="8">8</button>
+                        <button class="sample-btn" data-sample="9">9</button>
+                        <button class="sample-btn" data-sample="10">10</button>
+                        <button class="sample-btn" data-sample="11">11</button>
+                        <button class="sample-btn" data-sample="12">12</button>
+                        <button class="sample-btn" data-sample="13">13</button>
+                        <button class="sample-btn" data-sample="14">14</button>
+                        <button class="sample-btn" data-sample="15">15</button>
+                        <button class="sample-btn" data-sample="16">16</button>
+                        <button class="sample-btn" data-sample="17">17</button>
+                        <button class="sample-btn" data-sample="18">18</button>
+                        <button class="sample-btn" data-sample="19">19</button>
+                        <button class="sample-btn" data-sample="20">20</button>
+                    </div>
+                </div>
+
+                <!-- Spacer 3 (Now bottom border of LFO block) -->
                 <!-- <div class="master-spacer"></div> -->
 
                 <!-- 11. Master Volume (Moved up to Line 3) -->
@@ -480,6 +510,19 @@
                 document.getElementById('lfo2-toggle').classList.toggle('sweeping', state.master.lfo2Active);
             }
 
+            // Sampler Update (Mirrored)
+            if (state.sampler) {
+                state.sampler.forEach(pad => {
+                    const btn = document.querySelector(`.sample-btn[data-sample="${pad.id}"]`);
+                    if (btn) {
+                        if (btn.textContent !== pad.label) btn.textContent = pad.label;
+                        btn.classList.toggle('active', pad.active);
+                        btn.classList.toggle('loaded', pad.loaded);
+                        btn.classList.toggle('drag-over', pad.dragOver);
+                    }
+                });
+            }
+
             if (state.transport) {
                 document.getElementById('recording-time-display').textContent = state.transport.position || "00:00:00";
             }
@@ -523,8 +566,8 @@
         let isAudioPlaying = false;
         const SAMPLE_RATE = 48000;
         const CHANNELS = 2;
-        // REDUCED BUFFER FOR LOWER LATENCY (was 8192)
-        const BUFFER_SIZE = 4096;
+        // REDUCED BUFFER FOR LOWER LATENCY (was 8192, then 4096)
+        const BUFFER_SIZE = 2048; // ~42ms @ 48kHz
 
         function initAudioPlayback() {
             if (audioCtx) return;
@@ -547,12 +590,12 @@
                 let offset = 0;
 
                 // NEW: Jitter / Lag Management
-                // Tightened logic: skip if queue > 150ms (was 500ms) to force low latency
-                const maxSamplesInQueue = SAMPLE_RATE * 0.15;
+                // Tightened logic: skip if queue > 100ms (was 150ms) to force low latency
+                const maxSamplesInQueue = SAMPLE_RATE * 0.10;
                 let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
 
                 if (totalBuffered > maxSamplesInQueue) {
-                    console.warn("⚠️ Audio lag detected (>150ms), skipping to catch up...");
+                    // console.warn("⚠️ Audio lag detected (>100ms), skipping to catch up...");
                     let skipSamples = SAMPLE_RATE * 0.05; // Skip 50ms chunks
                     while (skipSamples > 0 && audioQueue.length > 0) {
                         const chunk = audioQueue[0];
@@ -691,7 +734,11 @@
                                 // Background resume attempt
                                 audioCtx.resume();
                             }
+
+                            // VISUAL SYNC: Reverted complex delay logic. 
+                            // Prioritizing immediate visual feedback. Audio buffer is reduced to 2048 (~42ms)
                             applyState(json);
+
                             if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
                         }
                         else if (json.type === 'cursor') {
