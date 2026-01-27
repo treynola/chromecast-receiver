@@ -3510,16 +3510,18 @@ select option {
     /* Lighter grey */
     border: 2px solid var(--green);
     /* Reduced to 2px */
-    color: var(--green);
+
+    /* Match Title Styling */
+    color: var(--gold);
+    font-family: 'Mexcellent', sans-serif !important;
+    font-size: 1.25em;
+    /* Match scalar visual weight */
+    font-weight: normal !important;
+    letter-spacing: 1px;
 
     /* Reduced Size Further */
     aspect-ratio: 1.0;
     padding: 1px;
-
-    font-family: 'Mexcellent', sans-serif !important;
-    font-size: 1.2em;
-    /* Increase size slightly for visibility */
-    font-weight: normal !important;
     /* Required for display font */
     letter-spacing: 1px;
     cursor: pointer;
