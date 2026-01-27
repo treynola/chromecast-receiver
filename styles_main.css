@@ -3506,16 +3506,19 @@ select option {
 /* Sample Center Updates */
 .sample-btn {
     /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
-    background-color: #333333;
-    /* Lighter grey */
-    border: 2px solid var(--green);
-    /* Reduced to 2px */
+    /* Normal State: Light Gold BG, Lighter Green Text/Border */
+    background-color: rgba(250, 215, 142, 0.15);
+    /* Light Gold hint */
 
-    /* Match Title Styling */
-    color: var(--gold);
+    /* Lighter lime green */
+    border: 2px solid #32CD32;
+    /* Lime Green */
+
+    /* Lighter Green Text */
+    color: #32CD32;
     font-family: 'Mexcellent', sans-serif !important;
-    font-size: 1.25em;
-    /* Match scalar visual weight */
+    font-size: 1.8em;
+    /* Increased Size */
     font-weight: normal !important;
     letter-spacing: 1px;
 
