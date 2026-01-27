@@ -3507,26 +3507,25 @@ select option {
 .sample-btn {
     /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
     /* Normal State: Light Gold BG, Lighter Green Text/Border */
-    background-color: rgba(250, 215, 142, 0.15);
+    /* Normal State: Light Gold BG, Lighter Green Text/Border */
+    background-color: rgba(250, 215, 142, 0.15) !important;
     /* Light Gold hint */
 
     /* Lighter lime green */
-    border: 2px solid #32CD32;
+    border: 2px solid #32CD32 !important;
     /* Lime Green */
 
     /* Lighter Green Text */
-    color: #32CD32;
+    color: #32CD32 !important;
     font-family: 'Mexcellent', sans-serif !important;
-    font-size: 1.8em;
+    font-size: 1.8em !important;
     /* Increased Size */
     font-weight: normal !important;
-    letter-spacing: 1px;
+    letter-spacing: 1px !important;
 
     /* Reduced Size Further */
     aspect-ratio: 1.0;
     padding: 1px;
-    /* Required for display font */
-    letter-spacing: 1px;
     cursor: pointer;
     border-radius: 12px;
     transition: all 0.1s ease;
