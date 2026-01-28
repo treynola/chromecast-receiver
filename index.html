@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css">
+    <link rel="stylesheet" href="styles_v101.css">
     <style>
         body {
             background-color: #000000 !important;
@@ -24,48 +24,61 @@
             overflow: hidden !important;
         }
 
+        /* SCALING WRAPPER to enforce 1440x810 aspect ratio on any TV */
+        #app-scaler {
+            width: 1440px;
+            height: 810px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-origin: center center;
+            /* Auto-scale will be applied by JS or CSS if possible, but JS is safer for window resizing */
+        }
+
         .container {
-            width: 98vw !important;
-            height: 96vh !important;
+            width: 100% !important;
+            height: 100% !important;
             max-width: none !important;
+            max-height: none !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 15px !important;
+            padding: 8px !important;
             margin: 0 !important;
             box-sizing: border-box !important;
-            box-shadow: 0 0 0 5px var(--green), 0 0 0 10px var(--gold), 0 0 0 15px var(--red), 0 10px 40px rgba(0, 0, 0, 0.8) !important;
+            box-shadow: 0 0 0 2px var(--green), 0 0 0 4px var(--gold), 0 0 0 6px var(--red) !important;
             border-radius: 15px !important;
             background-color: var(--dark-gray) !important;
         }
 
         /* Essential Layout Mirroring */
         .header {
-            margin-bottom: 10px !important;
+            margin-bottom: 5px !important;
             flex-shrink: 0;
+            height: 40px !important;
+            padding: 5px 20px !important;
         }
 
         /* NEW: 5-Column Layout mirrored from app */
         .main-content {
             flex: 1 !important;
             display: grid !important;
-            grid-template-columns: repeat(5, 280px) !important;
+            grid-template-columns: repeat(5, 1fr) !important;
             gap: 8px !important;
             padding: 0 4px !important;
-            /* Fits 1440px exactly */
             overflow: hidden !important;
         }
 
         .master-column {
             display: flex !important;
             flex-direction: column !important;
-            gap: 4px !important;
+            gap: 5px !important;
             overflow: hidden !important;
-            padding: 6px !important;
+            padding: 5px !important;
             background-color: var(--dark-gray) !important;
             border-radius: 10px !important;
             border: 1px solid var(--green) !important;
             position: relative !important;
-            top: 5px !important;
+            top: 0 !important;
         }
 
         .master-recording-area {
@@ -80,7 +93,7 @@
             width: 95% !important;
             justify-content: center !important;
             align-items: center !important;
-            margin: 2px auto !important;
+            margin: 25px 0 0 0 !important;
         }
 
         .master-rec-row button,
@@ -96,11 +109,13 @@
 
         .lfo-meter-item {
             padding-top: 0 !important;
+            margin-bottom: 0 !important;
         }
 
         .master-waveform-item {
-            margin-top: 10px !important;
-            /* Align with tracks */
+            margin-top: 0 !important;
+            height: 60px !important;
+            flex: 0 0 auto !important;
         }
 
         .master-item {
@@ -122,16 +137,21 @@
 
 
         .sample-btn {
+            background-color: var(--gold) !important;
+            color: var(--green) !important;
+            border: 4px solid var(--green) !important;
             font-family: 'Mexcellent', sans-serif !important;
-            font-weight: normal !important;
-            letter-spacing: 1px !important;
             font-size: 1.8em !important;
-            color: #32CD32 !important;
-            /* Lighter Green */
-            background-color: rgba(250, 215, 142, 0.15) !important;
-            /* Light Gold Hint */
-            border: 2px solid #32CD32 !important;
+            font-weight: 720 !important;
+            letter-spacing: 1px !important;
             aspect-ratio: 1.0;
+        }
+
+        .sample-center-container {
+            background-color: #222222 !important;
+            border: 4px solid var(--green) !important;
+            border-radius: 10px;
+            padding: 10px;
         }
 
         .param-value,
@@ -188,6 +208,8 @@
             border: 2px solid white;
             border-radius: 50%;
             box-shadow: 0 0 15px yellow;
+            transform: translate(-50%, -50%);
+            /* Centered on point */
         }
 
         @font-face {
@@ -308,153 +330,155 @@
         </div>
     </div>
 
-    <div class="container" id="mirror-ui" style="display:none;">
-        <div class="header">
-            <h1>NOWMULTIMEDIA MXS-004</h1><br>
-            <h2> Mix N Studio 004</h2>
-        </div>
-        <!-- NEW: 5-Column Main Content (Master + 4 Tracks) -->
-        <div class="main-content">
-            <!-- Column 1: Master Controls -->
-            <div class="master-column">
-                <!-- 1. Master Recording (Direct children to match main app) -->
-                <div class="track-header">Master Recording:</div>
-                <div id="recording-time-display" class="track-time-display">00:00:00</div>
-
-                <!-- Ghost "Status" to align with Tracks -->
-                <!-- Replaced by Master Volume on Line 3 -->
-                <div class="master-item master-volume-aligned">
-                    <div class="track-header">Vol</div>
-                    <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
-                    <span id="master-volume-value" class="master-value">0.0 dB</span>
-                </div>
-
-                <!-- 2. Master Waveform -->
-                <div class="master-item master-waveform-item">
-                    <div class="waveform-box master-waveform-box">
-                        <div class="waveform-labels">
-                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
-                            <div class="waveform-label-external">R</div>
-                        </div>
-                        <div id="master-waveform-container" class="flex-grow">
-                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
-                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3. Loop Length -->
-                <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
-                <!-- 3. Loop Length (Top, Compact Row) -->
-                <div class="master-item master-row-layout">
-                    <div class="track-header">Loop Length</div>
-                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
-                    <span id="loop-length-value" class="master-value">4.0s</span>
-                </div>
-
-                <!-- Spacer removed -->
-                <!-- <div class="master-spacer"></div> -->
-
-                <!-- 4. Combined REC and Format -->
-                <div class="master-item master-bottom-item">
-                    <div class="master-rec-row">
-                        <button id="master-record-button" class="button">REC</button>
-                        <div id="record-format-display"
-                            style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
-                            Stereo (WAV)</div>
-                    </div>
-                </div>
-
-                <!-- Spacer 1 (Now top border of LFO block) -->
-                <!-- <div class="master-spacer"></div> -->
-
-                <!-- NEW: Side-by-Side LFO Container -->
-                <!-- 3. Loop Length (Moved down, Compact Row) -->
-                <!-- Side-by-Side LFO Container (Bottom) -->
-                <div class="lfo-side-by-side-container">
-                    <!-- Column Left: LFO 1 -->
-                    <div class="lfo-column">
-                        <div class="master-item lfo-button-item">
-                            <button id="lfo-toggle">LFO 1</button>
-                        </div>
-                        <div class="master-item lfo-meter-item">
-                            <div class="meter-container lfo-meter">
-                                <div id="lfo-meter-bar" class="meter-bar"></div>
-                            </div>
-                        </div>
-                        <div class="master-item">
-                            <label for="lfo-time" class="master-label" style="font-size:0.65em;">Sweep 1</label>
-                            <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
-                            <span id="lfo-time-value" class="master-value">1.8s</span>
-                        </div>
-                    </div>
-
-                    <!-- Vertical Separator -->
-                    <div class="lfo-separator"></div>
-
-                    <!-- Column Right: LFO 2 -->
-                    <div class="lfo-column">
-                        <div class="master-item lfo-button-item">
-                            <button id="lfo2-toggle">LFO 2</button>
-                        </div>
-                        <div class="master-item lfo-meter-item">
-                            <div class="meter-container lfo-meter">
-                                <div id="lfo2-meter-bar" class="meter-bar"></div>
-                            </div>
-                        </div>
-                        <div class="master-item">
-                            <label for="lfo2-time" class="master-label" style="font-size:0.65em;">Sweep 2</label>
-                            <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
-                            <span id="lfo2-time-value" class="master-value">1.8s</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Spacer 3 (Now bottom border of LFO block) -->
-                <div class="master-spacer"></div>
-
-                <!-- 4. Sample Station (Mirrored) -->
-                <div class="master-item sample-center-container">
-                    <div class="track-header">Sample Station</div>
-                    <div class="sample-grid">
-                        <button class="sample-btn" data-sample="1">1</button>
-                        <button class="sample-btn" data-sample="2">2</button>
-                        <button class="sample-btn" data-sample="3">3</button>
-                        <button class="sample-btn" data-sample="4">4</button>
-                        <button class="sample-btn" data-sample="5">5</button>
-                        <button class="sample-btn" data-sample="6">6</button>
-                        <button class="sample-btn" data-sample="7">7</button>
-                        <button class="sample-btn" data-sample="8">8</button>
-                        <button class="sample-btn" data-sample="9">9</button>
-                        <button class="sample-btn" data-sample="10">10</button>
-                        <button class="sample-btn" data-sample="11">11</button>
-                        <button class="sample-btn" data-sample="12">12</button>
-                        <button class="sample-btn" data-sample="13">13</button>
-                        <button class="sample-btn" data-sample="14">14</button>
-                        <button class="sample-btn" data-sample="15">15</button>
-                        <button class="sample-btn" data-sample="16">16</button>
-                        <button class="sample-btn" data-sample="17">17</button>
-                        <button class="sample-btn" data-sample="18">18</button>
-                        <button class="sample-btn" data-sample="19">19</button>
-                        <button class="sample-btn" data-sample="20">20</button>
-                    </div>
-                </div>
-
-                <!-- Spacer 3 (Now bottom border of LFO block) -->
-                <!-- <div class="master-spacer"></div> -->
-
-                <!-- 11. Master Volume (Moved up to Line 3) -->
-                <!-- Removed from here -->
-
-                <!-- 12. Bottom Buttons -->
-                <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
-                    <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
-                    <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
-                </div>
+    <div id="app-scaler">
+        <div class="container" id="mirror-ui" style="display:none;">
+            <div class="header">
+                <h1>NOWMULTIMEDIA MXS-004</h1><br>
+                <h2> Mix N Studio 004</h2>
             </div>
+            <!-- NEW: 5-Column Main Content (Master + 4 Tracks) -->
+            <div class="main-content">
+                <!-- Column 1: Master Controls -->
+                <div class="master-column">
+                    <!-- 1. Master Recording (Direct children to match main app) -->
+                    <div class="track-header">Master Recording:</div>
+                    <div id="recording-time-display" class="track-time-display">00:00:00</div>
 
-            <!-- Columns 2-5: Tracks -->
-            <div class="tracks-container" id="tracks-container"></div>
+                    <!-- Ghost "Status" to align with Tracks -->
+                    <!-- Replaced by Master Volume on Line 3 -->
+                    <div class="master-item master-volume-aligned">
+                        <div class="track-header">Vol</div>
+                        <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
+                        <span id="master-volume-value" class="master-value">0.0 dB</span>
+                    </div>
+
+                    <!-- 2. Master Waveform -->
+                    <div class="master-item master-waveform-item">
+                        <div class="waveform-box master-waveform-box">
+                            <div class="waveform-labels">
+                                <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                                <div class="waveform-label-external">R</div>
+                            </div>
+                            <div id="master-waveform-container" class="flex-grow">
+                                <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
+                                <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Loop Length -->
+                    <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
+                    <!-- 3. Loop Length (Top, Compact Row) -->
+                    <div class="master-item master-row-layout">
+                        <div class="track-header">Loop Length</div>
+                        <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                        <span id="loop-length-value" class="master-value">4.0s</span>
+                    </div>
+
+                    <!-- Spacer removed -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- 4. Combined REC and Format -->
+                    <div class="master-item master-bottom-item">
+                        <div class="master-rec-row">
+                            <button id="master-record-button" class="button">REC</button>
+                            <div id="record-format-display"
+                                style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
+                                Stereo (WAV)</div>
+                        </div>
+                    </div>
+
+                    <!-- Spacer 1 (Now top border of LFO block) -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- NEW: Side-by-Side LFO Container -->
+                    <!-- 3. Loop Length (Moved down, Compact Row) -->
+                    <!-- Side-by-Side LFO Container (Bottom) -->
+                    <div class="lfo-side-by-side-container">
+                        <!-- Column Left: LFO 1 -->
+                        <div class="lfo-column">
+                            <div class="master-item lfo-button-item">
+                                <button id="lfo-toggle">LFO 1</button>
+                            </div>
+                            <div class="master-item lfo-meter-item">
+                                <div class="meter-container lfo-meter">
+                                    <div id="lfo-meter-bar" class="meter-bar"></div>
+                                </div>
+                            </div>
+                            <div class="master-item">
+                                <label for="lfo-time" class="master-label" style="font-size:0.65em;">Sweep 1</label>
+                                <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
+                                <span id="lfo-time-value" class="master-value">1.8s</span>
+                            </div>
+                        </div>
+
+                        <!-- Vertical Separator -->
+                        <div class="lfo-separator"></div>
+
+                        <!-- Column Right: LFO 2 -->
+                        <div class="lfo-column">
+                            <div class="master-item lfo-button-item">
+                                <button id="lfo2-toggle">LFO 2</button>
+                            </div>
+                            <div class="master-item lfo-meter-item">
+                                <div class="meter-container lfo-meter">
+                                    <div id="lfo2-meter-bar" class="meter-bar"></div>
+                                </div>
+                            </div>
+                            <div class="master-item">
+                                <label for="lfo2-time" class="master-label" style="font-size:0.65em;">Sweep 2</label>
+                                <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
+                                <span id="lfo2-time-value" class="master-value">1.8s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Spacer 3 (Now bottom border of LFO block) -->
+                    <div class="master-spacer"></div>
+
+                    <!-- 4. Sample Station (Mirrored) -->
+                    <div class="master-item sample-center-container">
+                        <div class="track-header">Sample Station</div>
+                        <div class="sample-grid">
+                            <button class="sample-btn" data-sample="1">1</button>
+                            <button class="sample-btn" data-sample="2">2</button>
+                            <button class="sample-btn" data-sample="3">3</button>
+                            <button class="sample-btn" data-sample="4">4</button>
+                            <button class="sample-btn" data-sample="5">5</button>
+                            <button class="sample-btn" data-sample="6">6</button>
+                            <button class="sample-btn" data-sample="7">7</button>
+                            <button class="sample-btn" data-sample="8">8</button>
+                            <button class="sample-btn" data-sample="9">9</button>
+                            <button class="sample-btn" data-sample="10">10</button>
+                            <button class="sample-btn" data-sample="11">11</button>
+                            <button class="sample-btn" data-sample="12">12</button>
+                            <button class="sample-btn" data-sample="13">13</button>
+                            <button class="sample-btn" data-sample="14">14</button>
+                            <button class="sample-btn" data-sample="15">15</button>
+                            <button class="sample-btn" data-sample="16">16</button>
+                            <button class="sample-btn" data-sample="17">17</button>
+                            <button class="sample-btn" data-sample="18">18</button>
+                            <button class="sample-btn" data-sample="19">19</button>
+                            <button class="sample-btn" data-sample="20">20</button>
+                        </div>
+                    </div>
+
+                    <!-- Spacer 3 (Now bottom border of LFO block) -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- 11. Master Volume (Moved up to Line 3) -->
+                    <!-- Removed from here -->
+
+                    <!-- 12. Bottom Buttons -->
+                    <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
+                        <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
+                        <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
+                    </div>
+                </div>
+
+                <!-- Columns 2-5: Tracks -->
+                <div class="tracks-container" id="tracks-container"></div>
+            </div>
         </div>
     </div>
 
@@ -481,99 +505,107 @@
         let tracksInited = false;
 
         function applyState(state) {
-            // FIX: Only initialize tracks if they are present in the state AND not already inited
-            if (!tracksInited && state.tracks && state.tracks.length > 0) {
-                if (typeof TrackView === 'undefined') {
-                    console.warn("⏳ TrackView.js not loaded yet (or failed)...");
-                    const activeEl = document.getElementById('ws-active-status');
-                    if (activeEl) activeEl.textContent = "⏳ Waiting for TrackView.js...";
-                    return;
-                }
-                const container = document.getElementById('tracks-container');
-                container.innerHTML = '';
-                trackViews = [];
-
-                console.log(`📡 Building Receiver UI for ${state.tracks.length} tracks...`);
-
-                state.tracks.forEach((t) => {
-                    const tv = new TrackView(t.id);
-                    container.appendChild(tv.buildElement());
-                    trackViews.push(tv);
-                });
-
-                tracksInited = true;
-                document.getElementById('loading-overlay').style.display = 'none';
-                document.getElementById('mirror-ui').style.display = 'flex';
-                console.log(`✅ Receiver UI Initialized with ${trackViews.length} tracks.`);
-            }
-
-            // Master Update
-            if (state.master) {
-                const volS = document.getElementById('master-volume');
-                const volV = document.getElementById('master-volume-value');
-                const lenS = document.getElementById('loop-length');
-                const lenV = document.getElementById('loop-length-value');
-                const recB = document.getElementById('master-record-button');
-
-                if (volS) volS.value = state.master.volume;
-                if (volV) volV.textContent = (state.master.volume || 0).toFixed(1) + " dB";
-                if (lenS) lenS.value = state.master.loopLength;
-                if (lenV) lenV.textContent = (state.master.loopLength || 0).toFixed(1) + "s";
-                if (recB) recB.classList.toggle('recording', state.master.isRecording);
-
-                document.getElementById('lfo-meter-bar').style.width = (state.master.lfo1Meter * 100) + "%";
-                document.getElementById('lfo2-meter-bar').style.width = (state.master.lfo2Meter * 100) + "%";
-                document.getElementById('lfo-toggle').classList.toggle('sweeping', state.master.lfo1Active);
-                document.getElementById('lfo2-toggle').classList.toggle('sweeping', state.master.lfo2Active);
-            }
-
-            // Sampler Update (Mirrored)
-            if (state.sampler) {
-                state.sampler.forEach(pad => {
-                    const btn = document.querySelector(`.sample-btn[data-sample="${pad.id}"]`);
-                    if (btn) {
-                        if (btn.textContent !== pad.label) btn.textContent = pad.label;
-                        btn.classList.toggle('active', pad.active);
-                        btn.classList.toggle('loaded', pad.loaded);
-                        btn.classList.toggle('drag-over', pad.dragOver);
+            try {
+                // FIX: Only initialize tracks if they are present in the state AND not already inited
+                if (!tracksInited && state.tracks && state.tracks.length > 0) {
+                    if (typeof TrackView === 'undefined') {
+                        console.warn("⏳ TrackView.js not loaded yet (or failed)...");
+                        const activeEl = document.getElementById('ws-active-status');
+                        if (activeEl) activeEl.textContent = "⏳ Waiting for TrackView.js...";
+                        return;
                     }
-                });
-            }
+                    const container = document.getElementById('tracks-container');
+                    container.innerHTML = '';
+                    trackViews = [];
 
-            if (state.transport) {
-                document.getElementById('recording-time-display').textContent = state.transport.position || "00:00:00";
-            }
+                    console.log(`📡 Building Receiver UI for ${state.tracks.length} tracks...`);
 
-            // Tracks Update
-            if (state.tracks && trackViews.length > 0) {
-                state.tracks.forEach(t => {
-                    const tv = trackViews[t.id];
-                    if (!tv) return;
-
-                    // Sync sliders
-                    const params = ['vol', 'pan', 'pitch', 'treble', 'mid_gain', 'bass'];
-                    params.forEach(p => {
-                        const val = t[p === 'mid_gain' ? 'midGain' : p];
-                        if (tv.elements.knobs[p]) tv.elements.knobs[p].value = val;
-                        if (tv.elements.valueDisplays[p]) tv.elements.valueDisplays[p].textContent = parseFloat(val).toFixed(1);
+                    state.tracks.forEach((t) => {
+                        const tv = new TrackView(t.id);
+                        container.appendChild(tv.buildElement());
+                        trackViews.push(tv);
                     });
 
-                    // Sync status & buttons
-                    if (t.armed) tv.setStatus('Recording', 'recording');
-                    else if (t.isPlaying) tv.setStatus('Playing', 'playing');
-                    else tv.setStatus('Ready', 'ready');
+                    tracksInited = true;
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    document.getElementById('mirror-ui').style.display = 'flex';
+                    console.log(`✅ Receiver UI Initialized with ${trackViews.length} tracks.`);
+                }
 
-                    if (tv.elements.recBtn) tv.elements.recBtn.classList.toggle('recording', t.armed);
-                    if (tv.elements.playBtn) tv.elements.playBtn.classList.toggle('playing', t.isPlaying);
+                // Master Update
+                if (state.master) {
+                    const volS = document.getElementById('master-volume');
+                    const volV = document.getElementById('master-volume-value');
+                    const lenS = document.getElementById('loop-length');
+                    const lenV = document.getElementById('loop-length-value');
+                    const recB = document.getElementById('master-record-button');
 
-                    // Meter Update (Hack for receiver display)
-                    if (tv.elements.waveformCanvasL) {
-                        // Use the canvas area as a meter bar for the receiver since we don't have real-time waveform data
-                        const ctx = tv.elements.waveformCanvasL.getContext('2d');
-                        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
-                        ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters.l || 0), 100);
-                    }
-                });
+                    if (volS) volS.value = state.master.volume;
+                    if (volV) volV.textContent = (state.master.volume || 0).toFixed(1) + " dB";
+                    if (lenS) lenS.value = state.master.loopLength;
+                    if (lenV) lenV.textContent = (state.master.loopLength || 0).toFixed(1) + "s";
+                    if (recB) recB.classList.toggle('recording', state.master.isRecording);
+
+                    const lfo1Bar = document.getElementById('lfo-meter-bar');
+                    const lfo2Bar = document.getElementById('lfo2-meter-bar');
+                    const lfo1Btn = document.getElementById('lfo-toggle');
+                    const lfo2Btn = document.getElementById('lfo2-toggle');
+                    if (lfo1Bar) lfo1Bar.style.width = (state.master.lfo1Meter * 100) + "%";
+                    if (lfo2Bar) lfo2Bar.style.width = (state.master.lfo2Meter * 100) + "%";
+                    if (lfo1Btn) lfo1Btn.classList.toggle('sweeping', state.master.lfo1Active);
+                    if (lfo2Btn) lfo2Btn.classList.toggle('sweeping', state.master.lfo2Active);
+                }
+
+                // Sampler Update (Mirrored)
+                if (state.sampler) {
+                    state.sampler.forEach(pad => {
+                        const btn = document.querySelector(`.sample-btn[data-sample="${pad.id}"]`);
+                        if (btn) {
+                            if (btn.textContent !== pad.label) btn.textContent = pad.label;
+                            btn.classList.toggle('active', pad.active);
+                            btn.classList.toggle('loaded', pad.loaded);
+                            btn.classList.toggle('drag-over', pad.dragOver);
+                        }
+                    });
+                }
+
+                if (state.transport) {
+                    const timeDisplay = document.getElementById('recording-time-display');
+                    if (timeDisplay) timeDisplay.textContent = state.transport.position || "00:00:00";
+                }
+
+                // Tracks Update
+                if (state.tracks && trackViews.length > 0) {
+                    state.tracks.forEach(t => {
+                        const tv = trackViews[t.id];
+                        if (!tv) return;
+
+                        // Sync sliders
+                        const params = ['vol', 'pan', 'pitch', 'treble', 'mid_gain', 'bass'];
+                        params.forEach(p => {
+                            const val = t[p === 'mid_gain' ? 'midGain' : p];
+                            if (tv.elements.knobs && tv.elements.knobs[p]) tv.elements.knobs[p].value = val;
+                            if (tv.elements.valueDisplays && tv.elements.valueDisplays[p]) tv.elements.valueDisplays[p].textContent = parseFloat(val).toFixed(1);
+                        });
+
+                        // Sync status & buttons
+                        if (t.armed) tv.setStatus('Recording', 'recording');
+                        else if (t.isPlaying) tv.setStatus('Playing', 'playing');
+                        else tv.setStatus('Ready', 'ready');
+
+                        if (tv.elements.recBtn) tv.elements.recBtn.classList.toggle('recording', t.armed);
+                        if (tv.elements.playBtn) tv.elements.playBtn.classList.toggle('playing', t.isPlaying);
+
+                        // Meter Update (Hack for receiver display)
+                        if (tv.elements.waveformCanvasL) {
+                            const ctx = tv.elements.waveformCanvasL.getContext('2d');
+                            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
+                            ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('❌ applyState error:', err);
             }
         }
 
@@ -701,6 +733,12 @@
             }
         }
 
+
+        // Track reconnection attempts for exponential backoff
+        let reconnectAttempt = 0;
+        let heartbeatInterval = null;
+        let currentWS = null;
+
         function connectWS(url) {
             console.log("Connecting to WS:", url);
             const statusEl = document.getElementById('ws-status');
@@ -709,14 +747,39 @@
             if (statusEl) statusEl.textContent = "Connecting to " + url + "...";
             if (debugEl) debugEl.textContent = "Target: " + url;
 
+            // Clean up previous connection
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+            if (currentWS) {
+                try { currentWS.close(); } catch (e) { }
+            }
+
             const ws = new WebSocket(url);
+            currentWS = ws;
             ws.binaryType = 'arraybuffer';
+
+            let lastDataTime = Date.now();
+
             ws.onopen = () => {
                 console.log("WS Connected");
+                reconnectAttempt = 0; // Reset backoff on successful connect
+                lastDataTime = Date.now();
+
                 if (statusEl) {
                     statusEl.textContent = "✅ WS Connected - Waiting for state...";
                     statusEl.style.color = "#4CAF50";
                 }
+
+                // Start heartbeat check (every 10s, detect stale after 30s of no data)
+                heartbeatInterval = setInterval(() => {
+                    const elapsed = Date.now() - lastDataTime;
+                    if (elapsed > 30000) {
+                        console.warn("⚠️ No data for 30s, closing stale connection");
+                        ws.close();
+                    }
+                }, 10000);
             };
             ws.onerror = (err) => {
                 console.error("WS Error:", err);
@@ -729,6 +792,7 @@
             let msgCount = 0;
             let audioCount = 0;
             ws.onmessage = (e) => {
+                lastDataTime = Date.now(); // Update heartbeat timestamp
                 msgCount++;
                 const debugEl = document.getElementById('debug-info');
                 const activeEl = document.getElementById('ws-active-status');
@@ -760,10 +824,13 @@
                         }
                         else if (json.type === 'cursor') {
                             const cur = document.getElementById('cursor');
-                            if (cur) {
+                            const scaler = document.getElementById('app-scaler');
+                            if (cur && scaler) {
+                                const rect = scaler.getBoundingClientRect();
                                 cur.style.display = 'block';
-                                cur.style.left = (json.x * 100) + "vw";
-                                cur.style.top = (json.y * 100) + "vh";
+                                // Position relative to scaled container (accounts for CSS transform)
+                                cur.style.left = (rect.left + json.x * rect.width) + "px";
+                                cur.style.top = (rect.top + json.y * rect.height) + "px";
                             }
                         }
                     } else if (view[0] === 2) {
@@ -779,8 +846,24 @@
                 }
             };
             ws.onclose = () => {
-                console.log("WS Closed, retrying...");
-                setTimeout(() => connectWS(url), 2000);
+                console.log("WS Closed, scheduling reconnect...");
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+                currentWS = null;
+
+                // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
+                reconnectAttempt++;
+                const delay = Math.min(2000 * Math.pow(2, reconnectAttempt - 1), 30000);
+                console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempt})`);
+
+                if (statusEl) {
+                    statusEl.textContent = `⏳ Reconnecting in ${delay / 1000}s...`;
+                    statusEl.style.color = "#FFC107";
+                }
+
+                setTimeout(() => connectWS(url), delay);
             };
         }
 
@@ -793,9 +876,30 @@
                     const url = e.data.wsUrl || e.data;
                     if (url) connectWS(url);
                 });
-                ctx.start();
+                const options = new cast.framework.CastReceiverOptions();
+                options.disableIdleTimeout = true;
+                options.statusText = 'Ready to Mix';
+                ctx.start(options);
             }
         };
+
+        // --- Auto-Scaler Logic ---
+        function scaleApp() {
+            const scaler = document.getElementById('app-scaler');
+            if (!scaler) return;
+
+            const targetW = 1440;
+            const targetH = 810;
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+
+            const scale = Math.min(winW / targetW, winH / targetH);
+            scaler.style.transform = `scale(${scale})`;
+        }
+
+        window.addEventListener('resize', scaleApp);
+        scaleApp(); // Initial call
+
     </script>
 </body>
 
