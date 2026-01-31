@@ -941,7 +941,8 @@
 
                 if (activeEl && msgCount % 20 === 0) {
                     const peak = (window._lastAudioPeak || 0).toFixed(3);
-                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Bytes: ${e.data.byteLength}`;
+                    const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
+                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState} | Bytes: ${e.data.byteLength}`;
                 }
 
                 if (typeof e.data === 'string') {
