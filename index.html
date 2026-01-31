@@ -780,31 +780,66 @@
         }
 
         async function handleWebRTCOffer(sdp) {
-            console.log("🔊 WebRTC Offer Received");
+            console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
+            const statusEl = document.getElementById('ws-active-status');
+            if (statusEl) statusEl.textContent = "🔊 WebRTC: Setting up...";
+
             if (peerConnection) peerConnection.close();
 
             peerConnection = new RTCPeerConnection(rtcConfig);
 
+            // Connection state monitoring
+            peerConnection.onconnectionstatechange = () => {
+                console.log("🔗 WebRTC Connection State:", peerConnection.connectionState);
+                if (statusEl) statusEl.textContent = `WebRTC: ${peerConnection.connectionState}`;
+            };
+
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log("🧊 ICE Connection State:", peerConnection.iceConnectionState);
+            };
+
             peerConnection.ontrack = (e) => {
-                console.log("🔊 WebRTC Audio Track Received");
+                console.log("🔊 WebRTC Audio Track Received!", e.streams.length, "streams");
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Track received!";
+
+                // Create or get audio element
                 let audioEl = document.getElementById('webrtc-audio');
                 if (!audioEl) {
                     audioEl = document.createElement('audio');
                     audioEl.id = 'webrtc-audio';
-                    audioEl.autoplay = true;
                     document.body.appendChild(audioEl);
                 }
-                audioEl.srcObject = e.streams[0];
-                audioEl.play().then(() => {
-                    console.log("✅ WebRTC Audio Playing");
-                    const btn = document.getElementById('audio-unmute-btn');
-                    if (btn) btn.classList.remove('visible');
-                }).catch(e => console.warn("Autoplay block:", e));
 
-                // Stop PCM processor if running
+                // AGGRESSIVE PLAYBACK for Chromecast
+                audioEl.autoplay = true;
+                audioEl.muted = false;
+                audioEl.volume = 1.0;
+                audioEl.srcObject = e.streams[0];
+
+                // Force play with retry
+                const tryPlay = () => {
+                    audioEl.play().then(() => {
+                        console.log("✅ WebRTC Audio Playing Successfully!");
+                        if (statusEl) statusEl.textContent = "✅ WebRTC AUDIO PLAYING";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.remove('visible');
+                    }).catch(err => {
+                        console.warn("⚠️ WebRTC Autoplay blocked:", err);
+                        if (statusEl) statusEl.textContent = "⚠️ WebRTC: Tap to unmute";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.add('visible');
+                        // Retry after 1 second
+                        setTimeout(tryPlay, 1000);
+                    });
+                };
+                tryPlay();
+
+                // Stop PCM processor to prevent double audio
                 if (audioCtx) {
+                    console.log("🔇 Stopping PCM fallback (WebRTC active)");
                     audioCtx.suspend();
                     isAudioPlaying = false;
+                    audioQueue = []; // Clear any buffered PCM
                 }
             };
 
@@ -829,8 +864,10 @@
                         sdp: answer.sdp
                     }));
                 }
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Answer sent, waiting for track...";
             } catch (err) {
                 console.error("WebRTC Error:", err);
+                if (statusEl) statusEl.textContent = "❌ WebRTC Error: " + err.message;
             }
         }
 
@@ -1055,8 +1092,8 @@
                 });
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
-                options.statusText = 'Ready to Mix (v3:00 PM)';
-                console.log("🚀 MxsReceiver v9.7 - TIMESTAMP 3:00 PM - Client Wait Fix");
+                options.statusText = 'Ready to Mix (v3:12 PM)';
+                console.log("🚀 MxsReceiver v9.8 - TIMESTAMP 3:12 PM - Enhanced WebRTC Debug");
                 ctx.start(options);
             }
         };
