@@ -647,9 +647,14 @@
 
                         // Meter Update (Hack for receiver display)
                         if (tv.elements.waveformCanvasL) {
-                            const ctx = tv.elements.waveformCanvasL.getContext('2d');
-                            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
-                            ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                            const ctxL = tv.elements.waveformCanvasL.getContext('2d');
+                            ctxL.fillStyle = '#000'; ctxL.fillRect(0, 0, 300, 100);
+                            ctxL.fillStyle = '#0f0'; ctxL.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                        }
+                        if (tv.elements.waveformCanvasR) {
+                            const ctxR = tv.elements.waveformCanvasR.getContext('2d');
+                            ctxR.fillStyle = '#000'; ctxR.fillRect(0, 0, 300, 100);
+                            ctxR.fillStyle = '#0f0'; ctxR.fillRect(0, 0, 300 * (t.meters?.r || 0), 100);
                         }
                     });
                 }
@@ -943,9 +948,11 @@
                     try {
                         const msg = JSON.parse(e.data);
                         if (msg.type === 'offer') {
-                            handleWebRTCOffer(msg.sdp);
-                        } else if (msg.type === 'ice-candidate') {
-                            handleIceCandidate(msg.candidate);
+                            handleWebRTCOffer(msg.sdp || msg.data?.sdp);
+                        } else if (msg.type === 'answer') {
+                            // Should not happen on receiver usually
+                        } else if (msg.type === 'ice-candidate' || msg.candidate) {
+                            handleIceCandidate(msg.candidate || msg.data?.candidate || msg);
                         }
                     } catch (err) { }
                     return;
@@ -957,24 +964,20 @@
                         const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
                         if (json.type === 'state') {
                             if (audioCtx && audioCtx.state === 'suspended') {
-                                // Background resume attempt
                                 audioCtx.resume();
                             }
-
-                            // VISUAL SYNC: Reverted complex delay logic. 
-                            // Prioritizing immediate visual feedback. Audio buffer is reduced to 2048 (~42ms)
                             applyState(json);
-
-                            if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
+                            if (debugEl && (msgCount % 50 === 0)) {
+                                debugEl.textContent = `✅ State Rx | Mode: ${peerConnection ? 'WebRTC' : 'PCM'} | Q: ${audioQueue.length}`;
+                            }
                         }
                         else if (json.type === 'cursor') {
+                            // ... cursor logic is fine ...
                             const cur = document.getElementById('cursor');
                             const scaler = document.getElementById('app-scaler');
                             if (cur && scaler) {
                                 const rect = scaler.getBoundingClientRect();
                                 cur.style.display = 'block';
-                                // Position relative to scaled container (accounts for CSS transform)
-                                // Cursor hotspot is at top-left, so no offset needed
                                 const x = rect.left + json.x * rect.width;
                                 const y = rect.top + json.y * rect.height;
                                 cur.style.left = x + "px";
@@ -984,12 +987,11 @@
                         else if (json.type === 'offer') {
                             handleWebRTCOffer(json.sdp || json.data?.sdp);
                         }
-                        else if (json.type === 'ice-candidate') {
-                            handleIceCandidate(json.candidate || json.data?.candidate);
+                        else if (json.type === 'ice-candidate' || json.candidate) {
+                            handleIceCandidate(json.candidate || json.data?.candidate || json);
                         }
                     } else if (view[0] === 2) {
                         // Audio chunk - f32le stereo PCM
-                        // Use 4-byte offset for alignment
                         audioCount++;
                         const pcmData = new Uint8Array(e.data, 4);
                         handleAudioChunk(pcmData);
