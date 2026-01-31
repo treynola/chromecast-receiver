@@ -32,22 +32,27 @@
             justify-content: center;
             align-items: center;
             transform-origin: center center;
-            /* Auto-scale will be applied by JS or CSS if possible, but JS is safer for window resizing */
+            overflow: hidden;
+            /* Container within scaler should fill completely */
         }
 
         .container {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: none !important;
-            max-height: none !important;
+            width: 1440px !important;
+            height: 810px !important;
+            max-width: 1440px !important;
+            max-height: 810px !important;
+            min-width: 1440px !important;
+            min-height: 810px !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 8px !important;
+            padding: 6px !important;
             margin: 0 !important;
             box-sizing: border-box !important;
-            box-shadow: 0 0 0 2px var(--green), 0 0 0 4px var(--gold), 0 0 0 6px var(--red) !important;
-            border-radius: 15px !important;
+            box-shadow: none !important;
+            border: 2px solid var(--green) !important;
+            border-radius: 8px !important;
             background-color: var(--dark-gray) !important;
+            overflow: hidden !important;
         }
 
         /* Essential Layout Mirroring */
@@ -195,21 +200,23 @@
             cursor: default !important;
         }
 
+        /* macOS-style cursor: small arrow with white border and black interior */
         #cursor {
             position: fixed;
             top: 0;
             left: 0;
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             z-index: 20000;
             display: none;
             pointer-events: none;
-            background: rgba(255, 255, 0, 0.5);
-            border: 2px solid white;
-            border-radius: 50%;
-            box-shadow: 0 0 15px yellow;
-            transform: translate(-50%, -50%);
-            /* Centered on point */
+            background: transparent;
+            /* macOS cursor arrow shape via SVG data URI */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 2 L5 19 L9 15 L13 22 L15 21 L11 14 L17 14 Z' fill='black' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-size: contain;
+            transform: translate(0, 0);
+            /* Cursor tip is at top-left */
         }
 
         @font-face {
@@ -570,8 +577,37 @@
                 }
 
                 if (state.transport) {
+                    // Detect sample rate from sender and pre-initialize audio context
+                    if (state.transport.sampleRate && state.transport.sampleRate !== detectedSampleRate) {
+                        detectedSampleRate = state.transport.sampleRate;
+                        console.log('📡 Detected sender sample rate:', detectedSampleRate, 'Hz');
+                        // Pre-initialize audio with correct sample rate
+                        initAudioPlayback(detectedSampleRate);
+                    }
+
                     const timeDisplay = document.getElementById('recording-time-display');
-                    if (timeDisplay) timeDisplay.textContent = state.transport.position || "00:00:00";
+                    // Only update time display if master is recording (not constantly during playback)
+                    if (timeDisplay && state.master && state.master.isRecording) {
+                        // Format transport.position from "bars:beats:sixteenths" to "MM:SS:FF"
+                        const pos = state.transport.position || "0:0:0";
+                        const parts = pos.split(':');
+                        if (parts.length >= 3) {
+                            const bars = parseInt(parts[0]) || 0;
+                            const beats = parseInt(parts[1]) || 0;
+                            const ticks = parseInt(parts[2]) || 0;
+                            // Convert to seconds (assuming 120 BPM, 4/4 time: 1 bar = 2s)
+                            const bpm = state.transport.bpm || 120;
+                            const secondsPerBeat = 60 / bpm;
+                            const totalSeconds = (bars * 4 * secondsPerBeat) + (beats * secondsPerBeat) + (ticks * secondsPerBeat / 4);
+                            const mins = Math.floor(totalSeconds / 60);
+                            const secs = Math.floor(totalSeconds % 60);
+                            const frames = Math.floor((totalSeconds * 100) % 100);
+                            timeDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}:${String(frames).padStart(2, '0')}`;
+                        }
+                    } else if (timeDisplay && !state.master?.isRecording) {
+                        // Keep last recorded time or show 00:00:00 when not recording
+                        // Don't update continuously to prevent scrolling effect
+                    }
                 }
 
                 // Tracks Update
@@ -613,15 +649,38 @@
         let audioCtx = null;
         let audioQueue = [];
         let isAudioPlaying = false;
-        const SAMPLE_RATE = 48000;
+        let detectedSampleRate = 48000; // Default, will be updated from sender state
         const CHANNELS = 2;
-        // REDUCED BUFFER FOR LOWER LATENCY (was 8192, then 4096)
-        const BUFFER_SIZE = 2048; // ~42ms @ 48kHz
+        const BUFFER_SIZE = 4096; // Increased for smoother playback (~85ms @ 48kHz)
 
-        function initAudioPlayback() {
-            if (audioCtx) return;
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
-            console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
+        function initAudioPlayback(sampleRate) {
+            // Use sender's sample rate if provided, otherwise use default
+            const targetRate = sampleRate || detectedSampleRate || 48000;
+
+            if (audioCtx) {
+                // If sample rate changed, recreate context
+                if (audioCtx.sampleRate !== targetRate) {
+                    console.log(`🔊 Sample rate mismatch: ${audioCtx.sampleRate} vs ${targetRate}, recreating context...`);
+                    audioCtx.close();
+                    audioCtx = null;
+                    audioQueue = [];
+                } else {
+                    return; // Already initialized with correct rate
+                }
+            }
+
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: targetRate,
+                    latencyHint: 'playback' // 'playback' for smoother audio vs 'interactive' for low latency
+                });
+                console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
+            } catch (e) {
+                // Fallback if specific sample rate not supported
+                console.warn('⚠️ Failed to create AudioContext with rate', targetRate, 'falling back to default');
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
+                console.log('🔊 Receiver AudioContext (fallback):', audioCtx.sampleRate, 'Hz');
+            }
 
             const unmuteBtn = document.getElementById('audio-unmute-btn');
             if (audioCtx.state === 'suspended') {
@@ -638,14 +697,13 @@
                 let samplesNeeded = BUFFER_SIZE;
                 let offset = 0;
 
-                // NEW: Jitter / Lag Management
-                // Tightened logic: skip if queue > 100ms (was 150ms) to force low latency
-                const maxSamplesInQueue = SAMPLE_RATE * 0.10;
+                // Jitter management: skip if queue > 200ms to prevent lag buildup
+                const maxSamplesInQueue = audioCtx.sampleRate * 0.20;
                 let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
 
                 if (totalBuffered > maxSamplesInQueue) {
-                    // console.warn("⚠️ Audio lag detected (>100ms), skipping to catch up...");
-                    let skipSamples = SAMPLE_RATE * 0.05; // Skip 50ms chunks
+                    // Skip old audio to catch up
+                    let skipSamples = audioCtx.sampleRate * 0.08; // Skip 80ms
                     while (skipSamples > 0 && audioQueue.length > 0) {
                         const chunk = audioQueue[0];
                         const available = chunk.data.length / 2 - chunk.offset;
@@ -659,17 +717,18 @@
                 let maxPeak = 0;
                 while (samplesNeeded > 0 && audioQueue.length > 0) {
                     const chunk = audioQueue[0];
-                    const available = chunk.data.length / 2 - chunk.offset;
-                    const toRead = Math.min(samplesNeeded, available);
+                    const availableStereoSamples = chunk.data.length / 2 - chunk.offset;
+                    const toRead = Math.min(samplesNeeded, availableStereoSamples);
 
                     for (let i = 0; i < toRead; i++) {
                         const idx = (chunk.offset + i) * 2;
+                        // Read interleaved stereo: L, R, L, R...
                         left[offset + i] = chunk.data[idx] || 0;
                         right[offset + i] = chunk.data[idx + 1] || 0;
                     }
 
+                    // Track peak for debugging
                     if (toRead > 0) {
-                        // Optimizing peak check: check every 64th sample
                         for (let k = 0; k < toRead; k += 64) {
                             const val = Math.abs(chunk.data[(chunk.offset + k) * 2]);
                             if (val > maxPeak) maxPeak = val;
@@ -699,22 +758,20 @@
         }
 
         function handleAudioChunk(pcmData) {
-            if (!audioCtx) initAudioPlayback();
+            // Initialize audio context with detected sample rate if not already done
+            if (!audioCtx) initAudioPlayback(detectedSampleRate);
 
-            // NEW: 4-byte padding header in backend ensures alignment.
-            // We use the buffer starting at offset 4.
+            // 4-byte padding header in backend ensures alignment.
             try {
-                // pcmData is a Uint8Array(e.data, 4) if we use the new alignment.
-                // Wait, in onmessage we do: const pcmData = new Uint8Array(e.data, 4);
-                // Then floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
-                // This is perfectly aligned.
+                // pcmData is already aligned (starts at offset 4 from original message)
                 const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
 
                 // Add to queue with read offset
                 audioQueue.push({ data: floatView, offset: 0 });
 
-                // Limit queue to ~500ms of audio
-                const maxChunks = Math.ceil((SAMPLE_RATE * 0.5) / (BUFFER_SIZE / 2));
+                // Limit queue to ~500ms of audio using the actual sample rate
+                const currentRate = audioCtx ? audioCtx.sampleRate : detectedSampleRate;
+                const maxChunks = Math.ceil((currentRate * 0.5) / (BUFFER_SIZE / 2));
                 while (audioQueue.length > maxChunks) {
                     audioQueue.shift();
                 }
