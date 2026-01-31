@@ -24,16 +24,24 @@
             overflow: hidden !important;
         }
 
-        /* SCALING WRAPPER to enforce 1440x810 aspect ratio on any TV */
+        /* SCALING WRAPPER to enforce 16:9 aspect ratio (1440x810) on any TV */
         #app-scaler {
-            width: 1440px;
-            height: 810px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transform-origin: center center;
-            overflow: hidden;
-            /* Container within scaler should fill completely */
+            /* Position: Center in viewport */
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform-origin: center center !important;
+            /* Will be scaled and translated by JS */
+
+            /* Fixed internal dimensions */
+            width: 1440px !important;
+            height: 810px !important;
+
+            /* Contain the container */
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            overflow: visible !important;
         }
 
         .container {
@@ -45,14 +53,18 @@
             min-height: 810px !important;
             display: flex !important;
             flex-direction: column !important;
-            padding: 6px !important;
+            padding: 8px !important;
             margin: 0 !important;
             box-sizing: border-box !important;
-            box-shadow: none !important;
-            border: 2px solid var(--green) !important;
-            border-radius: 8px !important;
+            border: 3px solid var(--green) !important;
+            border-radius: 10px !important;
             background-color: var(--dark-gray) !important;
             overflow: hidden !important;
+            /* Triple-layer border effect for visibility */
+            box-shadow:
+                0 0 0 3px var(--gold),
+                0 0 0 6px var(--red),
+                0 0 20px rgba(0, 0, 0, 0.8) !important;
         }
 
         /* Essential Layout Mirroring */
@@ -950,8 +962,14 @@
             const winW = window.innerWidth;
             const winH = window.innerHeight;
 
-            const scale = Math.min(winW / targetW, winH / targetH);
-            scaler.style.transform = `scale(${scale})`;
+            // Calculate scale to fit TV screen with small margin (95% of available space)
+            const scale = Math.min(winW / targetW, winH / targetH) * 0.95;
+
+            // Apply scale AND translate to center
+            // translate(-50%, -50%) centers the element, then scale
+            scaler.style.transform = `translate(-50%, -50%) scale(${scale})`;
+
+            console.log(`📺 Scaled app: ${winW}x${winH} -> scale ${scale.toFixed(3)}`);
         }
 
         window.addEventListener('resize', scaleApp);
