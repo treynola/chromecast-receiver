@@ -217,16 +217,17 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 24px;
-            height: 24px;
+            width: 16px;
+            height: 16px;
             z-index: 20000;
             display: none;
             pointer-events: none;
             background: transparent;
-            /* macOS cursor arrow shape via SVG data URI */
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M5 2 L5 19 L9 15 L13 22 L15 21 L11 14 L17 14 Z' fill='black' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E");
+            /* macOS cursor arrow shape via SVG data URI - smaller and sharper */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M3 1 L3 13 L6 10 L9 15 L10.5 14 L7.5 9 L12 9 Z' fill='black' stroke='white' stroke-width='1'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
             background-size: contain;
+            /* Hotspot is at top-left corner of cursor */
             transform: translate(0, 0);
             /* Cursor tip is at top-left */
         }
@@ -661,6 +662,10 @@
         let audioCtx = null;
         let audioQueue = [];
         let isAudioPlaying = false;
+
+        // WebRTC State
+        let peerConnection = null;
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         let detectedSampleRate = 48000; // Default, will be updated from sender state
         const CHANNELS = 2;
         const BUFFER_SIZE = 4096; // Increased for smoother playback (~85ms @ 48kHz)
@@ -767,6 +772,67 @@
 
             processor.connect(audioCtx.destination);
             isAudioPlaying = true;
+        }
+
+        async function handleWebRTCOffer(sdp) {
+            console.log("🔊 WebRTC Offer Received");
+            if (peerConnection) peerConnection.close();
+
+            peerConnection = new RTCPeerConnection(rtcConfig);
+
+            peerConnection.ontrack = (e) => {
+                console.log("🔊 WebRTC Audio Track Received");
+                let audioEl = document.getElementById('webrtc-audio');
+                if (!audioEl) {
+                    audioEl = document.createElement('audio');
+                    audioEl.id = 'webrtc-audio';
+                    audioEl.autoplay = true;
+                    document.body.appendChild(audioEl);
+                }
+                audioEl.srcObject = e.streams[0];
+                audioEl.play().then(() => {
+                    console.log("✅ WebRTC Audio Playing");
+                    const btn = document.getElementById('audio-unmute-btn');
+                    if (btn) btn.classList.remove('visible');
+                }).catch(e => console.warn("Autoplay block:", e));
+
+                // Stop PCM processor if running
+                if (audioCtx) {
+                    audioCtx.suspend();
+                    isAudioPlaying = false;
+                }
+            };
+
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate) {
+                    ws.send(JSON.stringify({
+                        type: 'ice-candidate',
+                        candidate: e.candidate
+                    }));
+                }
+            };
+
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                console.log("📤 Sending WebRTC Answer");
+                ws.send(JSON.stringify({
+                    type: 'answer',
+                    sdp: answer.sdp
+                }));
+            } catch (err) {
+                console.error("WebRTC Error:", err);
+            }
+        }
+
+        async function handleIceCandidate(candidate) {
+            if (peerConnection && peerConnection.remoteDescription) {
+                try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (e) { console.warn("ICE Error:", e); }
+            }
         }
 
         function handleAudioChunk(pcmData) {
@@ -898,9 +964,18 @@
                                 const rect = scaler.getBoundingClientRect();
                                 cur.style.display = 'block';
                                 // Position relative to scaled container (accounts for CSS transform)
-                                cur.style.left = (rect.left + json.x * rect.width) + "px";
-                                cur.style.top = (rect.top + json.y * rect.height) + "px";
+                                // Cursor hotspot is at top-left, so no offset needed
+                                const x = rect.left + json.x * rect.width;
+                                const y = rect.top + json.y * rect.height;
+                                cur.style.left = x + "px";
+                                cur.style.top = y + "px";
                             }
+                        }
+                        else if (json.type === 'offer') {
+                            handleWebRTCOffer(json.sdp || json.data?.sdp);
+                        }
+                        else if (json.type === 'ice-candidate') {
+                            handleIceCandidate(json.candidate || json.data?.candidate);
                         }
                     } else if (view[0] === 2) {
                         // Audio chunk - f32le stereo PCM
