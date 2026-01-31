@@ -975,7 +975,13 @@
                     const view = new Uint8Array(e.data);
 
                     if (view[0] === 3) {
-                        const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+                        let json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+
+                        // CRITICAL FIX: Unwrap nested data from push_ws_json({ data: ... })
+                        if (json.data && typeof json.data === 'object' && json.data.type) {
+                            json = json.data;
+                        }
+
                         if (json.type === 'state') {
                             if (audioCtx && audioCtx.state === 'suspended') {
                                 audioCtx.resume();
@@ -999,10 +1005,11 @@
                             }
                         }
                         else if (json.type === 'offer') {
-                            handleWebRTCOffer(json.sdp || json.data?.sdp);
+                            console.log("🔊 WebRTC Offer Extracted from binary frame");
+                            handleWebRTCOffer(json.sdp);
                         }
                         else if (json.type === 'ice-candidate' || json.candidate) {
-                            handleIceCandidate(json.candidate || json.data?.candidate || json);
+                            handleIceCandidate(json.candidate || json);
                         }
                     } else if (view[0] === 2) {
                         // Audio chunk - f32le stereo PCM
@@ -1048,8 +1055,8 @@
                 });
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
-                options.statusText = 'Ready to Mix (v2:45 PM)';
-                console.log("🚀 MxsReceiver v9.5 - TIMESTAMP 2:45 PM");
+                options.statusText = 'Ready to Mix (v2:55 PM)';
+                console.log("🚀 MxsReceiver v9.6 - TIMESTAMP 2:55 PM - WebRTC Signaling Fix");
                 ctx.start(options);
             }
         };
