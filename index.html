@@ -804,8 +804,8 @@
             };
 
             peerConnection.onicecandidate = (e) => {
-                if (e.candidate) {
-                    ws.send(JSON.stringify({
+                if (e.candidate && currentWS) {
+                    currentWS.send(JSON.stringify({
                         type: 'ice-candidate',
                         candidate: e.candidate
                     }));
@@ -818,10 +818,12 @@
                 await peerConnection.setLocalDescription(answer);
 
                 console.log("📤 Sending WebRTC Answer");
-                ws.send(JSON.stringify({
-                    type: 'answer',
-                    sdp: answer.sdp
-                }));
+                if (currentWS) {
+                    currentWS.send(JSON.stringify({
+                        type: 'answer',
+                        sdp: answer.sdp
+                    }));
+                }
             } catch (err) {
                 console.error("WebRTC Error:", err);
             }
@@ -938,6 +940,14 @@
                 }
 
                 if (typeof e.data === 'string') {
+                    try {
+                        const msg = JSON.parse(e.data);
+                        if (msg.type === 'offer') {
+                            handleWebRTCOffer(msg.sdp);
+                        } else if (msg.type === 'ice-candidate') {
+                            handleIceCandidate(msg.candidate);
+                        }
+                    } catch (err) { }
                     return;
                 }
                 try {
