@@ -860,11 +860,18 @@
                 // Add to queue with read offset
                 audioQueue.push({ data: floatView, offset: 0 });
 
-                // Limit queue to ~100ms of audio (LATENCY KILLER)
+                // LATENCY & QUALITY BALANCE:
+                // Limit queue to ~150ms of audio (Safely low latency for WiFi)
                 const currentRate = audioCtx ? audioCtx.sampleRate : detectedSampleRate;
-                const maxChunks = Math.ceil((currentRate * 0.1) / (BUFFER_SIZE / 2));
+                const maxChunks = Math.ceil((currentRate * 0.15) / (BUFFER_SIZE / 2));
                 while (audioQueue.length > maxChunks) {
                     audioQueue.shift();
+                }
+
+                // If we were stuttering (empty queue), don't restart immediately
+                // Wait for at least 50ms (safety threshold) before starting again
+                if (!isAudioPlaying && audioQueue.length >= 2) {
+                    isAudioPlaying = true;
                 }
             } catch (e) {
                 console.error("Audio Alignment Error:", e);
@@ -1041,8 +1048,8 @@
                 });
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
-                options.statusText = 'Ready to Mix (v2:32 PM)';
-                console.log("🚀 MxsReceiver v9.4 - TIMESTAMP 2:32 PM");
+                options.statusText = 'Ready to Mix (v2:45 PM)';
+                console.log("🚀 MxsReceiver v9.5 - TIMESTAMP 2:45 PM");
                 ctx.start(options);
             }
         };
