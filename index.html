@@ -848,15 +848,21 @@
 
             // 4-byte padding header in backend ensures alignment.
             try {
-                // pcmData is already aligned (starts at offset 4 from original message)
-                const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
+                // PCM Fallback now uses Int16Array (2 bytes per sample, 4 bytes per stereo frame)
+                const int16View = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 2);
+
+                // Convert back to Float32 for Web Audio API
+                const floatView = new Float32Array(int16View.length);
+                for (let i = 0; i < int16View.length; i++) {
+                    floatView[i] = int16View[i] / 32768;
+                }
 
                 // Add to queue with read offset
                 audioQueue.push({ data: floatView, offset: 0 });
 
-                // Limit queue to ~500ms of audio using the actual sample rate
+                // Limit queue to ~100ms of audio (LATENCY KILLER)
                 const currentRate = audioCtx ? audioCtx.sampleRate : detectedSampleRate;
-                const maxChunks = Math.ceil((currentRate * 0.5) / (BUFFER_SIZE / 2));
+                const maxChunks = Math.ceil((currentRate * 0.1) / (BUFFER_SIZE / 2));
                 while (audioQueue.length > maxChunks) {
                     audioQueue.shift();
                 }
@@ -1035,8 +1041,8 @@
                 });
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
-                options.statusText = 'Ready to Mix (v1:18 PM)';
-                console.log("🚀 MxsReceiver v9.4 - TIMESTAMP 1:18 PM");
+                options.statusText = 'Ready to Mix (v2:25 PM)';
+                console.log("🚀 MxsReceiver v9.4 - TIMESTAMP 2:25 PM");
                 ctx.start(options);
             }
         };
