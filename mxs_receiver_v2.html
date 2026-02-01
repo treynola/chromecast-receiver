@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    <title>MXS-004 PRO MONITOR V9.4</title>
+    <title>MXS-004 PRO MONITOR V9.6 (Loop Slicing)</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -264,16 +264,19 @@
 
         #ws-active-status {
             position: fixed;
-            bottom: 10px;
-            right: 10px;
-            font-size: 0.7em;
-            color: rgba(255, 255, 255, 0.5);
+            top: 20px;
+            left: 20px;
+            font-size: 1.2em;
+            color: #00ff00;
             font-family: 'Courier New', monospace;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid var(--green);
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 3px solid #00ff00;
+            text-shadow: 0 0 10px #00ff00;
+            max-width: 400px;
+            word-wrap: break-word;
         }
 
         #audio-unmute-btn {
@@ -647,9 +650,14 @@
 
                         // Meter Update (Hack for receiver display)
                         if (tv.elements.waveformCanvasL) {
-                            const ctx = tv.elements.waveformCanvasL.getContext('2d');
-                            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
-                            ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                            const ctxL = tv.elements.waveformCanvasL.getContext('2d');
+                            ctxL.fillStyle = '#000'; ctxL.fillRect(0, 0, 300, 100);
+                            ctxL.fillStyle = '#0f0'; ctxL.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                        }
+                        if (tv.elements.waveformCanvasR) {
+                            const ctxR = tv.elements.waveformCanvasR.getContext('2d');
+                            ctxR.fillStyle = '#000'; ctxR.fillRect(0, 0, 300, 100);
+                            ctxR.fillStyle = '#0f0'; ctxR.fillRect(0, 0, 300 * (t.meters?.r || 0), 100);
                         }
                     });
                 }
@@ -775,31 +783,66 @@
         }
 
         async function handleWebRTCOffer(sdp) {
-            console.log("🔊 WebRTC Offer Received");
+            console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
+            const statusEl = document.getElementById('ws-active-status');
+            if (statusEl) statusEl.textContent = "🔊 WebRTC: Setting up...";
+
             if (peerConnection) peerConnection.close();
 
             peerConnection = new RTCPeerConnection(rtcConfig);
 
+            // Connection state monitoring
+            peerConnection.onconnectionstatechange = () => {
+                console.log("🔗 WebRTC Connection State:", peerConnection.connectionState);
+                if (statusEl) statusEl.textContent = `WebRTC: ${peerConnection.connectionState}`;
+            };
+
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log("🧊 ICE Connection State:", peerConnection.iceConnectionState);
+            };
+
             peerConnection.ontrack = (e) => {
-                console.log("🔊 WebRTC Audio Track Received");
+                console.log("🔊 WebRTC Audio Track Received!", e.streams.length, "streams");
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Track received!";
+
+                // Create or get audio element
                 let audioEl = document.getElementById('webrtc-audio');
                 if (!audioEl) {
                     audioEl = document.createElement('audio');
                     audioEl.id = 'webrtc-audio';
-                    audioEl.autoplay = true;
                     document.body.appendChild(audioEl);
                 }
-                audioEl.srcObject = e.streams[0];
-                audioEl.play().then(() => {
-                    console.log("✅ WebRTC Audio Playing");
-                    const btn = document.getElementById('audio-unmute-btn');
-                    if (btn) btn.classList.remove('visible');
-                }).catch(e => console.warn("Autoplay block:", e));
 
-                // Stop PCM processor if running
+                // AGGRESSIVE PLAYBACK for Chromecast
+                audioEl.autoplay = true;
+                audioEl.muted = false;
+                audioEl.volume = 1.0;
+                audioEl.srcObject = e.streams[0];
+
+                // Force play with retry
+                const tryPlay = () => {
+                    audioEl.play().then(() => {
+                        console.log("✅ WebRTC Audio Playing Successfully!");
+                        if (statusEl) statusEl.textContent = "✅ WebRTC AUDIO PLAYING";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.remove('visible');
+                    }).catch(err => {
+                        console.warn("⚠️ WebRTC Autoplay blocked:", err);
+                        if (statusEl) statusEl.textContent = "⚠️ WebRTC: Tap to unmute";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.add('visible');
+                        // Retry after 1 second
+                        setTimeout(tryPlay, 1000);
+                    });
+                };
+                tryPlay();
+
+                // Stop PCM processor to prevent double audio
                 if (audioCtx) {
+                    console.log("🔇 Stopping PCM fallback (WebRTC active)");
                     audioCtx.suspend();
                     isAudioPlaying = false;
+                    audioQueue = []; // Clear any buffered PCM
                 }
             };
 
@@ -824,8 +867,10 @@
                         sdp: answer.sdp
                     }));
                 }
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Answer sent, waiting for track...";
             } catch (err) {
                 console.error("WebRTC Error:", err);
+                if (statusEl) statusEl.textContent = "❌ WebRTC Error: " + err.message;
             }
         }
 
@@ -843,17 +888,30 @@
 
             // 4-byte padding header in backend ensures alignment.
             try {
-                // pcmData is already aligned (starts at offset 4 from original message)
-                const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
+                // PCM Fallback now uses Int16Array (2 bytes per sample, 4 bytes per stereo frame)
+                const int16View = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 2);
+
+                // Convert back to Float32 for Web Audio API
+                const floatView = new Float32Array(int16View.length);
+                for (let i = 0; i < int16View.length; i++) {
+                    floatView[i] = int16View[i] / 32768;
+                }
 
                 // Add to queue with read offset
                 audioQueue.push({ data: floatView, offset: 0 });
 
-                // Limit queue to ~500ms of audio using the actual sample rate
+                // LATENCY & QUALITY BALANCE:
+                // Limit queue to ~150ms of audio (Safely low latency for WiFi)
                 const currentRate = audioCtx ? audioCtx.sampleRate : detectedSampleRate;
-                const maxChunks = Math.ceil((currentRate * 0.5) / (BUFFER_SIZE / 2));
+                const maxChunks = Math.ceil((currentRate * 0.15) / (BUFFER_SIZE / 2));
                 while (audioQueue.length > maxChunks) {
                     audioQueue.shift();
+                }
+
+                // If we were stuttering (empty queue), don't restart immediately
+                // Wait for at least 50ms (safety threshold) before starting again
+                if (!isAudioPlaying && audioQueue.length >= 2) {
+                    isAudioPlaying = true;
                 }
             } catch (e) {
                 console.error("Audio Alignment Error:", e);
@@ -936,16 +994,19 @@
 
                 if (activeEl && msgCount % 20 === 0) {
                     const peak = (window._lastAudioPeak || 0).toFixed(3);
-                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Bytes: ${e.data.byteLength}`;
+                    const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
+                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState} | Bytes: ${e.data.byteLength}`;
                 }
 
                 if (typeof e.data === 'string') {
                     try {
                         const msg = JSON.parse(e.data);
                         if (msg.type === 'offer') {
-                            handleWebRTCOffer(msg.sdp);
-                        } else if (msg.type === 'ice-candidate') {
-                            handleIceCandidate(msg.candidate);
+                            handleWebRTCOffer(msg.sdp || msg.data?.sdp);
+                        } else if (msg.type === 'answer') {
+                            // Should not happen on receiver usually
+                        } else if (msg.type === 'ice-candidate' || msg.candidate) {
+                            handleIceCandidate(msg.candidate || msg.data?.candidate || msg);
                         }
                     } catch (err) { }
                     return;
@@ -954,27 +1015,29 @@
                     const view = new Uint8Array(e.data);
 
                     if (view[0] === 3) {
-                        const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+                        let json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+
+                        // CRITICAL FIX: Unwrap nested data from push_ws_json({ data: ... })
+                        if (json.data && typeof json.data === 'object' && json.data.type) {
+                            json = json.data;
+                        }
+
                         if (json.type === 'state') {
                             if (audioCtx && audioCtx.state === 'suspended') {
-                                // Background resume attempt
                                 audioCtx.resume();
                             }
-
-                            // VISUAL SYNC: Reverted complex delay logic. 
-                            // Prioritizing immediate visual feedback. Audio buffer is reduced to 2048 (~42ms)
                             applyState(json);
-
-                            if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
+                            if (debugEl && (msgCount % 50 === 0)) {
+                                debugEl.textContent = `✅ State Rx | Mode: ${peerConnection ? 'WebRTC' : 'PCM'} | Q: ${audioQueue.length}`;
+                            }
                         }
                         else if (json.type === 'cursor') {
+                            // ... cursor logic is fine ...
                             const cur = document.getElementById('cursor');
                             const scaler = document.getElementById('app-scaler');
                             if (cur && scaler) {
                                 const rect = scaler.getBoundingClientRect();
                                 cur.style.display = 'block';
-                                // Position relative to scaled container (accounts for CSS transform)
-                                // Cursor hotspot is at top-left, so no offset needed
                                 const x = rect.left + json.x * rect.width;
                                 const y = rect.top + json.y * rect.height;
                                 cur.style.left = x + "px";
@@ -982,14 +1045,16 @@
                             }
                         }
                         else if (json.type === 'offer') {
-                            handleWebRTCOffer(json.sdp || json.data?.sdp);
+                            console.log("🔊 WebRTC Offer Extracted from binary frame");
+                            const statusEl = document.getElementById('ws-active-status');
+                            if (statusEl) statusEl.textContent = "🔊 GOT OFFER! Creating answer...";
+                            handleWebRTCOffer(json.sdp);
                         }
-                        else if (json.type === 'ice-candidate') {
-                            handleIceCandidate(json.candidate || json.data?.candidate);
+                        else if (json.type === 'ice-candidate' || json.candidate) {
+                            handleIceCandidate(json.candidate || json);
                         }
                     } else if (view[0] === 2) {
                         // Audio chunk - f32le stereo PCM
-                        // Use 4-byte offset for alignment
                         audioCount++;
                         const pcmData = new Uint8Array(e.data, 4);
                         handleAudioChunk(pcmData);
@@ -1032,8 +1097,8 @@
                 });
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
-                options.statusText = 'Ready to Mix (v1:18 PM)';
-                console.log("🚀 MxsReceiver v9.4 - TIMESTAMP 1:18 PM");
+                options.statusText = 'Ready to Mix (v10:30 PM)';
+                console.log("🚀 MxsReceiver v11.1 - TIMESTAMP 10:30 PM - V124 Stable Signal Fix");
                 ctx.start(options);
             }
         };
