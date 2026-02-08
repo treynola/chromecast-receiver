@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>MXS-004 PRO MONITOR V9.6 (Loop Slicing)</title>
+    <meta name="viewport" content="width=1920, initial-scale=1">
+    <meta charset="UTF-8">
+    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles_v101.css">
+    <style>
+        body {
+            background-color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            overflow: hidden !important;
+        }
+
+        /* SCALING WRAPPER to enforce 16:9 aspect ratio (1440x810) on any TV */
+        #app-scaler {
+            /* Position: Center in viewport */
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform-origin: center center !important;
+            /* Will be scaled and translated by JS */
+
+            /* Fixed internal dimensions */
+            width: 1440px !important;
+            height: 810px !important;
+
+            /* Contain the container */
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            overflow: visible !important;
+        }
+
+        .container {
+            width: 1440px !important;
+            height: 810px !important;
+            max-width: 1440px !important;
+            max-height: 810px !important;
+            min-width: 1440px !important;
+            min-height: 810px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            padding: 8px !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            border: 3px solid var(--green) !important;
+            border-radius: 10px !important;
+            background-color: var(--dark-gray) !important;
+            overflow: hidden !important;
+            /* Triple-layer border effect for visibility */
+            box-shadow:
+                0 0 0 3px var(--gold),
+                0 0 0 6px var(--red),
+                0 0 20px rgba(0, 0, 0, 0.8) !important;
+        }
+
+        /* Essential Layout Mirroring */
+        .header {
+            margin-bottom: 5px !important;
+            flex-shrink: 0;
+            height: 40px !important;
+            padding: 5px 20px !important;
+        }
+
+        /* NEW: 5-Column Layout mirrored from app */
+        .main-content {
+            flex: 1 !important;
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 8px !important;
+            padding: 0 4px !important;
+            overflow: hidden !important;
+        }
+
+        .master-column {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 5px !important;
+            overflow: hidden !important;
+            padding: 5px !important;
+            background-color: var(--dark-gray) !important;
+            border-radius: 10px !important;
+            border: 1px solid var(--green) !important;
+            position: relative !important;
+            top: 0 !important;
+        }
+
+        .master-recording-area {
+            margin-top: 5px !important;
+        }
+
+        /* Combined REC and Format look */
+        .master-rec-row {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 5px !important;
+            width: 95% !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 25px 0 0 0 !important;
+        }
+
+        .master-rec-row button,
+        .master-rec-row select {
+            flex: 1 !important;
+            font-size: 0.8em !important;
+        }
+
+        /* Tighten LFO spacing */
+        .lfo-button-item {
+            margin-bottom: -5px !important;
+        }
+
+        .lfo-meter-item {
+            padding-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+
+        .master-waveform-item {
+            margin-top: 0 !important;
+            height: 60px !important;
+            flex: 0 0 auto !important;
+        }
+
+        .master-item {
+            flex-shrink: 0 !important;
+            padding: 3px !important;
+        }
+
+        .master-label,
+        .track-header {
+            font-family: 'Mexcellent', sans-serif !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.8em !important;
+            color: var(--gold) !important;
+        }
+
+
+
+
+
+        .sample-btn {
+            background-color: var(--gold) !important;
+            color: var(--green) !important;
+            border: 4px solid var(--green) !important;
+            font-family: 'Mexcellent', sans-serif !important;
+            font-size: 1.8em !important;
+            font-weight: 720 !important;
+            letter-spacing: 1px !important;
+            aspect-ratio: 1.0;
+        }
+
+        .sample-center-container {
+            background-color: #222222 !important;
+            border: 4px solid var(--green) !important;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .param-value,
+        .master-value,
+        label,
+        .status-indicator,
+        .button,
+        button,
+        select {
+            font-family: 'Courier New', Courier, monospace !important;
+            font-weight: bold;
+        }
+
+        .master-spacer {
+            height: 1px !important;
+            background: linear-gradient(to right, transparent, var(--gold), transparent) !important;
+            margin: 5px 0 !important;
+        }
+
+        .master-spacer-invisible {
+            height: 5px !important;
+        }
+
+        .tracks-container {
+            display: contents !important;
+        }
+
+        .track {
+            height: 100% !important;
+            border: 1px solid var(--green) !important;
+        }
+
+        /* Disable Interactivity on Receiver */
+        input[type="range"] {
+            pointer-events: none !important;
+        }
+
+        button,
+        select {
+            pointer-events: none !important;
+            cursor: default !important;
+        }
+
+        /* macOS-style cursor: small arrow with white border and black interior */
+        #cursor {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 16px;
+            height: 16px;
+            z-index: 20000;
+            display: none;
+            pointer-events: none;
+            background: transparent;
+            /* macOS cursor arrow shape via SVG data URI - smaller and sharper */
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M3 1 L3 13 L6 10 L9 15 L10.5 14 L7.5 9 L12 9 Z' fill='black' stroke='white' stroke-width='1'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-size: contain;
+            /* Hotspot is at top-left corner of cursor */
+            transform: translate(0, 0);
+            /* Cursor tip is at top-left */
+        }
+
+        @font-face {
+            font-family: 'Mexcellent';
+            src: url('fonts/MexcellentRg.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        @font-face {
+            font-family: 'Mexcellent 3D';
+            src: url('fonts/Mexcellent3d.otf') format('opentype');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--gold);
+            font-family: 'Mexcellent', sans-serif;
+        }
+
+        #ws-active-status {
+            position: fixed;
+            bottom: 5px;
+            right: 5px;
+            font-size: 0.7em;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #00ff00;
+            text-shadow: 0 0 5px #00ff00;
+            max-width: 320px;
+            word-wrap: break-word;
+            pointer-events: none;
+        }
+
+        #audio-unmute-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 30px;
+            background: var(--red);
+            color: #fff;
+            border: 3px solid var(--gold);
+            font-family: 'Mexcellent', sans-serif;
+            font-size: 1.5em;
+            cursor: pointer;
+            z-index: 10001;
+            display: none;
+            border-radius: 8px;
+            box-shadow: 0 0 25px var(--red);
+            animation: pulse 2s infinite;
+        }
+
+        #audio-unmute-btn.visible {
+            display: block;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .loader {
+            border: 8px solid #333;
+            border-top: 8px solid var(--gold);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading-overlay">
+        <div class="loader"></div>
+        <h1 style="font-size: 3em;">NOWMULTIMEDIA MXS-004</h1>
+        <div id="boot-status" style="font-family: monospace; color: #888;">Synchronizing UI...</div>
+        <div style="font-family: monospace; color: #555; font-size: 0.8em; margin-top: 5px;">v12.16 | 12:16 PM Feb 8
+        </div>
+        <div id="ws-status"
+            style="font-family: monospace; font-size: 1.2em; color: #555; margin-top: 10px; background: rgba(20,20,20,0.8); padding: 5px;">
+            Waiting for signal...</div>
+        <div id="debug-info"
+            style="font-family: monospace; font-size: 0.8em; color: #444; margin-top: 20px; max-width: 80%; word-break: break-all;">
+        </div>
+    </div>
+
+    <div id="app-scaler">
+        <div class="container" id="mirror-ui" style="display:none;">
+            <div class="header">
+                <h1>NOWMULTIMEDIA MXS-004</h1><br>
+                <h2> Mix N Studio 004</h2>
+            </div>
+            <!-- NEW: 5-Column Main Content (Master + 4 Tracks) -->
+            <div class="main-content">
+                <!-- Column 1: Master Controls -->
+                <div class="master-column">
+                    <!-- 1. Master Recording (Direct children to match main app) -->
+                    <div class="track-header">Master Recording:</div>
+                    <div id="recording-time-display" class="track-time-display">00:00:00</div>
+
+                    <!-- Ghost "Status" to align with Tracks -->
+                    <!-- Replaced by Master Volume on Line 3 -->
+                    <div class="master-item master-volume-aligned">
+                        <div class="track-header">Vol</div>
+                        <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
+                        <span id="master-volume-value" class="master-value">0.0 dB</span>
+                    </div>
+
+                    <!-- 2. Master Waveform -->
+                    <div class="master-item master-waveform-item">
+                        <div class="waveform-box master-waveform-box">
+                            <div class="waveform-labels">
+                                <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                                <div class="waveform-label-external">R</div>
+                            </div>
+                            <div id="master-waveform-container" class="flex-grow">
+                                <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
+                                <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Loop Length -->
+                    <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
+                    <!-- 3. Loop Length (Top, Compact Row) -->
+                    <div class="master-item master-row-layout">
+                        <div class="track-header">Loop Length</div>
+                        <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                        <span id="loop-length-value" class="master-value">4.0s</span>
+                    </div>
+
+                    <!-- Spacer removed -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- 4. Combined REC and Format -->
+                    <div class="master-item master-bottom-item">
+                        <div class="master-rec-row">
+                            <button id="master-record-button" class="button">REC</button>
+                            <div id="record-format-display"
+                                style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
+                                Stereo (WAV)</div>
+                        </div>
+                    </div>
+
+                    <!-- Spacer 1 (Now top border of LFO block) -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- NEW: Side-by-Side LFO Container -->
+                    <!-- 3. Loop Length (Moved down, Compact Row) -->
+                    <!-- Side-by-Side LFO Container (Bottom) -->
+                    <div class="lfo-side-by-side-container">
+                        <!-- Column Left: LFO 1 -->
+                        <div class="lfo-column">
+                            <div class="master-item lfo-button-item">
+                                <button id="lfo-toggle">LFO 1</button>
+                            </div>
+                            <div class="master-item lfo-meter-item">
+                                <div class="meter-container lfo-meter">
+                                    <div id="lfo-meter-bar" class="meter-bar"></div>
+                                </div>
+                            </div>
+                            <div class="master-item">
+                                <label for="lfo-time" class="master-label" style="font-size:0.65em;">Sweep 1</label>
+                                <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
+                                <span id="lfo-time-value" class="master-value">1.8s</span>
+                            </div>
+                        </div>
+
+                        <!-- Vertical Separator -->
+                        <div class="lfo-separator"></div>
+
+                        <!-- Column Right: LFO 2 -->
+                        <div class="lfo-column">
+                            <div class="master-item lfo-button-item">
+                                <button id="lfo2-toggle">LFO 2</button>
+                            </div>
+                            <div class="master-item lfo-meter-item">
+                                <div class="meter-container lfo-meter">
+                                    <div id="lfo2-meter-bar" class="meter-bar"></div>
+                                </div>
+                            </div>
+                            <div class="master-item">
+                                <label for="lfo2-time" class="master-label" style="font-size:0.65em;">Sweep 2</label>
+                                <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
+                                <span id="lfo2-time-value" class="master-value">1.8s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Spacer 3 (Now bottom border of LFO block) -->
+                    <div class="master-spacer"></div>
+
+                    <!-- 4. Sample Station (Mirrored) -->
+                    <div class="master-item sample-center-container">
+                        <div class="track-header">Sample Station</div>
+                        <div class="sample-grid">
+                            <button class="sample-btn" data-sample="1">1</button>
+                            <button class="sample-btn" data-sample="2">2</button>
+                            <button class="sample-btn" data-sample="3">3</button>
+                            <button class="sample-btn" data-sample="4">4</button>
+                            <button class="sample-btn" data-sample="5">5</button>
+                            <button class="sample-btn" data-sample="6">6</button>
+                            <button class="sample-btn" data-sample="7">7</button>
+                            <button class="sample-btn" data-sample="8">8</button>
+                            <button class="sample-btn" data-sample="9">9</button>
+                            <button class="sample-btn" data-sample="10">10</button>
+                            <button class="sample-btn" data-sample="11">11</button>
+                            <button class="sample-btn" data-sample="12">12</button>
+                            <button class="sample-btn" data-sample="13">13</button>
+                            <button class="sample-btn" data-sample="14">14</button>
+                            <button class="sample-btn" data-sample="15">15</button>
+                            <button class="sample-btn" data-sample="16">16</button>
+                            <button class="sample-btn" data-sample="17">17</button>
+                            <button class="sample-btn" data-sample="18">18</button>
+                            <button class="sample-btn" data-sample="19">19</button>
+                            <button class="sample-btn" data-sample="20">20</button>
+                        </div>
+                    </div>
+
+                    <!-- Spacer 3 (Now bottom border of LFO block) -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- 11. Master Volume (Moved up to Line 3) -->
+                    <!-- Removed from here -->
+
+                    <!-- 12. Bottom Buttons -->
+                    <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
+                        <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
+                        <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
+                    </div>
+                </div>
+
+                <!-- Columns 2-5: Tracks -->
+                <div class="tracks-container" id="tracks-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cursor"></div>
+    <div id="ws-active-status">Waiting for data...</div>
+    <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
+
+    <script>
+        function handleScriptError(src) {
+            const status = document.getElementById('ws-active-status');
+            if (status) {
+                status.innerHTML = `<span style="color:#f44336">❌ Failed to load ${src}. Attempting fallback...</span>`;
+            }
+            if (src === 'TrackView.js') {
+                const s = document.createElement('script');
+                s.src = 'src/ui/TrackView.js';
+                document.head.appendChild(s);
+            }
+        }
+    </script>
+    <script src="TrackView.js" onerror="handleScriptError('TrackView.js')"></script>
+    <script>
+        let trackViews = [];
+        let tracksInited = false;
+
+        function applyState(state) {
+            try {
+                // FIX: Only initialize tracks if they are present in the state AND not already inited
+                if (!tracksInited && state.tracks && state.tracks.length > 0) {
+                    if (typeof TrackView === 'undefined') {
+                        console.warn("⏳ TrackView.js not loaded yet (or failed)...");
+                        const activeEl = document.getElementById('ws-active-status');
+                        if (activeEl) activeEl.textContent = "⏳ Waiting for TrackView.js...";
+                        return;
+                    }
+                    const container = document.getElementById('tracks-container');
+                    container.innerHTML = '';
+                    trackViews = [];
+
+                    console.log(`📡 Building Receiver UI for ${state.tracks.length} tracks...`);
+
+                    state.tracks.forEach((t) => {
+                        const tv = new TrackView(t.id);
+                        container.appendChild(tv.buildElement());
+                        trackViews.push(tv);
+                    });
+
+                    tracksInited = true;
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    document.getElementById('mirror-ui').style.display = 'flex';
+                    console.log(`✅ Receiver UI Initialized with ${trackViews.length} tracks.`);
+                }
+
+                // Master Update
+                if (state.master) {
+                    const volS = document.getElementById('master-volume');
+                    const volV = document.getElementById('master-volume-value');
+                    const lenS = document.getElementById('loop-length');
+                    const lenV = document.getElementById('loop-length-value');
+                    const recB = document.getElementById('master-record-button');
+
+                    if (volS) volS.value = state.master.volume;
+                    if (volV) volV.textContent = (state.master.volume || 0).toFixed(1) + " dB";
+                    if (lenS) lenS.value = state.master.loopLength;
+                    if (lenV) lenV.textContent = (state.master.loopLength || 0).toFixed(1) + "s";
+                    if (recB) recB.classList.toggle('recording', state.master.isRecording);
+
+                    const lfo1Bar = document.getElementById('lfo-meter-bar');
+                    const lfo2Bar = document.getElementById('lfo2-meter-bar');
+                    const lfo1Btn = document.getElementById('lfo-toggle');
+                    const lfo2Btn = document.getElementById('lfo2-toggle');
+                    if (lfo1Bar) lfo1Bar.style.width = (state.master.lfo1Meter * 100) + "%";
+                    if (lfo2Bar) lfo2Bar.style.width = (state.master.lfo2Meter * 100) + "%";
+                    if (lfo1Btn) lfo1Btn.classList.toggle('sweeping', state.master.lfo1Active);
+                    if (lfo2Btn) lfo2Btn.classList.toggle('sweeping', state.master.lfo2Active);
+                }
+
+                // Sampler Update (Mirrored)
+                if (state.sampler) {
+                    state.sampler.forEach(pad => {
+                        const btn = document.querySelector(`.sample-btn[data-sample="${pad.id}"]`);
+                        if (btn) {
+                            if (btn.textContent !== pad.label) btn.textContent = pad.label;
+                            btn.classList.toggle('active', pad.active);
+                            btn.classList.toggle('loaded', pad.loaded);
+                            btn.classList.toggle('drag-over', pad.dragOver);
+                        }
+                    });
+                }
+
+                if (state.transport) {
+                    // Detect sample rate from sender and pre-initialize audio context
+                    if (state.transport.sampleRate && state.transport.sampleRate !== detectedSampleRate) {
+                        detectedSampleRate = state.transport.sampleRate;
+                        console.log('📡 Detected sender sample rate:', detectedSampleRate, 'Hz');
+                        // Pre-initialize audio with correct sample rate
+                        initAudioPlayback(detectedSampleRate);
+                    }
+
+                    const timeDisplay = document.getElementById('recording-time-display');
+                    // Only update time display if master is recording (not constantly during playback)
+                    if (timeDisplay && state.master && state.master.isRecording) {
+                        // Format transport.position from "bars:beats:sixteenths" to "MM:SS:FF"
+                        const pos = state.transport.position || "0:0:0";
+                        const parts = pos.split(':');
+                        if (parts.length >= 3) {
+                            const bars = parseInt(parts[0]) || 0;
+                            const beats = parseInt(parts[1]) || 0;
+                            const ticks = parseInt(parts[2]) || 0;
+                            // Convert to seconds (assuming 120 BPM, 4/4 time: 1 bar = 2s)
+                            const bpm = state.transport.bpm || 120;
+                            const secondsPerBeat = 60 / bpm;
+                            const totalSeconds = (bars * 4 * secondsPerBeat) + (beats * secondsPerBeat) + (ticks * secondsPerBeat / 4);
+                            const mins = Math.floor(totalSeconds / 60);
+                            const secs = Math.floor(totalSeconds % 60);
+                            const frames = Math.floor((totalSeconds * 100) % 100);
+                            timeDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}:${String(frames).padStart(2, '0')}`;
+                        }
+                    } else if (timeDisplay && !state.master?.isRecording) {
+                        // Keep last recorded time or show 00:00:00 when not recording
+                        // Don't update continuously to prevent scrolling effect
+                    }
+                }
+
+                // Tracks Update
+                if (state.tracks && trackViews.length > 0) {
+                    state.tracks.forEach(t => {
+                        const tv = trackViews[t.id];
+                        if (!tv) return;
+
+                        // Sync sliders
+                        const params = ['vol', 'pan', 'pitch', 'treble', 'mid_gain', 'bass'];
+                        params.forEach(p => {
+                            const val = t[p === 'mid_gain' ? 'midGain' : p];
+                            if (tv.elements.knobs && tv.elements.knobs[p]) tv.elements.knobs[p].value = val;
+                            if (tv.elements.valueDisplays && tv.elements.valueDisplays[p]) tv.elements.valueDisplays[p].textContent = parseFloat(val).toFixed(1);
+                        });
+
+                        // Sync status & buttons
+                        if (t.armed) tv.setStatus('Recording', 'recording');
+                        else if (t.isPlaying) tv.setStatus('Playing', 'playing');
+                        else tv.setStatus('Ready', 'ready');
+
+                        if (tv.elements.recBtn) tv.elements.recBtn.classList.toggle('recording', t.armed);
+                        if (tv.elements.playBtn) tv.elements.playBtn.classList.toggle('playing', t.isPlaying);
+
+                        // Meter Update (Hack for receiver display)
+                        if (tv.elements.waveformCanvasL) {
+                            const ctxL = tv.elements.waveformCanvasL.getContext('2d');
+                            ctxL.fillStyle = '#000'; ctxL.fillRect(0, 0, 300, 100);
+                            ctxL.fillStyle = '#0f0'; ctxL.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                        }
+                        if (tv.elements.waveformCanvasR) {
+                            const ctxR = tv.elements.waveformCanvasR.getContext('2d');
+                            ctxR.fillStyle = '#000'; ctxR.fillRect(0, 0, 300, 100);
+                            ctxR.fillStyle = '#0f0'; ctxR.fillRect(0, 0, 300 * (t.meters?.r || 0), 100);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('❌ applyState error:', err);
+            }
+        }
+
+        // ============= AUDIO STREAMING PLAYBACK =============
+        let audioCtx = null;
+        let audioQueue = [];
+        let isAudioPlaying = false;
+
+        // WebRTC State
+        let peerConnection = null;
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        let detectedSampleRate = 48000; // Default, will be updated from sender state
+        const CHANNELS = 2;
+        const SAMPLES_PER_CHUNK = 2048; // Sender sends 2048 samples per channel
+        let nextPlayTime = 0; // For scheduling buffers seamlessly
+
+        function initAudioPlayback(sampleRate) {
+            // FORCE 48kHz - no resampling, matches Chromecast hardware
+            const targetRate = 48000;
+
+            if (audioCtx) {
+                // If sample rate changed, recreate context
+                if (audioCtx.sampleRate !== targetRate) {
+                    console.log(`🔊 Sample rate mismatch: ${audioCtx.sampleRate} vs ${targetRate}, recreating context...`);
+                    audioCtx.close();
+                    audioCtx = null;
+                    nextPlayTime = 0;
+                } else {
+                    return; // Already initialized with correct rate
+                }
+            }
+
+            try {
+                // Force 48kHz, no latencyHint (use browser default)
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 48000
+                });
+                console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz (FORCED 48kHz)');
+            } catch (e) {
+                console.warn('⚠️ Failed to create AudioContext with 48kHz, falling back to default');
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('🔊 Receiver AudioContext (fallback):', audioCtx.sampleRate, 'Hz');
+            }
+
+            const unmuteBtn = document.getElementById('audio-unmute-btn');
+            if (audioCtx.state === 'suspended') {
+                if (unmuteBtn) unmuteBtn.classList.add('visible');
+            }
+
+            isAudioPlaying = true;
+            nextPlayTime = 0;
+        }
+
+        // Buffer Management State
+        const TARGET_LATENCY = 0.200; // 200ms target buffer for stability
+        const MAX_LATENCY = 0.500;    // Max 500ms before we force-reset
+        const MIN_LATENCY = 0.050;    // Min 50ms before we force-reset
+        let driftCorrectionTotal = 0;
+
+        function scheduleAudioChunk(leftChannel, rightChannel) {
+            if (!audioCtx || audioCtx.state !== 'running') return;
+
+            const numSamples = leftChannel.length;
+            const buffer = audioCtx.createBuffer(CHANNELS, numSamples, audioCtx.sampleRate);
+            buffer.getChannelData(0).set(leftChannel);
+            buffer.getChannelData(1).set(rightChannel);
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            const chunkDuration = numSamples / audioCtx.sampleRate;
+
+            // --- Adaptive Jitter Management ---
+            // If nextPlayTime is 0 (first chunk) or way behind, initialize it
+            if (nextPlayTime < now + MIN_LATENCY) {
+                const initialDelay = Math.max(TARGET_LATENCY, 0.1);
+                nextPlayTime = now + initialDelay;
+                // console.log(`🔊 [Buffer] Initialized/Reset queue to ${initialDelay}s`);
+            }
+
+            // If we are getting too far ahead (>500ms), pull it back gracefully
+            const currentLatency = nextPlayTime - now;
+            if (currentLatency > MAX_LATENCY) {
+                // Hard reset if way ahead
+                nextPlayTime = now + TARGET_LATENCY;
+                // console.warn(`⚠️ [Buffer] Overshot! Resetting to ${TARGET_LATENCY}s`);
+            } else if (currentLatency > TARGET_LATENCY + 0.05) {
+                // Micro-Correction: If >50ms over target, shave off 2ms
+                nextPlayTime -= 0.002;
+            }
+
+            source.start(nextPlayTime);
+            nextPlayTime += chunkDuration;
+        }
+
+        async function handleWebRTCOffer(sdp) {
+            console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
+            const statusEl = document.getElementById('ws-active-status');
+            if (statusEl) statusEl.textContent = "🔊 WebRTC: Setting up...";
+
+            if (peerConnection) peerConnection.close();
+
+            peerConnection = new RTCPeerConnection(rtcConfig);
+
+            // Connection state monitoring
+            peerConnection.onconnectionstatechange = () => {
+                console.log("🔗 WebRTC Connection State:", peerConnection.connectionState);
+                if (statusEl) statusEl.textContent = `WebRTC: ${peerConnection.connectionState}`;
+            };
+
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log("🧊 ICE Connection State:", peerConnection.iceConnectionState);
+            };
+
+            peerConnection.ontrack = (e) => {
+                console.log("🔊 WebRTC Audio Track Received!", e.streams.length, "streams");
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Track received!";
+
+                // Create or get audio element
+                let audioEl = document.getElementById('webrtc-audio');
+                if (!audioEl) {
+                    audioEl = document.createElement('audio');
+                    audioEl.id = 'webrtc-audio';
+                    document.body.appendChild(audioEl);
+                }
+
+                // AGGRESSIVE PLAYBACK for Chromecast
+                audioEl.autoplay = true;
+                audioEl.muted = false;
+                audioEl.volume = 1.0;
+                audioEl.srcObject = e.streams[0];
+
+                // Force play with retry
+                const tryPlay = () => {
+                    audioEl.play().then(() => {
+                        console.log("✅ WebRTC Audio Playing Successfully!");
+                        if (statusEl) statusEl.textContent = "✅ WebRTC AUDIO PLAYING";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.remove('visible');
+                    }).catch(err => {
+                        console.warn("⚠️ WebRTC Autoplay blocked:", err);
+                        if (statusEl) statusEl.textContent = "⚠️ WebRTC: Tap to unmute";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.add('visible');
+                        // Retry after 1 second
+                        setTimeout(tryPlay, 1000);
+                    });
+                };
+                tryPlay();
+
+                // Stop PCM processor to prevent double audio
+                if (audioCtx) {
+                    console.log("🔇 Stopping PCM fallback (WebRTC active)");
+                    audioCtx.suspend();
+                    isAudioPlaying = false;
+                    audioQueue = []; // Clear any buffered PCM
+                }
+            };
+
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate && currentWS) {
+                    currentWS.send(JSON.stringify({
+                        type: 'ice-candidate',
+                        candidate: e.candidate
+                    }));
+                }
+            };
+
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                console.log("📤 Sending WebRTC Answer");
+                if (currentWS) {
+                    currentWS.send(JSON.stringify({
+                        type: 'answer',
+                        sdp: answer.sdp
+                    }));
+                }
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Answer sent, waiting for track...";
+            } catch (err) {
+                console.error("WebRTC Error:", err);
+                if (statusEl) statusEl.textContent = "❌ WebRTC Error: " + err.message;
+            }
+        }
+
+        async function handleIceCandidate(candidate) {
+            if (peerConnection && peerConnection.remoteDescription) {
+                try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (e) { console.warn("ICE Error:", e); }
+            }
+        }
+
+        function handleAudioChunk(pcmData) {
+            // Initialize audio context with detected sample rate if not already done
+            if (!audioCtx) initAudioPlayback(detectedSampleRate);
+
+            try {
+                // Audio is Int16 interleaved stereo (L0, R0, L1, R1, ...)
+                // Create a copy to aligned buffer to avoid alignment issues
+                const alignedBuffer = new ArrayBuffer(pcmData.byteLength);
+                new Uint8Array(alignedBuffer).set(pcmData);
+                const int16View = new Int16Array(alignedBuffer);
+
+                // De-interleave into separate L/R Float32 channels
+                // Apply 0.25x gain to prevent clipping/static (lower = cleaner)
+                const HEADROOM_GAIN = 0.25;
+                const numStereoFrames = int16View.length / 2;
+                const leftChannel = new Float32Array(numStereoFrames);
+                const rightChannel = new Float32Array(numStereoFrames);
+
+                for (let i = 0; i < numStereoFrames; i++) {
+                    leftChannel[i] = (int16View[i * 2] / 32768.0) * HEADROOM_GAIN;
+                    rightChannel[i] = (int16View[i * 2 + 1] / 32768.0) * HEADROOM_GAIN;
+                }
+
+                // Schedule for immediate playback
+                scheduleAudioChunk(leftChannel, rightChannel);
+
+            } catch (e) {
+                console.error("Audio Processing Error:", e);
+            }
+        }
+
+        function startAudioManually() {
+            if (audioCtx) {
+                audioCtx.resume().then(() => {
+                    console.log("🔊 Audio Context Resumed Manually");
+                    const btn = document.getElementById('audio-unmute-btn');
+                    if (btn) btn.classList.remove('visible');
+                });
+            }
+        }
+
+
+        // Track reconnection attempts for exponential backoff
+        let reconnectAttempt = 0;
+        let heartbeatInterval = null;
+        let currentWS = null;
+
+        function connectWS(url) {
+            console.log("Connecting to WS:", url);
+            const statusEl = document.getElementById('ws-status');
+            const debugEl = document.getElementById('debug-info');
+
+            if (statusEl) statusEl.textContent = "Connecting to " + url + "...";
+            if (debugEl) debugEl.textContent = "Target: " + url;
+
+            // Clean up previous connection
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+            if (currentWS) {
+                try { currentWS.close(); } catch (e) { }
+            }
+
+            const ws = new WebSocket(url);
+            currentWS = ws;
+            ws.binaryType = 'arraybuffer';
+
+            let lastDataTime = Date.now();
+
+            ws.onopen = () => {
+                console.log("WS Connected");
+                reconnectAttempt = 0; // Reset backoff on successful connect
+                lastDataTime = Date.now();
+
+                if (statusEl) {
+                    statusEl.textContent = "✅ WS Connected - Waiting for state...";
+                    statusEl.style.color = "#4CAF50";
+                }
+
+                // Start heartbeat check (every 10s, detect stale after 30s of no data)
+                heartbeatInterval = setInterval(() => {
+                    const elapsed = Date.now() - lastDataTime;
+                    if (elapsed > 30000) {
+                        console.warn("⚠️ No data for 30s, closing stale connection");
+                        ws.close();
+                    }
+                }, 10000);
+            };
+            ws.onerror = (err) => {
+                console.error("WS Error:", err);
+                if (statusEl) {
+                    statusEl.textContent = "❌ WS Connection Failed";
+                    statusEl.style.color = "#f44336";
+                }
+                if (debugEl) debugEl.textContent += " [ERR]";
+            };
+            let msgCount = 0;
+            let audioCount = 0;
+            ws.onmessage = (e) => {
+                lastDataTime = Date.now(); // Update heartbeat timestamp
+                msgCount++;
+                const debugEl = document.getElementById('debug-info');
+                const activeEl = document.getElementById('ws-active-status');
+
+                if (activeEl && msgCount % 20 === 0) {
+                    const peak = (window._lastAudioPeak || 0).toFixed(3);
+                    const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
+                    activeEl.innerHTML = `v12.16 | 12:16 PM Feb 8<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState} | Bytes: ${e.data.byteLength}`;
+                }
+
+                if (typeof e.data === 'string') {
+                    try {
+                        const msg = JSON.parse(e.data);
+                        if (msg.type === 'offer') {
+                            handleWebRTCOffer(msg.sdp || msg.data?.sdp);
+                        } else if (msg.type === 'answer') {
+                            // Should not happen on receiver usually
+                        } else if (msg.type === 'ice-candidate' || msg.candidate) {
+                            handleIceCandidate(msg.candidate || msg.data?.candidate || msg);
+                        }
+                    } catch (err) { }
+                    return;
+                }
+                try {
+                    const view = new Uint8Array(e.data);
+
+                    if (view[0] === 3) {
+                        let json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+
+                        // DEBUG: Log what we received
+                        console.log("📦 MSG_META received, raw type:", json.type, "data.type:", json.data?.type);
+
+                        // CRITICAL FIX: Unwrap nested data from push_ws_json({ data: ... })
+                        if (json.data && typeof json.data === 'object' && json.data.type) {
+                            console.log("📦 Unwrapping nested data, inner type:", json.data.type);
+                            json = json.data;
+                        }
+
+                        // DEBUG: Log final type after unwrap
+                        console.log("📦 Final message type:", json.type);
+
+                        if (json.type === 'state') {
+                            if (audioCtx && audioCtx.state === 'suspended') {
+                                audioCtx.resume();
+                            }
+                            applyState(json);
+                            if (debugEl && (msgCount % 50 === 0)) {
+                                debugEl.textContent = `✅ State Rx | Mode: ${peerConnection ? 'WebRTC' : 'PCM'} | Q: ${audioQueue.length}`;
+                            }
+                        }
+                        else if (json.type === 'cursor') {
+                            // ... cursor logic is fine ...
+                            const cur = document.getElementById('cursor');
+                            const scaler = document.getElementById('app-scaler');
+                            if (cur && scaler) {
+                                const rect = scaler.getBoundingClientRect();
+                                cur.style.display = 'block';
+                                const x = rect.left + json.x * rect.width;
+                                const y = rect.top + json.y * rect.height;
+                                cur.style.left = x + "px";
+                                cur.style.top = y + "px";
+                            }
+                        }
+                        else if (json.type === 'offer') {
+                            console.log("🔊 WebRTC Offer Extracted from binary frame!");
+                            const statusEl = document.getElementById('ws-active-status');
+                            if (statusEl) statusEl.textContent = "🔊 GOT OFFER! Creating answer...";
+                            handleWebRTCOffer(json.sdp);
+                        }
+                        else if (json.type === 'ice-candidate' || json.candidate) {
+                            handleIceCandidate(json.candidate || json);
+                        }
+                    } else if (view[0] === 2) {
+                        // Audio chunk - f32le stereo PCM
+                        audioCount++;
+                        const pcmData = new Uint8Array(e.data, 4);
+                        handleAudioChunk(pcmData);
+                    }
+                } catch (err) {
+                    console.error("Parse Error:", err);
+                    if (debugEl) debugEl.textContent = `Rx Error: ${err.message}`;
+                }
+            };
+            ws.onclose = () => {
+                console.log("WS Closed, scheduling reconnect...");
+                if (heartbeatInterval) {
+                    clearInterval(heartbeatInterval);
+                    heartbeatInterval = null;
+                }
+                currentWS = null;
+
+                // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
+                reconnectAttempt++;
+                const delay = Math.min(2000 * Math.pow(2, reconnectAttempt - 1), 30000);
+                console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempt})`);
+
+                if (statusEl) {
+                    statusEl.textContent = `⏳ Reconnecting in ${delay / 1000}s...`;
+                    statusEl.style.color = "#FFC107";
+                }
+
+                setTimeout(() => connectWS(url), delay);
+            };
+        }
+
+        window.onload = () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('ws')) connectWS(params.get('ws'));
+            if (typeof cast !== 'undefined') {
+                const ctx = cast.framework.CastReceiverContext.getInstance();
+                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
+                    const url = e.data.wsUrl || e.data;
+                    if (url) connectWS(url);
+                });
+                const options = new cast.framework.CastReceiverOptions();
+                options.disableIdleTimeout = true;
+                options.statusText = 'MXS-004 v12.16 (12:16 PM Feb 8 - 0.25x Gain)';
+                console.log("🚀 MxsReceiver v12.16 - TIMESTAMP 12:16 PM Feb 8 - 0.25x Gain Low Distortion");
+                ctx.start(options);
+            }
+        };
+
+        // --- Auto-Scaler Logic ---
+        function scaleApp() {
+            const scaler = document.getElementById('app-scaler');
+            if (!scaler) return;
+
+            const targetW = 1440;
+            const targetH = 810;
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+
+            // Calculate scale to fit TV screen with small margin (95% of available space)
+            const scale = Math.min(winW / targetW, winH / targetH) * 0.95;
+
+            // Apply scale AND translate to center
+            // translate(-50%, -50%) centers the element, then scale
+            scaler.style.transform = `translate(-50%, -50%) scale(${scale})`;
+
+            console.log(`📺 Scaled app: ${winW}x${winH} -> scale ${scale.toFixed(3)}`);
+        }
+
+        window.addEventListener('resize', scaleApp);
+        scaleApp(); // Initial call
+
+    </script>
+</body>
+
+</html>
