@@ -719,11 +719,13 @@
             nextPlayTime = 0;
         }
 
-        // Buffer Management State
-        const TARGET_LATENCY = 0.200; // 200ms target buffer for stability
-        const MAX_LATENCY = 0.500;    // Max 500ms before we force-reset
-        const MIN_LATENCY = 0.050;    // Min 50ms before we force-reset
+        // Buffer Management State (V12.22 - Adaptive Jitter Buffer)
+        // Wider latency window for network variance, smoother corrections
+        const TARGET_LATENCY = 0.150; // 150ms target (was 200ms)
+        const MAX_LATENCY = 0.300;    // Max 300ms before reset (was 500ms)
+        const MIN_LATENCY = 0.080;    // Min 80ms (was 50ms)
         let driftCorrectionTotal = 0;
+        let consecutiveUnderruns = 0;
 
         function scheduleAudioChunk(leftChannel, rightChannel) {
             if (!audioCtx || audioCtx.state !== 'running') return;
@@ -740,28 +742,37 @@
             const now = audioCtx.currentTime;
             const chunkDuration = numSamples / audioCtx.sampleRate;
 
-            // --- Adaptive Jitter Management ---
-            // If nextPlayTime is 0 (first chunk) or way behind, initialize it
-            if (nextPlayTime < now + MIN_LATENCY) {
-                const initialDelay = Math.max(TARGET_LATENCY, 0.1);
-                nextPlayTime = now + initialDelay;
-                // console.log(`🔊 [Buffer] Initialized/Reset queue to ${initialDelay}s`);
+            // --- V12.22 Adaptive Jitter Management ---
+            // Underrun detection: if we're scheduling in the past, we've starved
+            if (nextPlayTime < now) {
+                consecutiveUnderruns++;
+                // After 3 underruns, increase buffer target temporarily
+                if (consecutiveUnderruns > 3) {
+                    nextPlayTime = now + TARGET_LATENCY + 0.050; // Add 50ms cushion
+                    console.warn(`⚠️ [Buffer] Underrun recovery: added 50ms cushion`);
+                    consecutiveUnderruns = 0;
+                } else {
+                    nextPlayTime = now + TARGET_LATENCY;
+                }
+            } else {
+                consecutiveUnderruns = 0;
             }
 
-            // If we are getting too far ahead (>500ms), pull it back gracefully
+            // Overflow protection: if way ahead, soft-reset
             const currentLatency = nextPlayTime - now;
             if (currentLatency > MAX_LATENCY) {
-                // Hard reset if way ahead
                 nextPlayTime = now + TARGET_LATENCY;
-                // console.warn(`⚠️ [Buffer] Overshot! Resetting to ${TARGET_LATENCY}s`);
-            } else if (currentLatency > TARGET_LATENCY + 0.05) {
-                // Micro-Correction: If >50ms over target, shave off 2ms
-                nextPlayTime -= 0.002;
+                // console.warn(`⚠️ [Buffer] Overflow: reset to ${TARGET_LATENCY}s`);
+            } else if (currentLatency > TARGET_LATENCY + 0.030) {
+                // Gentle correction: 1ms per chunk if >30ms over target
+                nextPlayTime -= 0.001;
+                driftCorrectionTotal += 0.001;
             }
 
             source.start(nextPlayTime);
             nextPlayTime += chunkDuration;
         }
+
 
         async function handleWebRTCOffer(sdp) {
             console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
@@ -1075,8 +1086,27 @@
             if (typeof cast !== 'undefined') {
                 const ctx = cast.framework.CastReceiverContext.getInstance();
                 ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
-                    const url = e.data.wsUrl || e.data;
-                    if (url) connectWS(url);
+                    let url = e.data.wsUrl || e.data;
+                    console.log("📨 Received Cast Message:", e.data);
+
+                    if (url) {
+                        // Check for embedded audio stream in WS URL query params
+                        // Format: ws://IP:PORT?audio_stream=http%3A%2F%2F...
+                        try {
+                            // Dummy protocol to make URL parser happy for ws://
+                            const parsed = new URL(url.replace('ws://', 'http://').replace('wss://', 'https://'));
+                            const audioUrl = parsed.searchParams.get('audio_stream');
+
+                            if (audioUrl) {
+                                console.log("🎵 Found Audio Stream in Message:", audioUrl);
+                                playAudioStream(audioUrl);
+                            }
+                        } catch (err) {
+                            console.warn("Error parsing WS URL for audio:", err);
+                        }
+
+                        connectWS(url);
+                    }
                 });
                 const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
@@ -1085,6 +1115,60 @@
                 ctx.start(options);
             }
         };
+
+        // --- Audio Stream Playback ---
+        function playAudioStream(initialUrl) {
+            let url = initialUrl;
+            // Handle URL-encoded strings if needed (though usually decoded by caller)
+            try { url = decodeURIComponent(url); } catch (e) { }
+
+            if (!url) return;
+
+            console.log("🎵 Initiating Audio Stream Playback:", url);
+
+            // Check if audio element already exists
+            let audio = document.getElementById('cast-audio-stream');
+            if (audio) {
+                console.log("♻️ Updating existing audio stream...");
+                audio.src = url;
+            } else {
+                audio = new Audio(url);
+                audio.id = 'cast-audio-stream';
+                audio.crossOrigin = "anonymous";
+                audio.preload = "auto";
+            }
+
+            // Auto-play handling
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log("✅ Audio playback started successfully");
+                }).catch(e => {
+                    console.warn("⚠️ Audio autoplay blocked or failed:", e);
+                });
+            }
+
+            // Error handling/Retries
+            audio.onerror = (e) => {
+                console.error("❌ Audio stream error:", e);
+                // Simple retry logic after 2s
+                setTimeout(() => {
+                    console.log("🔄 Retrying audio stream...");
+                    audio.src = url; // Force reload
+                    audio.load();
+                    audio.play().catch(e => console.warn("Retry play failed:", e));
+                }, 2000);
+            };
+        }
+
+        // Check URL params on load
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialAudioUrl = urlParams.get('audio_stream');
+        if (initialAudioUrl) {
+            playAudioStream(initialAudioUrl);
+        } else {
+            console.log("ℹ️ No audio_stream parameter found on load.");
+        }
 
         // --- Auto-Scaler Logic ---
         function scaleApp() {
