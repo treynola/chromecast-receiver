@@ -680,19 +680,20 @@
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         let detectedSampleRate = 48000;
         const CHANNELS = 2;
-        const SOURCE_SAMPLE_RATE = 48000; // Sender always sends 48kHz
+        const SOURCE_SAMPLE_RATE = 48000; // Sender captures at AudioContext rate (always 48kHz)
         let nextPlayTime = 0;
 
         // ═══════════════════════════════════════════════════════════════
-        // AUDIO PLAYBACK V14 - AudioBufferSourceNode + Float32
-        // Uses AudioBufferSourceNode with SOURCE_SAMPLE_RATE for
-        // automatic sample rate conversion (handles 48k→44.1k etc.)
-        // Data is Float32 interleaved from sender (no Int16 conversion)
+        // AUDIO PLAYBACK V15 - Int16 + AudioBufferSourceNode + Jitter
+        // - Data: Int16 interleaved stereo from sender (192KB/s)
+        // - Playback: AudioBufferSourceNode at SOURCE_SAMPLE_RATE
+        //   (Web Audio auto-resamples to context rate if needed)
+        // - Jitter: 300ms target latency, tolerant WiFi scheduling
         // ═══════════════════════════════════════════════════════════════
 
-        // Jitter buffer parameters
-        const TARGET_LATENCY = 0.150;
-        const MAX_LATENCY = 0.400;
+        const TARGET_LATENCY = 0.300;  // 300ms buffer for WiFi jitter
+        const MAX_LATENCY = 0.600;     // Only hard-reset if > 600ms ahead
+        let consecutiveUnderruns = 0;
 
         function initAudioPlayback(sampleRate) {
             if (audioCtx) return;
@@ -701,12 +702,10 @@
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({
                     sampleRate: 48000
                 });
-                console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
             } catch (e) {
-                console.warn('⚠️ Failed to create 48kHz AudioContext, using default');
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                console.log('🔊 Receiver AudioContext (fallback):', audioCtx.sampleRate, 'Hz');
             }
+            console.log('🔊 Receiver AudioContext:', audioCtx.sampleRate, 'Hz');
 
             const unmuteBtn = document.getElementById('audio-unmute-btn');
             if (audioCtx.state === 'suspended') {
@@ -715,7 +714,6 @@
 
             isAudioPlaying = true;
             nextPlayTime = 0;
-            console.log('🔊 AudioBufferSourceNode playback ready (auto-resamples from', SOURCE_SAMPLE_RATE, 'Hz)');
         }
 
         function handleAudioChunk(pcmData) {
@@ -723,25 +721,25 @@
             if (!audioCtx || audioCtx.state !== 'running') return;
 
             try {
-                // Decode Float32 interleaved stereo (L0, R0, L1, R1, ...)
+                // Decode Int16 interleaved stereo (L0, R0, L1, R1, ...)
                 const alignedBuffer = new ArrayBuffer(pcmData.byteLength);
                 new Uint8Array(alignedBuffer).set(pcmData);
-                const floatView = new Float32Array(alignedBuffer);
-                const numStereoFrames = floatView.length / 2;
+                const int16View = new Int16Array(alignedBuffer);
+                const numStereoFrames = int16View.length / 2;
                 if (numStereoFrames === 0) return;
 
-                // Create AudioBuffer at SOURCE rate — Web Audio auto-resamples to context rate
+                // Create AudioBuffer at SOURCE rate (Web Audio auto-resamples)
                 const buffer = audioCtx.createBuffer(CHANNELS, numStereoFrames, SOURCE_SAMPLE_RATE);
                 const leftChan = buffer.getChannelData(0);
                 const rightChan = buffer.getChannelData(1);
 
-                // De-interleave Float32 into separate L/R channels
+                // De-interleave Int16 → Float32 into separate L/R channels
                 for (let i = 0; i < numStereoFrames; i++) {
-                    leftChan[i] = floatView[i * 2];
-                    rightChan[i] = floatView[i * 2 + 1];
+                    leftChan[i] = int16View[i * 2] / 32768.0;
+                    rightChan[i] = int16View[i * 2 + 1] / 32768.0;
                 }
 
-                // Schedule playback with jitter management
+                // Schedule with WiFi-tolerant jitter management
                 const source = audioCtx.createBufferSource();
                 source.buffer = buffer;
                 source.connect(audioCtx.destination);
@@ -749,15 +747,29 @@
                 const now = audioCtx.currentTime;
                 const chunkDuration = numStereoFrames / SOURCE_SAMPLE_RATE;
 
-                // Underrun: if behind, reset to target latency
                 if (nextPlayTime < now) {
-                    nextPlayTime = now + TARGET_LATENCY;
-                }
+                    // Underrun — chunk arrived late
+                    consecutiveUnderruns++;
+                    if (consecutiveUnderruns > 5) {
+                        // Persistent underrun: reset to full target latency
+                        nextPlayTime = now + TARGET_LATENCY;
+                        consecutiveUnderruns = 0;
+                    } else {
+                        // Brief underrun: schedule with minimal gap (50ms)
+                        nextPlayTime = now + 0.050;
+                    }
+                } else {
+                    consecutiveUnderruns = 0;
 
-                // Overflow: if too far ahead, reset
-                const currentLatency = nextPlayTime - now;
-                if (currentLatency > MAX_LATENCY) {
-                    nextPlayTime = now + TARGET_LATENCY;
+                    // Overflow: if too far ahead, gently correct
+                    const currentLatency = nextPlayTime - now;
+                    if (currentLatency > MAX_LATENCY) {
+                        // Hard reset only if WAY too far ahead
+                        nextPlayTime = now + TARGET_LATENCY;
+                    } else if (currentLatency > TARGET_LATENCY + 0.050) {
+                        // Gently speed up: 2ms per chunk
+                        nextPlayTime -= 0.002;
+                    }
                 }
 
                 source.start(nextPlayTime);
