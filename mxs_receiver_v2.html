@@ -510,6 +510,7 @@
 
     <div id="cursor"></div>
     <div id="ws-active-status">Waiting for data...</div>
+    <audio id="cast-audio" preload="none"></audio>
     <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
 
     <script>
@@ -670,114 +671,67 @@
             }
         }
 
-        // ============= AUDIO STREAMING PLAYBACK =============
-        let audioCtx = null;
+        // ============= AUDIO STREAMING PLAYBACK (V16 - Native WAV) =============
+        // Instead of decoding raw PCM in JavaScript, we use a native <audio> element
+        // pointed at /live.wav on the HTTP server. Chromecast's built-in WAV
+        // decoder handles all sample rate conversion, buffering, and playback.
+        // This eliminates: AudioBufferSourceNode, Int16 decoding, jitter buffers.
+        let audioCtx = null; // Kept for compatibility with unmute button
         let audioQueue = [];
         let isAudioPlaying = false;
 
-        // WebRTC State
+        // WebRTC State (kept for signaling)
         let peerConnection = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         let detectedSampleRate = 48000;
-        const CHANNELS = 2;
-        const SOURCE_SAMPLE_RATE = 48000; // Sender captures at AudioContext rate (always 48kHz)
-        let nextPlayTime = 0;
 
-        // ═══════════════════════════════════════════════════════════════
-        // AUDIO PLAYBACK V15 - Int16 + AudioBufferSourceNode + Jitter
-        // - Data: Int16 interleaved stereo from sender (192KB/s)
-        // - Playback: AudioBufferSourceNode at SOURCE_SAMPLE_RATE
-        //   (Web Audio auto-resamples to context rate if needed)
-        // - Jitter: 300ms target latency, tolerant WiFi scheduling
-        // ═══════════════════════════════════════════════════════════════
+        function startWavStream(wsUrl) {
+            const audioEl = document.getElementById('cast-audio');
+            if (!audioEl) {
+                console.error('❌ No <audio id="cast-audio"> element found');
+                return;
+            }
 
-        const TARGET_LATENCY = 0.300;  // 300ms buffer for WiFi jitter
-        const MAX_LATENCY = 0.600;     // Only hard-reset if > 600ms ahead
-        let consecutiveUnderruns = 0;
-
-        function initAudioPlayback(sampleRate) {
-            if (audioCtx) return;
-
+            // Extract host from WebSocket URL (e.g., ws://192.168.1.14:8090 → 192.168.1.14)
             try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 48000
-                });
+                const url = new URL(wsUrl.replace('ws://', 'http://').replace('wss://', 'https://'));
+                const wavUrl = `http://${url.hostname}:8089/live.wav`;
+                console.log('🔊 Starting native WAV stream:', wavUrl);
+
+                audioEl.src = wavUrl;
+                audioEl.load();
+
+                audioEl.oncanplay = () => {
+                    console.log('🔊 WAV stream ready, starting playback');
+                    audioEl.play().then(() => {
+                        console.log('🔊 WAV playback started!');
+                        isAudioPlaying = true;
+                        const statusEl = document.getElementById('ws-active-status');
+                        if (statusEl) statusEl.textContent = '✅ Audio: Native WAV Stream';
+                    }).catch(err => {
+                        console.warn('⚠️ WAV autoplay blocked:', err);
+                        const unmuteBtn = document.getElementById('audio-unmute-btn');
+                        if (unmuteBtn) unmuteBtn.classList.add('visible');
+                    });
+                };
+
+                audioEl.onerror = (e) => {
+                    console.error('❌ WAV stream error:', e);
+                    // Retry after 2 seconds
+                    setTimeout(() => {
+                        console.log('🔄 Retrying WAV stream...');
+                        audioEl.src = wavUrl;
+                        audioEl.load();
+                    }, 2000);
+                };
             } catch (e) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                console.error('❌ Failed to parse WS URL for WAV stream:', e);
             }
-            console.log('🔊 Receiver AudioContext:', audioCtx.sampleRate, 'Hz');
-
-            const unmuteBtn = document.getElementById('audio-unmute-btn');
-            if (audioCtx.state === 'suspended') {
-                if (unmuteBtn) unmuteBtn.classList.add('visible');
-            }
-
-            isAudioPlaying = true;
-            nextPlayTime = 0;
         }
 
         function handleAudioChunk(pcmData) {
-            if (!audioCtx) initAudioPlayback(detectedSampleRate);
-            if (!audioCtx || audioCtx.state !== 'running') return;
-
-            try {
-                // Decode Int16 interleaved stereo (L0, R0, L1, R1, ...)
-                const alignedBuffer = new ArrayBuffer(pcmData.byteLength);
-                new Uint8Array(alignedBuffer).set(pcmData);
-                const int16View = new Int16Array(alignedBuffer);
-                const numStereoFrames = int16View.length / 2;
-                if (numStereoFrames === 0) return;
-
-                // Create AudioBuffer at SOURCE rate (Web Audio auto-resamples)
-                const buffer = audioCtx.createBuffer(CHANNELS, numStereoFrames, SOURCE_SAMPLE_RATE);
-                const leftChan = buffer.getChannelData(0);
-                const rightChan = buffer.getChannelData(1);
-
-                // De-interleave Int16 → Float32 into separate L/R channels
-                for (let i = 0; i < numStereoFrames; i++) {
-                    leftChan[i] = int16View[i * 2] / 32768.0;
-                    rightChan[i] = int16View[i * 2 + 1] / 32768.0;
-                }
-
-                // Schedule with WiFi-tolerant jitter management
-                const source = audioCtx.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioCtx.destination);
-
-                const now = audioCtx.currentTime;
-                const chunkDuration = numStereoFrames / SOURCE_SAMPLE_RATE;
-
-                if (nextPlayTime < now) {
-                    // Underrun — chunk arrived late
-                    consecutiveUnderruns++;
-                    if (consecutiveUnderruns > 5) {
-                        // Persistent underrun: reset to full target latency
-                        nextPlayTime = now + TARGET_LATENCY;
-                        consecutiveUnderruns = 0;
-                    } else {
-                        // Brief underrun: schedule with minimal gap (50ms)
-                        nextPlayTime = now + 0.050;
-                    }
-                } else {
-                    consecutiveUnderruns = 0;
-
-                    // Overflow: if too far ahead, gently correct
-                    const currentLatency = nextPlayTime - now;
-                    if (currentLatency > MAX_LATENCY) {
-                        // Hard reset only if WAY too far ahead
-                        nextPlayTime = now + TARGET_LATENCY;
-                    } else if (currentLatency > TARGET_LATENCY + 0.050) {
-                        // Gently speed up: 2ms per chunk
-                        nextPlayTime -= 0.002;
-                    }
-                }
-
-                source.start(nextPlayTime);
-                nextPlayTime += chunkDuration;
-
-            } catch (e) {
-                console.error("Audio Processing Error:", e);
-            }
+            // V16: Audio is now handled by native <audio> element via /live.wav
+            // This function is kept as a no-op for compatibility with the WS dispatch
         }
 
         async function handleWebRTCOffer(sdp) {
@@ -882,13 +836,17 @@
 
 
         function startAudioManually() {
-            if (audioCtx) {
-                audioCtx.resume().then(() => {
-                    console.log("🔊 Audio Context Resumed Manually");
+            // V16: Play the native <audio> element (user gesture unlocks autoplay)
+            const audioEl = document.getElementById('cast-audio');
+            if (audioEl && audioEl.src) {
+                audioEl.play().then(() => {
+                    console.log('🔊 Audio started manually');
                     const btn = document.getElementById('audio-unmute-btn');
                     if (btn) btn.classList.remove('visible');
-                });
+                }).catch(e => console.error('Play failed:', e));
             }
+            // Also resume AudioContext if it exists (legacy)
+            if (audioCtx) audioCtx.resume();
         }
 
 
@@ -926,9 +884,12 @@
                 lastDataTime = Date.now();
 
                 if (statusEl) {
-                    statusEl.textContent = "✅ WS Connected - Waiting for state...";
+                    statusEl.textContent = "✅ WS Connected - Starting WAV stream...";
                     statusEl.style.color = "#4CAF50";
                 }
+
+                // V16: Start native WAV audio stream
+                startWavStream(url);
 
                 // Start heartbeat check (every 10s, detect stale after 30s of no data)
                 heartbeatInterval = setInterval(() => {
