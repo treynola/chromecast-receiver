@@ -671,67 +671,186 @@
             }
         }
 
-        // ============= AUDIO STREAMING PLAYBACK (V16 - Native WAV) =============
-        // Instead of decoding raw PCM in JavaScript, we use a native <audio> element
-        // pointed at /live.wav on the HTTP server. Chromecast's built-in WAV
-        // decoder handles all sample rate conversion, buffering, and playback.
-        // This eliminates: AudioBufferSourceNode, Int16 decoding, jitter buffers.
-        let audioCtx = null; // Kept for compatibility with unmute button
+        // ============= AUDIO STREAMING PLAYBACK (V17 - Low Latency WAV Fetch) =============
+        // Uses fetch('/live.wav') + ReadableStream to stream WAV data from the 
+        // HTTP server, then manually decodes Int16 PCM and schedules playback via
+        // AudioBufferSourceNode with only 50ms look-ahead. This gives ~50ms latency
+        // vs the <audio> element's ~1.5s built-in buffer.
+        let audioCtx = null;
         let audioQueue = [];
         let isAudioPlaying = false;
+        let wavStreamAbort = null; // AbortController for fetch
 
         // WebRTC State (kept for signaling)
         let peerConnection = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         let detectedSampleRate = 48000;
 
-        function startWavStream(wsUrl) {
-            const audioEl = document.getElementById('cast-audio');
-            if (!audioEl) {
-                console.error('❌ No <audio id="cast-audio"> element found');
-                return;
-            }
+        const WAV_SAMPLE_RATE = 48000;
+        const WAV_CHANNELS = 2;
+        const WAV_HEADER_SIZE = 44;
+        const SCHEDULE_AHEAD = 0.050; // 50ms look-ahead (vs <audio>'s ~1500ms)
+        let wavNextPlayTime = 0;
 
-            // Extract host from WebSocket URL (e.g., ws://192.168.1.14:8090 → 192.168.1.14)
+        function startWavStream(wsUrl) {
+            // Extract host from WebSocket URL
             try {
                 const url = new URL(wsUrl.replace('ws://', 'http://').replace('wss://', 'https://'));
                 const wavUrl = `http://${url.hostname}:8089/live.wav`;
-                console.log('🔊 Starting native WAV stream:', wavUrl);
+                console.log('🔊 V17: Starting low-latency WAV fetch stream:', wavUrl);
 
-                audioEl.src = wavUrl;
-                audioEl.load();
+                // Create AudioContext for playback
+                if (!audioCtx) {
+                    try {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                    } catch (e) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    console.log('🔊 AudioContext:', audioCtx.sampleRate, 'Hz');
+                }
 
-                audioEl.oncanplay = () => {
-                    console.log('🔊 WAV stream ready, starting playback');
-                    audioEl.play().then(() => {
-                        console.log('🔊 WAV playback started!');
-                        isAudioPlaying = true;
-                        const statusEl = document.getElementById('ws-active-status');
-                        if (statusEl) statusEl.textContent = '✅ Audio: Native WAV Stream';
-                    }).catch(err => {
-                        console.warn('⚠️ WAV autoplay blocked:', err);
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(() => {
                         const unmuteBtn = document.getElementById('audio-unmute-btn');
                         if (unmuteBtn) unmuteBtn.classList.add('visible');
                     });
-                };
+                }
 
-                audioEl.onerror = (e) => {
-                    console.error('❌ WAV stream error:', e);
-                    // Retry after 2 seconds
-                    setTimeout(() => {
-                        console.log('🔄 Retrying WAV stream...');
-                        audioEl.src = wavUrl;
-                        audioEl.load();
-                    }, 2000);
-                };
+                // Cancel any previous stream
+                if (wavStreamAbort) wavStreamAbort.abort();
+                wavStreamAbort = new AbortController();
+
+                // Fetch the WAV stream
+                fetch(wavUrl, { signal: wavStreamAbort.signal })
+                    .then(response => {
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        console.log('🔊 WAV stream connected, reading data...');
+                        isAudioPlaying = true;
+                        wavNextPlayTime = 0;
+
+                        const reader = response.body.getReader();
+                        let headerSkipped = false;
+                        let headerBytesRead = 0;
+                        let pcmBuffer = new Uint8Array(0); // Accumulator for partial chunks
+
+                        function processStream() {
+                            reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    console.log('🔊 WAV stream ended');
+                                    return;
+                                }
+
+                                if (!value || value.length === 0) {
+                                    processStream();
+                                    return;
+                                }
+
+                                let data = value;
+
+                                // Skip WAV header (first 44 bytes)
+                                if (!headerSkipped) {
+                                    const remaining = WAV_HEADER_SIZE - headerBytesRead;
+                                    if (data.length <= remaining) {
+                                        headerBytesRead += data.length;
+                                        processStream();
+                                        return;
+                                    }
+                                    data = data.subarray(remaining);
+                                    headerSkipped = true;
+                                    headerBytesRead = WAV_HEADER_SIZE;
+                                    console.log('🔊 WAV header skipped, PCM streaming started');
+
+                                    const statusEl = document.getElementById('ws-active-status');
+                                    if (statusEl) statusEl.textContent = '✅ Audio: Low-Latency WAV Stream';
+                                }
+
+                                // Append to accumulator
+                                const combined = new Uint8Array(pcmBuffer.length + data.length);
+                                combined.set(pcmBuffer);
+                                combined.set(data, pcmBuffer.length);
+
+                                // Process complete stereo frames (4 bytes per frame: 2 bytes L + 2 bytes R)
+                                const frameSize = WAV_CHANNELS * 2; // 4 bytes per stereo frame
+                                const usableBytes = Math.floor(combined.length / frameSize) * frameSize;
+
+                                if (usableBytes > 0) {
+                                    const pcmChunk = combined.subarray(0, usableBytes);
+                                    pcmBuffer = combined.subarray(usableBytes); // Save remainder
+
+                                    scheduleAudioChunk(pcmChunk);
+                                } else {
+                                    pcmBuffer = combined;
+                                }
+
+                                processStream();
+                            }).catch(err => {
+                                if (err.name !== 'AbortError') {
+                                    console.error('🔊 WAV stream read error:', err);
+                                    // Retry after 2 seconds
+                                    setTimeout(() => startWavStream(wsUrl), 2000);
+                                }
+                            });
+                        }
+
+                        processStream();
+                    })
+                    .catch(err => {
+                        if (err.name !== 'AbortError') {
+                            console.error('❌ WAV fetch failed:', err);
+                            setTimeout(() => startWavStream(wsUrl), 2000);
+                        }
+                    });
             } catch (e) {
                 console.error('❌ Failed to parse WS URL for WAV stream:', e);
             }
         }
 
+        function scheduleAudioChunk(pcmBytes) {
+            if (!audioCtx || audioCtx.state !== 'running') return;
+
+            try {
+                // Decode Int16 interleaved stereo → Float32 separate channels
+                const aligned = new ArrayBuffer(pcmBytes.byteLength);
+                new Uint8Array(aligned).set(pcmBytes);
+                const int16 = new Int16Array(aligned);
+                const numFrames = int16.length / WAV_CHANNELS;
+                if (numFrames === 0) return;
+
+                const buffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, WAV_SAMPLE_RATE);
+                const L = buffer.getChannelData(0);
+                const R = buffer.getChannelData(1);
+
+                for (let i = 0; i < numFrames; i++) {
+                    L[i] = int16[i * 2] / 32768.0;
+                    R[i] = int16[i * 2 + 1] / 32768.0;
+                }
+
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (wavNextPlayTime < now) {
+                    // Behind — schedule with minimal look-ahead
+                    wavNextPlayTime = now + SCHEDULE_AHEAD;
+                }
+
+                // Cap max latency at 200ms
+                if (wavNextPlayTime - now > 0.200) {
+                    wavNextPlayTime = now + SCHEDULE_AHEAD;
+                }
+
+                source.start(wavNextPlayTime);
+                wavNextPlayTime += numFrames / WAV_SAMPLE_RATE;
+
+            } catch (e) {
+                console.error('Schedule error:', e);
+            }
+        }
+
         function handleAudioChunk(pcmData) {
-            // V16: Audio is now handled by native <audio> element via /live.wav
-            // This function is kept as a no-op for compatibility with the WS dispatch
+            // V17: Audio handled by fetch('/live.wav') stream — this is a no-op
         }
 
         async function handleWebRTCOffer(sdp) {
