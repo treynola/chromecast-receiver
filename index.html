@@ -680,105 +680,111 @@
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         let detectedSampleRate = 48000; // Default, will be updated from sender state
         const CHANNELS = 2;
-        const SAMPLES_PER_CHUNK = 2048; // Sender sends 2048 samples per channel
-        let nextPlayTime = 0; // For scheduling buffers seamlessly
+        const SOURCE_SAMPLE_RATE = 48000; // Sender always sends 48kHz
+
+        // ═══════════════════════════════════════════════════════════════
+        // RING BUFFER AUDIO PLAYBACK (V13 - Gapless)
+        // Instead of scheduling individual AudioBufferSourceNodes
+        // (which click at chunk boundaries), we use a circular buffer
+        // that a ScriptProcessorNode continuously reads from.
+        // ═══════════════════════════════════════════════════════════════
+
+        // Ring buffer: ~2 seconds of stereo audio at 48kHz
+        const RING_SIZE = 48000 * 2; // 2 seconds worth of samples
+        let ringLeft = new Float32Array(RING_SIZE);
+        let ringRight = new Float32Array(RING_SIZE);
+        let ringWritePos = 0;   // Where incoming chunks write to
+        let ringReadPos = 0;    // Where the ScriptProcessor reads from
+        let ringFillLevel = 0;  // How many samples are buffered
+        let playbackNode = null; // The ScriptProcessorNode
+        let audioStarted = false;
+        const PREFILL_SAMPLES = 4096; // Buffer 4096 samples (~85ms) before starting playback
 
         function initAudioPlayback(sampleRate) {
-            // FORCE 48kHz - no resampling, matches Chromecast hardware
-            const targetRate = 48000;
-
-            if (audioCtx) {
-                // If sample rate changed, recreate context
-                if (audioCtx.sampleRate !== targetRate) {
-                    console.log(`🔊 Sample rate mismatch: ${audioCtx.sampleRate} vs ${targetRate}, recreating context...`);
-                    audioCtx.close();
-                    audioCtx = null;
-                    nextPlayTime = 0;
-                } else {
-                    return; // Already initialized with correct rate
-                }
-            }
+            if (audioCtx && playbackNode) return; // Already initialized
 
             try {
-                // Force 48kHz, no latencyHint (use browser default)
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({
                     sampleRate: 48000
                 });
-                console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz (FORCED 48kHz)');
+                console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
             } catch (e) {
-                console.warn('⚠️ Failed to create AudioContext with 48kHz, falling back to default');
+                console.warn('⚠️ Failed to create 48kHz AudioContext, using default');
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 console.log('🔊 Receiver AudioContext (fallback):', audioCtx.sampleRate, 'Hz');
             }
+
+            // Create a ScriptProcessorNode that continuously reads from the ring buffer
+            const PLAYBACK_BUFFER = 2048; // Process 2048 samples at a time
+            playbackNode = audioCtx.createScriptProcessor(PLAYBACK_BUFFER, 0, 2); // 0 inputs, 2 outputs (stereo)
+
+            playbackNode.onaudioprocess = (e) => {
+                const outLeft = e.outputBuffer.getChannelData(0);
+                const outRight = e.outputBuffer.getChannelData(1);
+                const len = outLeft.length;
+
+                if (ringFillLevel < len) {
+                    // Buffer underrun: output silence (no clicks!)
+                    outLeft.fill(0);
+                    outRight.fill(0);
+                    return;
+                }
+
+                // Read from ring buffer
+                for (let i = 0; i < len; i++) {
+                    outLeft[i] = ringLeft[ringReadPos];
+                    outRight[i] = ringRight[ringReadPos];
+                    ringReadPos = (ringReadPos + 1) % RING_SIZE;
+                }
+                ringFillLevel -= len;
+            };
+
+            playbackNode.connect(audioCtx.destination);
+            isAudioPlaying = true;
 
             const unmuteBtn = document.getElementById('audio-unmute-btn');
             if (audioCtx.state === 'suspended') {
                 if (unmuteBtn) unmuteBtn.classList.add('visible');
             }
 
-            isAudioPlaying = true;
-            nextPlayTime = 0;
+            console.log('🔊 Ring buffer playback initialized (gapless mode)');
         }
 
-        // Buffer Management State (V12.22 - Adaptive Jitter Buffer)
-        // Wider latency window for network variance, smoother corrections
-        const TARGET_LATENCY = 0.150; // 150ms target (was 200ms)
-        const MAX_LATENCY = 0.300;    // Max 300ms before reset (was 500ms)
-        const MIN_LATENCY = 0.080;    // Min 80ms (was 50ms)
-        let driftCorrectionTotal = 0;
-        let consecutiveUnderruns = 0;
+        function handleAudioChunk(pcmData) {
+            // Initialize audio context if needed
+            if (!audioCtx) initAudioPlayback(detectedSampleRate);
 
-        // Source audio is always 48kHz from the sender
-        const SOURCE_SAMPLE_RATE = 48000;
+            try {
+                // Decode Int16 interleaved stereo → Float32 L/R
+                const alignedBuffer = new ArrayBuffer(pcmData.byteLength);
+                new Uint8Array(alignedBuffer).set(pcmData);
+                const int16View = new Int16Array(alignedBuffer);
+                const numStereoFrames = int16View.length / 2;
 
-        function scheduleAudioChunk(leftChannel, rightChannel) {
-            if (!audioCtx || audioCtx.state !== 'running') return;
-
-            const numSamples = leftChannel.length;
-            // CRITICAL: Create buffer at SOURCE data rate (48kHz), not the context rate.
-            // Web Audio will automatically resample to the context rate during playback.
-            const buffer = audioCtx.createBuffer(CHANNELS, numSamples, SOURCE_SAMPLE_RATE);
-            buffer.getChannelData(0).set(leftChannel);
-            buffer.getChannelData(1).set(rightChannel);
-
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
-
-            const now = audioCtx.currentTime;
-            const chunkDuration = numSamples / SOURCE_SAMPLE_RATE;
-
-            // --- V12.22 Adaptive Jitter Management ---
-            // Underrun detection: if we're scheduling in the past, we've starved
-            if (nextPlayTime < now) {
-                consecutiveUnderruns++;
-                // After 3 underruns, increase buffer target temporarily
-                if (consecutiveUnderruns > 3) {
-                    nextPlayTime = now + TARGET_LATENCY + 0.050; // Add 50ms cushion
-                    console.warn(`⚠️ [Buffer] Underrun recovery: added 50ms cushion`);
-                    consecutiveUnderruns = 0;
-                } else {
-                    nextPlayTime = now + TARGET_LATENCY;
+                // Write decoded samples into the ring buffer
+                for (let i = 0; i < numStereoFrames; i++) {
+                    ringLeft[ringWritePos] = int16View[i * 2] / 32768.0;
+                    ringRight[ringWritePos] = int16View[i * 2 + 1] / 32768.0;
+                    ringWritePos = (ringWritePos + 1) % RING_SIZE;
                 }
-            } else {
-                consecutiveUnderruns = 0;
-            }
 
-            // Overflow protection: if way ahead, soft-reset
-            const currentLatency = nextPlayTime - now;
-            if (currentLatency > MAX_LATENCY) {
-                nextPlayTime = now + TARGET_LATENCY;
-                // console.warn(`⚠️ [Buffer] Overflow: reset to ${TARGET_LATENCY}s`);
-            } else if (currentLatency > TARGET_LATENCY + 0.030) {
-                // Gentle correction: 1ms per chunk if >30ms over target
-                nextPlayTime -= 0.001;
-                driftCorrectionTotal += 0.001;
-            }
+                // Track fill level (cap at ring size to prevent overflow)
+                ringFillLevel = Math.min(ringFillLevel + numStereoFrames, RING_SIZE);
 
-            source.start(nextPlayTime);
-            nextPlayTime += chunkDuration;
+                // Update peak meter for debug display
+                if (numStereoFrames > 0) {
+                    let peak = 0;
+                    for (let i = 0; i < Math.min(numStereoFrames, 128); i++) {
+                        const v = Math.abs(int16View[i * 2] / 32768.0);
+                        if (v > peak) peak = v;
+                    }
+                    window._lastAudioPeak = peak;
+                }
+
+            } catch (e) {
+                console.error("Audio Processing Error:", e);
+            }
         }
-
 
         async function handleWebRTCOffer(sdp) {
             console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
@@ -880,36 +886,6 @@
             }
         }
 
-        function handleAudioChunk(pcmData) {
-            // Initialize audio context with detected sample rate if not already done
-            if (!audioCtx) initAudioPlayback(detectedSampleRate);
-
-            try {
-                // Audio is Int16 interleaved stereo (L0, R0, L1, R1, ...)
-                // Create a copy to aligned buffer to avoid alignment issues
-                const alignedBuffer = new ArrayBuffer(pcmData.byteLength);
-                new Uint8Array(alignedBuffer).set(pcmData);
-                const int16View = new Int16Array(alignedBuffer);
-
-                // De-interleave into separate L/R Float32 channels
-                // No gain reduction needed — signal already limited by DynamicsCompressorNode at sender
-                const HEADROOM_GAIN = 1.0;
-                const numStereoFrames = int16View.length / 2;
-                const leftChannel = new Float32Array(numStereoFrames);
-                const rightChannel = new Float32Array(numStereoFrames);
-
-                for (let i = 0; i < numStereoFrames; i++) {
-                    leftChannel[i] = (int16View[i * 2] / 32768.0) * HEADROOM_GAIN;
-                    rightChannel[i] = (int16View[i * 2 + 1] / 32768.0) * HEADROOM_GAIN;
-                }
-
-                // Schedule for immediate playback
-                scheduleAudioChunk(leftChannel, rightChannel);
-
-            } catch (e) {
-                console.error("Audio Processing Error:", e);
-            }
-        }
 
         function startAudioManually() {
             if (audioCtx) {
