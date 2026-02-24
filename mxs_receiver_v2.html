@@ -687,7 +687,7 @@
 
         const WAV_SAMPLE_RATE = 48000;
         const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.050; // 50ms look-ahead
+        const SCHEDULE_AHEAD = 0.030; // 30ms look-ahead
         let wavNextPlayTime = 0;
 
         function initAudioPlayback() {
@@ -734,7 +734,7 @@
                 if (wavNextPlayTime < now) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                 }
-                if (wavNextPlayTime - now > 0.200) {
+                if (wavNextPlayTime - now > 0.150) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                 }
 
