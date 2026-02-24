@@ -892,8 +892,8 @@
                 const int16View = new Int16Array(alignedBuffer);
 
                 // De-interleave into separate L/R Float32 channels
-                // Apply gentle headroom to prevent clipping
-                const HEADROOM_GAIN = 0.90;
+                // No gain reduction needed — signal already limited by DynamicsCompressorNode at sender
+                const HEADROOM_GAIN = 1.0;
                 const numStereoFrames = int16View.length / 2;
                 const leftChannel = new Float32Array(numStereoFrames);
                 const rightChannel = new Float32Array(numStereoFrames);
