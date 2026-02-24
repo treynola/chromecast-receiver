@@ -1,0 +1,3753 @@
+/*
+ * Filename: styles.css
+ * Version: DEC02_CompactControls_v2.1
+ * Date: December 2, 2025
+ * Time: 09:37 CST
+ * Description: Main stylesheet for the NOWMULTIMEDIA MXS-004 application.
+ */
+@font-face {
+    font-family: 'Mexcellent';
+    src: url('fonts/MexcellentRg.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Mexcellent 3D';
+    src: url('fonts/Mexcellent3d.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+:root {
+    --red: #FF0000;
+    --gold: #FAD78E;
+    --dark-gold: #b38600;
+    --green: #008000;
+    --dark-green: #004d00;
+    --darker-green: #005200;
+    --off-black: #1a1a1a;
+    --dark-gray: #2c2c2c;
+    --mid-gray: #444;
+    --text-color: #f0f0f0;
+    --dark-green-transparent: rgba(0, 100, 0, 0.5);
+    --dark-red: #8B0000;
+}
+
+body {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: #000000 !important;
+    /* Solid black for casting - prevents desktop showing */
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    padding: 2px;
+    /* Strict 2px border via padding */
+    box-sizing: border-box;
+    margin: 0;
+    width: 100vw;
+
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    overflow: hidden;
+    /* strict no-scroll */
+}
+
+/* Force hide global hidden inputs and containers to prevent layout shifts */
+.layout-hider,
+#global-hidden-container,
+#global-file-input,
+#global-dir-input {
+    display: none !important;
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    z-index: -1000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+}
+
+/* Helper Classes for Layout (avoiding inline styles for CSP compliance) */
+.full-width-flex {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+}
+
+.waveform-box {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+}
+
+.waveform-labels {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-around !important;
+    height: 60px !important;
+    margin-right: 4px !important;
+}
+
+.flex-grow {
+    flex: 1 !important;
+}
+
+.tight-bottom {
+    margin-bottom: 2px !important;
+}
+
+.master-vol-group {
+    margin-top: 2px !important;
+}
+
+.master-rec-group {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 5px !important;
+    margin-bottom: 2px !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.font-small {
+    font-size: 0.8em !important;
+}
+
+.bold {
+    font-weight: bold !important;
+}
+
+.text-center {
+    text-align: center !important;
+}
+
+.margin-top-0 {
+    margin-top: 0 !important;
+}
+
+.color-gold {
+    color: var(--gold) !important;
+}
+
+.bg-dark {
+    background-color: #444 !important;
+}
+
+.margin-0 {
+    margin: 0 !important;
+}
+
+.margin-top-5 {
+    margin-top: 5px !important;
+}
+
+.margin-bottom-20 {
+    margin-bottom: 20px !important;
+}
+
+.flex-center-gap-10 {
+    display: flex !important;
+    gap: 10px !important;
+    justify-content: center !important;
+}
+
+.btn-confirm {
+    background-color: var(--green) !important;
+    color: var(--gold) !important;
+    border: 1px solid var(--gold) !important;
+    padding: 8px 20px !important;
+    border-radius: 5px !important;
+    cursor: pointer !important;
+    font-weight: bold !important;
+    font-family: inherit !important;
+}
+
+.btn-cancel {
+    background-color: var(--red) !important;
+    color: var(--gold) !important;
+    border: 1px solid var(--gold) !important;
+    padding: 8px 20px !important;
+    border-radius: 5px !important;
+    cursor: pointer !important;
+    font-weight: bold !important;
+    font-family: inherit !important;
+}
+
+.z-3000 {
+    z-index: 3000 !important;
+}
+
+.lfo-meter-layout {
+    width: 50% !important;
+    margin: 2px auto 0 !important;
+}
+
+.docs-btn-layout {
+    display: flex !important;
+    justify-content: center !important;
+    margin-top: auto !important;
+    padding-top: 10px !important;
+}
+
+.display-none {
+    display: none !important;
+}
+
+/* Custom Message Box Classes */
+#custom-message-box {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: var(--off-black);
+    color: var(--text-color);
+    padding: 20px;
+    border-radius: 10px;
+    z-index: 2000;
+    text-align: center;
+    font-family: 'Courier New', Courier, monospace;
+    max-width: 80vw;
+    word-wrap: break-word;
+}
+
+#custom-message-box.info {
+    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+}
+
+#custom-message-box.error {
+    box-shadow: 0 0 0 3px var(--red), 0 0 0 6px var(--gold), 0 0 0 9px var(--green);
+}
+
+#custom-message-box.success {
+    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+}
+
+#custom-message-box.warning {
+    box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px var(--green), 0 0 0 9px var(--red);
+}
+
+#message-box-close {
+    margin-top: 15px;
+    padding: 8px 15px;
+    background-color: var(--gold);
+    color: var(--off-black);
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+/* Track UI Helpers */
+.track-input-layout {
+    display: flex !important;
+    gap: 10px !important;
+    align-items: center !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+}
+
+.track-input-layout select {
+    flex: 1;
+    /* allow the select to take remaining space */
+}
+
+/* TrackView Compatibility Styles */
+.track-controls-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.knob-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 5px;
+    min-width: 0;
+    /* Prevent flex overflow */
+}
+
+.knob-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75em;
+    font-weight: bold;
+    color: var(--gold);
+    margin-bottom: 2px;
+}
+
+label {
+    font-size: 0.8em;
+    font-weight: bold;
+    color: var(--gold);
+    text-transform: uppercase;
+}
+
+.knob-value {
+    color: var(--gold);
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.track-eq-container .knob-group {
+    width: 48%;
+    /* 2 per row */
+    flex: none;
+}
+
+.loop-controls {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+    border-top: 1px solid var(--mid-gray);
+    padding-top: 5px;
+}
+
+.track-transport-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+    margin: 5px 0;
+}
+
+/* Uniform Waveform Styles (shared by track and master) */
+.waveform-box {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    height: 60px !important;
+    background: transparent !important;
+    margin-bottom: 5px !important;
+}
+
+.track-item .waveform-box {
+    border: 1px solid var(--mid-gray) !important;
+}
+
+.waveform-labels {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-around !important;
+    height: 100% !important;
+    width: 20px !important;
+    text-align: center !important;
+    border-right: 1px solid var(--gold) !important;
+    margin-right: 4px !important;
+}
+
+.waveform-label-external {
+    font-size: 0.6em !important;
+    color: var(--red) !important;
+    font-weight: bold !important;
+}
+
+.waveform-canvas-container {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-grow: 1 !important;
+    height: 100% !important;
+    justify-content: center !important;
+    gap: 4px !important;
+}
+
+.waveform-canvas {
+    width: 100% !important;
+    height: 26px !important;
+    background: #000 !important;
+    display: block !important;
+    border: 1px solid var(--gold) !important;
+    border-radius: 4px !important;
+    box-sizing: border-box !important;
+}
+
+.track-input-row {
+    display: flex;
+    align-items: center;
+    margin-top: 5px;
+}
+
+.input-device-select {
+    flex: 1;
+    background: var(--dark-gray);
+    color: var(--text-color);
+    border: 1px solid var(--mid-gray);
+    border-radius: 3px;
+    font-size: 0.8em;
+    padding: 2px;
+}
+
+.knob-markers-container {
+    position: relative;
+    height: 10px;
+    /* Reduced height */
+    width: 100%;
+    margin-top: -5px;
+    /* Overlap slider slightly or sit just below */
+    pointer-events: none;
+}
+
+.knob-marker {
+    position: absolute;
+    width: 2px;
+    height: 100%;
+    background-color: transparent;
+    /* Changed from red/green to be subtle or invisible until active */
+    top: 0;
+}
+
+.lfo-assign-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+/* Ensure images don't break layout */
+img {
+    max-width: 100%;
+}
+
+.track-bottom-layout {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 10px !important;
+    border-top: 1px solid var(--mid-gray) !important;
+    padding-top: 5px !important;
+    margin-top: 5px !important;
+}
+
+.flex-1-no-margin {
+    flex: 1 !important;
+    margin: 0 !important;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    /* 
+       Total Layout Math:
+       Body Padding: 2px (left/right/top/bottom)
+       Container Box Shadow: 6px (2+2+2) extended OUTSIDE the element.
+       
+       Total 'consumed' width from edges = 2px (padding)
+       Total 'consumed' width from shadow = 6px
+       
+       Margin needed = 6px (shadow size).
+    */
+    width: calc(100% - 12px);
+    /* 100% minus 6px*2 for shadows */
+    height: calc(100% - 12px);
+    max-width: none;
+    background-color: var(--dark-gray);
+    border-radius: 15px;
+    padding: 8px;
+    box-sizing: border-box;
+    box-shadow: 0 0 0 2px var(--green), 0 0 0 4px var(--gold), 0 0 0 6px var(--red);
+    position: relative;
+    margin: 6px;
+    /* Make room for the shadow inside the parent padding */
+    overflow: hidden;
+}
+
+.hidden {
+    display: none;
+}
+
+#app-curtain {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: black;
+    z-index: 9999;
+    transition: opacity 1.8s ease-in-out;
+    pointer-events: none;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 20px;
+    height: 40px;
+    background-color: var(--off-black);
+    flex-shrink: 0;
+}
+
+.header h1,
+.header h2 {
+    margin: 0;
+    color: var(--gold);
+    font-family: 'Mexcellent', sans-serif;
+    font-weight: normal;
+    white-space: nowrap;
+    letter-spacing: 1px;
+}
+
+.header h1 {
+    font-size: 2em;
+}
+
+.header h2 {
+    font-size: 1.2em;
+}
+
+.header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+#cast-btn {
+    background: transparent;
+    border: none;
+    color: var(--gold);
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 2px 5px;
+    transition: color 0.2s ease;
+}
+
+#cast-btn:hover {
+    color: var(--red);
+    filter: drop-shadow(0 0 5px var(--gold));
+}
+
+/* ============================================
+   NEW 5-COLUMN LAYOUT (Master + 4 Tracks)
+   ============================================ */
+.main-content {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    /* Guarantees 5 equal columns */
+    gap: 8px;
+    padding: 0 4px 5px 4px;
+    /* Fit 1440px exactly */
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.master-column {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border: 1px solid var(--green);
+    border-radius: 10px;
+    padding: 5px;
+    background-color: var(--dark-gray);
+    overflow: hidden;
+    position: relative;
+    top: 0;
+}
+
+/* QA: Align Master Recording with tracks */
+.master-recording-area {
+    margin-top: 0 !important;
+    /* Reset, using ghost spacer instead */
+}
+
+/* QA Fix: Nudge Master Time Display down without moving Waveform */
+#recording-time-display {
+    margin-top: 3px !important;
+    margin-bottom: -3px !important;
+}
+
+/* Equal-height master items */
+.master-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    min-height: 0;
+}
+
+.master-item input[type="range"] {
+    width: 90%;
+    margin: 2px 0;
+}
+
+.master-label {
+    font-size: 0.75em;
+    color: var(--green);
+    font-weight: bold;
+    margin-bottom: 2px;
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
+.master-value {
+    font-size: 0.7em;
+    color: var(--gold);
+    font-weight: 720;
+}
+
+.master-waveform-box {
+    width: 100%;
+    height: 100%;
+    min-height: 40px;
+}
+
+/* Visible line spacer to match track column dividers */
+.master-spacer {
+    flex: 0 0 auto;
+    height: 1px;
+    background-color: var(--mid-gray);
+    margin: 5px 0;
+    width: 100%;
+}
+
+/* Invisible spacer for spacing only */
+.master-spacer-invisible {
+    flex: 0 0 auto;
+    height: 5px;
+}
+
+/* Tighter spacing for bottom section items */
+.master-bottom-item {
+    flex: 0 0 auto !important;
+    min-height: auto;
+    padding: 2px 0;
+}
+
+/* Hide old master-controls if any remain */
+.master-controls {
+    display: none;
+}
+
+/* Hide duplicate buttons in recordings-section (now in master column) */
+.sessions-header #import-files-button,
+.sessions-header #show-docs-button {
+    display: none;
+}
+
+/* Style master column buttons */
+.master-buttons,
+.master-rec-row,
+.master-bottom-buttons {
+    display: flex;
+    flex-direction: row;
+    gap: 3px;
+    width: 95%;
+    justify-content: center;
+    align-items: center;
+    margin: 2px auto;
+    flex-wrap: nowrap;
+}
+
+.master-rec-row button {
+    flex: 1;
+    height: 22px;
+}
+
+/* v10.13c: All 4 bottom buttons = equal 25% width, DOCS styling */
+.master-bottom-buttons button {
+    flex: 1 1 25%;
+    min-width: 0;
+    height: 22px;
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    font-size: 0.55em;
+    font-weight: 700;
+    padding: 0 2px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    line-height: 1;
+    border-radius: 3px;
+}
+
+.master-bottom-buttons button:hover {
+    filter: brightness(1.2);
+}
+
+.master-rec-row select {
+    flex: 1.5;
+    height: 22px;
+}
+
+/* Tighten LFO spacing */
+
+.lfo-meter-item {
+    padding-top: 0 !important;
+}
+
+.master-waveform-item {
+    margin-top: 0 !important;
+    height: 60px !important;
+    flex: 0 0 auto !important;
+    /* Reset from flex:1 to match fixed track waveform height */
+}
+
+/* Master Volume Aligned (Row Layout to fit 30px height) */
+.master-volume-aligned {
+    flex-direction: row !important;
+    height: 30px;
+    flex: 0 0 auto !important;
+    /* Prevent stretching to align with fixed Track status */
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 0 !important;
+    padding: 0 5px !important;
+}
+
+.master-volume-aligned input[type="range"] {
+    flex: 1;
+    height: 4px;
+    margin: 0;
+}
+
+/* Generalized Row Layout for Master Items (Loop, Vol) */
+.master-row-layout {
+    flex-direction: row !important;
+    height: 24px;
+    /* Compacted from 30px to align tighter */
+    flex: 0 0 auto !important;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 5px 0 0 0 !important;
+    /* Match Track Input Row margin-top: 5px */
+    padding: 0 5px !important;
+}
+
+.master-bottom-item {
+    padding: 0 !important;
+}
+
+.master-rec-row {
+    margin: 25px 0 0 0 !important;
+    /* Push DOWN to align with Track Buttons (QA fix) */
+    max-height: 24px;
+    justify-content: flex-start !important;
+    /* Align button to left for spacing on right */
+}
+
+.master-row-layout input[type="range"] {
+    flex: 1;
+    height: 4px;
+    margin: 0;
+}
+
+.master-row-layout .track-header {
+    font-size: 0.7em;
+    margin: 0;
+    white-space: nowrap;
+}
+
+.master-row-layout .master-value {
+    font-size: 0.7em;
+    min-width: 35px;
+    text-align: right;
+}
+
+/* Specific tweaks if needed */
+.master-volume-aligned {
+    /* Use the generic class properties but keep this for backward compat if JS references it, 
+       OR just have it inherit/duplicate for now to be safe */
+    flex-direction: row !important;
+    height: 30px;
+    flex: 0 0 auto !important;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 0 !important;
+    padding: 0 5px !important;
+}
+
+/* LFO Side-by-Side Layout */
+.lfo-side-by-side-container {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--mid-gray);
+    padding: 4px 0;
+    margin: 7px 0 5px 0;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.lfo-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+/* Vertical Separator */
+.lfo-separator {
+    width: 1px;
+    background-color: var(--mid-gray);
+    align-self: stretch;
+    margin: 0 2px;
+}
+
+/* Overrides for compact look in side-by-side */
+.lfo-column .master-item {
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.lfo-column .lfo-button-item {
+    margin-bottom: 0px !important;
+    /* Force no extra padding to rely on space-between */
+}
+
+.lfo-column .lfo-button-item button {
+    font-size: 0.65em;
+    padding: 2px 4px;
+    width: 90%;
+}
+
+.lfo-column .lfo-meter-item .meter-container {
+    height: 6px;
+    /* Thinner meters */
+    width: 90%;
+}
+
+.lfo-column input[type="range"] {
+    height: 10px;
+    /* Smaller sliders */
+}
+
+/* Hide original individual spacers since we wrap the whole block */
+.lfo-hidden-spacer {
+    display: none;
+}
+
+.control-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    justify-content: space-between;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    /* Reduced vertical space */
+    width: 100%;
+    margin-bottom: 3px;
+    /* Reduced from 5px */
+}
+
+.control-group label {
+    margin: 0;
+    font-size: 0.75em;
+    /* Reduced by one size */
+    color: var(--green);
+    font-weight: bold;
+}
+
+.master-label {
+    font-size: 0.7em;
+    /* Slightly smaller to match Track Labels (.control-group label) */
+    color: var(--green);
+    /* Changed to green to match Track controls */
+    font-weight: bold;
+    margin-bottom: 2px;
+    width: 100%;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.label-value-pair {
+    width: 100%;
+    text-align: center;
+}
+
+#loop-time-display {
+    color: var(--gold);
+    font-size: 1.1rem;
+    min-height: 2rem;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#master-volume-value,
+#loop-length-value,
+#lfo-time-value,
+#lfo2-time-value {
+    color: var(--gold);
+    font-size: 0.7em;
+    font-weight: 720;
+}
+
+/* Target the label/value container in top panel controls */
+.label-value-container {
+    width: 72% !important;
+    margin: 0 auto;
+}
+
+.tracks-container {
+    display: contents;
+    /* Tracks become direct grid children of main-content */
+}
+
+/* Fallback for old layouts - now handled by main-content grid */
+@media (min-width: 768px) {
+    .tracks-container.legacy-layout {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .tracks-container {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.track {
+    background-color: var(--dark-gray);
+    border: 1px solid var(--green);
+    border-radius: 10px;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    overflow: hidden;
+}
+
+.track-header {
+    text-align: center;
+    color: var(--gold);
+    font-weight: bold;
+    font-size: 0.9em;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+
+.knob-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 1px;
+    /* Tight spacing */
+}
+
+.slider-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    height: 20px;
+}
+
+.knob-label-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    cursor: pointer;
+    font-size: 0.75em;
+    font-weight: 720;
+    padding: 0 2px;
+    min-height: 16px;
+    position: relative;
+    /* Anchor for absolute value */
+}
+
+.knob-label-group label {
+    color: var(--gold);
+    pointer-events: none;
+    flex-shrink: 0;
+    margin-right: auto;
+    /* Pushes label to left */
+}
+
+/* v2.1 - GUI refinements */
+.lfo-assign {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: #727272;
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--mid-gray);
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.lfo-assign:first-of-type {
+    margin-right: 2px;
+}
+
+.lfo-assign:checked {
+    background-color: var(--green);
+}
+
+.lfo-assign:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 3px;
+    height: 7px;
+    border: solid var(--gold);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.lfo-assign.reversed:checked {
+    background-color: var(--red);
+}
+
+.param-value {
+    font-size: 0.75em;
+    color: var(--gold);
+    min-width: 45px;
+    text-align: center;
+    pointer-events: none;
+    flex-shrink: 0;
+    position: absolute;
+    left: 50%;
+    top: 5px;
+    /* Pushed down 5px */
+    transform: translateX(-50%);
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 100%;
+    cursor: pointer;
+    background: var(--mid-gray);
+    height: 5px;
+    border-radius: 5px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    /* Reduced to 14px */
+    height: 14px;
+    /* Reduced to 14px */
+    background: var(--gold);
+    border-radius: 50%;
+    border: 2px solid var(--dark-gray);
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+#master-volume,
+#lfo-time,
+#lfo2-time,
+#loop-length {
+    width: 72%;
+    margin: 0 auto;
+}
+
+.knob-label-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    cursor: pointer;
+    font-size: 0.825em;
+    font-weight: 720;
+    padding-right: 5px;
+}
+
+.knob-label-group label {
+    color: var(--gold);
+    pointer-events: none;
+}
+
+/* Removed conflicting .lfo-assign and .param-value styles */
+
+.track-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin: 8px 0;
+}
+
+.app-button {
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 720;
+    height: 18px !important;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: filter 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    /* Default font size */
+    border: 2px solid;
+}
+
+.track-buttons button,
+#lfo-toggle,
+#lfo2-toggle,
+#master-record-button,
+#show-docs-button,
+#import-files-button {
+    border-radius: 4px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Restored Transport Button Styles */
+.track-transport-row .track-btn {
+    flex: 1;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 700;
+    font-size: 0.8em;
+    padding: 4px 2px;
+    border: 1px solid var(--mid-gray);
+    background: #333;
+    color: var(--gold);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.1s;
+}
+
+.track-transport-row .track-btn:hover {
+    filter: brightness(1.2);
+    border-color: var(--gold);
+}
+
+.track-transport-row .track-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: none;
+}
+
+/* Specific Button Colors */
+.rec-btn {
+    color: var(--red) !important;
+    border-color: var(--dark-red) !important;
+}
+
+.rec-btn.recording {
+    background-color: var(--red) !important;
+    color: white !important;
+    box-shadow: 0 0 5px var(--red);
+}
+
+.play-btn {
+    color: var(--green) !important;
+    border-color: var(--dark-green) !important;
+}
+
+.play-btn.playing {
+    background-color: var(--green) !important;
+    color: white !important;
+    box-shadow: 0 0 5px var(--green);
+}
+
+.stop-btn {
+    color: var(--gold) !important;
+}
+
+.rev-btn {
+    color: cyan !important;
+}
+
+/* FX Chain Container Styles */
+.fx-chain-container {
+    margin-top: 5px;
+    border: 1px solid var(--mid-gray);
+    padding: 4px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.fx-slot-container {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.fx-chain-checkbox {
+    display: none;
+    /* Hide actual checkbox */
+}
+
+.fx-chain-slot-label {
+    flex: 1;
+    text-align: center;
+    background: #222;
+    border: 1px solid #444;
+    color: #666;
+    margin: 0 2px;
+    cursor: pointer;
+    font-size: 0.75em;
+    border-radius: 3px;
+    padding: 2px 0;
+}
+
+.fx-chain-slot-label.selected {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: #333;
+}
+
+.fx-chain-checkbox:checked+.fx-chain-slot-label {
+    background: var(--green);
+    color: white;
+    border-color: var(--green);
+}
+
+.fx-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.effect-type-select {
+    flex: 1;
+    background: var(--dark-gray);
+    color: var(--gold);
+    border: 1px solid var(--mid-gray);
+    font-size: 0.8em;
+    border-radius: 3px;
+}
+
+.fx-order-controls button {
+    background: #333;
+    border: 1px solid var(--mid-gray);
+    color: var(--gold);
+    cursor: pointer;
+    font-size: 0.8em;
+    padding: 2px 6px;
+}
+
+/* EQ Container Layout Fix */
+.track-eq-container {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+}
+
+.track-buttons button,
+#master-record-button,
+#lfo-toggle,
+#lfo2-toggle,
+#show-docs-button,
+#import-files-button,
+.recording-item-arrow,
+#close-docs-button,
+#close-audio-files-modal,
+#close-load-to-track-modal,
+#load-to-track-list li button,
+.qa-controls button,
+#rescan-audio-files,
+#select-all-audio-files,
+#load-selected-audio-files,
+.fx-chain-arrow {
+    line-height: 18px !important;
+}
+
+.track-time-display {
+    text-align: center;
+    border-radius: 5px;
+    font-size: 0.9em;
+    background-color: var(--dark-green-transparent);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 720;
+    width: 60%;
+    margin: 0 auto;
+    height: 22px;
+    /* Reduced height to match dropdowns */
+    box-sizing: border-box;
+    line-height: 22px;
+    /* Adjusted line-height for vertical centering */
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#lfo-toggle,
+#lfo2-toggle {
+    width: 60px;
+    margin: 0 auto;
+    flex-shrink: 0;
+}
+
+#master-record-button {
+    flex: none !important;
+    width: calc((100% - 15px) / 4) !important;
+    margin-right: 15px !important;
+    /* Spacing to make up for smaller width */
+    margin-left: 0;
+}
+
+.track-buttons button:hover,
+#lfo-toggle:hover,
+#master-record-button:hover {
+    filter: brightness(1.2);
+}
+
+#master-record-button:disabled {
+    filter: grayscale(1);
+    cursor: not-allowed;
+    background-color: var(--mid-gray);
+}
+
+.track-buttons button[data-action="play"] {
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+}
+
+/* v10.13c: Scissors / Cut button — LFO toggle style */
+.slice-trigger-btn {
+    background-color: var(--gold) !important;
+    color: var(--green) !important;
+    border: 1px solid var(--green) !important;
+    font-weight: 720;
+    font-size: 0.85em;
+    padding: 0 6px;
+    cursor: pointer;
+    border-radius: 3px;
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    box-sizing: border-box !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.slice-trigger-btn:hover {
+    filter: brightness(1.2);
+}
+
+.track-buttons button[data-action="record"],
+#master-record-button {
+    background-color: var(--red);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+}
+
+.track-buttons button[data-action="stop"] {
+    background-color: var(--gold);
+    color: var(--red);
+    border: 1px solid var(--red);
+}
+
+.track-buttons button[data-action="reverse"],
+#lfo-toggle,
+#lfo2-toggle {
+    background-color: var(--gold);
+    color: var(--green);
+    border: 1px solid var(--green);
+    font-weight: 720;
+}
+
+.track-buttons button[data-action="reverse"].reversed,
+#lfo-toggle.sweeping,
+#lfo2-toggle.sweeping {
+    background-color: var(--gold);
+    color: var(--dark-green);
+    border: 1px solid var(--green);
+}
+
+.track-buttons button[data-action="reverse"].reversed.blinking,
+#lfo-toggle.sweeping.blinking,
+#lfo2-toggle.sweeping.blinking {
+    background-color: var(--green);
+    color: var(--gold);
+    border-color: var(--gold);
+    animation: rev-blink-final 0.5s infinite;
+}
+
+.track-buttons button.recording,
+#master-record-button.recording,
+.track-buttons button.playing.blinking {
+    animation: text-blink 0.5s infinite;
+}
+
+@keyframes text-blink {
+    50% {
+        color: var(--dark-gray);
+    }
+}
+
+@keyframes rev-blink-final {
+    50% {
+        color: var(--dark-green);
+        border-color: var(--dark-gold);
+    }
+}
+
+.input-source,
+.effect-type-select,
+#record-as-select,
+.recording-action-select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-color: var(--dark-green-transparent);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 5px;
+    padding: 0 25px 0 8px;
+    height: 22px;
+    /* Reduced height by 20% */
+    line-height: 22px;
+    /* Explicitly set line-height for vertical centering */
+    box-sizing: border-box;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 12px;
+}
+
+.input-source,
+.effect-type-select {
+    width: 60%;
+    margin: 0 auto;
+}
+
+#record-as-select {
+    width: 50%;
+    margin: 0;
+}
+
+.input-source:hover,
+.effect-type-select:hover,
+#record-as-select:hover,
+.recording-action-select:hover {
+    background-color: var(--red);
+    color: var(--gold);
+    border-color: var(--gold);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+}
+
+.input-source:focus,
+.effect-type-select:focus,
+#record-as-select:focus,
+.recording-action-select:focus {
+    background-color: var(--gold);
+    color: var(--dark-red);
+    border-color: var(--gold);
+    outline: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+}
+
+select option {
+    background: var(--gold);
+    color: var(--dark-red);
+}
+
+.meter-container {
+    width: 100%;
+    height: 10px;
+    background-color: var(--off-black);
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--mid-gray);
+}
+
+.master-meter .meter-container,
+.track .meter-container,
+.lfo-meter {
+    border-color: var(--gold);
+}
+
+.meter-bar {
+    height: 100%;
+    background-color: var(--green);
+    width: 100%;
+    transform-origin: left;
+    transition: transform 0.05s linear;
+}
+
+.meter-bar.peak {
+    background-color: var(--red);
+}
+
+.lfo-meter .meter-bar {
+    background-color: var(--gold);
+}
+
+.lfo-meter {
+    width: 50%;
+    margin: 0 auto;
+}
+
+.stereo-meter-wrapper {
+    display: flex;
+    width: 80%;
+    gap: 4px;
+}
+
+.stereo-meter-wrapper .meter-container {
+    flex: 1;
+}
+
+.status-indicator {
+    text-align: center;
+    border-radius: 55px;
+    font-size: 0.9em;
+    background-color: var(--off-black);
+    position: relative;
+    overflow: hidden;
+    height: 30px;
+    line-height: 30px;
+}
+
+.scrolling-text-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+}
+
+.status-ready {
+    color: var(--green);
+    font-weight: bold;
+    font-size: 0.8em;
+}
+
+.status-recording {
+    color: var(--red);
+}
+
+.status-playing {
+    color: var(--gold);
+}
+
+.status-error {
+    color: orangered;
+}
+
+.file-input {
+    display: none;
+}
+
+.file-label {
+    display: block;
+    text-align: center;
+    padding: 10px;
+    background-color: var(--mid-gray);
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.file-label:hover {
+    background-color: #555;
+}
+
+.loop-controls {
+    display: none;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.effect-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 15px;
+    border-top: 1px solid var(--mid-gray);
+    padding-top: 15px;
+}
+
+.preset-marker {
+    position: absolute;
+    top: 50%;
+    width: 2px;
+    height: 16px;
+    transform: translate(-50%, -50%);
+    /* Centered on the % position */
+    display: none;
+    pointer-events: all;
+    z-index: 2;
+    border-radius: 1px;
+    cursor: ew-resize;
+}
+
+.min-preset-marker {
+    background-color: var(--green);
+}
+
+.max-preset-marker {
+    background-color: var(--red);
+}
+
+.sessions-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* Add a small gap between the title and the button */
+}
+
+#recordings-section {
+    margin-top: 5px;
+    padding: 15px;
+    background-color: var(--dark-gray);
+    border-radius: 5px;
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+#recordings-section h2 {
+    color: var(--gold);
+    font-weight: bold;
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+    font-size: 1em;
+}
+
+#import-files-button {
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+}
+
+#import-files-button:hover {
+    filter: brightness(1.2);
+}
+
+/* Specific Import Button Styles */
+.btn-import-dir {
+    background-color: var(--gold) !important;
+    border: 1px solid var(--off-black) !important;
+}
+
+.btn-import-dir i {
+    color: var(--green) !important;
+}
+
+.btn-system-audio {
+    background-color: var(--gold) !important;
+    border: 1px solid var(--off-black) !important;
+}
+
+.btn-system-audio i {
+    color: var(--red) !important;
+}
+
+.recording-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background-color: var(--dark-gray);
+    padding: 5px;
+    border-radius: 5px;
+    border: 1px solid var(--green);
+    margin-top: 5px;
+}
+
+.recording-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 5px;
+}
+
+.recording-item-cue {
+    display: flex;
+    flex-direction: row;
+    /* Changed to row */
+    gap: 5px;
+    /* Increased gap for better spacing */
+    align-items: center;
+}
+
+.recording-item-arrow-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+}
+
+.recording-item-arrow {
+    background-color: var(--dark-green-transparent);
+    color: var(--gold);
+    border: none;
+    border-radius: 4px;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.custom-audio-player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: var(--dark-green-transparent);
+    border-radius: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--gold);
+    height: 25px;
+    box-sizing: border-box;
+    width: 72%;
+}
+
+.play-pause-btn {
+    /* Aggressive reset */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none !important;
+    outline: none;
+    cursor: pointer;
+
+    /* Desired styles */
+    background-color: var(--dark-green-transparent);
+    /* Button interior background is green */
+    border-radius: 3px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    /* No whitespace */
+    margin: 0;
+    /* No whitespace */
+    line-height: 1;
+    /* Control vertical spacing */
+    color: var(--gold);
+    /* Unicode character color is gold */
+    font-size: 13px;
+    /* Default size for pause icon */
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.play-pause-btn.playing {
+    background-color: var(--dark-green-transparent);
+    /* Still green background when playing */
+    border: none !important;
+    /* Remove border when playing */
+    color: var(--gold);
+    /* Unicode character color is gold */
+}
+
+.progress-bar-container {
+    flex-grow: 1;
+    background-color: var(--off-black);
+    border-radius: 5px;
+    height: 8px;
+    cursor: pointer;
+    overflow: hidden;
+    border: 1px solid var(--gold);
+}
+
+.recording-action-select {
+    width: auto;
+    margin: 0;
+}
+
+.recording-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+.recording-item .info {
+    font-size: 0.7em;
+    color: var(--gold);
+    font-weight: bold;
+    text-align: center;
+    width: 100%;
+}
+
+.recording-item-checkbox-label {
+    font-size: 0.7em;
+    font-weight: bold;
+    text-align: center;
+    cursor: pointer;
+    padding: 2px 5px;
+    /* Add some padding for better clickability */
+    border-radius: 4px;
+    /* Changed border-radius to 4px */
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+
+    /* Matching .track-buttons button[data-action="reverse"] default state */
+    background-color: var(--gold);
+    color: var(--green);
+    border: 1px solid var(--green);
+}
+
+.recording-item-checkbox-label.active {
+    /* Matching .track-buttons button[data-action="reverse"].reversed.blinking state */
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    /* Using gold border for active state */
+}
+
+.recording-item-sync-checkbox,
+.recording-item-continue-checkbox {
+    display: none;
+    /* Hide the actual checkbox input */
+}
+
+.recording-item .filename-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.filename-display-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* This will center the children horizontally */
+    width: 100%;
+    /* Ensure it takes full width to center properly */
+}
+
+.recording-item .rename-input {
+    background-color: var(--dark-gray);
+    color: var(--gold);
+    border: 1px solid var(--green);
+    border-radius: 3px;
+    padding: 5px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    font-size: 0.9em;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.custom-audio-player {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: var(--green);
+    border-radius: 5px;
+    padding: 5px 10px;
+    border: 1px solid var(--gold);
+    height: 30px;
+    box-sizing: border-box;
+    width: 72%;
+}
+
+.recording-action-select {
+    width: auto;
+    margin: 0;
+}
+
+.play-pause-btn {
+    /* Aggressive reset */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background: transparent;
+    border: none !important;
+    outline: none;
+    cursor: pointer;
+
+    /* Desired styles */
+    background-color: var(--green);
+    /* Button interior background is green */
+    border-radius: 3px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    /* No whitespace */
+    margin: 0;
+    /* No whitespace */
+    line-height: 1;
+    /* Control vertical spacing */
+    color: var(--gold);
+    /* Unicode character color is gold */
+    font-size: 13px;
+    /* Default size for pause icon */
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.play-icon-btn {
+    font-size: 10px;
+    /* Smaller size for play icon */
+    position: relative;
+    left: 2px;
+}
+
+.play-pause-btn.playing {
+    background-color: var(--green);
+    /* Still green background when playing */
+    border: none !important;
+    /* Remove border when playing */
+    color: var(--gold);
+    /* Unicode character color is gold */
+}
+
+.progress-bar-container {
+    flex-grow: 1;
+    background-color: var(--dark-gray);
+    border-radius: 5px;
+    height: 8px;
+    cursor: pointer;
+    overflow: hidden;
+    border: 1px solid var(--gold);
+}
+
+.progress-bar-fill {
+    width: 0%;
+    height: 100%;
+    background-color: var(--gold);
+    border-radius: 5px;
+}
+
+.time-display {
+    color: var(--gold);
+    font-size: 0.8em;
+    font-weight: bold;
+    min-width: 80px;
+    text-align: center;
+}
+
+.effect-param-columns {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    border-bottom: 1px solid var(--green);
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+}
+
+.effect-param-columns.layout-single {
+    grid-template-columns: 1fr;
+}
+
+.effect-param-columns.layout-double {
+    grid-template-columns: 1fr 1fr;
+}
+
+.effect-param-columns.layout-odd> :first-child {
+    grid-column: 1 / -1;
+}
+
+.effect-param-columns:empty {
+    display: none;
+}
+
+.effect-control-group {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+.effect-control-group .knob-label-group {
+    font-size: 0.85em;
+    /* Increased from 0.75em */
+    justify-content: space-between;
+    position: relative;
+}
+
+.effect-control-group .knob-label-group label {
+    margin-right: 0;
+}
+
+.effect-control-group .param-value {
+    position: static;
+    transform: none;
+    text-align: right;
+    width: auto;
+    min-width: 60px;
+    font-size: 0.85em;
+    /* Increased from 0.75em (inherited) */
+}
+
+.effect-control-group .slider-wrapper {
+    width: 100%;
+}
+
+.fx-chain-container {
+    margin-top: 2px;
+    padding-top: 10px;
+    border-top: 1px solid var(--mid-gray);
+}
+
+.fx-chain-title {
+    color: var(--green);
+    font-weight: bold;
+    text-align: center;
+    width: 100%;
+    font-size: 0.8em;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+}
+
+.fx-chain-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-top: 5px;
+    width: 100%;
+}
+
+.fx-chain-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+}
+
+.fx-chain-slot input[type="checkbox"] {
+    display: none;
+}
+
+.fx-chain-slot-label {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 18px !important;
+    line-height: 18px !important;
+    box-sizing: border-box;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 720;
+    font-size: 0.7em;
+    text-align: center;
+    padding: 1px;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+}
+
+.fx-chain-slot input[type="checkbox"]:checked+.fx-chain-slot-label {
+    background-color: var(--gold);
+    color: var(--green);
+    border-color: var(--green);
+}
+
+.fx-chain-slot-label.selected {
+    background-color: var(--red);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+}
+
+.fx-chain-arrow {
+    background-color: var(--gold);
+    color: var(--red);
+    border: 1px solid var(--red);
+    border-radius: 4px;
+    padding: 0 4px;
+    transition: filter 0.2s ease;
+    height: 16px !important;
+    line-height: 16px !important;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: 720;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fx-chain-arrow {
+    filter: brightness(1.2);
+}
+
+
+
+/* --- Dialog Styling --- */
+@keyframes dialog-open {
+    from {
+        transform: scale(0.12);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(0.84);
+        opacity: 1;
+    }
+}
+
+@keyframes dialog-close {
+    from {
+        transform: scale(0.84);
+        opacity: 1;
+    }
+
+    to {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+#docs-dialog,
+#qa-dialog,
+.effect-params-dialog,
+.audition-params-dialog {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    overflow: visible;
+    width: 92vw;
+    height: 92vh;
+    max-width: 1200px;
+    transform: scale(0.12);
+    opacity: 0;
+}
+
+#docs-dialog[open],
+#qa-dialog[open],
+.effect-params-dialog[open],
+.audition-params-dialog[open] {
+    animation: dialog-open 1.44s ease-in-out forwards;
+}
+
+/* Ensure backdrop is consistent */
+#docs-dialog::backdrop,
+#qa-dialog::backdrop,
+.effect-params-dialog::backdrop,
+.audition-params-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.docs-content-wrapper {
+    position: relative;
+    background-color: var(--green);
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+}
+
+#docs-dialog pre {
+    background-color: var(--green);
+    color: var(--gold);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1.1em;
+    line-height: 1.2;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 15px;
+    margin: 0;
+    margin-top: 30px;
+    text-align: left;
+    user-select: text;
+    font-weight: bold;
+}
+
+#docs-dialog pre .red {
+    color: var(--red);
+}
+
+#docs-dialog pre .gold {
+    color: var(--red);
+}
+
+#docs-dialog pre .green {
+    color: var(--red);
+}
+
+#docs-dialog pre .light {
+    color: var(--gold);
+}
+
+#docs-dialog .section-header {
+    display: block;
+    font-weight: bold;
+    margin: 0.5em 0 0.2em 0;
+}
+
+#docs-dialog div {
+    margin: 0;
+    padding: 0;
+}
+
+#docs-dialog .indented {
+    padding-left: 15px;
+}
+
+#docs-dialog div>span {
+    display: block;
+}
+
+#close-docs-button,
+#close-qa-button {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 100;
+    background: var(--gold);
+    color: var(--green);
+    border: 2px solid var(--red);
+    border-radius: 5px;
+    font-weight: 720;
+    font-size: 1.0em;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.docs-button-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 15px;
+}
+
+#recordings-section hr {
+    border: none;
+    height: 1px;
+    background-color: var(--off-black);
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+/* --- QA Dialog Specific Styling --- */
+#qa-effects-list {
+    margin-top: 20px;
+    padding: 10px;
+    background-color: var(--off-black);
+    border-radius: 8px;
+    height: calc(100% - 150px);
+    overflow-y: auto;
+    border: 1px solid var(--green);
+}
+
+.qa-category {
+    margin-bottom: 15px;
+}
+
+.qa-category h3 {
+    color: var(--red);
+    font-weight: bold;
+    border-bottom: 1px solid var(--gold);
+    padding-bottom: 5px;
+    margin: 0 0 10px 0;
+    font-size: 1.1em;
+}
+
+.qa-effect-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.qa-effect-item input[type="checkbox"] {
+    margin-right: 10px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--gold);
+    border-radius: 3px;
+    cursor: pointer;
+    position: relative;
+    top: 2px;
+}
+
+.qa-effect-item input[type="checkbox"]:checked {
+    background-color: var(--green);
+}
+
+.qa-effect-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--gold);
+    border-width: 0 3px 3px 0;
+    transform: rotate(45deg);
+}
+
+.qa-effect-item label {
+    color: var(--text-color);
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.qa-controls {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+}
+
+.qa-controls button {
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: filter 0.2s;
+    width: 50%;
+}
+
+.qa-controls button:hover {
+    filter: brightness(1.2);
+}
+
+#qa-ship-button {
+    background-color: var(--red);
+}
+
+.ship-build-container {
+    display: flex;
+    gap: 10px;
+    width: 80%;
+    justify-content: center;
+}
+
+#build-name-input {
+    flex-grow: 1;
+    background-color: var(--dark-gray);
+    color: var(--gold);
+    border: 1px solid var(--green);
+    border-radius: 5px;
+    padding: 10px;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+}
+
+.scrolling-text-wrapper {
+    overflow: hidden;
+    width: 100%;
+}
+
+.scrolling-text {
+    display: inline-block;
+    white-space: nowrap;
+    animation: scroll-text 20s linear infinite;
+}
+
+@keyframes scroll-text {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(-100%);
+    }
+}
+
+#audio-files-modal {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    overflow: visible;
+    width: 50vw;
+    height: 92vh;
+    max-width: 1200px;
+    transform: scale(0.12);
+    opacity: 0;
+}
+
+#audio-files-modal[open] {
+    animation: dialog-open 1.44s ease-in-out forwards;
+}
+
+#audio-files-modal.closing {
+    animation: dialog-close 0.72s ease-in-out forwards;
+}
+
+#audio-files-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.audio-files-modal-content {
+    position: relative;
+    background-color: #000;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+}
+
+.audio-files-modal-content h2 {
+    color: var(--gold);
+    text-align: center;
+}
+
+.audio-files-modal-content button {
+    background-color: var(--green);
+    color: var(--gold);
+    margin-right: 10px;
+    border: 1px solid var(--gold);
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+    transition: filter 0.2s ease;
+}
+
+.audio-files-modal-content button:hover {
+    filter: brightness(1.2);
+
+}
+
+#audio-files-list {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+    max-height: calc(100% - 100px);
+    overflow-y: auto;
+}
+
+#audio-files-list li {
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--mid-gray);
+    color: var(--text-color);
+}
+
+#audio-files-list li:hover {
+    background-color: var(--mid-gray);
+}
+
+#close-audio-files-modal {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 100;
+    background: var(--gold);
+    color: var(--red);
+    border: 3px solid var(--green);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.1em;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    line-height: 1;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* --- Load to Track Modal Styling --- */
+#load-to-track-modal {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    overflow: visible;
+    width: 400px;
+    height: 300px;
+    transform: scale(0.12);
+    opacity: 0;
+}
+
+#load-to-track-modal[open] {
+    animation: dialog-open 1.44s ease-in-out forwards;
+}
+
+#load-to-track-modal.closing {
+    animation: dialog-close 0.72s ease-in-out forwards;
+}
+
+#load-to-track-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.load-to-track-modal-content {
+    position: relative;
+    background-color: #000;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+}
+
+#load-to-track-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#load-to-track-list li button {
+    width: 100%;
+    background-color: var(--dark-green-transparent);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 5px;
+    padding: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#load-to-track-list li button:hover {
+    background-color: var(--red);
+    color: var(--gold);
+    border-color: var(--gold);
+}
+
+#load-to-track-list li button:focus {
+    background-color: var(--gold);
+    color: var(--dark-red);
+    border-color: var(--gold);
+    outline: none;
+}
+
+#close-load-to-track-modal {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 100;
+    background: var(--gold);
+    color: var(--red);
+    border: 3px solid var(--green);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.1em;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    line-height: 1;
+}
+
+#close-load-to-track-modal:hover {
+    filter: brightness(1.2);
+}
+
+#close-audio-files-modal {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 100;
+    background: var(--gold);
+    color: var(--red);
+    border: 3px solid var(--green);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.1em;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+    line-height: 1;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+/* --- Load to Track Modal Styling --- */
+#load-to-track-modal {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+    overflow: visible;
+    width: 400px;
+    height: 300px;
+    transform: scale(0.12);
+    opacity: 0;
+}
+
+#load-to-track-modal[open] {
+    animation: dialog-open 1.44s ease-in-out forwards;
+}
+
+#load-to-track-modal.closing {
+    animation: dialog-close 0.72s ease-in-out forwards;
+}
+
+#load-to-track-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.load-to-track-modal-content {
+    position: relative;
+    background-color: #000;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    align-items: center;
+}
+
+#load-to-track-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#load-to-track-list li button {
+    width: 100%;
+    background-color: var(--dark-green-transparent);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 5px;
+    padding: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#load-to-track-list li button:hover {
+    background-color: var(--red);
+    color: var(--gold);
+    border-color: var(--gold);
+}
+
+#load-to-track-list li button:focus {
+    background-color: var(--gold);
+    color: var(--dark-red);
+    border-color: var(--gold);
+    outline: none;
+}
+
+#close-load-to-track-modal {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    z-index: 100;
+    background: var(--gold);
+    color: var(--red);
+    border: 3px solid var(--green);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1.2em;
+    width: 35px;
+    height: 35px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+}
+
+#close-load-to-track-modal:hover {
+    filter: brightness(1.2);
+}
+
+.master-out-display-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    align-items: center;
+    margin-top: 5px;
+}
+
+@media (min-width: 640px) {
+    .master-out-display-group {
+        flex-direction: row;
+        justify-content: space-around;
+        align-items: flex-start;
+    }
+}
+
+.master-out-display-group .stereo-meter-wrapper,
+.master-out-display-group .stereo-waveform-wrapper {
+    flex: 1;
+    min-width: 45%;
+    max-width: 50%;
+    width: 100%;
+    height: 60px;
+    box-sizing: border-box;
+}
+
+.master-out-display-group .stereo-meter-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+}
+
+.master-out-display-group .stereo-meter-wrapper .meter-container {
+    height: 20px;
+}
+
+.master-out-display-group .stereo-waveform-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Master Waveform Visualizer Fixes */
+#master-waveform-container {
+    position: relative;
+    min-width: 0;
+    height: 60px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    gap: 4px;
+    /* 4px gap as requested */
+}
+
+.waveform-canvas {
+    width: 100%;
+    flex: 1;
+    height: auto;
+    min-height: 0;
+    /* Flex overflow fix */
+    display: block;
+    background-color: #111;
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    box-sizing: border-box;
+    /* Border fix */
+}
+
+.stereo-waveform-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
+.stereo-meter-wrapper {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    height: 60px;
+    width: 10px;
+}
+
+.stereo-meter-wrapper .meter-container {
+    height: 45%;
+    margin-top: 0;
+    width: 100%;
+}
+
+.waveform-label-external {
+    color: var(--red);
+    font-weight: bold;
+    text-transform: uppercase;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8em;
+    width: 15px;
+    text-align: center;
+}
+
+.track-waveform-container {
+    width: 100%;
+    height: 60px;
+    /* Increased height to match master visualizer */
+    background-color: transparent;
+    /* Container itself is transparent */
+    border: none;
+    /* Remove border from container */
+    margin-bottom: 5px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* Gap between labels and canvases */
+    min-width: 0;
+    /* Flex fix */
+}
+
+.track-waveform-labels {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    height: 100%;
+    margin-right: 0;
+    flex-shrink: 0;
+    /* Prevent labels from shrinking */
+}
+
+.track-waveform-canvases {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    /* 4px gap between L and R canvases */
+    height: 100%;
+    min-width: 0;
+    /* Flex fix */
+}
+
+.track-waveform-canvas-L,
+.track-waveform-canvas-R {
+    width: 100%;
+    flex: 1;
+    display: block;
+    background-color: #111;
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    box-sizing: border-box;
+    min-height: 0;
+    /* Flex fix */
+}
+
+/* Cast Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal:not(.hidden) {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: var(--off-black);
+    border: 2px solid var(--gold);
+    border-radius: 10px;
+    padding: 30px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), 0 0 10px var(--gold);
+    text-align: center;
+    position: relative;
+    color: var(--text-color);
+}
+
+.modal-content h2 {
+    color: var(--gold);
+    margin-top: 0;
+    font-family: 'Mexcellent', sans-serif;
+    letter-spacing: 2px;
+}
+
+.cast-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+    margin: 25px 0;
+}
+
+.cast-option-btn {
+    background: transparent;
+    color: var(--text-color);
+    border: 1px solid var(--mid-gray);
+    padding: 12px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 140px;
+}
+
+.cast-option-btn:hover {
+    border-color: var(--gold);
+    background: rgba(255, 215, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.cast-option-btn-alt {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+    border: 1px solid var(--mid-gray);
+    padding: 12px 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 140px;
+    justify-content: center;
+}
+
+#cast-launcher {
+    --connected-color: var(--gold);
+    --disconnected-color: var(--text-color);
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.cast-option-btn i {
+    font-size: 1.2em;
+    color: var(--gold);
+}
+
+.cast-status {
+    color: var(--green);
+    margin: 15px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    min-height: 1.2em;
+    white-space: pre-wrap;
+}
+
+.device-list {
+    max-height: 250px;
+    overflow-y: auto;
+    margin-top: 20px;
+    border-top: 1px solid #444;
+}
+
+.device-item {
+    padding: 12px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+    cursor: pointer;
+}
+
+.device-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.device-item span {
+    color: var(--text-color);
+}
+
+.device-item .device-ip {
+    color: var(--mid-gray);
+    font-size: 0.8em;
+}
+
+.close-modal {
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 1.5em;
+    color: var(--mid-gray);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-modal:hover {
+    color: var(--red);
+}
+
+.close-modal {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    color: var(--text-color);
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-modal:hover {
+    color: var(--red);
+}
+
+.cast-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.cast-option-btn {
+    background-color: var(--mid-gray);
+    color: var(--text-color);
+    border: 1px solid var(--gold);
+    padding: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: all 0.2s ease;
+}
+
+.cast-option-btn:hover {
+    background-color: var(--gold);
+    color: var(--off-black);
+    transform: translateY(-2px);
+}
+
+.cast-status {
+    margin-top: 15px;
+    font-size: 0.9em;
+    color: var(--gold);
+    min-height: 20px;
+}
+
+.main-controls {
+    margin-top: -5px;
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+    border-bottom: 1px solid var(--mid-gray);
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+}
+
+.main-controls .knob-container {
+    margin-bottom: 1px;
+}
+
+.main-controls .slider-wrapper {
+    height: 18px;
+    /* Tighten to exact thumb size */
+}
+
+.track .control-group label {
+    font-size: 0.8em;
+}
+
+.device-list {
+    margin-top: 15px;
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid #333;
+    padding-top: 10px;
+}
+
+.device-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #222;
+    padding: 10px;
+    margin-bottom: 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.device-item:hover {
+    background: #333;
+}
+
+.device-item span {
+    font-size: 0.9em;
+    color: #eee;
+}
+
+.device-item .device-ip {
+    font-size: 0.8em;
+    color: #888;
+}
+
+/* Effect Parameter Dialogs (vNewStrategy) */
+.effect-dialogs-container {
+    position: relative;
+    width: 100%;
+    z-index: 10;
+    /* Base z-index */
+}
+
+/* --- Effect Params Dialogs (Universal Styling) --- */
+.effect-params-dialog,
+.audition-params-dialog {
+    position: fixed;
+    /* Always floating */
+    z-index: 2000;
+    background: var(--off-black);
+    border: 2px solid var(--dark-gold);
+    border-radius: 8px;
+    padding: 0;
+    width: 320px;
+    max-width: 95vw;
+    height: auto;
+    max-height: 85vh;
+    min-height: 100px;
+    /* Small base for empty state */
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.9);
+    display: none;
+    flex-direction: column;
+}
+
+.effect-params-dialog[open],
+.audition-params-dialog[open] {
+    display: flex;
+}
+
+.effect-params-dialog::backdrop,
+.audition-params-dialog::backdrop {
+    display: none;
+}
+
+.dialog-content,
+.audition-dialog-content {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    /* Changed from 3 columns for better readability */
+    gap: 12px;
+    padding: 15px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.effect-params-dialog .dialog-header,
+.audition-params-dialog .dialog-header {
+    background: var(--green);
+    color: var(--gold);
+    font-weight: bold;
+    padding: 10px 12px;
+    border-radius: 6px 6px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: move;
+    user-select: none;
+}
+
+.effect-params-dialog .dialog-header span,
+.audition-params-dialog .dialog-header span {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.close-dialog-btn {
+    background: transparent;
+    border: none;
+    color: var(--red);
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 1.4em;
+    /* Larger X */
+    padding: 0 8px;
+    line-height: 1;
+    width: auto;
+    /* Reset from merge error */
+}
+
+/* Ensure z-index stacking for 7 slots - increased to stay above other UI */
+.effect-params-dialog[data-slot-index="0"] {
+    z-index: 500;
+}
+
+.effect-params-dialog[data-slot-index="1"] {
+    z-index: 501;
+}
+
+.effect-params-dialog[data-slot-index="2"] {
+    z-index: 502;
+}
+
+.effect-params-dialog[data-slot-index="3"] {
+    z-index: 503;
+}
+
+.effect-params-dialog[data-slot-index="4"] {
+    z-index: 504;
+}
+
+.effect-params-dialog[data-slot-index="5"] {
+    z-index: 505;
+}
+
+.effect-params-dialog[data-slot-index="6"] {
+    z-index: 506;
+}
+
+/* Audition Params Panel */
+.audition-params-container {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 10px;
+
+    /* Static/Relative Positioning (In-Flow) */
+    position: relative;
+    width: 100%;
+    margin-top: 5px;
+    z-index: 100;
+
+    display: none;
+    /* Toggled via JS */
+    color: #fff;
+    flex-wrap: wrap;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.audition-params-container .control-group {
+    background: #1a1a1a;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #333;
+}
+
+/* Audition Dialog specific styles are now mostly universal */
+
+/* Audition Slot Selector */
+.audition-slot-selector {
+    grid-column: span 3;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 183, 0, 0.2);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.assigned-slot-title {
+    font-size: 10px;
+    color: var(--dark-gold);
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.slot-radio-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.slot-radio-group label {
+    font-size: 11px;
+    color: var(--gold);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.slot-radio-group input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--green);
+}
+
+/* --- Chromecast UI --- */
+#cast-dialog {
+    width: 350px;
+    background: var(--off-black);
+    border: 2px solid var(--gold);
+    color: var(--white);
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.cast-content-wrapper {
+    position: relative;
+    padding: 10px;
+}
+
+#close-cast-button {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--red);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.cast-device-list {
+    max-height: 240px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--dark-green-transparent);
+    border-radius: 4px;
+    margin: 15px 0;
+    padding: 5px;
+    min-height: 60px;
+}
+
+.cast-device-item {
+    padding: 12px;
+    border-bottom: 1px solid var(--dark-green-transparent);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px;
+    margin-bottom: 2px;
+}
+
+.cast-device-item:last-child {
+    border-bottom: none;
+}
+
+.cast-device-item:hover {
+    background: var(--dark-green-transparent);
+    color: var(--gold);
+}
+
+.cast-device-item.connecting {
+    background: var(--gold);
+    color: var(--black);
+    font-weight: bold;
+}
+
+.cast-device-item.connected {
+    background: var(--green);
+    color: var(--white);
+    font-weight: bold;
+}
+
+#cast-button i {
+    margin-right: 5px;
+}
+
+/* --- QA FIXES: Effects Dialog Layout --- */
+.effect-params-dialog .dialog-content,
+.audition-params-dialog .dialog-content {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    align-items: start;
+    height: auto;
+    max-height: 80vh;
+    overflow-y: auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Ensure controls fit */
+.effect-params-dialog .effect-control-group,
+.audition-params-dialog .effect-control-group {
+    width: 100% !important;
+    margin-bottom: 0 !important;
+    flex: unset !important;
+    /* Override flex sizing */
+}
+
+/* Override existing responsive behavior if any */
+@media (max-width: 600px) {
+
+    .effect-params-dialog .dialog-content,
+    .audition-params-dialog .dialog-content {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* --- PREMIUM CAST DIALOG (v6.6) --- */
+#cast-dialog {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: auto;
+    overflow: visible;
+    color: white;
+}
+
+#cast-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(5px);
+}
+
+.cast-content-wrapper {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    padding: 25px;
+    width: 400px;
+    box-shadow: 0 0 30px rgba(179, 134, 0, 0.3);
+    position: relative;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#cast-device-list {
+    min-height: 150px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 20px;
+    border-top: 1px solid rgba(179, 134, 0, 0.3);
+    border-bottom: 1px solid rgba(179, 134, 0, 0.3);
+    padding: 10px 0;
+}
+
+#cast-device-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+#cast-device-list::-webkit-scrollbar-thumb {
+    background: var(--gold);
+    border-radius: 3px;
+}
+
+#cast-device-list::-webkit-scrollbar-track {
+    background: #111;
+}
+
+#close-cast-button {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: var(--gold);
+    font-size: 1.5em;
+    cursor: pointer;
+    font-weight: bold;
+    transition: color 0.3s;
+}
+
+#close-cast-button:hover {
+    color: white;
+    text-shadow: 0 0 10px var(--gold);
+}
+
+.cast-device-item:hover {
+    transform: translateX(5px);
+    box-shadow: -5px 0 0 var(--gold);
+}
+
+/* --- Sessions Dialog (New Modal) --- */
+#sessions-dialog {
+    width: 600px;
+    height: 600px;
+    /* Fixed centering */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    background-color: #222;
+    border: 1px solid var(--gold);
+    color: #eee;
+    padding: 0;
+    margin: 0;
+    z-index: 10000;
+    /* High z-index */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    border-radius: 8px;
+}
+
+/* Ensure backdrop is dark */
+#sessions-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.sessions-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 15px;
+    box-sizing: border-box;
+}
+
+.sessions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+.sessions-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    color: var(--gold);
+}
+
+#recordings-list {
+    flex: 1;
+    overflow-y: auto;
+    /* Ensure items look okay in this context */
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border: none;
+    /* Reset if previously bordered */
+}
+
+/* --- 420 Sample Center --- */
+.sample-center-container {
+    width: 90%;
+    /* Reduced from 95% to prevent side clipping */
+    box-sizing: border-box;
+    /* Ensure padding/border doesn't add to width */
+    margin: 4px auto 8px auto;
+    /* Pulled up for more vertical space */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    /* Override master-item flex:1 constraints */
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: auto !important;
+
+    /* Dark Grey Background with Green Hue hint */
+    background-color: #121812 !important;
+    border: 3px solid var(--green) !important;
+    border-radius: 10px;
+    padding: 6px 10px;
+}
+
+/* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
+.sample-center-container .track-header {
+    color: var(--gold) !important;
+    font-weight: bold !important;
+    font-size: 0.9em !important;
+}
+
+
+
+.sample-grid {
+    display: grid;
+    /* 4 columns */
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    width: 100%;
+    margin-top: 5px;
+}
+
+/* Update: Media Button Height Match (Add to existing list or override) */
+#show-sessions-button,
+#show-docs-button,
+#import-files-button {
+    line-height: 18px !important;
+}
+
+/* Sample Center Updates */
+.sample-btn {
+    /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
+    /* Normal State: Match REV Button Scheme */
+    background-color: var(--gold) !important;
+    color: var(--green) !important;
+    border: 3px solid var(--green) !important;
+
+    font-family: 'Mexcellent', sans-serif !important;
+    font-size: 1.8em !important;
+    font-weight: 720 !important;
+    /* Match REV weight */
+    letter-spacing: 1px !important;
+
+    /* Reduced Size Further */
+    aspect-ratio: 1.0;
+    padding: 1px;
+    cursor: pointer;
+    border-radius: 12px;
+    transition: all 0.1s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: none;
+    /* Removed shadow */
+    position: relative;
+    z-index: 5;
+}
+
+/* Hover Effects */
+.sample-btn:hover {
+    /* Hover State: Greenish BG, Gold Text/Border */
+    background-color: var(--dark-green-transparent);
+    border-color: var(--gold);
+    color: var(--gold);
+    box-shadow: 0 0 8px var(--gold);
+    text-shadow: none;
+}
+
+.sample-btn:active {
+    background-color: var(--gold);
+    color: var(--green) !important;
+    /* Green text on press */
+    font-weight: normal;
+    /* Normal weight on press */
+}
+
+.sample-btn.active {
+    background-color: var(--gold) !important;
+    color: var(--red) !important;
+    /* Visual pop on trigger */
+    box-shadow: 0 0 15px var(--red);
+}
+
+.sample-btn.loaded {
+    /* Loaded State: Gold BG, but maybe darker green text to show it's occupied */
+    background-color: var(--gold) !important;
+    color: var(--dark-green) !important;
+    border-color: var(--green) !important;
+}
+
+.sample-btn.drag-over {
+    border: 2px dashed #fff;
+    background-color: #444;
+}
+
+/* Matching Media Button Style */
+#show-sessions-button {
+    background-color: var(--green);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    padding: 0 5px;
+}
+
+#show-sessions-button:hover {
+    filter: brightness(1.2);
+}
+
+/* Loop Control Layout Fixes (Prevent Overlap) */
+.loop-controls .knob-label-group .param-value {
+    position: static;
+    transform: none;
+    margin-left: auto;
+    /* Push to right */
+    min-width: auto;
+    text-align: right;
+}
+
+.loop-controls .knob-label-group {
+    justify-content: space-between;
+    /* Ensure spreading */
+}
+
+/* Loop Control Styling (Match LFO) */
+.loop-controls {
+    /* Container style matches .lfo-side-by-side-container */
+    background-color: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--mid-gray);
+    padding: 4px 5px;
+    /* Add horizontal padding since it's not full width */
+    margin: 7px 0 5px 0;
+    border-top: 1px solid var(--mid-gray);
+    /* Add top border for completeness */
+}
+
+/* Labels Match Sweep 1/2 */
+.loop-controls label {
+    color: var(--green) !important;
+    /* Green */
+    font-size: 0.65em !important;
+    /* Size match */
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Ensure Values are Gold and positioned correctly (Fixed previously) */
+.loop-controls .knob-label-group .param-value {
+    color: var(--gold);
+    position: static;
+    transform: none;
+    margin-left: auto;
+    text-align: right;
+    font-size: 0.75em;
+    /* Match value size */
+}
+
+/* Separator for Loop Start/End? 
+   Since they are flex items, we can add a border to the first one?
+   But we don't have a dedicated separator element.
+   We can add border-right to the first child container. 
+*/
+.loop-controls .loop-row-layout>div:first-child {
+    border-right: 1px solid var(--mid-gray);
+    padding-right: 5px;
+    margin-right: 5px;
+}
+
+/* v10.13c: Loop time values underneath sliders (styled like LFO sweep values) */
+.loop-line-3 {
+    display: flex;
+    width: 100%;
+    gap: 4px;
+    margin-top: 1px;
+}
+
+.loop-line-3 .param-value {
+    position: static !important;
+    transform: none !important;
+    flex: 1;
+    text-align: center;
+    color: var(--gold);
+    font-size: 0.7em;
+    font-weight: 720;
+    pointer-events: none;
+    min-width: 0;
+}
