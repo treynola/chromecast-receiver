@@ -687,7 +687,7 @@
 
         const WAV_SAMPLE_RATE = 48000;
         const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.030; // 30ms look-ahead
+        const SCHEDULE_AHEAD = 0.060; // 60ms look-ahead (Safety vs Jitter)
         let wavNextPlayTime = 0;
 
         function initAudioPlayback() {
@@ -706,24 +706,24 @@
         }
 
         function handleAudioChunk(pcmData) {
-            // V18: Direct WS → AudioBufferSourceNode (live, ~5ms delivery)
+            // V20: Direct WS → Float32 AudioBufferSourceNode (High Fidelity)
             if (!audioCtx) initAudioPlayback();
             if (!audioCtx || audioCtx.state !== 'running') return;
 
             try {
-                // pcmData = Int16 interleaved stereo (4-byte WS header already stripped)
-                const aligned = new ArrayBuffer(pcmData.byteLength);
-                new Uint8Array(aligned).set(pcmData);
-                const int16 = new Int16Array(aligned);
-                const numFrames = int16.length / WAV_CHANNELS;
+                // pcmData is now Float32 interleaved stereo (from raw ArrayBuffer view)
+                const float32 = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
+                const numFrames = float32.length / WAV_CHANNELS;
                 if (numFrames === 0) return;
 
                 const buffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, WAV_SAMPLE_RATE);
                 const L = buffer.getChannelData(0);
                 const R = buffer.getChannelData(1);
+
+                // Zero-copy de-interlace
                 for (let i = 0; i < numFrames; i++) {
-                    L[i] = int16[i * 2] / 32768.0;
-                    R[i] = int16[i * 2 + 1] / 32768.0;
+                    L[i] = float32[i * 2];
+                    R[i] = float32[i * 2 + 1];
                 }
 
                 const source = audioCtx.createBufferSource();
@@ -734,7 +734,8 @@
                 if (wavNextPlayTime < now) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                 }
-                if (wavNextPlayTime - now > 0.150) {
+                // Cap latency at 250ms to prevent drift
+                if (wavNextPlayTime - now > 0.250) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                 }
 
@@ -995,10 +996,10 @@
                             handleIceCandidate(json.candidate || json);
                         }
                     } else if (view[0] === 2) {
-                        // Audio chunk - f32le stereo PCM
+                        // Audio chunk - Float32 stereo PCM (V20 High Fidelity)
                         audioCount++;
-                        const pcmData = new Uint8Array(e.data, 4);
-                        handleAudioChunk(pcmData);
+                        // Pass the entire ArrayBuffer to handleAudioChunk (it will create the view)
+                        handleAudioChunk(new Uint8Array(e.data, 4));
                     }
                 } catch (err) {
                     console.error("Parse Error:", err);
