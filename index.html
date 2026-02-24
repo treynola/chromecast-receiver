@@ -598,12 +598,17 @@
                 }
 
                 if (state.transport) {
-                    // Detect sample rate from sender and pre-initialize audio context
-                    if (state.transport.sampleRate && state.transport.sampleRate !== detectedSampleRate) {
-                        detectedSampleRate = state.transport.sampleRate;
-                        console.log('📡 Detected sender sample rate:', detectedSampleRate, 'Hz');
-                        // Pre-initialize audio with correct sample rate
-                        initAudioPlayback(detectedSampleRate);
+                    // V21: Dynamic Sample Rate Sync
+                    // Detect rate from sender and update scheduling clock
+                    if (state.transport.sampleRate && state.transport.sampleRate !== activeSampleRate) {
+                        console.log(`📡 Sample Rate Sync: ${activeSampleRate}Hz -> ${state.transport.sampleRate}Hz`);
+                        activeSampleRate = state.transport.sampleRate;
+
+                        // Resync scheduler on rate change to prevent time-axis jump
+                        wavNextPlayTime = 0;
+
+                        // Pre-warm context if needed
+                        initAudioPlayback();
                     }
 
                     const timeDisplay = document.getElementById('recording-time-display');
@@ -683,9 +688,8 @@
         // WebRTC State (kept for signaling)
         let peerConnection = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        let detectedSampleRate = 48000;
+        let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
-        const WAV_SAMPLE_RATE = 48000;
         const WAV_CHANNELS = 2;
         const SCHEDULE_AHEAD = 0.060; // 60ms look-ahead (Safety vs Jitter)
         let wavNextPlayTime = 0;
@@ -716,7 +720,7 @@
                 const numFrames = float32.length / WAV_CHANNELS;
                 if (numFrames === 0) return;
 
-                const buffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, WAV_SAMPLE_RATE);
+                const buffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, activeSampleRate);
                 const L = buffer.getChannelData(0);
                 const R = buffer.getChannelData(1);
 
@@ -740,7 +744,7 @@
                 }
 
                 source.start(wavNextPlayTime);
-                wavNextPlayTime += numFrames / WAV_SAMPLE_RATE;
+                wavNextPlayTime += numFrames / activeSampleRate;
             } catch (e) {
                 console.error('Audio error:', e);
             }
