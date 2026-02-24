@@ -728,11 +728,16 @@
         let driftCorrectionTotal = 0;
         let consecutiveUnderruns = 0;
 
+        // Source audio is always 48kHz from the sender
+        const SOURCE_SAMPLE_RATE = 48000;
+
         function scheduleAudioChunk(leftChannel, rightChannel) {
             if (!audioCtx || audioCtx.state !== 'running') return;
 
             const numSamples = leftChannel.length;
-            const buffer = audioCtx.createBuffer(CHANNELS, numSamples, audioCtx.sampleRate);
+            // CRITICAL: Create buffer at SOURCE data rate (48kHz), not the context rate.
+            // Web Audio will automatically resample to the context rate during playback.
+            const buffer = audioCtx.createBuffer(CHANNELS, numSamples, SOURCE_SAMPLE_RATE);
             buffer.getChannelData(0).set(leftChannel);
             buffer.getChannelData(1).set(rightChannel);
 
@@ -741,7 +746,7 @@
             source.connect(audioCtx.destination);
 
             const now = audioCtx.currentTime;
-            const chunkDuration = numSamples / audioCtx.sampleRate;
+            const chunkDuration = numSamples / SOURCE_SAMPLE_RATE;
 
             // --- V12.22 Adaptive Jitter Management ---
             // Underrun detection: if we're scheduling in the past, we've starved
