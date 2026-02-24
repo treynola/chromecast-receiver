@@ -887,8 +887,8 @@
                 const int16View = new Int16Array(alignedBuffer);
 
                 // De-interleave into separate L/R Float32 channels
-                // Apply 0.25x gain to prevent clipping/static (lower = cleaner)
-                const HEADROOM_GAIN = 0.25;
+                // Apply gentle headroom to prevent clipping
+                const HEADROOM_GAIN = 0.90;
                 const numStereoFrames = int16View.length / 2;
                 const leftChannel = new Float32Array(numStereoFrames);
                 const rightChannel = new Float32Array(numStereoFrames);
