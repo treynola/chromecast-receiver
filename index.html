@@ -755,16 +755,17 @@
             if (!audioCtx) initAudioPlayback(detectedSampleRate);
 
             try {
-                // Decode Int16 interleaved stereo → Float32 L/R
+                // Audio is Float32 interleaved stereo (L0, R0, L1, R1, ...)
+                // 4 bytes per sample, so total bytes / 4 = total Float32 values
                 const alignedBuffer = new ArrayBuffer(pcmData.byteLength);
                 new Uint8Array(alignedBuffer).set(pcmData);
-                const int16View = new Int16Array(alignedBuffer);
-                const numStereoFrames = int16View.length / 2;
+                const floatView = new Float32Array(alignedBuffer);
+                const numStereoFrames = floatView.length / 2;
 
                 // Write decoded samples into the ring buffer
                 for (let i = 0; i < numStereoFrames; i++) {
-                    ringLeft[ringWritePos] = int16View[i * 2] / 32768.0;
-                    ringRight[ringWritePos] = int16View[i * 2 + 1] / 32768.0;
+                    ringLeft[ringWritePos] = floatView[i * 2];
+                    ringRight[ringWritePos] = floatView[i * 2 + 1];
                     ringWritePos = (ringWritePos + 1) % RING_SIZE;
                 }
 
@@ -775,7 +776,7 @@
                 if (numStereoFrames > 0) {
                     let peak = 0;
                     for (let i = 0; i < Math.min(numStereoFrames, 128); i++) {
-                        const v = Math.abs(int16View[i * 2] / 32768.0);
+                        const v = Math.abs(floatView[i * 2]);
                         if (v > peak) peak = v;
                     }
                     window._lastAudioPeak = peak;
