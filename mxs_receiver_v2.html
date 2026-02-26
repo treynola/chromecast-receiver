@@ -762,7 +762,7 @@
                     if (totalQueuedSecs >= SCHEDULE_AHEAD) {
                         isBuffering = false;
                         console.log("🚀 Buffer Zone reached, flushing", pendingBuffers.length, "chunks");
-                        wavNextPlayTime = audioCtx.currentTime; // V114.12: Removed +0.050 artificial padding
+                        wavNextPlayTime = audioCtx.currentTime + 0.050; // V114.13: Hardware padding (Web Audio needs 50ms decode buffer)
                         pendingBuffers.forEach(buf => {
                             const source = audioCtx.createBufferSource();
                             source.buffer = buf;
@@ -795,7 +795,7 @@
                 // Emergency Reset (V114.8: Stop overlapping sources)
                 if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
                     console.warn(`⚠️ Buffer sync lost (Drift: ${bufferLevel.toFixed(3)}s), re-buffering...`);
-                    wavNextPlayTime = now; // V114.12: Removed +0.050 padding
+                    wavNextPlayTime = now + 0.050; // V114.13: Hardware padding (Reset)
                     isBuffering = true;
                     pendingBuffers = [audioBuffer]; 
                     
