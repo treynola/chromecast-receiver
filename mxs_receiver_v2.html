@@ -713,8 +713,16 @@
         }
 
         function handleAudioChunk(pcmData) {
+            // V114.3: Silence any HTML audio stream if PCM data is arriving
+            const streamAudio = document.getElementById('cast-audio-stream');
+            if (streamAudio && !streamAudio.paused) {
+                console.log("🔇 Silencing HTTP stream (PCM active)");
+                streamAudio.pause();
+                streamAudio.src = "";
+            }
+
             // V114.2: Hard exit if WebRTC is active to prevent dual-stream phasing
-            const webrtcActive = !!(peerConnection && peerConnection.connectionState === 'connected');
+            const webrtcActive = !!(peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.iceConnectionState === 'connected'));
             if (webrtcActive) {
                 if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
                 return;
@@ -857,6 +865,13 @@
                     });
                 };
                 tryPlay();
+
+                // V114.3: Absolute silencing of other paths
+                const streamAudio = document.getElementById('cast-audio-stream');
+                if (streamAudio) {
+                    streamAudio.pause();
+                    streamAudio.src = "";
+                }
 
                 // V114.2: ABSOLUTE PCM MUTING when WebRTC arrives
                 if (audioCtx) {
