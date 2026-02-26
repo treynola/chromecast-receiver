@@ -695,6 +695,7 @@
         let wavNextPlayTime = 0;
         let isBuffering = true; // V114: Pre-roll state
         let smoothedDrift = 0;  // V114: EWMA Filtered drift
+        let pendingBuffers = []; // V114.1: Queue for pre-roll
 
         function initAudioPlayback() {
             if (audioCtx) return;
@@ -712,12 +713,10 @@
         }
 
         function handleAudioChunk(pcmData) {
-            // V22: Direct WS -> 24-bit PCM Unpacking -> Float32 AudioBufferSourceNode
             if (!audioCtx) initAudioPlayback();
             if (!audioCtx || audioCtx.state !== 'running') return;
 
             try {
-                // pcmData is now 24-bit packed integer PCM interleaved stereo (3 bytes per sample)
                 const numSamples = pcmData.byteLength / 3;
                 const numFrames = numSamples / WAV_CHANNELS;
                 if (numFrames === 0) return;
@@ -725,71 +724,77 @@
                 const float32 = new Float32Array(numSamples);
                 for (let i = 0; i < numSamples; i++) {
                     let val = (pcmData[i * 3]) | (pcmData[i * 3 + 1] << 8) | (pcmData[i * 3 + 2] << 16);
-                    // Sign extend: shift left by 8, then sign-propagating shift right by 8
                     val = (val << 8) >> 8;
                     float32[i] = val / 8388607;
                 }
 
-                const buffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, activeSampleRate);
-                const L = buffer.getChannelData(0);
-                const R = buffer.getChannelData(1);
+                const audioBuffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, activeSampleRate);
+                const L = audioBuffer.getChannelData(0);
+                const R = audioBuffer.getChannelData(1);
 
-                // Zero-copy de-interlace
                 for (let i = 0; i < numFrames; i++) {
                     L[i] = float32[i * 2];
                     R[i] = float32[i * 2 + 1];
                 }
 
+                const now = audioCtx.currentTime;
+                const duration = numFrames / activeSampleRate;
+
+                // Initialize wavNextPlayTime on first chunk
+                if (wavNextPlayTime === 0) {
+                    wavNextPlayTime = now + 0.050; // Start with 50ms padding
+                }
+
+                if (isBuffering) {
+                    pendingBuffers.push({ buffer: audioBuffer, time: wavNextPlayTime });
+                    wavNextPlayTime += duration;
+
+                    const bufferLevel = wavNextPlayTime - now;
+                    if (bufferLevel >= SCHEDULE_AHEAD) {
+                        isBuffering = false;
+                        console.log("🚀 Buffer Zone reached, flushing", pendingBuffers.length, "chunks");
+                        pendingBuffers.forEach(item => {
+                            const source = audioCtx.createBufferSource();
+                            source.buffer = item.buffer;
+                            source.connect(audioCtx.destination);
+                            source.start(item.time);
+                        });
+                        pendingBuffers = [];
+                    }
+                    window._lastIsBuffering = true;
+                    window._lastBufferLevel = bufferLevel;
+                    return;
+                }
+
+                // Regular Playback Path
                 const source = audioCtx.createBufferSource();
-                source.buffer = buffer;
+                source.buffer = audioBuffer;
                 source.connect(audioCtx.destination);
 
-                const now = audioCtx.currentTime;
                 const bufferLevel = wavNextPlayTime - now;
-
-                // V114: Pre-roll "Buffer Zone" logic
-                // Don't start actual playback until we have 250ms of data
-                if (isBuffering) {
-                    if (bufferLevel < SCHEDULE_AHEAD) {
-                        // Keep accumulating
-                        return;
-                    } else {
-                        isBuffering = false;
-                        console.log("🚀 Buffer Zone reached, starting playback:", bufferLevel.toFixed(3), "s");
-                    }
-                }
-
-                // V114: Adaptive PLL with EWMA Smoothing
-                // Target: 250ms buffer. 
                 const targetBuffer = 0.250;
                 let currentDrift = bufferLevel - targetBuffer;
-                
-                // EWMA Filter (0.98 alpha = very smooth, ignores short oscillations)
                 smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02);
-                
-                // Fine adjustments: target +-0.2% (0.998x to 1.002x) based on SMOOTHED drift
-                let adjustment = smoothedDrift * 0.04; // Slightly lower gain for the smoothed value
-                let newRate = 1.0 + adjustment;
-                
-                // Tight clamp: 0.998 to 1.002 (±0.2%)
-                source.playbackRate.value = Math.max(0.998, Math.min(1.002, newRate));
+                let adjustment = smoothedDrift * 0.04;
+                source.playbackRate.value = Math.max(0.998, Math.min(1.002, 1.0 + adjustment));
 
-                // Emergency Reset (only if massive gap > 1.0s or extreme underflow)
+                // Emergency Reset (Break/Drop)
                 if (wavNextPlayTime < now - 0.100 || bufferLevel > 1.000) {
                     console.warn("⚠️ Buffer sync lost, re-buffering...");
-                    wavNextPlayTime = now + SCHEDULE_AHEAD;
-                    source.playbackRate.value = 1.0;
+                    wavNextPlayTime = now + 0.050;
                     isBuffering = true;
+                    pendingBuffers = [{ buffer: audioBuffer, time: wavNextPlayTime }];
+                    wavNextPlayTime += duration;
                     smoothedDrift = 0;
+                    return;
                 }
 
-                // V114 Debug info
+                source.start(wavNextPlayTime);
+                wavNextPlayTime += duration;
+
                 window._lastBufferLevel = bufferLevel;
                 window._lastPlaybackRate = source.playbackRate.value;
-                window._lastIsBuffering = isBuffering;
-
-                source.start(wavNextPlayTime);
-                wavNextPlayTime += numFrames / activeSampleRate;
+                window._lastIsBuffering = false;
             } catch (e) {
                 console.error('Audio error:', e);
             }
