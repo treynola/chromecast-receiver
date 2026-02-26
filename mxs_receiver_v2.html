@@ -691,8 +691,10 @@
         let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
         const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.150; // V113: 150ms target look-ahead (PLL Headroom)
+        const SCHEDULE_AHEAD = 0.250; // V114: 250ms target look-ahead (Buffer Zone)
         let wavNextPlayTime = 0;
+        let isBuffering = true; // V114: Pre-roll state
+        let smoothedDrift = 0;  // V114: EWMA Filtered drift
 
         function initAudioPlayback() {
             if (audioCtx) return;
@@ -745,30 +747,46 @@
                 const now = audioCtx.currentTime;
                 const bufferLevel = wavNextPlayTime - now;
 
-                // V113: Adaptive PLL Stabilizer (Phase-Locked Loop style)
-                // Instead of "snapping" or "jumping", we use a smooth continuous function.
-                // Target: 150ms buffer. 
-                // Gain 0.05 means +50ms of drift results in +0.25% speed adjustment.
-                const targetBuffer = 0.150;
-                let drift = bufferLevel - targetBuffer;
+                // V114: Pre-roll "Buffer Zone" logic
+                // Don't start actual playback until we have 250ms of data
+                if (isBuffering) {
+                    if (bufferLevel < SCHEDULE_AHEAD) {
+                        // Keep accumulating
+                        return;
+                    } else {
+                        isBuffering = false;
+                        console.log("🚀 Buffer Zone reached, starting playback:", bufferLevel.toFixed(3), "s");
+                    }
+                }
+
+                // V114: Adaptive PLL with EWMA Smoothing
+                // Target: 250ms buffer. 
+                const targetBuffer = 0.250;
+                let currentDrift = bufferLevel - targetBuffer;
                 
-                // Fine adjustments: target +-0.2% (0.998x to 1.002x)
-                // This is enough to follow the sender's clock without audible pitch warbles.
-                let adjustment = drift * 0.05; 
+                // EWMA Filter (0.98 alpha = very smooth, ignores short oscillations)
+                smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02);
+                
+                // Fine adjustments: target +-0.2% (0.998x to 1.002x) based on SMOOTHED drift
+                let adjustment = smoothedDrift * 0.04; // Slightly lower gain for the smoothed value
                 let newRate = 1.0 + adjustment;
                 
                 // Tight clamp: 0.998 to 1.002 (±0.2%)
                 source.playbackRate.value = Math.max(0.998, Math.min(1.002, newRate));
 
-                // Emergency Reset (only if massive gap > 500ms)
-                if (wavNextPlayTime < now || bufferLevel > 0.500) {
+                // Emergency Reset (only if massive gap > 1.0s or extreme underflow)
+                if (wavNextPlayTime < now - 0.100 || bufferLevel > 1.000) {
+                    console.warn("⚠️ Buffer sync lost, re-buffering...");
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                     source.playbackRate.value = 1.0;
+                    isBuffering = true;
+                    smoothedDrift = 0;
                 }
 
-                // V113 Debug info
+                // V114 Debug info
                 window._lastBufferLevel = bufferLevel;
                 window._lastPlaybackRate = source.playbackRate.value;
+                window._lastIsBuffering = isBuffering;
 
                 source.start(wavNextPlayTime);
                 wavNextPlayTime += numFrames / activeSampleRate;
@@ -968,7 +986,8 @@
                     const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
                     const buff = (window._lastBufferLevel || 0).toFixed(3);
                     const rate = (window._lastPlaybackRate || 1.0).toFixed(4);
-                    activeEl.innerHTML = `v12.28 PLL | Buffer: ${buff}s | Rate: ${rate}x<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState}`;
+                    const stateTxt = window._lastIsBuffering ? 'BUFFERING' : 'STABLE';
+                    activeEl.innerHTML = `v12.28 V114 | ${stateTxt} | Buffer: ${buff}s | Rate: ${rate}x<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState}`;
                 }
 
                 if (typeof e.data === 'string') {
