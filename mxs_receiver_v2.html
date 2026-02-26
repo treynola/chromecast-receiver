@@ -710,15 +710,23 @@
         }
 
         function handleAudioChunk(pcmData) {
-            // V20: Direct WS → Float32 AudioBufferSourceNode (High Fidelity)
+            // V22: Direct WS -> 24-bit PCM Unpacking -> Float32 AudioBufferSourceNode
             if (!audioCtx) initAudioPlayback();
             if (!audioCtx || audioCtx.state !== 'running') return;
 
             try {
-                // pcmData is now Float32 interleaved stereo (from raw ArrayBuffer view)
-                const float32 = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
-                const numFrames = float32.length / WAV_CHANNELS;
+                // pcmData is now 24-bit packed integer PCM interleaved stereo (3 bytes per sample)
+                const numSamples = pcmData.byteLength / 3;
+                const numFrames = numSamples / WAV_CHANNELS;
                 if (numFrames === 0) return;
+
+                const float32 = new Float32Array(numSamples);
+                for (let i = 0; i < numSamples; i++) {
+                    let val = (pcmData[i * 3]) | (pcmData[i * 3 + 1] << 8) | (pcmData[i * 3 + 2] << 16);
+                    // Sign extend: shift left by 8, then sign-propagating shift right by 8
+                    val = (val << 8) >> 8;
+                    float32[i] = val / 8388607;
+                }
 
                 const buffer = audioCtx.createBuffer(WAV_CHANNELS, numFrames, activeSampleRate);
                 const L = buffer.getChannelData(0);
@@ -1002,7 +1010,7 @@
                     } else if (view[0] === 2) {
                         // Audio chunk - Float32 stereo PCM (V20 High Fidelity)
                         audioCount++;
-                        // Pass the entire ArrayBuffer to handleAudioChunk (it will create the view)
+                        // V22: Skip 4 bytes (MSG_AUDIO + 3 padding bytes) for 4-byte alignment
                         handleAudioChunk(new Uint8Array(e.data, 4));
                     }
                 } catch (err) {
