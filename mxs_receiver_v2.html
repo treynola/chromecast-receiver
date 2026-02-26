@@ -690,8 +690,8 @@
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
         let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
-        const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.150; // V114.4: Reduced from 0.250 for lower "Lag"
+        // Audio Sync Controls
+        const SCHEDULE_AHEAD = 0.100; // V114.11: Reduced from 0.150 for immediate "Direct-Feel" playback
         let wavNextPlayTime = 0;
         let isBuffering = true; // V114: Pre-roll state
         let smoothedDrift = 0;  // V114: EWMA Filtered drift
@@ -783,7 +783,7 @@
                 source.connect(audioCtx.destination);
 
                 const bufferLevel = wavNextPlayTime - now;
-                const targetBuffer = 0.150; // V114.4: Reduced from 0.250
+                const targetBuffer = 0.100; // V114.11: Reduced from 0.150 to stay closer to edge of network
                 let currentDrift = bufferLevel - targetBuffer;
                 
                 // V114.9: Removed Adaptive PLL (Dynamic playbackRate).
