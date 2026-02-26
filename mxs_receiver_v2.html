@@ -785,9 +785,10 @@
                 const bufferLevel = wavNextPlayTime - now;
                 const targetBuffer = 0.150; // V114.4: Reduced from 0.250
                 let currentDrift = bufferLevel - targetBuffer;
-                smoothedDrift = (smoothedDrift * 0.95) + (currentDrift * 0.05); // Faster reaction (0.05 vs 0.02)
-                let adjustment = smoothedDrift * 0.04;
-                source.playbackRate.value = Math.max(0.998, Math.min(1.002, 1.0 + adjustment));
+                // V114.5: Slower reaction (0.98 vs 0.95) to prevent "wavy" pitch shifting
+                smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02); 
+                let adjustment = smoothedDrift * 0.03; // Slightly reduced adjustment factor
+                source.playbackRate.value = Math.max(0.999, Math.min(1.001, 1.0 + adjustment)); // Narrower range
 
                 // Emergency Reset (Break/Drop)
                 if (wavNextPlayTime < now - 0.100 || bufferLevel > 1.000) {
