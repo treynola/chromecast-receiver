@@ -691,7 +691,7 @@
         let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
         // Audio Sync Controls
-        const SCHEDULE_AHEAD = 0.050; // V114.12: Reduced from 0.100 for immediate "Zero-Lag" playback
+        const SCHEDULE_AHEAD = 0.150; // V114.14: Restored to 150ms to buffer > 1x 85ms chunk
         let wavNextPlayTime = 0;
         let isBuffering = true; // V114: Pre-roll state
         let smoothedDrift = 0;  // V114: EWMA Filtered drift
@@ -783,7 +783,7 @@
                 source.connect(audioCtx.destination);
 
                 const bufferLevel = wavNextPlayTime - now;
-                const targetBuffer = 0.050; // V114.12: Reduced from 0.100 to stay closer to edge of network
+                const targetBuffer = 0.150; // V114.14: Restored margin to prevent instant network starvation
                 let currentDrift = bufferLevel - targetBuffer;
                 
                 // V114.9: Removed Adaptive PLL (Dynamic playbackRate).
