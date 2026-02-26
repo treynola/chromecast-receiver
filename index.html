@@ -794,12 +794,21 @@
                 smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02); 
                 source.playbackRate.value = Math.max(0.98, Math.min(1.02, 1.0 + (smoothedDrift * adjBase)));
 
-                // Emergency Reset (V114.7: Tightened to 0.400s)
+                // Emergency Reset (V114.8: Stop overlapping sources)
                 if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
                     console.warn(`⚠️ Buffer sync lost (Drift: ${bufferLevel.toFixed(3)}s), re-buffering...`);
                     wavNextPlayTime = now + 0.050;
                     isBuffering = true;
                     pendingBuffers = [audioBuffer]; 
+                    
+                    // NEW V114.8: Stop all previously scheduled nodes to prevent overlapping/waviness
+                    if (window._activeSources) {
+                        window._activeSources.forEach(s => {
+                            try { s.stop(); s.disconnect(); } catch(e){}
+                        });
+                    }
+                    window._activeSources = [];
+                    
                     wavNextPlayTime += duration;
                     smoothedDrift = 0;
                     return;
@@ -807,6 +816,16 @@
 
                 source.start(wavNextPlayTime);
                 wavNextPlayTime += duration;
+                
+                // Track active sources so we can stop them safely on lag resets
+                if (!window._activeSources) window._activeSources = [];
+                window._activeSources.push(source);
+                source.onended = () => {
+                    if (window._activeSources) {
+                        const idx = window._activeSources.indexOf(source);
+                        if (idx > -1) window._activeSources.splice(idx, 1);
+                    }
+                };
 
                 window._lastBufferLevel = bufferLevel;
                 window._lastPlaybackRate = source.playbackRate.value;
