@@ -691,7 +691,7 @@
         let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
         const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.060; // 60ms look-ahead (Safety vs Jitter)
+        const SCHEDULE_AHEAD = 0.085; // V111: 85ms look-ahead (Improved Jitter Immunity)
         let wavNextPlayTime = 0;
 
         function initAudioPlayback() {
@@ -746,8 +746,8 @@
                 if (wavNextPlayTime < now) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                 }
-                // Cap latency at 250ms to prevent drift
-                if (wavNextPlayTime - now > 0.250) {
+                // V111: Tightened drift protection (180ms) to prevent large pitch jumps
+                if (wavNextPlayTime - now > 0.180) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
                 }
 
@@ -813,12 +813,18 @@
                 };
                 tryPlay();
 
-                // Stop PCM processor to prevent double audio
+                // V111: AGGRESSIVE PCM MUTING when WebRTC arrives
                 if (audioCtx) {
                     console.log("🔇 Stopping PCM fallback (WebRTC active)");
-                    audioCtx.suspend();
-                    isAudioPlaying = false;
-                    audioQueue = []; // Clear any buffered PCM
+                    try {
+                        // Suspend context and clear buffers to eliminate phasing/flanging
+                        audioCtx.suspend();
+                        isAudioPlaying = false;
+                        audioQueue = []; // Clear any buffered PCM
+                        wavNextPlayTime = 0;
+                    } catch (e) {
+                         console.warn("Error suspending AudioContext:", e);
+                    }
                 }
             };
 
