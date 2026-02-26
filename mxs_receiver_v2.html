@@ -786,13 +786,11 @@
                 const targetBuffer = 0.150; // V114.4: Reduced from 0.250
                 let currentDrift = bufferLevel - targetBuffer;
                 
-                // V114.7: Adaptive adjustment factor based on drift severity
-                // If drift is minor (<100ms), use precise slow reaction
-                // If drift is moderate (100-400ms), use aggressive catchup
-                const adjBase = Math.abs(currentDrift) > 0.100 ? 0.10 : 0.03;
-                
-                smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02); 
-                source.playbackRate.value = Math.max(0.98, Math.min(1.02, 1.0 + (smoothedDrift * adjBase)));
+                // V114.9: Removed Adaptive PLL (Dynamic playbackRate).
+                // Dynamic pitch bending causes audible "wow and flutter" (waviness).
+                // We lock the rate to exactly 1.0 for perfect musical fidelity, 
+                // and rely solely on buffer resets to handle extreme drift.
+                source.playbackRate.value = 1.0; 
 
                 // Emergency Reset (V114.8: Stop overlapping sources)
                 if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
