@@ -740,29 +740,25 @@
                 const now = audioCtx.currentTime;
                 const duration = numFrames / activeSampleRate;
 
-                // Initialize wavNextPlayTime on first chunk
-                if (wavNextPlayTime === 0) {
-                    wavNextPlayTime = now + 0.050; // Start with 50ms padding
-                }
-
                 if (isBuffering) {
-                    pendingBuffers.push({ buffer: audioBuffer, time: wavNextPlayTime });
-                    wavNextPlayTime += duration;
-
-                    const bufferLevel = wavNextPlayTime - now;
-                    if (bufferLevel >= SCHEDULE_AHEAD) {
+                    pendingBuffers.push(audioBuffer);
+                    const totalQueuedSecs = pendingBuffers.length * duration;
+                    
+                    if (totalQueuedSecs >= SCHEDULE_AHEAD) {
                         isBuffering = false;
                         console.log("🚀 Buffer Zone reached, flushing", pendingBuffers.length, "chunks");
-                        pendingBuffers.forEach(item => {
+                        wavNextPlayTime = audioCtx.currentTime + 0.050; // Initial padding
+                        pendingBuffers.forEach(buf => {
                             const source = audioCtx.createBufferSource();
-                            source.buffer = item.buffer;
+                            source.buffer = buf;
                             source.connect(audioCtx.destination);
-                            source.start(item.time);
+                            source.start(wavNextPlayTime);
+                            wavNextPlayTime += buf.duration;
                         });
                         pendingBuffers = [];
                     }
                     window._lastIsBuffering = true;
-                    window._lastBufferLevel = bufferLevel;
+                    window._lastBufferLevel = totalQueuedSecs;
                     return;
                 }
 
