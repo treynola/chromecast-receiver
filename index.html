@@ -691,7 +691,7 @@
         let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
         const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.250; // V114: 250ms target look-ahead (Buffer Zone)
+        const SCHEDULE_AHEAD = 0.150; // V114.4: Reduced from 0.250 for lower "Lag"
         let wavNextPlayTime = 0;
         let isBuffering = true; // V114: Pre-roll state
         let smoothedDrift = 0;  // V114: EWMA Filtered drift
@@ -783,9 +783,9 @@
                 source.connect(audioCtx.destination);
 
                 const bufferLevel = wavNextPlayTime - now;
-                const targetBuffer = 0.250;
+                const targetBuffer = 0.150; // V114.4: Reduced from 0.250
                 let currentDrift = bufferLevel - targetBuffer;
-                smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02);
+                smoothedDrift = (smoothedDrift * 0.95) + (currentDrift * 0.05); // Faster reaction (0.05 vs 0.02)
                 let adjustment = smoothedDrift * 0.04;
                 source.playbackRate.value = Math.max(0.998, Math.min(1.002, 1.0 + adjustment));
 
@@ -794,7 +794,7 @@
                     console.warn("⚠️ Buffer sync lost, re-buffering...");
                     wavNextPlayTime = now + 0.050;
                     isBuffering = true;
-                    pendingBuffers = [{ buffer: audioBuffer, time: wavNextPlayTime }];
+                    pendingBuffers = [audioBuffer]; // V114.4: Correct format (array of buffers)
                     wavNextPlayTime += duration;
                     smoothedDrift = 0;
                     return;
