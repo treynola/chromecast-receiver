@@ -785,17 +785,21 @@
                 const bufferLevel = wavNextPlayTime - now;
                 const targetBuffer = 0.150; // V114.4: Reduced from 0.250
                 let currentDrift = bufferLevel - targetBuffer;
-                // V114.5: Slower reaction (0.98 vs 0.95) to prevent "wavy" pitch shifting
+                
+                // V114.7: Adaptive adjustment factor based on drift severity
+                // If drift is minor (<100ms), use precise slow reaction
+                // If drift is moderate (100-400ms), use aggressive catchup
+                const adjBase = Math.abs(currentDrift) > 0.100 ? 0.10 : 0.03;
+                
                 smoothedDrift = (smoothedDrift * 0.98) + (currentDrift * 0.02); 
-                let adjustment = smoothedDrift * 0.03; // Slightly reduced adjustment factor
-                source.playbackRate.value = Math.max(0.999, Math.min(1.001, 1.0 + adjustment)); // Narrower range
+                source.playbackRate.value = Math.max(0.98, Math.min(1.02, 1.0 + (smoothedDrift * adjBase)));
 
-                // Emergency Reset (Break/Drop)
-                if (wavNextPlayTime < now - 0.100 || bufferLevel > 1.000) {
-                    console.warn("⚠️ Buffer sync lost, re-buffering...");
+                // Emergency Reset (V114.7: Tightened to 0.400s)
+                if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
+                    console.warn(`⚠️ Buffer sync lost (Drift: ${bufferLevel.toFixed(3)}s), re-buffering...`);
                     wavNextPlayTime = now + 0.050;
                     isBuffering = true;
-                    pendingBuffers = [audioBuffer]; // V114.4: Correct format (array of buffers)
+                    pendingBuffers = [audioBuffer]; 
                     wavNextPlayTime += duration;
                     smoothedDrift = 0;
                     return;
@@ -1082,6 +1086,15 @@
                     } else if (view[0] === 2) {
                         // Audio chunk - Float32 stereo PCM (V20 High Fidelity)
                         audioCount++;
+                        
+                        // V114.7: Strict Single-Path Enforcement
+                        // If we are getting PCM packets, MUTE the WebRTC audio element to prevent phasing/waviness
+                        const webrtcEl = document.getElementById('webrtc-audio');
+                        if (webrtcEl && !webrtcEl.paused) {
+                            webrtcEl.pause();
+                            webrtcEl.muted = true;
+                        }
+
                         // V22: Skip 4 bytes (MSG_AUDIO + 3 padding bytes) for 4-byte alignment
                         handleAudioChunk(new Uint8Array(e.data, 4));
                     }
