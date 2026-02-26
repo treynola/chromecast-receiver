@@ -713,6 +713,13 @@
         }
 
         function handleAudioChunk(pcmData) {
+            // V114.2: Hard exit if WebRTC is active to prevent dual-stream phasing
+            const webrtcActive = !!(peerConnection && peerConnection.connectionState === 'connected');
+            if (webrtcActive) {
+                if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+                return;
+            }
+
             if (!audioCtx) initAudioPlayback();
             if (!audioCtx || audioCtx.state !== 'running') return;
 
@@ -851,15 +858,16 @@
                 };
                 tryPlay();
 
-                // V111: AGGRESSIVE PCM MUTING when WebRTC arrives
+                // V114.2: ABSOLUTE PCM MUTING when WebRTC arrives
                 if (audioCtx) {
-                    console.log("🔇 Stopping PCM fallback (WebRTC active)");
+                    console.log("🔇 Suspending PCM context (WebRTC OVERLORD active)");
                     try {
-                        // Suspend context and clear buffers to eliminate phasing/flanging
                         audioCtx.suspend();
                         isAudioPlaying = false;
-                        audioQueue = []; // Clear any buffered PCM
+                        pendingBuffers = []; // Clear V114.1 queue
+                        audioQueue = []; 
                         wavNextPlayTime = 0;
+                        isBuffering = true; // Reset so PCM has to re-buffer if WebRTC drops
                     } catch (e) {
                          console.warn("Error suspending AudioContext:", e);
                     }
@@ -1023,7 +1031,9 @@
                         console.log("📦 Final message type:", json.type);
 
                         if (json.type === 'state') {
-                            if (audioCtx && audioCtx.state === 'suspended') {
+                            // V114.2: Only resume PCM context if WebRTC is NOT active
+                            const webrtcActive = !!(peerConnection && peerConnection.connectionState === 'connected');
+                            if (audioCtx && audioCtx.state === 'suspended' && !webrtcActive) {
                                 audioCtx.resume();
                             }
                             applyState(json);
