@@ -691,7 +691,7 @@
         let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
         const WAV_CHANNELS = 2;
-        const SCHEDULE_AHEAD = 0.085; // V111: 85ms look-ahead (Improved Jitter Immunity)
+        const SCHEDULE_AHEAD = 0.100; // V112: 100ms target look-ahead
         let wavNextPlayTime = 0;
 
         function initAudioPlayback() {
@@ -743,13 +743,31 @@
                 source.connect(audioCtx.destination);
 
                 const now = audioCtx.currentTime;
-                if (wavNextPlayTime < now) {
-                    wavNextPlayTime = now + SCHEDULE_AHEAD;
+                const bufferLevel = wavNextPlayTime - now;
+
+                // V112: Adaptive Playback Rate Controller
+                // Instead of "snapping" the time (which sounds wavy), we slightly adjust speed.
+                if (bufferLevel > 0.180) {
+                    source.playbackRate.value = 1.02; // Catch up (2% faster)
+                } else if (bufferLevel > 0.140) {
+                    source.playbackRate.value = 1.01; // Catch up (1% faster)
+                } else if (bufferLevel < 0.040 && bufferLevel > 0) {
+                    source.playbackRate.value = 0.99; // Slow down (1% slower)
+                } else if (bufferLevel < 0.010 && bufferLevel > 0) {
+                    source.playbackRate.value = 0.98; // Slow down (2% slower)
+                } else {
+                    source.playbackRate.value = 1.0;
                 }
-                // V111: Tightened drift protection (180ms) to prevent large pitch jumps
-                if (wavNextPlayTime - now > 0.180) {
+
+                // Emergency Reset (only if massive gap or extreme lag > 500ms)
+                if (wavNextPlayTime < now || bufferLevel > 0.500) {
                     wavNextPlayTime = now + SCHEDULE_AHEAD;
+                    source.playbackRate.value = 1.0;
                 }
+
+                // V112 Debug info for the user
+                window._lastBufferLevel = bufferLevel;
+                window._lastPlaybackRate = source.playbackRate.value;
 
                 source.start(wavNextPlayTime);
                 wavNextPlayTime += numFrames / activeSampleRate;
@@ -944,11 +962,12 @@
                 msgCount++;
                 const debugEl = document.getElementById('debug-info');
                 const activeEl = document.getElementById('ws-active-status');
-
                 if (activeEl && msgCount % 20 === 0) {
                     const peak = (window._lastAudioPeak || 0).toFixed(3);
                     const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
-                    activeEl.innerHTML = `v12.16 | 12:16 PM Feb 8<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState} | Bytes: ${e.data.byteLength}`;
+                    const buff = (window._lastBufferLevel || 0).toFixed(3);
+                    const rate = (window._lastPlaybackRate || 1.0).toFixed(3);
+                    activeEl.innerHTML = `v12.28 | Buffer: ${buff}s | Rate: ${rate}x<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState}`;
                 }
 
                 if (typeof e.data === 'string') {
