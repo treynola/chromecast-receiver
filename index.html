@@ -793,7 +793,9 @@
                 source.playbackRate.value = 1.0; 
 
                 // Emergency Reset (V114.8: Stop overlapping sources)
-                if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
+                // V114.17: Increased limit from 0.4s to 0.8s. The Rust backend can buffer 4 chunks (340ms) and
+                // send them in bursts. A limit of 0.4s was falsely triggering resets and dropping all audio!
+                if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.800) {
                     console.warn(`⚠️ Buffer sync lost (Drift: ${bufferLevel.toFixed(3)}s), re-buffering...`);
                     wavNextPlayTime = now + 0.050; // V114.13: Hardware padding (Reset)
                     isBuffering = true;
