@@ -951,17 +951,35 @@
 
 
         function startAudioManually() {
-            // V16: Play the native <audio> element (user gesture unlocks autoplay)
+            console.log('🔊 Manual audio start triggered...');
+            const btn = document.getElementById('audio-unmute-btn');
+            if (btn) btn.classList.remove('visible');
+
+            // 1. Play the HTTP Stream element
+            const streamAudio = document.getElementById('cast-audio-stream');
+            if (streamAudio) {
+                streamAudio.play().then(() => console.log('✅ HTTP Stream started')).catch(e => console.warn('Stream play failed:', e));
+            }
+
+            // 2. Play the WebRTC element
+            const rtcAudio = document.getElementById('webrtc-audio');
+            if (rtcAudio) {
+                rtcAudio.play().then(() => console.log('✅ WebRTC Audio started')).catch(e => console.warn('WebRTC play failed:', e));
+            }
+
+            // 3. Play the legacy cast-audio element
             const audioEl = document.getElementById('cast-audio');
             if (audioEl && audioEl.src) {
-                audioEl.play().then(() => {
-                    console.log('🔊 Audio started manually');
-                    const btn = document.getElementById('audio-unmute-btn');
-                    if (btn) btn.classList.remove('visible');
-                }).catch(e => console.error('Play failed:', e));
+                audioEl.play().then(() => console.log('✅ Legacy Cast Audio started')).catch(e => console.warn('Legacy play failed:', e));
             }
-            // Also resume AudioContext if it exists (legacy)
-            if (audioCtx) audioCtx.resume();
+
+            // 4. Resume AudioContext (for PCM chunks)
+            if (audioCtx) {
+                audioCtx.resume().then(() => {
+                    console.log('✅ AudioContext resumed (state:', audioCtx.state, ')');
+                    // If we were buffering, this will allow scheduled nodes to play
+                });
+            }
         }
 
 
@@ -1069,7 +1087,14 @@
                         // DEBUG: Log final type after unwrap
                         console.log("📦 Final message type:", json.type);
 
-                        if (json.type === 'state') {
+                        // --- V114.3: WebRTC Signaling via MSG_META ---
+                        if (json.type === 'offer') {
+                            console.log("🔥 WebRTC Offer detected in MSG_META");
+                            handleWebRTCOffer(json.sdp);
+                        } else if (json.type === 'ice-candidate' || json.candidate) {
+                            console.log("🧊 ICE Candidate detected in MSG_META");
+                            handleIceCandidate(json.candidate || json);
+                        } else if (json.type === 'state') {
                             // V114.2: Only resume PCM context if WebRTC is NOT active
                             const webrtcActive = !!(peerConnection && peerConnection.connectionState === 'connected');
                             if (audioCtx && audioCtx.state === 'suspended' && !webrtcActive) {
