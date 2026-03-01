@@ -153,8 +153,9 @@
                 const data = JSON.parse(event.data);
                 
                 // Native Stream Launch message
-                if (data.type === 'connect' && data.url && data.url.includes("audio_stream=")) {
-                     const directUrl = decodeURIComponent(data.url.split("audio_stream=")[1].split("&")[0]);
+                const targetUrl = data.url || data.wsUrl;
+                if (data.type === 'connect' && targetUrl && targetUrl.includes("audio_stream=")) {
+                     const directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
                      logMsg("Connecting Audio Server: " + directUrl);
                      
                      let request = new cast.framework.messages.LoadRequestData();
