@@ -1,35 +1,37 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>NOWMULTIMEDIA MXS-004 Studio Receiver</title>
     <!-- Google Cast Web Receiver SDK -->
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link rel="stylesheet" href="styles_v101.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            color: white;
-            font-family: 'Courier New', monospace;
-            height: 100vh;
-            overflow: hidden;
+            background-color: transparent !important;
+            overflow: hidden; /* Cast receiver shouldn't scroll */
+        }
+        
+        /* Hide Cast Default Player */
+        cast-media-player {
+            display: none;
         }
 
-        cast-media-player {
-            display: none; /* Hide default UI, we just want it to play audio cleanly */
+        #mxs-studio-container {
+            display: none; /* Hidden until state arrives */
+            width: 100vw;
+            height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
         }
 
         #splash {
             text-align: center;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
         #splash h1 {
@@ -37,113 +39,124 @@
             font-size: 3em;
             margin-bottom: 20px;
             text-shadow: 0 0 20px rgba(250, 215, 142, 0.5);
+            font-family: 'Courier New', monospace;
         }
-
         #splash h2 {
             color: #008000;
             font-size: 1.5em;
+            font-family: 'Courier New', monospace;
         }
-
         #status-text {
             color: #ccc;
             margin-top: 15px;
             font-size: 1.2em;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Enforce Read-Only UI on Cast */
+        .track * {
+            pointer-events: none !important;
         }
         
-        #debug-log {
+        .debug-panel {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 10px; right: 10px;
             background: rgba(0,0,0,0.8);
             border: 1px solid #333;
+            color: #0f0;
             padding: 10px;
-            font-size: 14px;
-            max-width: 600px;
-            min-height: 100px;
-            max-height: 300px;
-            overflow-y: hidden;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-end;
+            font-family: monospace;
+            max-width: 400px;
+            max-height: 200px;
+            overflow: hidden;
+            display: none; /* Change to block to debug */
         }
-
     </style>
 </head>
-
 <body>
-    <!-- The native Google component for media decoding -->
     <cast-media-player></cast-media-player>
 
     <div id="splash">
         <h1>MXS-004 STUDIO</h1>
         <h2>HI-FI AUDIO PLAYBACK</h2>
-        <div id="status-text">WAITING FOR AUDIO STREAM...</div>
+        <div id="status-text">INITIALIZING RECEIVER...</div>
+    </div>
+
+    <!-- The mirror of the desktop App UI -->
+    <div id="mxs-studio-container" class="container">
+        <!-- Tracks are populated here by the state differ -->
+        <div id="tracks-container"></div>
+        
+        <!-- Master Section -->
+        <div id="master-section" class="master-bus">
+            <h2 class="master-title">MASTER BUS</h2>
+            
+            <div class="meter-container master-meter-container">
+                <canvas id="master-meter-canvas" width="60" height="200"></canvas>
+            </div>
+            
+            <div class="master-controls">
+                <div class="knob-container">
+                    <div class="knob" id="master-vol-knob" style="transform: rotate(0deg);"></div>
+                    <span class="knob-label">Vol: 0.0dB</span>
+                </div>
+            </div>
+            <button id="master-play-btn" class="active">PLAYING</button>
+            <div id="master-status" class="master-status-text">CAST RECEIVER ACTIVE</div>
+        </div>
     </div>
     
-    <div id="debug-log"></div>
+    <div id="debug-log" class="debug-panel"></div>
 
     <script>
         const statusText = document.getElementById("status-text");
+        const splash = document.getElementById("splash");
+        const studioContainer = document.getElementById("mxs-studio-container");
+        const tracksContainer = document.getElementById("tracks-container");
         const debugLog = document.getElementById("debug-log");
         
-        function logMsg(msg, color="#fff") {
+        function logMsg(msg) {
             console.log(msg);
             const line = document.createElement("div");
-            line.style.color = color;
             line.textContent = `> ${msg}`;
             debugLog.appendChild(line);
-            if (debugLog.childNodes.length > 10) {
-                debugLog.removeChild(debugLog.firstChild);
-            }
+            if(debugLog.children.length > 5) debugLog.removeChild(debugLog.firstChild);
         }
 
-        logMsg("Initializing Cast Receiver...", "#0f0");
+        logMsg("Initializing Cast Receiver...");
 
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
-
-        // Configure player to prefer WebM / Opus
+        
         const playbackConfig = new cast.framework.PlaybackConfig();
         playbackConfig.autoResumeDuration = 5;
         context.start({ playbackConfig: playbackConfig });
 
-        // Optional: Listen for PLAYING state to update UI
-        playerManager.addEventListener(
-            cast.framework.events.EventType.PLAYING, () => {
-                logMsg("State: PLAYING", "#5f5");
-                statusText.textContent = "AUDIO STREAM ACTIVE";
-                statusText.style.color = "#0f0";
-            }
-        );
+        playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
+            statusText.textContent = "AUDIO STREAM ACTIVE";
+            statusText.style.color = "#0f0";
+            // Do not hide splash until we receive UI layout data
+        });
         
-        playerManager.addEventListener(
-            cast.framework.events.EventType.BUFFERING, () => {
-                logMsg("State: BUFFERING...", "#ff0");
-                statusText.textContent = "BUFFERING STREAM...";
-                statusText.style.color = "#FFA500";
-            }
-        );
-        
-        playerManager.addEventListener(
-            cast.framework.events.EventType.ERROR, (event) => {
-                logMsg("Stream Codec/Network Error", "#f00");
-                console.error("Player error:", event);
-                statusText.textContent = "STREAM DECODE ERROR";
-                statusText.style.color = "#f00";
-            }
-        );
+        playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
+            statusText.textContent = "STREAM ERROR";
+            statusText.style.color = "#f00";
+        });
 
-        // V106: Listen for CUSTOM MESSAGES (like our old Hybrid launch fallback)
+        // ==========================================================
+        // UI REPLICATION ENGINE
+        // ==========================================================
+
+        // Generic custom message listener for Cast State Broadcaster
         context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', (event) => {
-            logMsg("Received Custom HYBRID LOAD request: " + event.data);
             try {
-                let data = JSON.parse(event.data);
-                // "audio_stream" is passed in by our scripts.js wsUrl string mapping
-                if (data.url && data.url.includes("audio_stream=")) {
+                const data = JSON.parse(event.data);
+                
+                // Native Stream Launch message
+                if (data.type === 'connect' && data.url && data.url.includes("audio_stream=")) {
                      const directUrl = decodeURIComponent(data.url.split("audio_stream=")[1].split("&")[0]);
-                     logMsg("Extracted Direct Audio stream: " + directUrl, "#0ff");
+                     logMsg("Connecting Audio Server: " + directUrl);
                      
-                     // Force PlayerManager to play it natively!
                      let request = new cast.framework.messages.LoadRequestData();
                      let mediaInfo = new cast.framework.messages.MediaInformation();
                      mediaInfo.contentId = directUrl;
@@ -152,35 +165,145 @@
                      request.media = mediaInfo;
                      
                      playerManager.load(request);
-                     statusText.textContent = "CONNECTING TO STREAM...";
+                     statusText.textContent = "CONNECTING TO AUDIO NODE...";
                 }
+                
+                // Studio State Broadcaster Message
+                if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                    if(splash.style.display !== 'none') {
+                        splash.style.display = 'none';
+                        studioContainer.style.display = 'flex';
+                    }
+                    renderStudioState(data.state);
+                }
+                
             } catch (err) {
-                logMsg("Error parsing HYBRID command.", "#f00");
+                logMsg("Parse Error: " + err.message);
             }
         });
 
-        // Intercept native LOAD requests
-        playerManager.setMessageInterceptor(
-            cast.framework.messages.MessageType.LOAD,
-            request => {
-                logMsg("Intercepted Native LOAD -> " + request.media.contentId, "#0ff");
-                statusText.textContent = "CONNECTING TO STREAM...";
+        // Intercept native LOAD requests for legacy fallback
+        playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, request => {
+            statusText.textContent = "CONNECTING NATIVE STREAM...";
+            if (request.media) {
+                request.media.streamType = cast.framework.messages.StreamType.LIVE;
+                if (!request.media.contentType) request.media.contentType = 'audio/webm';
+            }
+            return request;
+        });
+
+        // ----------------------------------------------------
+        // DOM Rendering Logic
+        // Takes the JSON tree from the sender and builds/updates the CSS UI
+        // ----------------------------------------------------
+        function renderStudioState(state) {
+            // Master updates
+            if(state.master) {
+                const volLabel = document.querySelector("#master-vol-knob + .knob-label");
+                if(volLabel && state.master.volume !== undefined) {
+                    volLabel.textContent = `Vol: ${state.master.volume.toFixed(1)}dB`;
+                }
+            }
+
+            // Track updates
+            if(!state.tracks || !Array.isArray(state.tracks)) return;
+            
+            state.tracks.forEach((trackState, index) => {
+                let trackDiv = document.querySelector(`.track[data-id="${trackState.id}"]`);
                 
-                // Ensure it plays as a LIVE stream so it doesn't wait for EOF
-                if (request.media) {
-                    request.media.streamType = cast.framework.messages.StreamType.LIVE;
-                    // Ensure content-type is WebM
-                    if (!request.media.contentType) {
-                         request.media.contentType = 'audio/webm';
-                    }
+                // Create if missing
+                if (!trackDiv) {
+                    trackDiv = document.createElement("div");
+                    trackDiv.className = "track";
+                    trackDiv.dataset.id = trackState.id;
+                    trackDiv.innerHTML = getTrackTemplate(trackState.id);
+                    tracksContainer.appendChild(trackDiv);
+                }
+
+                // Update Name
+                const nameEl = trackDiv.querySelector(".track-name span");
+                if(nameEl && trackState.name) nameEl.textContent = trackState.name;
+
+                // Update Colors
+                if (trackState.color) {
+                    trackDiv.style.borderColor = trackState.color;
+                    const header = trackDiv.querySelector(".track-header");
+                    if(header) header.style.background = `linear-gradient(to right, ${trackState.color}, rgba(0,0,0,0.8))`;
+                }
+
+                // Update Button States (Toggle colors)
+                const playBtn = trackDiv.querySelector(".btn-play");
+                if(playBtn) {
+                     if(trackState.isPlaying) {
+                         playBtn.classList.add("active");
+                         playBtn.style.color = "#0f0";
+                         playBtn.style.borderColor = "#0f0";
+                     } else {
+                         playBtn.classList.remove("active");
+                         playBtn.style.color = "";
+                         playBtn.style.borderColor = "";
+                     }
                 }
                 
-                return request;
-            }
-        );
+                // Sliders/Knobs Text
+                const volEl = trackDiv.querySelector(".vol-label");
+                if(volEl && trackState.volume !== undefined) volEl.textContent = `Vol: ${trackState.volume.toFixed(1)}dB`;
+                
+                const panEl = trackDiv.querySelector(".pan-label");
+                if(panEl && trackState.pan !== undefined) panEl.textContent = `Pan: ${trackState.pan.toFixed(2)}`;
+                
+                // Track FX List
+                const fxContainer = trackDiv.querySelector(".effects-grid");
+                if(fxContainer && trackState.effects) {
+                    fxContainer.innerHTML = "";
+                    trackState.effects.forEach((eff, i) => {
+                        const box = document.createElement("div");
+                        box.className = "effect-slot " + (eff ? "occupied" : "empty");
+                        box.textContent = eff ? eff.name : `Slot ${i+1}`;
+                        if(eff && !eff.enabled) box.style.opacity = "0.5";
+                        fxContainer.appendChild(box);
+                    });
+                }
+            });
+            
+            // Cleanup deleted tracks
+            const currentIds = state.tracks.map(t => String(t.id));
+            Array.from(tracksContainer.children).forEach(child => {
+                 if(!currentIds.includes(child.dataset.id)) {
+                     child.remove();
+                 }
+            });
+        }
 
-        logMsg("Receiver Ready.", "#0f0");
+        // HTML skeleton for a track that mirrors desktop track structure
+        function getTrackTemplate(id) {
+            return `
+                <div class="track-header">
+                    <div class="track-number">${id+1}</div>
+                    <div class="track-name"><span class="scrolling-text">Loading...</span></div>
+                </div>
+                
+                <div class="track-controls">
+                    <button class="btn btn-play" disabled>PLAY</button>
+                    <button class="btn" disabled>LOOP</button>
+                </div>
+                
+                <div class="track-knobs">
+                    <div class="knob-container">
+                        <div class="knob-label vol-label">Vol: 0.0dB</div>
+                    </div>
+                    <div class="knob-container">
+                        <div class="knob-label pan-label">Pan: 0.0</div>
+                    </div>
+                </div>
+
+                <div class="effects-section">
+                    <div class="effects-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            `;
+        }
     </script>
 </body>
-
 </html>
