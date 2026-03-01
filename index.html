@@ -108,6 +108,9 @@
     
     <div id="debug-log" class="debug-panel"></div>
 
+    <!-- Include TrackView.js for DOM parity -->
+    <script src="TrackView.js"></script>
+
     <script>
         const statusText = document.getElementById("status-text");
         const splash = document.getElementById("splash");
@@ -214,15 +217,15 @@
                 
                 // Create if missing
                 if (!trackDiv) {
-                    trackDiv = document.createElement("div");
-                    trackDiv.className = "track";
+                    const tv = new TrackView(trackState.id);
+                    trackDiv = tv.buildElement();
                     trackDiv.dataset.id = trackState.id;
-                    trackDiv.innerHTML = getTrackTemplate(trackState.id);
                     tracksContainer.appendChild(trackDiv);
+                    trackDiv.__tv = tv; // Save ref for helper methods if needed
                 }
 
                 // Update Name
-                const nameEl = trackDiv.querySelector(".track-name span");
+                const nameEl = trackDiv.querySelector(".file-name-display");
                 if(nameEl && trackState.name) nameEl.textContent = trackState.name;
 
                 // Update Colors
@@ -233,7 +236,7 @@
                 }
 
                 // Update Button States (Toggle colors)
-                const playBtn = trackDiv.querySelector(".btn-play");
+                const playBtn = trackDiv.querySelector("button[data-action='play']");
                 if(playBtn) {
                      if(trackState.isPlaying) {
                          playBtn.classList.add("active");
@@ -247,22 +250,35 @@
                 }
                 
                 // Sliders/Knobs Text
-                const volEl = trackDiv.querySelector(".vol-label");
-                if(volEl && trackState.volume !== undefined) volEl.textContent = `Vol: ${trackState.volume.toFixed(1)}dB`;
+                const volSlider = trackDiv.querySelector("input[data-param='vol']");
+                const volVal = trackDiv.querySelector("span[data-value-for='vol']");
+                if(volSlider && trackState.volume !== undefined) {
+                    volSlider.value = trackState.volume;
+                    if(volVal) volVal.textContent = trackState.volume.toFixed(1) + "dB";
+                }
                 
-                const panEl = trackDiv.querySelector(".pan-label");
-                if(panEl && trackState.pan !== undefined) panEl.textContent = `Pan: ${trackState.pan.toFixed(2)}`;
+                const panSlider = trackDiv.querySelector("input[data-param='pan']");
+                const panVal = trackDiv.querySelector("span[data-value-for='pan']");
+                if(panSlider && trackState.pan !== undefined) {
+                    panSlider.value = trackState.pan;
+                    if(panVal) panVal.textContent = trackState.pan.toFixed(2);
+                }
                 
                 // Track FX List
-                const fxContainer = trackDiv.querySelector(".effects-grid");
-                if(fxContainer && trackState.effects) {
-                    fxContainer.innerHTML = "";
+                const fxSlots = trackDiv.querySelectorAll(".fx-chain-slot label");
+                if(fxSlots.length > 0 && trackState.effects) {
                     trackState.effects.forEach((eff, i) => {
-                        const box = document.createElement("div");
-                        box.className = "effect-slot " + (eff ? "occupied" : "empty");
-                        box.textContent = eff ? eff.name : `Slot ${i+1}`;
-                        if(eff && !eff.enabled) box.style.opacity = "0.5";
-                        fxContainer.appendChild(box);
+                        if (i < fxSlots.length) {
+                            fxSlots[i].textContent = eff ? eff.name.substring(0,3) : (i+1);
+                            fxSlots[i].style.opacity = (eff && !eff.enabled) ? "0.5" : "1";
+                            if(eff) {
+                                fxSlots[i].style.background = "#0f0";
+                                fxSlots[i].style.color = "#000";
+                            } else {
+                                fxSlots[i].style.background = "";
+                                fxSlots[i].style.color = "";
+                            }
+                        }
                     });
                 }
             });
@@ -274,36 +290,6 @@
                      child.remove();
                  }
             });
-        }
-
-        // HTML skeleton for a track that mirrors desktop track structure
-        function getTrackTemplate(id) {
-            return `
-                <div class="track-header">
-                    <div class="track-number">${id+1}</div>
-                    <div class="track-name"><span class="scrolling-text">Loading...</span></div>
-                </div>
-                
-                <div class="track-controls">
-                    <button class="btn btn-play" disabled>PLAY</button>
-                    <button class="btn" disabled>LOOP</button>
-                </div>
-                
-                <div class="track-knobs">
-                    <div class="knob-container">
-                        <div class="knob-label vol-label">Vol: 0.0dB</div>
-                    </div>
-                    <div class="knob-container">
-                        <div class="knob-label pan-label">Pan: 0.0</div>
-                    </div>
-                </div>
-
-                <div class="effects-section">
-                    <div class="effects-grid">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-            `;
         }
     </script>
 </body>
