@@ -84,25 +84,34 @@
 
     <!-- The mirror of the desktop App UI -->
     <div id="mxs-studio-container" class="container">
-        <!-- Tracks are populated here by the state differ -->
-        <div id="tracks-container"></div>
-        
-        <!-- Master Section -->
-        <div id="master-section" class="master-bus">
-            <h2 class="master-title">MASTER BUS</h2>
-            
-            <div class="meter-container master-meter-container">
-                <canvas id="master-meter-canvas" width="60" height="200"></canvas>
-            </div>
-            
-            <div class="master-controls">
-                <div class="knob-container">
-                    <div class="knob" id="master-vol-knob" style="transform: rotate(0deg);"></div>
-                    <span class="knob-label">Vol: 0.0dB</span>
+        <div class="main-content">
+            <!-- Column 1: Master Controls -->
+            <div class="master-column">
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+
+                <div class="master-item master-volume-aligned">
+                    <div class="track-header">Vol</div>
+                    <input type="range" id="master-volume" min="-80" max="20" step="0.1" value="0">
+                    <span id="master-volume-value" class="master-value">0.0 dB</span>
+                </div>
+
+                <div class="master-item master-waveform-item">
+                    <div class="waveform-box master-waveform-box">
+                        <div class="waveform-labels">
+                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                            <div class="waveform-label-external">R</div>
+                        </div>
+                        <div id="master-waveform-container" class="waveform-canvas-container flex-grow">
+                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
+                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <button id="master-play-btn" class="active">PLAYING</button>
-            <div id="master-status" class="master-status-text">CAST RECEIVER ACTIVE</div>
+
+            <!-- Columns 2-5: Tracks -->
+            <div id="tracks-container" class="tracks-container"></div>
         </div>
     </div>
     
