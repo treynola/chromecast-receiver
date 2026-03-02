@@ -314,6 +314,14 @@
                     window.audioService.setTrackVolume(trackId, val);
                 } else if (param === 'pan') {
                     window.audioService.setTrackPan(trackId, val);
+                } else if (param === 'treble') {
+                    window.audioService.setTrackEQ(trackId, { treble: val });
+                } else if (param === 'mid_gain') {
+                    window.audioService.setTrackEQ(trackId, { mid: val });
+                } else if (param === 'mid_freq') {
+                    window.audioService.setTrackEQ(trackId, { midFreq: val });
+                } else if (param === 'bass') {
+                    window.audioService.setTrackEQ(trackId, { bass: val });
                 } else {
                     console.warn(`Unknown parameter update: ${param}`);
                 }
@@ -527,7 +535,9 @@
             masterVol.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (masterVolVal) masterVolVal.textContent = `${val.toFixed(1)} dB`;
-                window.audioService.setMasterVolume(val);
+                if (window.audioService?.contextManager) {
+                    window.audioService.contextManager.setMasterVolume(val);
+                }
             });
         }
     });
