@@ -310,10 +310,12 @@
                     else window.audioService.setTrackLoopEnd(trackId, val);
                 } else if (param === 'playbackRate') {
                     window.audioService.setTrackPlaybackRate(trackId, val);
-                } else if (param === 'volume') {
+                } else if (param === 'volume' || param === 'vol') {
                     window.audioService.setTrackVolume(trackId, val);
+                } else if (param === 'pan') {
+                    window.audioService.setTrackPan(trackId, val);
                 } else {
-                    window.audioService.updateTrackParameter(trackId, param, val);
+                    console.warn(`Unknown parameter update: ${param}`);
                 }
 
                 if (track.elements.valueDisplays[param]) {
