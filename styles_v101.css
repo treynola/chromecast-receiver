@@ -51,6 +51,7 @@ body {
 
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-user-select: none;
     user-select: none;
     overflow: hidden;
     /* strict no-scroll */
@@ -292,13 +293,7 @@ body {
     flex: none;
 }
 
-.loop-controls {
-    display: flex;
-    gap: 5px;
-    margin-top: 5px;
-    border-top: 1px solid var(--mid-gray);
-    padding-top: 5px;
-}
+/* .loop-controls REMOVED - MERGED INTO LINE 3595 */
 
 .track-transport-row {
     display: flex;
@@ -307,26 +302,29 @@ body {
     margin: 5px 0;
 }
 
-.track-waveform-container {
+/* Uniform Waveform Styles (shared by track and master) */
+.waveform-box {
     display: flex !important;
     align-items: center !important;
-    /* Center vertically */
     width: 100% !important;
     height: 60px !important;
     background: transparent !important;
     margin-bottom: 5px !important;
+}
+
+.track-item .waveform-box {
     border: 1px solid var(--mid-gray) !important;
 }
 
-.track-waveform-labels {
+.waveform-labels {
     display: flex !important;
     flex-direction: column !important;
     justify-content: space-around !important;
     height: 100% !important;
     width: 20px !important;
     text-align: center !important;
-    border-right: 1px solid #333 !important;
-    margin-right: 2px !important;
+    border-right: 1px solid var(--gold) !important;
+    margin-right: 4px !important;
 }
 
 .waveform-label-external {
@@ -335,31 +333,26 @@ body {
     font-weight: bold !important;
 }
 
-.track-waveform-canvases {
+.waveform-canvas-container {
     display: flex !important;
     flex-direction: column !important;
     flex-grow: 1 !important;
-    /* Take remaining space */
     height: 100% !important;
+    justify-content: center !important;
+    gap: 4px !important;
 }
 
-.track-waveform-canvas-L,
-.track-waveform-canvas-R {
+.waveform-canvas {
     width: 100% !important;
-    height: 50% !important;
+    height: 26px !important;
     background: #000 !important;
     display: block !important;
+    border: 1px solid var(--gold) !important;
+    border-radius: 4px !important;
+    box-sizing: border-box !important;
 }
 
-.track-waveform-canvas-L,
-.track-waveform-canvas-R {
-    width: 100%;
-    height: 50%;
-    background: #000;
-    /* Ensure black background */
-    display: block;
-    /* Ensure they are block elements */
-}
+
 
 .track-input-row {
     display: flex;
@@ -449,21 +442,15 @@ img {
     margin: 6px;
     /* Make room for the shadow inside the parent padding */
     overflow: hidden;
+    transition: opacity 1.8s ease-in-out;
 }
 
 .hidden {
     display: none;
 }
 
-#app-curtain {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: black;
-    z-index: 9999;
-    transition: opacity 1.8s ease-in-out;
+.app-loading {
+    opacity: 0;
     pointer-events: none;
 }
 
@@ -1490,11 +1477,6 @@ select option {
     background-color: #555;
 }
 
-.loop-controls {
-    display: none;
-    flex-direction: column;
-    gap: 15px;
-}
 
 .effect-controls {
     display: flex;
@@ -2657,30 +2639,10 @@ select option {
     gap: 2px;
 }
 
-/* Master Waveform Visualizer Fixes */
+/* Master Waveform Visualizer Specifics (Uniformity with Tracks) */
 #master-waveform-container {
     position: relative;
     min-width: 0;
-    height: 60px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    gap: 4px;
-    /* 4px gap as requested */
-}
-
-.waveform-canvas {
-    width: 100%;
-    flex: 1;
-    height: auto;
-    min-height: 0;
-    /* Flex overflow fix */
-    display: block;
-    background-color: #111;
-    border: 1px solid var(--green);
-    border-radius: 4px;
-    box-sizing: border-box;
-    /* Border fix */
 }
 
 .stereo-waveform-wrapper {
@@ -2759,7 +2721,7 @@ select option {
     flex: 1;
     display: block;
     background-color: #111;
-    border: 1px solid var(--green);
+    border: 1px solid var(--gold);
     border-radius: 4px;
     box-sizing: border-box;
     min-height: 0;
@@ -3599,14 +3561,15 @@ select option {
 
 /* Loop Control Styling (Match LFO) */
 .loop-controls {
-    /* Container style matches .lfo-side-by-side-container */
+    display: flex;
+    /* Default flex for debugging, JS can override */
+    flex-direction: column;
     background-color: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid var(--mid-gray);
-    padding: 4px 5px;
-    /* Add horizontal padding since it's not full width */
-    margin: 7px 0 5px 0;
-    border-top: 1px solid var(--mid-gray);
-    /* Add top border for completeness */
+    /* border lines REMOVED per user request */
+    padding: 0;
+    gap: 0;
+    margin: 5px 0 0 0;
+    width: 100%;
 }
 
 /* Labels Match Sweep 1/2 */
@@ -3635,8 +3598,266 @@ select option {
    But we don't have a dedicated separator element.
    We can add border-right to the first child container. 
 */
+/* 3-Line Loop Control Layout */
+.loop-controls.active {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    min-height: 40px !important;
+    /* border removed - final styling */
+}
+
+.loop-controls.hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+}
+
+.loop-control-block {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 50px;
+    /* Ensure it takes space */
+}
+
+.loop-control-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Spread label and icon */
+    margin-bottom: 2px;
+}
+
+.loop-control-header label {
+    font-size: 0.7em !important;
+    /* Match FX Chain Title */
+    color: var(--green) !important;
+    font-weight: normal;
+    /* Was bold */
+    text-transform: none !important;
+    /* Normal case */
+    margin: 0;
+    white-space: nowrap;
+}
+
+.loop-control-value {
+    width: 100%;
+    margin-bottom: 2px;
+}
+
+.loop-control-value .param-value {
+    display: block !important;
+    text-align: left;
+    color: var(--gold);
+    font-size: 0.8em;
+    font-family: monospace;
+}
+
+/* Ensure sliders in loop controls are visible */
+.loop-controls .slider-wrapper {
+    width: 100%;
+    height: 15px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 0 !important;
+    /* No padding beneath */
+}
+
+/* Scissors default - Match Play Button Style */
+.loop-controls .slice-trigger-btn {
+    background-color: var(--green) !important;
+    border: 1px solid var(--gold) !important;
+    color: var(--gold) !important;
+    /* Icon color */
+    box-shadow: none !important;
+    transform: none !important;
+    cursor: pointer;
+    font-size: 0.65em;
+    /* Reduced from 0.8em */
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin: 0 4px;
+}
+
+.loop-controls .slice-trigger-btn i {
+    color: var(--gold) !important;
+}
+
+/* Scissors Hover - Red Background, White Icon */
+.loop-controls .slice-trigger-btn:hover {
+    background-color: red !important;
+    border: 1px solid white !important;
+}
+
+.loop-controls .slice-trigger-btn:hover i {
+    color: white !important;
+}
+
+/* --- NEW 3-LINE LAYOUT STYLES --- */
+
+.loop-grid-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 2px;
+    padding: 2px;
+}
+
+/* LINE 1: Labels & Scissors */
+.loop-line-1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.loop-line-1 label {
+    font-size: 0.65em;
+    /* Match LFO label size */
+    color: var(--green);
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* LINE 2: Sliders */
+.loop-line-2 {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    height: 12px;
+    /* Fixed height container for sliders */
+    align-items: center;
+}
+
+.loop-line-2 input[type="range"] {
+    flex: 1;
+    margin: 0;
+    height: 10px !important;
+    /* Match LFO slider height */
+    overflow: hidden;
+    /* Hide overflow */
+    padding: 0;
+}
+
+/* LINE 3: Values */
+.loop-line-3 {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.loop-line-3 .param-value {
+    font-size: 0.75em;
+    /* Match LFO value size */
+    color: var(--gold);
+    font-family: monospace;
+
+    /* OVERRIDE GLOBAL ABSOLUTE POSITIONING */
+    position: static !important;
+    transform: none !important;
+    left: auto !important;
+    top: auto !important;
+    text-align: left;
+    pointer-events: auto;
+    width: auto;
+}
+
+.loop-controls .slice-trigger-btn i {
+    color: var(--gold) !important;
+}
+
+/* Scissors Hover - Red Background, White Icon */
+.loop-controls .slice-trigger-btn:hover {
+    background-color: red !important;
+    border: 1px solid white !important;
+}
+
+.loop-controls .slice-trigger-btn:hover i {
+    color: white !important;
+}
+
+/* --- NEW 3-LINE LAYOUT STYLES --- */
+
+.loop-grid-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 2px;
+    padding: 2px;
+}
+
+/* LINE 1: Labels & Scissors */
+.loop-line-1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.loop-line-1 label {
+    font-size: 0.65em;
+    /* Match LFO label size */
+    color: var(--green);
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* LINE 2: Sliders */
+.loop-line-2 {
+    display: flex;
+    gap: 4px;
+    width: 100%;
+    height: 12px;
+    /* Fixed height container for sliders */
+    align-items: center;
+}
+
+.loop-line-2 input[type="range"] {
+    flex: 1;
+    margin: 0;
+    height: 10px !important;
+    /* Match LFO slider height */
+    overflow: hidden;
+    /* Hide overflow */
+    padding: 0;
+}
+
+/* LINE 3: Values */
+.loop-line-3 {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.loop-line-3 .param-value {
+    font-size: 0.75em;
+    /* Match LFO value size */
+    color: var(--gold);
+    font-family: monospace;
+}
+
+/* END OF LOOP CONTROLS STYLES */
+/* Scissors Hover - Red Background, White Icon */
+.loop-controls .slice-trigger-btn:hover {
+    background-color: red !important;
+    border: 1px solid white !important;
+}
+
+.loop-controls .slice-trigger-btn:hover i {
+    color: white !important;
+}
+
+.loop-controls .slider-wrapper input[type=range] {
+    width: 100% !important;
+    margin: 0 !important;
+}
+
+/* Separator between Start and End blocks */
 .loop-controls .loop-row-layout>div:first-child {
-    border-right: 1px solid var(--mid-gray);
-    padding-right: 5px;
-    margin-right: 5px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding-right: 6px;
+    margin-right: 6px;
 }

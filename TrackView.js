@@ -50,38 +50,44 @@
             this.elements.status = statusDiv;
             trackDiv.appendChild(statusDiv);
 
-            // 4. Waveform
-            const waveformContainer = document.createElement('div');
-            waveformContainer.className = 'track-waveform-container';
+            // 4. Waveform (Uniform with Master)
+            const waveformBox = document.createElement('div');
+            waveformBox.className = 'waveform-box';
 
             const wfLabels = document.createElement('div');
-            wfLabels.className = 'track-waveform-labels';
+            wfLabels.className = 'waveform-labels';
             wfLabels.innerHTML = '<div class="waveform-label-external">L</div><div class="waveform-label-external">R</div>';
 
-            const wfCanvases = document.createElement('div');
-            wfCanvases.className = 'track-waveform-canvases';
+            const wfContainer = document.createElement('div');
+            wfContainer.className = 'waveform-canvas-container';
 
             const canvasL = document.createElement('canvas');
-            canvasL.className = 'track-waveform-canvas-L';
+            canvasL.className = 'waveform-canvas track-waveform-canvas-L';
+            canvasL.width = 242;
+            canvasL.height = 26;
+
             const canvasR = document.createElement('canvas');
-            canvasR.className = 'track-waveform-canvas-R';
+            canvasR.className = 'waveform-canvas track-waveform-canvas-R';
+            canvasR.width = 242;
+            canvasR.height = 26;
 
             this.elements.waveformCanvasL = canvasL;
             this.elements.waveformCanvasR = canvasR;
 
-            wfCanvases.append(canvasL, canvasR);
-            waveformContainer.append(wfLabels, wfCanvases);
-            trackDiv.appendChild(waveformContainer);
+            wfContainer.append(canvasL, canvasR);
+            waveformBox.append(wfLabels, wfContainer);
+            trackDiv.appendChild(waveformBox);
 
             // 5. Input Control Group
             const inputGroup = document.createElement('div');
             inputGroup.className = 'control-group';
 
-            const inputLabel = document.createElement('label');
-            inputLabel.textContent = 'Input';
-
             const inputLayout = document.createElement('div');
             inputLayout.className = 'track-input-layout';
+
+            const inputLabel = document.createElement('label');
+            inputLabel.textContent = 'Input';
+            inputLabel.style.fontSize = '0.72em';
 
             const inputSelect = document.createElement('select');
             inputSelect.className = 'input-source';
@@ -95,7 +101,7 @@
                 <option value="mc-pa">MC PA Mode</option>
             `;
 
-            inputLayout.appendChild(inputSelect);
+            inputLayout.append(inputLabel, inputSelect);
 
             // Monitor Widget
             const monitorSpan = document.createElement('span');
@@ -106,7 +112,7 @@
             // Monitor Checkbox removed as per user request
             // const monCheck = ... 
 
-            inputGroup.append(inputLabel, inputLayout);
+            inputGroup.appendChild(inputLayout);
 
             // File Name Display (inside input group)
             const fileLabel = document.createElement('span');
@@ -142,24 +148,7 @@
             paMicGroup.append(paLabel, paSlider, paValue);
             trackDiv.appendChild(paMicGroup);
 
-            // 7. Loop Controls
-            const loopControls = document.createElement('div');
-            loopControls.className = 'loop-controls';
-            loopControls.style.display = 'none';
-            this.elements.loopControls = loopControls;
-
-            const loopStartGroup = this._createKnobsShort('Loop Start', 'loopStart', 0, 1, 0, 's');
-            const loopEndGroup = this._createKnobsShort('Loop End', 'loopEnd', 0, 1, 1, 's');
-
-            [loopStartGroup, loopEndGroup].forEach(g => {
-                this.elements.knobs = this.elements.knobs || {};
-                this.elements.valueDisplays = this.elements.valueDisplays || {};
-                this.elements.knobs[g.input.dataset.param] = g.input;
-                this.elements.valueDisplays[g.input.dataset.param] = g.valueDisplay;
-                loopControls.appendChild(g.container);
-            });
-            trackDiv.appendChild(loopControls);
-
+            // 7. Loop Controls (Start/End)
             // 8. Buttons
             const btnRow = document.createElement('div');
             btnRow.className = 'track-buttons';
@@ -177,6 +166,128 @@
 
             btnRow.append(recBtn, stopBtn, playBtn, revBtn);
             trackDiv.appendChild(btnRow);
+
+            // 7. Loop Controls (Start/End) - MOVED AFTER BUTTONS
+            const loopControls = document.createElement('div');
+            loopControls.className = 'loop-controls hidden';
+            this.elements.loopControls = loopControls;
+
+            const loopRow = document.createElement('div');
+            loopRow.className = 'loop-row-layout';
+            loopRow.style.display = 'flex';
+            loopRow.style.gap = '8px';
+            loopRow.style.width = '100%';
+            loopRow.style.alignItems = 'flex-end'; // Align sliders
+
+            // --- CUSTOM 3-LINE LAYOUT FOR LOOPS ---
+            const loopLayout = document.createElement('div');
+            loopLayout.className = 'loop-grid-layout';
+
+            // LINE 1: Labels & Scissors (Split 50/50 to match sliders)
+            const line1 = document.createElement('div');
+            line1.className = 'loop-line-1';
+            line1.style.display = 'flex';
+            line1.style.width = '100%';
+            line1.style.gap = '4px'; // Match slider gap
+
+            // Left Header Box (50%)
+            const leftHeader = document.createElement('div');
+            leftHeader.style.flex = '1';
+            leftHeader.style.display = 'flex';
+            leftHeader.style.alignItems = 'center';
+            leftHeader.style.justifyContent = 'flex-start'; // Start Label Left
+
+            const startLabel = document.createElement('label');
+            startLabel.textContent = 'Loop Start';
+            startLabel.style.fontSize = '0.72em';
+            leftHeader.appendChild(startLabel);
+
+            // Right Header Box (50%)
+            const rightHeader = document.createElement('div');
+            rightHeader.style.flex = '1';
+            rightHeader.style.display = 'flex';
+            rightHeader.style.alignItems = 'center';
+            rightHeader.style.justifyContent = 'space-between'; // End Label Left, Scissors Right
+
+            const endLabel = document.createElement('label');
+            endLabel.textContent = 'Loop End';
+            endLabel.style.fontSize = '0.72em';
+
+            // Scissors Button
+            const sliceBtn = document.createElement('button');
+            sliceBtn.className = "slice-trigger-btn";
+            sliceBtn.title = "Double-click to create new sample from loop";
+            sliceBtn.innerHTML = `<i class="fa-solid fa-scissors"></i>`;
+
+            sliceBtn.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.error(`TrackView ${this.id}: 🚨 LOOP SLICE TRIGGERED (Double-Click Icon) 🚨`);
+                const event = new CustomEvent('slice-loop-request', {
+                    detail: { trackIndex: this.index }
+                });
+                window.dispatchEvent(event);
+            });
+
+            // PREVENT GHOST CLICKS: Stop single clicks from bubbling up to .container
+            sliceBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            rightHeader.append(endLabel, sliceBtn);
+
+            line1.append(leftHeader, rightHeader);
+
+            // LINE 2: Sliders
+            const line2 = document.createElement('div');
+            line2.className = 'loop-line-2 slider-wrapper'; // slider-wrapper for common styling
+
+            const startSlider = document.createElement('input');
+            startSlider.type = 'range';
+            startSlider.dataset.param = 'loopStart';
+            startSlider.className = 'loop-start-slider';
+            startSlider.min = 0; startSlider.max = 1; startSlider.step = 0.01; startSlider.value = 0;
+
+            const endSlider = document.createElement('input');
+            endSlider.type = 'range';
+            endSlider.dataset.param = 'loopEnd';
+            endSlider.className = 'loop-end-slider';
+            endSlider.min = 0; endSlider.max = 1; endSlider.step = 0.01; endSlider.value = 1;
+
+            line2.append(startSlider, endSlider);
+
+            // LINE 3: values
+            const line3 = document.createElement('div');
+            line3.className = 'loop-line-3';
+
+            const startVal = document.createElement('span');
+            startVal.className = 'param-value';
+            startVal.dataset.valueFor = 'loopStart';
+            startVal.textContent = '0.00s';
+
+            const endVal = document.createElement('span');
+            endVal.className = 'param-value';
+            endVal.dataset.valueFor = 'loopEnd';
+            endVal.textContent = '1.00s';
+
+            line3.append(startVal, endVal);
+
+            // Append all lines
+            loopLayout.append(line1, line2, line3);
+            loopControls.appendChild(loopLayout);
+
+            // Register Elements (Crucial for updates)
+            this.elements.knobs = this.elements.knobs || {};
+            this.elements.valueDisplays = this.elements.valueDisplays || {};
+
+            this.elements.knobs['loopStart'] = startSlider;
+            this.elements.knobs['loopEnd'] = endSlider;
+            this.elements.valueDisplays['loopStart'] = startVal;
+            this.elements.valueDisplays['loopEnd'] = endVal;
+
+
+            trackDiv.appendChild(loopControls);
 
             // 9. FX Chain
             const fxContainer = document.createElement('div');
@@ -413,29 +524,32 @@
 
         _createKnobsShort(label, param, min, max, def, unit) {
             const container = document.createElement('div');
-            container.className = 'knob-container';
+            container.className = 'knob-container loop-control-block';
 
-            const labelGroup = document.createElement('div');
-            labelGroup.className = 'knob-label-group';
-            labelGroup.dataset.paramLabel = param;
+            // LINE 1: Header (Label + Optional Icon)
+            const headerRow = document.createElement('div');
+            headerRow.className = 'loop-control-header';
+            headerRow.style.display = 'flex';
+            headerRow.style.alignItems = 'center';
+            // headerRow.style.justifyContent = 'center'; // Or left aligned? User says: "Loop Start | Scissors Loop End"
 
             const lbl = document.createElement('label');
             lbl.textContent = label;
-            labelGroup.appendChild(lbl);
+            headerRow.appendChild(lbl);
+            container.appendChild(headerRow);
 
-            const val = document.createElement('span');
-            val.className = 'param-value';
-            val.textContent = parseFloat(def).toFixed(2) + unit;
-            val.dataset.valueFor = param;
-            labelGroup.appendChild(val);
-            container.appendChild(labelGroup);
-
+            // LINE 2: Slider (Now Second)
             const sliderWrapper = document.createElement('div');
             sliderWrapper.className = 'slider-wrapper';
+            sliderWrapper.style.marginTop = '2px';
 
             const input = document.createElement('input');
             input.type = 'range';
             input.dataset.param = param;
+
+            if (param === 'loopStart') input.classList.add('loop-start-slider');
+            if (param === 'loopEnd') input.classList.add('loop-end-slider');
+
             input.min = min;
             input.max = max;
             input.step = 0.01;
@@ -443,6 +557,21 @@
 
             sliderWrapper.appendChild(input);
             container.appendChild(sliderWrapper);
+
+            // LINE 3: Value (Now Third)
+            const valRow = document.createElement('div');
+            valRow.className = 'loop-control-value';
+            const val = document.createElement('span');
+            val.className = 'param-value';
+            val.textContent = parseFloat(def).toFixed(2) + unit;
+            val.dataset.valueFor = param;
+            // Force block display or own line
+            val.style.display = 'block';
+            val.style.textAlign = 'left'; // Align with header?
+            val.style.width = '100%';
+
+            valRow.appendChild(val);
+            container.appendChild(valRow); // Append Value AFTER Slider
 
             return { container, input, valueDisplay: val };
         }
@@ -458,6 +587,10 @@
             this.currentStatusText = text;
             this.currentStatusType = type;
             this._updateStatusDisplay();
+        }
+
+        updateFileLabel(text) {
+            this.setFileLabel(text);
         }
 
         setFileLabel(text) {
@@ -503,8 +636,22 @@
         }
 
         showLoopControls(show = true) {
+            console.log(`🎬 UI: showLoopControls For Track ${this.id}, show=${show}`);
             if (this.elements.loopControls) {
+                if (show) {
+                    console.warn(`✅ FOUND loopControls element for Track ${this.id}. Removing .hidden...`);
+                    this.elements.loopControls.classList.add('active');
+                    this.elements.loopControls.classList.remove('hidden');
+                } else {
+                    this.elements.loopControls.classList.remove('active');
+                    this.elements.loopControls.classList.add('hidden');
+                }
+
                 this.elements.loopControls.style.display = show ? 'flex' : 'none';
+                this.elements.loopControls.style.opacity = show ? '1' : '0';
+                console.warn(`✨ Visibility applied for Track ${this.id}. ClassList: ${this.elements.loopControls.classList}`);
+            } else {
+                console.error(`❌ TrackView ${this.id}: loopControls element NOT FOUND!`);
             }
         }
 
@@ -520,6 +667,22 @@
                 // Update displays
                 if (this.elements.valueDisplays.loopStart) this.elements.valueDisplays.loopStart.textContent = "0.00s";
                 if (this.elements.valueDisplays.loopEnd) this.elements.valueDisplays.loopEnd.textContent = duration.toFixed(2) + "s";
+            }
+        }
+
+        resetLoopPoints() {
+            // Get duration from linked trackAudio if available
+            const duration = this.trackAudio ? (this.trackAudio.player.buffer?.duration || 0) : 0;
+
+            console.log(`TrackView ${this.id}: Resetting Loop Points to ${duration.toFixed(2)}s`);
+
+            this.updateLoopSliders(duration);
+            this.showLoopControls(true);
+
+            // Sync with Audio Service to ensure internal Tone states match
+            if (duration > 0 && this.trackAudio) {
+                this.trackAudio.setLoopStart(0);
+                this.trackAudio.setLoopEnd(duration);
             }
         }
 

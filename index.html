@@ -360,26 +360,25 @@
             <div class="main-content">
                 <!-- Column 1: Master Controls -->
                 <div class="master-column">
-                    <!-- 1. Master Recording (Direct children to match main app) -->
+                    <!-- 1. Master Recording (Direct children to match TrackView structure) -->
                     <div class="track-header">Master Recording:</div>
                     <div id="recording-time-display" class="track-time-display">00:00:00</div>
 
-                    <!-- Ghost "Status" to align with Tracks -->
                     <!-- Replaced by Master Volume on Line 3 -->
                     <div class="master-item master-volume-aligned">
                         <div class="track-header">Vol</div>
-                        <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
+                        <input type="range" id="master-volume" min="-80" max="20" step="0.1" value="0">
                         <span id="master-volume-value" class="master-value">0.0 dB</span>
                     </div>
 
-                    <!-- 2. Master Waveform -->
+                    <!-- 2. Master Waveform (Shifted to match track visualizer level) -->
                     <div class="master-item master-waveform-item">
                         <div class="waveform-box master-waveform-box">
                             <div class="waveform-labels">
                                 <div class="waveform-label-external" style="margin-top: 2px;">L</div>
                                 <div class="waveform-label-external">R</div>
                             </div>
-                            <div id="master-waveform-container" class="flex-grow">
+                            <div id="master-waveform-container" class="waveform-canvas-container flex-grow">
                                 <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
                                 <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
                             </div>
@@ -387,32 +386,25 @@
                     </div>
 
                     <!-- 3. Loop Length -->
-                    <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
-                    <!-- 3. Loop Length (Top, Compact Row) -->
                     <div class="master-item master-row-layout">
                         <div class="track-header">Loop Length</div>
                         <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
                         <span id="loop-length-value" class="master-value">4.0s</span>
                     </div>
 
-                    <!-- Spacer removed -->
-                    <!-- <div class="master-spacer"></div> -->
-
                     <!-- 4. Combined REC and Format -->
                     <div class="master-item master-bottom-item">
                         <div class="master-rec-row">
                             <button id="master-record-button" class="button">REC</button>
-                            <div id="record-format-display"
-                                style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
-                                Stereo (WAV)</div>
+                            <select id="record-as-select" class="font-small" disabled>
+                                <option value="stereo" data-format="wav">Stereo (WAV)</option>
+                                <option value="stereo" data-format="mp4">Stereo (MP4)</option>
+                                <option value="stereo" data-format="alac">Stereo (ALAC)</option>
+                                <option value="stems" data-format="wav">Stems (WAV)</option>
+                            </select>
                         </div>
                     </div>
 
-                    <!-- Spacer 1 (Now top border of LFO block) -->
-                    <!-- <div class="master-spacer"></div> -->
-
-                    <!-- NEW: Side-by-Side LFO Container -->
-                    <!-- 3. Loop Length (Moved down, Compact Row) -->
                     <!-- Side-by-Side LFO Container (Bottom) -->
                     <div class="lfo-side-by-side-container">
                         <!-- Column Left: LFO 1 -->
@@ -453,10 +445,7 @@
                         </div>
                     </div>
 
-                    <!-- Spacer 3 (Now bottom border of LFO block) -->
-                    <div class="master-spacer"></div>
-
-                    <!-- 4. Sample Station (Mirrored) -->
+                    <!-- 4. Sample Station -->
                     <div class="master-item sample-center-container">
                         <div class="track-header">Sample Station</div>
                         <div class="sample-grid">
@@ -483,16 +472,11 @@
                         </div>
                     </div>
 
-                    <!-- Spacer 3 (Now bottom border of LFO block) -->
-                    <!-- <div class="master-spacer"></div> -->
-
-                    <!-- 11. Master Volume (Moved up to Line 3) -->
-                    <!-- Removed from here -->
-
-                    <!-- 12. Bottom Buttons -->
-                    <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
-                        <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
-                        <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
+                    <!-- 12. Import & Media Buttons -->
+                    <div class="master-item master-bottom-buttons">
+                        <button id="show-sessions-button" class="button"><i class="fa-solid fa-list"></i> MEDIA</button>
+                        <button id="import-files-button" class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
+                        <button id="show-docs-button" class="button"><i class="fa-solid fa-book"></i> DOCS</button>
                     </div>
                 </div>
 
