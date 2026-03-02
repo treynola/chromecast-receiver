@@ -308,7 +308,7 @@
                     const dur = window.audioService.getTrackDuration(trackId);
                     if (param === 'loopStart') window.audioService.setTrackLoopStart(trackId, val);
                     else window.audioService.setTrackLoopEnd(trackId, val);
-                } else if (param === 'playbackRate') {
+                } else if (param === 'playbackRate' || param === 'pitch') {
                     window.audioService.setTrackPlaybackRate(trackId, val);
                 } else if (param === 'volume' || param === 'vol') {
                     window.audioService.setTrackVolume(trackId, val);
