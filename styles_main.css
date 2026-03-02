@@ -306,11 +306,16 @@ label {
 }
 
 .loop-controls {
-    display: flex;
-    gap: 5px;
-    margin-top: 5px;
+    display: none;
+    /* Hidden by default in buildElement */
+    flex-direction: column;
+    gap: 4px;
+    background-color: rgba(0, 0, 0, 0.2);
     border-top: 1px solid var(--mid-gray);
-    padding-top: 5px;
+    border-bottom: 1px solid var(--mid-gray);
+    padding: 4px 5px;
+    margin: 4px 0;
+    flex-shrink: 0;
 }
 
 .track-transport-row {
@@ -328,6 +333,7 @@ label {
     height: 60px !important;
     background: transparent !important;
     margin-bottom: 5px !important;
+    flex-shrink: 0 !important;
 }
 
 .track-item .waveform-box {
@@ -946,6 +952,7 @@ img {
     font-size: 0.9em;
     cursor: pointer;
     text-transform: uppercase;
+    flex-shrink: 0;
 }
 
 .knob-container {
@@ -1291,14 +1298,12 @@ input[type="range"]::-webkit-slider-thumb {
     width: 60%;
     margin: 0 auto;
     height: 22px;
-    /* Reduced height to match dropdowns */
     box-sizing: border-box;
     line-height: 22px;
-    /* Adjusted line-height for vertical centering */
-
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 #lfo-toggle,
@@ -1531,6 +1536,7 @@ select option {
     overflow: hidden;
     height: 30px;
     line-height: 30px;
+    flex-shrink: 0;
 }
 
 .scrolling-text-wrapper {
@@ -1542,7 +1548,9 @@ select option {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5px;
+    padding: 0 5px;
+    /* Reduced vertical padding to prevent clipping */
+    overflow: hidden;
 }
 
 .status-ready {
@@ -1580,10 +1588,9 @@ select option {
     background-color: #555;
 }
 
-.loop-controls {
+/* Consolidated into top definition */
+.loop-controls-redundant {
     display: none;
-    flex-direction: column;
-    gap: 15px;
 }
 
 .effect-controls {
@@ -2362,11 +2369,7 @@ select option {
     font-weight: bold;
 }
 
-.scrolling-text-wrapper {
-    overflow: hidden;
-    width: 100%;
-}
-
+/* Scrolling text styles */
 .scrolling-text {
     display: inline-block;
     white-space: nowrap;
@@ -3689,16 +3692,6 @@ select option {
 }
 
 /* Loop Control Styling (Match LFO) */
-.loop-controls {
-    /* Container style matches .lfo-side-by-side-container */
-    background-color: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid var(--mid-gray);
-    padding: 4px 5px;
-    /* Add horizontal padding since it's not full width */
-    margin: 7px 0 5px 0;
-    border-top: 1px solid var(--mid-gray);
-    /* Add top border for completeness */
-}
 
 /* Labels Match Sweep 1/2 */
 .loop-controls label {
