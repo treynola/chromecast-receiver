@@ -333,24 +333,97 @@
             }
         });
 
-        // Change handling (Source Select)
+        // Change handling (Source Select & Effects)
         container.addEventListener('change', (e) => {
-            if (e.target.dataset.action === 'select-input') {
-                const trackDiv = e.target.closest('.track');
-                const trackId = parseInt(trackDiv.dataset.trackIndex, 10);
-                const track = window.tracks[trackId];
-                const value = e.target.value;
+            const target = e.target;
+            const trackDiv = target.closest('.track');
+            if (!trackDiv) return;
+            const trackId = parseInt(trackDiv.dataset.trackIndex, 10);
+            const track = window.tracks[trackId];
+
+            if (target.dataset.action === 'select-input') {
+                const value = target.value;
 
                 if (value === 'file') {
-                    e.target.value = 'mic';
+                    target.value = 'mic';
                     setTimeout(() => window.handleFileImport(track), 100);
                 } else if (value === 'directory') {
-                    e.target.value = 'mic';
+                    target.value = 'mic';
                     window.handleDirectorySelect(track);
                 } else if (value === 'system') {
                     // System audio capture logic...
                 } else {
                     // Standard device selection logic...
+                }
+            }
+
+            // --- Effect Selection (Audition-First Workflow) ---
+            if (target.classList.contains('effect-type-select')) {
+                const effectName = target.value;
+
+                if (effectName === 'none') {
+                    window.audioService.removeAuditioningEffect(trackId);
+                    if (track.elements.auditionDialog) {
+                        track.elements.auditionDialog.close();
+                    }
+                    track.state.auditioningEffect = null;
+                    return;
+                }
+
+                let config = null;
+                if (window.effectConfigs) {
+                    for (const cat in window.effectConfigs) {
+                        if (window.effectConfigs[cat][effectName]) {
+                            config = window.effectConfigs[cat][effectName];
+                            break;
+                        }
+                    }
+                }
+
+                if (!config) {
+                    console.error(`No config found for effect: ${effectName}`);
+                    target.value = 'none';
+                    return;
+                }
+
+                try {
+                    const paramValues = {};
+                    config.columns.flat().forEach(p => {
+                        paramValues[p.p] = p.def;
+                    });
+                    if (paramValues.mix === undefined) paramValues.mix = 0.5;
+
+                    const instance = window.audioService.setAuditioningEffect(trackId, effectName, paramValues);
+                    if (!instance) {
+                        target.value = 'none';
+                        return;
+                    }
+
+                    track.state.auditioningEffect = {
+                        name: effectName,
+                        config,
+                        instance,
+                        paramValues,
+                        enabled: true
+                    };
+
+                    const dialogContent = track.elements.auditionDialog.querySelector('.audition-dialog-content');
+                    if (dialogContent) {
+                        dialogContent.innerHTML = '';
+                        if (window.renderEffectParams) {
+                            window.renderEffectParams(dialogContent, config, paramValues, (pName, val) => {
+                                window.audioService.updateEffect(trackId, -1, { [pName]: val });
+                                if (track.state.auditioningEffect) {
+                                    track.state.auditioningEffect.paramValues[pName] = val;
+                                }
+                            });
+                        }
+                        track.elements.auditionDialog.showModal();
+                        target.value = 'none';
+                    }
+                } catch (err) {
+                    console.error(`Failed to create audition effect: ${effectName}`, err);
+                    target.value = 'none';
                 }
             }
         });

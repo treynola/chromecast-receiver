@@ -170,7 +170,25 @@
      */
     function populateEffectSelectors() {
         const selectors = document.querySelectorAll('.effect-type-select');
-        const categories = window.effectConfigs || {};
+        
+        // Ensure effectConfigs is populated from registered modules
+        window.effectConfigs = window.effectConfigs || {};
+        if (window.effectModules) {
+            for (const key in window.effectModules) {
+                const module = window.effectModules[key];
+                if (module && module.configs) {
+                    // Deep merge or assign to prevent overwriting existing categories incorrectly
+                    for (const cat in module.configs) {
+                        if (!window.effectConfigs[cat]) {
+                            window.effectConfigs[cat] = {};
+                        }
+                        Object.assign(window.effectConfigs[cat], module.configs[cat]);
+                    }
+                }
+            }
+        }
+
+        const categories = window.effectConfigs;
         console.log(`Populating Effect Selectors. Found ${selectors.length} selectors. Categories:`, Object.keys(categories));
 
         let optionsHtml = '<option value="none">None</option>';
