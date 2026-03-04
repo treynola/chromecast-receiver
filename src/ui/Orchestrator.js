@@ -18,14 +18,16 @@
             window.tracks = [];
 
             try {
-                // 1. Audio Service Init
-                await window.audioService.init();
+                // 1. Audio Engine Init
+                await window.audioEngine.init();
 
                 // 2. Create Tracks
                 await this.createTracks();
 
-                // 3. Permissions & Device Enumeration
-                await window.check_permissions();
+                // 3. Device Enumeration
+                if (window.audioEngine && window.audioEngine.contextManager && window.audioEngine.contextManager.deviceManager) {
+                    await window.audioEngine.contextManager.deviceManager.requestPermission();
+                }
                 await window.populateDeviceSelectors();
                 
                 // 4. Effects Population
@@ -33,14 +35,13 @@
                     window.populateEffectSelectors();
                 }
 
-                // 5. Recording UI
                 if (window.RecordingUI) {
-                    window.recordingUI = new window.RecordingUI('recordings-list', window.audioService);
+                    window.recordingUI = new window.RecordingUI('recordings-list', window.audioEngine);
                 }
 
                 // 6. UI Reveal
-                document.querySelector('.container').classList.remove('hidden');
-                if (window.removeCurtain) window.removeCurtain();
+                document.querySelector('.container').classList.remove('app-loading');
+                console.log("Orchestrator: UI Reveal - app-loading class removed.");
 
                 this.initialized = true;
                 console.log("Orchestrator: Initialization Complete.");
@@ -48,8 +49,7 @@
             } catch (err) {
                 console.error("Orchestrator: Initialization Failed:", err);
                 // Reveal UI anyway so user isn't stuck
-                document.querySelector('.container').classList.remove('hidden');
-                if (window.removeCurtain) window.removeCurtain();
+                document.querySelector('.container').classList.remove('app-loading');
                 alert(`Initialization error: ${err.message || err}\n\nThe app may have limited functionality.`);
             }
         }
@@ -65,7 +65,7 @@
             for (let i = 0; i < numTracks; i++) {
                 try {
                     // Create UI View
-                    const trackView = new window.TrackView(i, window.audioService);
+                    const trackView = new window.TrackView(i, window.audioEngine);
 
                     // Initialize UI State
                     trackView.state = {
@@ -92,7 +92,7 @@
                     this.setupTrackDialogs(trackView, i);
 
                     // Create Audio Engine Track
-                    trackView.trackAudio = await window.audioService.createTrack(i);
+                    trackView.trackAudio = await window.audioEngine.createTrack(i);
 
                     // Store Reference
                     window.tracks.push(trackView);
@@ -120,7 +120,7 @@
                 trackView.elements.auditionDialog.addEventListener('close', () => {
                     if (trackView.state.auditioningEffect) {
                         console.log(`Audition Closed for Track ${trackId}. Cleaning up.`);
-                        window.audioService.removeAuditioningEffect(trackId);
+                        trackView.trackAudio?.removeAuditioningEffect();
                         trackView.state.auditioningEffect = null;
                     }
                 });

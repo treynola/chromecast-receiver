@@ -245,18 +245,18 @@
                         if (arrayBuffer || url) {
                             track.setStatus('Loading...', 'playing');
                             if (arrayBuffer) {
-                                await window.audioService.loadDataToTrack(track.id, arrayBuffer, name);
+                                await track.trackAudio?.loadData(arrayBuffer, name);
                             } else {
-                                await window.audioService.loadFileToTrack(track.id, url);
+                                await track.trackAudio?.loadUrl(url);
                             }
 
                             track.setFileLabel(name);
                             track.setStatus('Ready', 'ready');
                             track.state.hasContent = true;
 
-                            const duration = window.audioService.getTrackDuration(track.id);
-                            window.audioService.setTrackLoopStart(track.id, 0);
-                            window.audioService.setTrackLoopEnd(track.id, duration);
+                            const duration = track.trackAudio?.player?.buffer?.duration || 0;
+                            track.trackAudio?.setLoopStart(0);
+                            track.trackAudio?.setLoopEnd(duration);
 
                             if (track.elements.playBtn) track.elements.playBtn.disabled = false;
                             if (track.updateLoopSliders) track.updateLoopSliders(duration);
@@ -274,21 +274,21 @@
                 fileInput.accept = 'audio/*,video/mp4,audio/flac';
                 fileInput.multiple = false;
                 fileInput.style.display = 'none';
-                fileInput.onchange = async (e) => {
-                    if (e.target.files.length > 0) {
-                        const file = e.target.files[0];
+                fileInput.onchange = async () => {
+                    if (fileInput.files.length > 0) {
+                        const file = fileInput.files[0];
                         const url = URL.createObjectURL(file);
                         try {
                             track.setStatus('Loading...', 'playing');
-                            await window.audioService.loadFileToTrack(track.id, url);
+                            await track.trackAudio?.loadUrl(url);
                             track.setFileLabel(file.name);
                             track.setStatus('Ready', 'ready');
                             track.state.hasContent = true;
                             if (track.showLoopControls) track.showLoopControls(true);
 
-                            const duration = window.audioService.getTrackDuration(track.id);
-                            window.audioService.setTrackLoopStart(track.id, 0);
-                            window.audioService.setTrackLoopEnd(track.id, duration);
+                            const duration = track.trackAudio?.player?.buffer?.duration || 0;
+                            track.trackAudio?.setLoopStart(0);
+                            track.trackAudio?.setLoopEnd(duration);
 
                             if (track.elements.playBtn) track.elements.playBtn.disabled = false;
                             if (track.updateLoopSliders) track.updateLoopSliders(duration);

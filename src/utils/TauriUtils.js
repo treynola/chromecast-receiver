@@ -87,7 +87,14 @@ window.TauriUtils = window.TauriUtils || {};
             const arrayBuffer = await new Response(blob).arrayBuffer();
             const uint8Array = new Uint8Array(arrayBuffer);
 
-            await window.__TAURI__.fs.writeBinaryFile(filePath, uint8Array);
+            if (window.__TAURI__.fs.writeBinaryFile) {
+                await window.__TAURI__.fs.writeBinaryFile(filePath, uint8Array);
+            } else if (window.__TAURI__.fs.writeFile) {
+                // Tauri v2 API
+                await window.__TAURI__.fs.writeFile(filePath, uint8Array);
+            } else {
+                throw new Error("Tauri FS API (writeBinaryFile/writeFile) not found.");
+            }
             console.log(`File saved to: ${filePath}`);
             return filePath;
         } catch (err) {

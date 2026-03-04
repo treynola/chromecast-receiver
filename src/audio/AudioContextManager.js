@@ -8,11 +8,14 @@
     // V114.20: Strictly Force hardware-aligned 48kHz context.
     try {
         if (window.Tone && (!window._mxsAudioInited || Tone.context.sampleRate !== 48000)) {
-            console.log("🔊 AudioContextManager (V114.20): Forcing hardware alignment (48kHz)...");
+            console.log("🔊 AudioContextManager (V12.101): Forcing hardware alignment (48kHz)...");
             const rawCtx = new (window.AudioContext || window.webkitAudioContext)({ 
                 sampleRate: 48000,
-                latencyHint: 'playback' // Higher stability for casting
+                latencyHint: 'interactive'
             });
+            window._mxsRawAudioContext = rawCtx;
+            window._mxsRawInitTime = performance.now();
+            window._mxsRawAudioInitTime = rawCtx.currentTime;
             Tone.setContext(new Tone.Context(rawCtx));
             window._mxsAudioInited = true;
         }
@@ -25,34 +28,22 @@
             // V12.75: Minimalist Constructor (Lazy Build)
 
             // --- Clock Drift Logic (V12.75: Focus Verified) ---
-            const runVerifiedDriftCheck = () => {
+            const runContinuousDriftCheck = () => {
                 if (Tone.context.state !== 'running') {
-                    requestAnimationFrame(runVerifiedDriftCheck);
+                    requestAnimationFrame(runContinuousDriftCheck);
                     return;
                 }
 
                 // Wait for the window to have focus (macOS Power Management)
                 if (!document.hasFocus()) {
-                    setTimeout(runVerifiedDriftCheck, 1000);
+                    setTimeout(runContinuousDriftCheck, 1000);
                     return;
                 }
 
-                setTimeout(() => {
-                    const startReal = performance.now();
-                    const startTone = Tone.now();
-
-                    setTimeout(() => {
-                        const elapsedReal = (performance.now() - startReal) / 1000;
-                        const elapsedTone = (Tone.now() - startTone);
-                        const ratio = elapsedTone / elapsedReal;
-                        console.log(`🕒 Audio Sync: ${(ratio * 100).toFixed(2)}% speed (SR=${Tone.context.sampleRate}).`);
-                        if (ratio < 0.75) {
-                            console.error(`🚨 CRITICAL ENGINE SLOWDOWN: Audio is running at ${(ratio * 100).toFixed(1)}% speed! Check CPU usage.`);
-                        }
-                    }, 5000);
-                }, 8000);
+                this._checkClockDrift();
+                setTimeout(runContinuousDriftCheck, 1000); // Check every second
             };
-            runVerifiedDriftCheck();
+            runContinuousDriftCheck();
 
             this.isInitialized = false;
             this.masterBus = null;
@@ -71,6 +62,7 @@
             this.deviceManager = new window.DeviceManager();
             this.audioRouter = null;
             this.inputStreams = new Map(); // V12.98 Cache deviceId -> MediaStream
+            this.inputSourceNodes = new Map(); // Cache deviceId -> MediaStreamAudioSourceNode
         }
 
         async init() {
@@ -120,11 +112,10 @@
             this.lfo2Meter = new Tone.Meter({ smoothing: 0.1 });
             this.lfo.connect(this.lfoMeter);
             this.lfo2.connect(this.lfo2Meter);
-            // V12.98: LFOs explicitly stopped and muted on launch
-            this.lfo.amplitude.value = 0;
-            this.lfo2.amplitude.value = 0;
-            this.lfo.stop();
-            this.lfo2.stop();
+            // V12.98: LFOs created but NOT started (user must toggle ON)
+            this.lfo.amplitude.value = 1;
+            this.lfo2.amplitude.value = 1;
+            // LFOs are stopped by default — user starts them via Sweep toggle buttons
 
             // Sampler
             if (window.SamplerService) {
@@ -146,8 +137,7 @@
             if (window.AudioUtils && window.AudioUtils.PCMRecorder) {
                 try {
                     const rawCtx = Tone.context.rawContext || Tone.context;
-                    const baseCtx = rawCtx._nativeAudioContext || rawCtx;
-                    window.AudioUtils.PCMRecorder.registerModule(baseCtx);
+                    window.AudioUtils.PCMRecorder.registerModule(rawCtx);
                     console.log("AudioContextManager: PCMRecorder module pre-registered.");
                 } catch (e) {
                     console.warn("AudioContextManager: PCMRecorder pre-registration failed:", e);
@@ -177,11 +167,10 @@
          * Critical for ensuring PCMRecorder and Tone.js share the same device.
          */
         getNativeContext() {
-            // v10.13c: Return Tone's own raw context — NOT _nativeAudioContext.
-            // On Safari/WebKit, _nativeAudioContext is a DIFFERENT object than rawContext,
-            // and connecting nodes across them causes TypeError.
-            // Tone creates all its internal nodes on rawContext, so we must too.
-            const native = Tone.context.rawContext || Tone.context;
+            // V115: Prefer the STORED raw AudioContext from module init.
+            // This bypasses Tone.js wrapper entirely, ensuring WebKit gets the
+            // true native AudioContext for createMediaStreamSource calls.
+            const native = window._mxsRawAudioContext || Tone.context.rawContext || Tone.context;
 
             if (!native) {
                 console.error("AudioContextManager: FATAL - No native context found!");
@@ -191,7 +180,7 @@
             // Tag for telemetry
             if (!native._ctxId) {
                 native._ctxId = `CTX_${Math.floor(Math.random() * 10000)}`;
-                console.log(`🔊 AudioContextManager: Tagged Native Context ${native._ctxId} [SR: ${native.sampleRate}]`);
+                console.log(`🔊 AudioContextManager: Tagged Native Context ${native._ctxId} [SR: ${native.sampleRate}] [Type: ${native.constructor.name}]`);
             }
             return native;
         }
@@ -216,6 +205,61 @@
             return index === 1 ? this.lfoMeter : this.lfo2Meter;
         }
 
+        _checkClockDrift() {
+            const rawCtx = window._mxsRawAudioContext;
+            if (!rawCtx || rawCtx.state !== 'running') return;
+
+            // One-time re-baseline: reset reference timestamps when context first runs.
+            // This eliminates the gap from suspended time between script load and user gesture.
+            if (!this._driftBaselined) {
+                window._mxsRawInitTime = performance.now();
+                window._mxsRawAudioInitTime = rawCtx.currentTime;
+                this._driftBaselined = true;
+                return; // Skip this check, start fresh next tick
+            }
+
+            const now = performance.now();
+            const wallElapsed = (now - window._mxsRawInitTime) / 1000;
+            const audioElapsed = rawCtx.currentTime - window._mxsRawAudioInitTime;
+
+            if (wallElapsed < 5) return; // Wait 5s for stabilization
+
+            const diff = Math.abs(audioElapsed - wallElapsed);
+            const speed = (audioElapsed / wallElapsed) * 100;
+            const driftThreshold = 0.5; // 500ms drift before any alert (was 50ms — too sensitive)
+            
+            const uptime = performance.now() - window._mxsRawInitTime;
+            const isWarmup = uptime < 15000; // 15s warmup (was 10s)
+
+            // Throttle: only log drift errors every 10 seconds to prevent console flooding
+            if (diff > driftThreshold) {
+                const logNow = performance.now();
+                if (this._lastDriftLog && (logNow - this._lastDriftLog) < 10000) return;
+
+                if (isWarmup) {
+                    console.warn(`🔊 Engine Warmup: Audio Sync at ${speed.toFixed(1)}%`);
+                } else if (speed < 80) {
+                    // Only truly critical if running at less than 80% speed
+                    console.error(`🔴 CRITICAL ENGINE SLOWDOWN: Audio is running at ${speed.toFixed(1)}% speed!`);
+                } else if (speed < 90) {
+                    console.warn(`⚠️ Audio drift detected: running at ${speed.toFixed(1)}% speed`);
+                } else {
+                    // 90-100% is normal system variation — log at info level only
+                    console.log(`🔊 Audio Sync: ${speed.toFixed(1)}% (minor drift, ${diff.toFixed(2)}s)`);
+                }
+                
+                // Only suggest Safe Mode for truly severe drift (>20%)
+                if (!isWarmup && Math.abs(100 - speed) > 20) {
+                    this._safeModeTriggered = true;
+                    console.error("⚠️ ENGINE STABILITY ADVISORY: System-wide sample rate mismatch (BlackHole/Aggregate?). Please set all devices to 48kHz in Audio MIDI Setup.");
+                }
+                this._lastDriftLog = logNow;
+            } else if (wallElapsed % 60 < 1) { 
+                // Healthy heartbeat every ~60s instead of every 20s
+                console.log(`🔊 Audio Sync: ${speed.toFixed(1)}% (${rawCtx.sampleRate}Hz)`);
+            }
+        }
+
         async warmUpMic() {
             // Manual Triggered Warmup
             try {
@@ -227,11 +271,35 @@
         }
 
         async getSharedInputStream(deviceId) {
+            // DEPRECATED: Use getSharedInputNode for WebKit safety
             const key = deviceId || 'default';
-            if (this.inputStreams.has(key)) {
-                const stream = this.inputStreams.get(key);
-                if (stream.active) return stream;
-                this.inputStreams.delete(key);
+            const constraints = {
+                audio: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                    channelCount: { ideal: 16 },
+                    echoCancellation: false,
+                    autoGainControl: false,
+                    noiseSuppression: false,
+                    sampleRate: { ideal: 48000 }
+                }
+            };
+            return await navigator.mediaDevices.getUserMedia(constraints);
+        }
+
+        /**
+         * Returns a shared MediaStreamAudioSourceNode for a given device.
+         * Resolves the WebKit 'InvalidAccessError' by ensuring 1 source node per stream.
+         */
+        async getSharedInputNode(deviceId) {
+            const key = deviceId || 'default';
+            
+            // Return cached node if active
+            if (this.inputSourceNodes.has(key)) {
+                const existing = this.inputSourceNodes.get(key);
+                if (existing.mediaStream && existing.mediaStream.active) {
+                    return { node: existing.node, stream: existing.mediaStream };
+                }
+                this.inputSourceNodes.delete(key);
             }
 
             const constraints = {
@@ -245,10 +313,28 @@
                 }
             };
 
-            console.log(`AudioContextManager: Negotiating new stream for ${key}...`);
+            console.log(`AudioContextManager: Creating NEW shared source node for ${key}...`);
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            this.inputStreams.set(key, stream);
-            return stream;
+
+            // V115: Validate stream has active audio tracks (WebKit InvalidAccessError guard)
+            const audioTracks = stream.getAudioTracks();
+            if (!audioTracks || audioTracks.length === 0) {
+                throw new Error(`No audio tracks in stream for device ${key}`);
+            }
+            console.log(`AudioContextManager: Stream acquired. Tracks: ${audioTracks.length}, Active: ${stream.active}, Label: ${audioTracks[0].label}`);
+
+            // V115: Get the TRUE native context and ensure it's running
+            const nativeCtx = this.getNativeContext();
+            if (nativeCtx.state !== 'running') {
+                console.log(`AudioContextManager: Resuming native context (state: ${nativeCtx.state})...`);
+                await nativeCtx.resume();
+            }
+            
+            console.log(`AudioContextManager: Creating source node on context [${nativeCtx._ctxId || 'unknown'}] (state: ${nativeCtx.state}, type: ${nativeCtx.constructor.name})`);
+            const node = nativeCtx.createMediaStreamSource(stream);
+            
+            this.inputSourceNodes.set(key, { node, mediaStream: stream });
+            return { node, stream };
         }
     }
 

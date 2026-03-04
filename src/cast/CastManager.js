@@ -3,6 +3,7 @@
  * Manages Chromecast, FCast, and WebRTC casting functionality.
  */
 (function () {
+    const { Tone } = window;
 
     /**
      * WebRTCCastSender
@@ -103,7 +104,7 @@
             if (invoke) {
                 try {
                     await invoke('cast_media_chunk', { chunk: base64 });
-                } catch (e) { }
+                } catch (e) { /* silent fail */ }
             }
         }
 
@@ -120,7 +121,7 @@
 
             let audioStream = null;
             try {
-                if (window.Tone && Tone.Destination.context) {
+                if (Tone && Tone.Destination.context) {
                     const audioContext = Tone.Destination.context.rawContext || Tone.Destination.context;
                     const destination = audioContext.createMediaStreamDestination();
 
@@ -186,7 +187,7 @@
                             await invoke('cast_webrtc_ice', {
                                 candidate: JSON.stringify(event.candidate)
                             });
-                        } catch (e) { }
+                        } catch (e) { /* ignore */ }
                     }
                 }
             };
@@ -316,7 +317,7 @@
                     } else {
                         castDeviceList.innerHTML = '<p class="text-center">No Cast devices found.</p>';
                     }
-                } catch (e) {
+                } catch (err) {
                     castDeviceList.innerHTML = '<p class="text-center">No Cast devices found.</p>';
                 }
             }
@@ -430,7 +431,7 @@
 
         if (Tone.context.state !== 'running') await Tone.start();
 
-        const cm = window.audioService?.contextManager;
+        const cm = window.audioEngine?.contextManager;
         const router = cm?.router;
 
         if (router && cm?.masterLimiter) {
@@ -448,10 +449,17 @@
         }
 
         try {
-            const nativeCtx = Tone.context.rawContext._nativeAudioContext || Tone.context.rawContext;
+            // Ensure we get the actual native BaseAudioContext, not a Tone.js wrapper
+            let nativeCtx = Tone.context.rawContext;
+            // Tone.js sometimes wraps the context — drill down to the real native one
+            if (nativeCtx && nativeCtx._context) nativeCtx = nativeCtx._context;
+            if (nativeCtx && nativeCtx._nativeAudioContext) nativeCtx = nativeCtx._nativeAudioContext;
             
             const setupAudioPipe = async () => {
-                if (!nativeCtx.audioWorklet) return;
+                if (!nativeCtx || !nativeCtx.audioWorklet) {
+                    console.warn('⚠️ AudioWorklet not available on this context');
+                    return;
+                }
                 try {
                     await nativeCtx.audioWorklet.addModule('src/audio/processors/CastProcessor.js');
                     const castWorkletNode = new AudioWorkletNode(nativeCtx, 'cast-processor');
@@ -463,6 +471,7 @@
                     const BATCH_SIZE = 4096;
                     let floatBatchBuffer = new Float32Array(BATCH_SIZE * 2);
                     let pcm24Buffer = new Uint8Array(BATCH_SIZE * 2 * 3);
+                    const fc = 0;
                     let frameCount = 0;
 
                     castWorkletNode.port.onmessage = (event) => {
@@ -537,7 +546,7 @@
             };
 
             await setupAudioPipe();
-        } catch (e) {
+        } catch (err) {
             audioPipeActive = false;
         }
     }
@@ -559,7 +568,7 @@
         try {
             testToneOsc = new Tone.Oscillator(440, 'sine');
             testToneGain = new Tone.Gain(-12);
-            const cm = window.audioService?.contextManager;
+            const cm = window.audioEngine?.contextManager;
             if (cm?.masterLimiter) {
                 testToneOsc.connect(testToneGain);
                 testToneGain.connect(cm.masterLimiter);

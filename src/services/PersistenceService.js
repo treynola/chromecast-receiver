@@ -43,22 +43,26 @@
         // --- Project State (Tracks Controls, Effects, LFOs) ---
         // Does NOT save Audio Blobs (User requested to remove JSZip bundling)
 
-        async saveProject(audioService) {
+        async saveProject(audioEngine) {
             console.log("PersistenceService: Saving project settings...");
             const projectData = {
                 version: "1.0",
                 timestamp: Date.now(),
                 master: {
-                    volume: (audioService.contextManager.masterVolume && audioService.contextManager.masterVolume.volume)
-                        ? audioService.contextManager.masterVolume.volume.value : 0,
-                    lfo1: { frequency: audioService.contextManager.lfo.frequency.value },
-                    lfo2: { frequency: audioService.contextManager.lfo2.frequency.value }
+                    volume: (audioEngine.contextManager.masterVolume && audioEngine.contextManager.masterVolume.volume)
+                        ? audioEngine.contextManager.masterVolume.volume.value : 0,
+                    lfo1: { frequency: audioEngine.contextManager.lfo.frequency.value },
+                    lfo2: { frequency: audioEngine.contextManager.lfo2.frequency.value }
                 },
                 recordings: window.recordingUI ? window.recordingUI.getRecordingState() : [],
                 tracks: []
             };
 
-            for (const [id, track] of audioService.tracks.entries()) {
+            for (let i = 0; i < window.tracks.length; i++) {
+                const trackView = window.tracks[i];
+                if (!trackView || !trackView.trackAudio) continue;
+                const track = trackView.trackAudio;
+                const id = trackView.id;
                 const trackData = {
                     id: id,
                     volume: track.volume.volume.value,
@@ -102,7 +106,7 @@
             return projectData;
         }
 
-        async loadProject(audioService) {
+        async loadProject(audioEngine) {
             console.log("PersistenceService: Loading project settings...");
             const json = localStorage.getItem(this.STORAGE_KEY);
             if (!json) {
@@ -115,11 +119,10 @@
 
                 // Master
                 if (data.master) {
-                    if (audioService.contextManager.masterVolume)
-                        audioService.contextManager.masterVolume.volume.value = data.master.volume || 0;
-
-                    if (data.master.lfo1) audioService.contextManager.lfo.frequency.value = data.master.lfo1.frequency;
-                    if (data.master.lfo2) audioService.contextManager.lfo2.frequency.value = data.master.lfo2.frequency;
+                    if (audioEngine.contextManager.masterVolume)
+                        audioEngine.contextManager.masterVolume.volume.value = data.master.volume || 0;
+                    if (data.master.lfo1) audioEngine.contextManager.lfo.frequency.value = data.master.lfo1.frequency;
+                    if (data.master.lfo2) audioEngine.contextManager.lfo2.frequency.value = data.master.lfo2.frequency;
 
                     // Update UI Sliders
                     this.updateGlobalSliders(data.master);
@@ -128,7 +131,7 @@
                 // Tracks
                 for (const trackData of data.tracks) {
                     const trackId = trackData.id;
-                    const track = audioService.tracks.get(trackId);
+                    const track = window.tracks[parseInt(trackId)]?.trackAudio;
                     if (!track) continue;
 
                     // 1. Mixer
@@ -160,7 +163,7 @@
                     // 3. LFOs
                     if (trackData.lfoConnections) {
                         trackData.lfoConnections.forEach(conn => {
-                            audioService.assignLfoToParameter(trackId, conn.param, conn.min, conn.max, conn.lfoIndex);
+                            track.connectLFO(conn.param, conn.min, conn.max, conn.lfoIndex);
                             this.updateLfoCheckbox(trackId, conn);
                         });
                     }

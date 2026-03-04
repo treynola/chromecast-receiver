@@ -117,7 +117,7 @@
                     track.setStatus('Loading...');
                     try {
                         const url = URL.createObjectURL(f.file);
-                        await window.audioService.loadFileToTrack(track.id, url);
+                        await track.trackAudio.loadUrl(url);
                         track.setStatus('Ready', 'ready');
                         track.updateFileLabel(f.name);
                         track.state.hasContent = true;

@@ -5,29 +5,11 @@
 (function () {
 
     /**
-     * Permission Check (Legacy/Safety)
-     */
-    async function check_permissions() {
-        try {
-            console.log("DeviceUI: Checking microphone permissions...");
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(t => t.stop());
-            console.log("DeviceUI: Microphone permission verified.");
-            window.isMicPermissionGranted = true;
-            return true;
-        } catch (err) {
-            console.error("DeviceUI: Mic check failed", err);
-            window.isMicPermissionGranted = false;
-            return false;
-        }
-    }
-
-    /**
      * Populates all audio input source selectors.
      */
     async function populateDeviceSelectors() {
         try {
-            const manager = window.audioService.deviceManager;
+            const manager = window.audioEngine.contextManager.deviceManager;
             const devices = await manager.enumerate();
 
             const savedDeviceId = window.PersistenceService.getInputDeviceId();
@@ -84,7 +66,6 @@
     }
 
     // Export to window
-    window.check_permissions = check_permissions;
     window.populateDeviceSelectors = populateDeviceSelectors;
 
 })();

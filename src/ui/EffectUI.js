@@ -11,7 +11,7 @@
         if (!auditionState) return;
         const { name, config, paramValues } = auditionState;
 
-        const instance = window.audioService.assignAuditionToSlot(trackId, slotIndex);
+        const instance = track.trackAudio?.transferAuditionToSlot(slotIndex);
 
         track.state.effectsChain = track.state.effectsChain || [];
         track.state.effectsChain[slotIndex] = {
@@ -83,7 +83,7 @@
                 content.appendChild(paramsWrapper);
 
                 renderEffectParams(paramsWrapper, config, paramValues, (pName, val) => {
-                    window.audioService.updateEffect(trackId, slotIndex, { [pName]: val });
+                    track.trackAudio?.updateEffect(slotIndex, { [pName]: val });
                     if (track.state.effectsChain[slotIndex]) {
                         track.state.effectsChain[slotIndex].paramValues[pName] = val;
                     }
@@ -113,12 +113,9 @@
         if (!config || !config.columns) return;
         const allParams = config.columns.flat();
 
-        // Use Grid layout (Managed by CSS .effect-params-grid)
-        container.classList.add('dialog-content'); // Keep generic logic
+        // Use Grid layout - rely on CSS .dialog-content for 3-column grid
+        container.classList.add('dialog-content');
         container.classList.add('effect-params-grid');
-        container.style.display = 'grid'; // Ensure explicit display
-        // container.style.gridTemplateColumns handled by CSS now
-        container.style.gap = '8px';
 
         allParams.forEach(p => {
             // Current Value
@@ -135,7 +132,6 @@
 
             const grp = document.createElement('div');
             grp.className = 'control-group effect-control-group';
-            grp.style.flex = '1 1 120px'; // Responsive sizing
 
             grp.innerHTML = `
                      <div class="knob-label-group">

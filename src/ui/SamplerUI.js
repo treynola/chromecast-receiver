@@ -7,8 +7,8 @@
     /**
      * Shows a modal for per-pad settings (Trigger Mode, Vintage Character).
      */
-    function showPadSettings(padId, btn) {
-        const acm = window.audioService?.contextManager;
+    function showPadSettings(padId) {
+        const acm = window.audioEngine?.contextManager;
         if (!acm || !acm.samplerService) return;
 
         const voice = acm.samplerService.getVoice(padId);
@@ -222,7 +222,6 @@
 
         // Close on backdrop click
         dialog.addEventListener('click', (e) => {
-            const rect = dialog.getBoundingClientRect();
             if (e.target === dialog) {
                 dialog.remove();
             }
@@ -238,7 +237,7 @@
 
         // Poll for AudioService and ACM availability
         const checkInterval = setInterval(() => {
-            const acm = window.audioService?.contextManager;
+            const acm = window.audioEngine?.contextManager;
             if (acm && acm.samplerService) {
                 clearInterval(checkInterval);
                 console.log("SamplerUI: Connecting to SamplerService...");
@@ -297,7 +296,7 @@
                                 url = data.url;
                                 name = data.filename;
                             }
-                        } catch (err) { }
+                        } catch (err) { /* ignore */ }
 
                         if (!url && e.dataTransfer.files.length > 0) {
                             const file = e.dataTransfer.files[0];

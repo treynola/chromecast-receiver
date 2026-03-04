@@ -102,8 +102,8 @@ window.AudioUtils = window.AudioUtils || {};
             // Two tiers: rawContext for node creation, deeper native for AudioWorkletNode.
             try {
                 let rawCtx;
-                if (window.audioService && window.audioService.contextManager) {
-                    rawCtx = window.audioService.contextManager.getNativeContext();
+                if (window.audioEngine && window.audioEngine.contextManager) {
+                    rawCtx = window.audioEngine.contextManager.getNativeContext();
                 } else {
                     rawCtx = this.toneContext.rawContext || this.toneContext;
                 }
@@ -111,19 +111,19 @@ window.AudioUtils = window.AudioUtils || {};
 
                 // AudioWorkletNode in Safari requires the ACTUAL BaseAudioContext,
                 // not Tone's wrapper. Unwrap one deeper level.
-                this._baseAudioContext = rawCtx._nativeAudioContext || rawCtx;
+                this._baseAudioContext = rawCtx;
             } catch (e) {
                 console.warn("PCMRecorder: Context resolution error, using Tone fallback.", e);
                 const fallback = Tone.context.rawContext || Tone.context;
                 this._lockedNativeContext = fallback;
-                this._baseAudioContext = fallback._nativeAudioContext || fallback;
+                this._baseAudioContext = fallback;
             }
 
             if (!this._lockedNativeContext) {
                 console.error("PCMRecorder: FATAL - No native context found. Recording will fail.");
                 const fallback = Tone.context.rawContext || Tone.context;
                 this._lockedNativeContext = fallback;
-                this._baseAudioContext = fallback._nativeAudioContext || fallback;
+                this._baseAudioContext = fallback;
             }
 
             this._inputNode = null;
@@ -150,7 +150,10 @@ window.AudioUtils = window.AudioUtils || {};
             if (!this._nativeInputNode) {
                 this._nativeInputNode = this._baseAudioContext.createGain();
                 this._nativeInputNode.gain.value = 1.0;
-                console.log(`PCMRecorder: Created Native Input Node on BASE context`);
+                // V13.6: Force Stereo bridge to prevent WebKit mono truncation
+                this._nativeInputNode.channelCount = 2;
+                this._nativeInputNode.channelCountMode = 'explicit';
+                console.log(`PCMRecorder: Created Native Input Node (Stereo) on BASE context`);
             }
             return this._nativeInputNode;
         }
@@ -199,12 +202,25 @@ window.AudioUtils = window.AudioUtils || {};
                 if (e.data.type === 'alive') return;
                 if (e.data.type === 'peak') {
                     if (this.isRecording) {
-                        if (e.data.value > 0.000001) {
-                            if (Math.random() < 0.1) {
-                                console.log(`PCMRecorder: Signal detected. Peak: ${e.data.value.toFixed(4)} | Channels: ${e.data.channels}`);
+                        const peak = e.data.value;
+                        const maxChan = e.data.maxChannel;
+                        const maxVal = e.data.maxChannelVal;
+
+                        if (peak > 0.000001) {
+                            if (Math.random() < 0.2) { // Only log periodically to avoid spam
+                                console.log(`PCMRecorder: Signal detected. Peak: ${peak.toFixed(4)} | Device Channels: ${e.data.channels} | Highest on Chan: ${maxChan + 1} (${maxVal.toFixed(4)})`);
+                                
+                                // Diagnostic for silent/ultra-low signal
+                                if (peak < 0.01) {
+                                    console.warn(`⚠️ LOW SIGNAL DETECTED (${peak.toFixed(5)}). If this is silence, check your "Audio MIDI Setup" to ensure your source is routed to Channel 1 or 2.`);
+                                }
                             }
-                        } else if (Math.random() < 0.05) {
-                            console.warn(`PCMRecorder: ⚠️ SILENT INPUT (Peak: ${e.data.value}, Ch: ${e.data.channels})`);
+                        } else if (Math.random() < 0.1) {
+                            if (maxVal > 0.000001) {
+                                console.warn(`PCMRecorder: ⚠️ SILENT ON CH 1/2, but signal found on CH ${maxChan + 1} (${maxVal.toFixed(4)})! Check routing.`);
+                            } else {
+                                console.warn(`PCMRecorder: ⚠️ SILENT INPUT (All 8 probed channels peak < 0.000001)`);
+                            }
                         }
                     }
                     return;
@@ -260,11 +276,22 @@ window.AudioUtils = window.AudioUtils || {};
                         this._peakCount = 0;
                         this.samplesToSkip = options.processorOptions?.latencySamples || 0;
                         this.skippedSamples = 0;
+                        this._channelPeaks = new Float32Array(8); // V13.5: Probe first 8 channels
                         this.port.postMessage({ type: 'alive', skipping: this.samplesToSkip });
                     }
                     process(inputs) {
                         const input = inputs[0];
                         if (!input || input.length === 0) return true;
+                        
+                        // V13.5: Multichannel Probing
+                        for (let c = 0; c < Math.min(input.length, 8); c++) {
+                            const chan = input[c];
+                            for (let i = 0; i < chan.length; i++) {
+                                const abs = Math.abs(chan[i]);
+                                if (abs > this._channelPeaks[c]) this._channelPeaks[c] = abs;
+                            }
+                        }
+
                         const leftIn = input[0];
                         const rightIn = input.length > 1 ? input[1] : leftIn;
                         if (!leftIn) return true;
@@ -293,13 +320,26 @@ window.AudioUtils = window.AudioUtils || {};
 
                         // Periodic Peak Reporting
                         this._peakCount++;
-                        if (this._peakCount > 30) {
-                            if (this._peak > 0 && this._peak < 0.0001) {
-                                // Potentially ultra-low signal
+                        if (this._peakCount > 40) { // ~1s at 48k
+                            let maxChanIndex = 0;
+                            let maxVal = 0;
+                            for(let c=0; c<8; c++) {
+                                if (this._channelPeaks[c] > maxVal) {
+                                    maxVal = this._channelPeaks[c];
+                                    maxChanIndex = c;
+                                }
                             }
-                            this.port.postMessage({ type: 'peak', value: this._peak, channels: input.length });
+
+                            this.port.postMessage({ 
+                                type: 'peak', 
+                                value: this._peak, 
+                                channels: input.length,
+                                maxChannel: maxChanIndex,
+                                maxChannelVal: maxVal
+                            });
                             this._peak = 0;
                             this._peakCount = 0;
+                            this._channelPeaks.fill(0);
                         }
 
                         return true;
@@ -339,13 +379,16 @@ window.AudioUtils = window.AudioUtils || {};
 
             // Mono-to-Stereo Duplication
             let rightIsSilent = true;
-            for (let i = 0; i < Math.min(rightBuffer.length, 1000); i++) {
-                if (Math.abs(rightBuffer[i]) > 0.0001) {
+            // V13.5: Scan representative samples across the whole buffer 
+            const step = Math.max(1, Math.floor(rightBuffer.length / 500));
+            for (let i = 0; i < rightBuffer.length; i += step) {
+                if (Math.abs(rightBuffer[i]) > 0.00001) {
                     rightIsSilent = false;
                     break;
                 }
             }
             if (rightIsSilent) {
+                console.log("PCMRecorder: Right channel silent. Duplicating left.");
                 rightBuffer.set(leftBuffer);
             }
 
@@ -394,6 +437,13 @@ window.AudioUtils = window.AudioUtils || {};
                     this._inputNode.dispose();
                 } catch (e) { }
                 this._inputNode = null;
+            }
+            // V13.3: Clean up native input node to prevent signal leak
+            if (this._nativeInputNode) {
+                try {
+                    this._nativeInputNode.disconnect();
+                } catch (e) { }
+                this._nativeInputNode = null;
             }
             if (this.workletNode) {
                 try {

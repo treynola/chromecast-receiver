@@ -12,9 +12,11 @@
             showDocsBtn.addEventListener('click', () => {
                 docsDialog.showModal();
                 // Load docs content if not already loaded (handled via docs.js)
-                if (window.docs) {
-                    const pre = docsDialog.querySelector('pre');
-                    if (pre) pre.textContent = window.docs;
+                if (window.docsContent) {
+                    const docsContainer = docsDialog.querySelector('pre'); // Assuming 'pre' is the container for docs content
+                    if (docsContainer) {
+                        docsContainer.innerHTML = window.docsContent;
+                    }
                 }
             });
         }

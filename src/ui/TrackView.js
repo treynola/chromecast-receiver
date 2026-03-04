@@ -385,9 +385,10 @@
                 header.innerHTML = `<span>Effect Slot ${i + 1}</span>`;
 
                 const closeBtn = document.createElement('button');
-                closeBtn.className = 'close-dialog-btn';
+                closeBtn.className = 'dialog-close-x';
                 closeBtn.dataset.action = 'close-effect-dialog';
-                closeBtn.textContent = 'x';
+                closeBtn.innerHTML = '&times;';
+                closeBtn.setAttribute('aria-label', 'Close');
                 header.appendChild(closeBtn);
 
                 const content = document.createElement('div');
@@ -406,13 +407,13 @@
 
             const auditionHeader = document.createElement('div');
             auditionHeader.className = 'dialog-header';
-
-
+            auditionHeader.innerHTML = `<span>AUDITION</span>`;
 
             const auditionCloseBtn = document.createElement('button');
-            auditionCloseBtn.className = 'close-dialog-btn';
+            auditionCloseBtn.className = 'dialog-close-x';
             auditionCloseBtn.dataset.action = 'close-audition-dialog';
-            auditionCloseBtn.textContent = 'x';
+            auditionCloseBtn.innerHTML = '&times;';
+            auditionCloseBtn.setAttribute('aria-label', 'Close');
             auditionHeader.appendChild(auditionCloseBtn);
 
             const auditionContent = document.createElement('div');
@@ -680,9 +681,9 @@
             this.showLoopControls(true);
 
             // Sync with Audio Service to ensure internal Tone states match
-            if (window.audioService && duration > 0) {
-                window.audioService.setTrackLoopStart(this.index, 0);
-                window.audioService.setTrackLoopEnd(this.index, duration);
+            if (duration > 0 && this.trackAudio) {
+                this.trackAudio.setLoopStart(0);
+                this.trackAudio.setLoopEnd(duration);
             }
         }
 

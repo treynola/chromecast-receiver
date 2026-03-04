@@ -228,7 +228,9 @@ class ToneCastManager {
         // This broadcasts to all connected clients (Receiver)
         if (this.invoke) {
             this.invoke('push_ws_json', { data: data }).catch(e => {
-                console.error("❌ ToneCastManager: Signaling failed", e);
+                // Silently ignore. If WebRTC signaling isn't implemented in the backend, 
+                // the primary WebM CastStream will handle the audio instead.
+                console.debug("ToneCastManager: Signaling not supported on this backend (using WebM stream fallback).");
             });
         }
     }

@@ -3,10 +3,12 @@
  * Manages the list of master recordings, preview players, and file actions.
  */
 (function () {
+    const { Tone } = window;
+
     class RecordingUI {
-        constructor(listElementId, audioService) {
+        constructor(listElementId, audioEngine) {
             this.listElement = document.getElementById(listElementId);
-            this.audioService = audioService;
+            this.audioEngine = audioEngine;
             this.createdObjectUrls = new Set();
             this.setlist = []; // URLs in continue order
             this.syncedRecordings = new Set(); // URLs to play in sync
@@ -59,7 +61,7 @@
                 e.dataTransfer.effectAllowed = 'copy';
             });
 
-            const playerDiv = this.createAudioPlayer(url, this.audioService.masterBus, item);
+            const playerDiv = this.createAudioPlayer(url, this.audioEngine?.masterLimiter || Tone.Destination, item);
             const actionsDiv = this.createRecordingActions(blob, filename, item, url);
             // Info div logic remains mostly same, just size display might differ
             const infoDiv = this.createRecordingInfo(filename, blob, item, typeof blobOrUrl === 'string');
@@ -191,6 +193,8 @@
             playerDiv.className = 'custom-audio-player';
             playerDiv._playerInstance = player;
 
+            // recordingItem is passed for future extensions, e.g., to highlight the item when playing.
+
             const playBtn = document.createElement('button');
             playBtn.className = 'play-pause-btn play-icon-btn';
             playBtn.innerHTML = '<i class="fas fa-play"></i>';
@@ -230,7 +234,7 @@
 
             const updateUI = () => {
                 if (player.state === 'started') {
-                    const now = Tone.Transport.seconds;
+                    const now = Tone.getTransport().seconds;
                     const elapsed = now - startTime;
                     const dur = player.buffer.duration;
                     if (dur > 0) {
@@ -247,7 +251,7 @@
 
                 let startOffset = pauseTime;
                 player.start(Tone.now(), startOffset);
-                startTime = Tone.Transport.seconds - startOffset;
+                startTime = Tone.getTransport().seconds - startOffset;
 
                 playBtn.style.display = 'none';
                 pauseBtn.style.display = 'flex';
@@ -269,7 +273,7 @@
             pauseBtn.onclick = () => {
                 player.stop();
                 cancelAnimationFrame(animationFrame);
-                pauseTime = Tone.Transport.seconds - startTime;
+                pauseTime = Tone.getTransport().seconds - startTime;
 
                 playBtn.style.display = 'flex';
                 pauseBtn.style.display = 'none';
@@ -299,7 +303,7 @@
                 if (player.state === 'started') {
                     player.stop();
                     player.start(Tone.now(), time);
-                    startTime = Tone.Transport.seconds - time;
+                    startTime = Tone.getTransport().seconds - time;
                 } else {
                     pauseTime = time;
                     progressBarFill.style.width = `${p * 100}%`;
@@ -341,7 +345,7 @@
                 }
             });
 
-            select.onchange = async (e) => {
+            select.onchange = async () => {
                 const val = select.value;
                 select.selectedIndex = 0;
 
@@ -356,7 +360,7 @@
                     if (confirmDelete) {
                         item.remove();
                         this.createdObjectUrls.delete(url);
-                        try { URL.revokeObjectURL(url); } catch (e) { }
+                        try { URL.revokeObjectURL(url); } catch (e) { /* ignored */ }
 
                         // Cleanup
                         this.syncedRecordings.delete(url);
@@ -467,14 +471,15 @@
             list.style.flexDirection = 'column';
             list.style.gap = '10px';
 
-            window.audioService.tracks.forEach((track, id) => {
+            window.tracks.forEach((track, id) => {
                 const btn = document.createElement('button');
                 btn.textContent = `Track ${id + 1}`;
                 btn.style.padding = '10px';
                 btn.onclick = async () => {
                     dialog.close();
-                    await window.audioService.loadFileToTrack(id, url);
+                    await track.loadUrl(url);
                     alert(`Loaded to Track ${id + 1}`);
+                    track.setStatus('Ready', 'ready');
                     // Reset loop points? Scripts.js handles this usually.
                 };
                 list.appendChild(btn);
@@ -524,7 +529,7 @@
                 btn.onclick = async () => {
                     dialog.close();
                     try {
-                        const service = window.audioService?.contextManager?.samplerService;
+                        const service = window.audioEngine?.samplerService;
                         if (service) {
                             await service.assignSample(i, url, filename);
                             alert(`Assigned to Pad ${i}`);

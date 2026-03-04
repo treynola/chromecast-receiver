@@ -4,7 +4,7 @@
  * Includes LFO marker dragging logic.
  */
 (function () {
-
+    const { Tone } = window;
     let lastLfoFrameTime = 0;
     let lfoPhase1 = 0;
     let lfoPhase2 = 0;
@@ -42,14 +42,14 @@
         const deltaTime = lastLfoFrameTime === 0 ? 0 : now - lastLfoFrameTime;
         lastLfoFrameTime = now;
 
-        const lfo1Enabled = window.audioService.isLfoEnabled(1);
-        const lfo2Enabled = window.audioService.isLfoEnabled(2);
+        const lfo1Enabled = window.audioEngine.getLfo(1)?.state === 'started';
+        const lfo2Enabled = window.audioEngine.getLfo(2)?.state === 'started';
 
         let visualLfo1 = 0;
         let visualLfo2 = 0;
 
         if (lfo1Enabled) {
-            const lfoNode = window.audioService.getLfo(1);
+            const lfoNode = window.audioEngine.getLfo(1);
             if (lfoNode) {
                 const freq = lfoNode.frequency.value;
                 lfoPhase1 += 2 * Math.PI * freq * deltaTime;
@@ -61,7 +61,7 @@
         }
 
         if (lfo2Enabled) {
-            const lfoNode = window.audioService.getLfo(2);
+            const lfoNode = window.audioEngine.getLfo(2);
             if (lfoNode) {
                 const freq = lfoNode.frequency.value;
                 lfoPhase2 += 2 * Math.PI * freq * deltaTime;
@@ -76,7 +76,7 @@
         if (window.tracks) {
             window.tracks.forEach(track => {
                 if (!track) return;
-                const audioTrack = window.audioService.tracks.get(track.id);
+                const audioTrack = track.trackAudio;
                 if (!audioTrack || !audioTrack.lfoConnections) return;
 
                 audioTrack.lfoConnections.forEach((conn, param) => {
@@ -104,7 +104,7 @@
         }
 
         // --- Master Waveforms ---
-        const masterNodes = window.audioService.getMasterWaveformNodes();
+        const masterNodes = window.audioEngine.contextManager.getMasterWaveformNodes();
         if (masterNodes) {
             const canvasL = document.getElementById('master-waveform-L');
             const canvasR = document.getElementById('master-waveform-R');
@@ -120,14 +120,14 @@
         if (window.tracks) {
             window.tracks.forEach(track => {
                 if (!track) return;
-                const audioTrack = window.audioService.tracks.get(track.id);
+                const audioTrack = track.trackAudio;
                 if (!audioTrack) return;
 
                 const trackNodes = audioTrack.getWaveforms();
                 if (trackNodes) {
                     const cvL = track.elements.waveformCanvasL;
                     const cvR = track.elements.waveformCanvasR;
-                    const isActive = track.state.isRecording || (track.state.isPlaying && window.audioService.isTrackLoaded(track.id)) || (audioTrack.monitorGate && audioTrack.monitorGate.gain.value > 0.01);
+                    const isActive = track.state.isRecording || (track.state.isPlaying && audioTrack.player.loaded) || (audioTrack.monitorGate && audioTrack.monitorGate.gain.value > 0.01);
 
                     if (cvL && cvL.offsetParent !== null) drawWaveform(cvL, trackNodes[0], isActive);
                     if (cvR && cvR.offsetParent !== null) drawWaveform(cvR, trackNodes[1], isActive);
@@ -136,7 +136,7 @@
                 if (track.elements.trackTimeDisplay) {
                     let position = 0;
                     if (track.state.isRecording || track.state.isPlaying) {
-                        position = window.audioService.getTrackPosition(track.id);
+                        position = audioTrack.getCurrentPosition?.() || 0;
                     } else {
                         position = track.state.pausePosition || 0;
                     }
@@ -151,9 +151,9 @@
         // --- Master Recording Time Display ---
         const masterTimeDisplay = document.getElementById('recording-time-display');
         if (masterTimeDisplay) {
-            const isRecording = window.isMasterMeditation || window.audioService.isMasterRecording;
+            const isRecording = window.isMasterMeditation || window.audioEngine.isMasterRecording;
             if (isRecording) {
-                const position = window.audioService.getMasterRecordPosition();
+                const position = window.audioEngine.isMasterRecording ? (window.Tone.now() - window.audioEngine.masterRecordStartTime) : 0;
                 const mins = Math.floor(position / 60);
                 const secs = Math.floor(position % 60);
                 const huns = Math.floor((position % 1) * 100);
@@ -195,7 +195,6 @@
             canvas.height = canvas.clientHeight;
         }
 
-        const data = waveformNode.getValue();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (!isActive) {
@@ -207,6 +206,9 @@
             ctx.stroke();
             return;
         }
+
+        // ONLY pull data if active to save CPU
+        const data = waveformNode.getValue();
 
         ctx.beginPath();
         ctx.strokeStyle = '#d4af37';
@@ -252,7 +254,7 @@
         const currentMin = activeDrag.track.state.lfoMinPresets?.[activeDrag.param] ?? parseFloat(slider.min);
         const currentMax = activeDrag.track.state.lfoMaxPresets?.[activeDrag.param] ?? parseFloat(slider.max);
 
-        window.audioService.updateLfoParameterRange(activeDrag.track.id, activeDrag.param, currentMin, currentMax);
+        activeDrag.track.trackAudio?.updateLfoRange(activeDrag.param, currentMin, currentMax);
     }
 
     function stopMarkerDrag() {
@@ -271,11 +273,11 @@
         // 1. Play/Loop Markers
         if (track.elements.waveformCanvasL) {
             const updatePlayMarkers = () => {
-                const audioTrack = window.audioService.tracks.get(track.id);
+                const audioTrack = track.trackAudio;
                 if (!audioTrack) return;
 
-                const progress = window.audioService.getTrackPosition(track.id);
-                const duration = window.audioService.getTrackDuration(track.id);
+                const progress = audioTrack.getCurrentPosition?.() || 0;
+                const duration = audioTrack.player?.buffer?.duration || 0;
                 const loopStart = audioTrack.loopStart || 0;
                 const loopEnd = audioTrack.loopEnd || duration;
 

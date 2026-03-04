@@ -35,20 +35,20 @@
                         if (data.url) {
                             track.setStatus('Loading...');
                             try {
-                                await window.audioService.loadFileToTrack(trackId, data.url);
+                                await track.trackAudio.loadUrl(data.url);
                                 track.setStatus('Ready', 'ready');
                                 track.updateFileLabel(data.filename);
                                 track.state.hasContent = true;
                                 track.elements.playBtn.disabled = false;
                                 track.resetLoopPoints();
-                            } catch (err) {
-                                console.error("Drop Load Error", err);
+                            } catch (error) {
+                                console.error('Error importing file:', error);
                                 track.setStatus('Error', 'error');
                             }
                         }
                         return;
                     }
-                } catch (e) { /* ignore */ }
+                } catch (error) { /* ignore */ }
 
                 // 2. External Files / Directories
                 const items = e.dataTransfer.items;
@@ -62,13 +62,13 @@
                             track.setStatus('Loading...');
                             try {
                                 const url = URL.createObjectURL(file);
-                                await window.audioService.loadFileToTrack(trackId, url);
+                                await track.trackAudio.loadUrl(url);
                                 track.setStatus('Ready', 'ready');
                                 track.updateFileLabel(file.name);
                                 track.state.hasContent = true;
                                 track.elements.playBtn.disabled = false;
                                 track.resetLoopPoints();
-                            } catch (err) {
+                            } catch (error) {
                                 track.setStatus('Error', 'error');
                             }
                         } else if (entry.isDirectory) {
@@ -83,7 +83,7 @@
                                     alert("No audio files found in directory.");
                                     track.setStatus('Empty Dir', 'error');
                                 }
-                            } catch (err) {
+                            } catch (error) {
                                 track.setStatus('Scan Error', 'error');
                             }
                         }
@@ -102,6 +102,25 @@
 
         container.addEventListener('click', async (e) => {
             const target = e.target;
+            
+            // --- GLOBAL HEADER BUTTONS EXEMPTION ---
+            const headerBtn = target.closest('#show-sessions-button, #import-files-button, #show-docs-button, #cast-btn');
+            if (headerBtn) {
+                console.log(`Interactions: Global header button clicked: ${headerBtn.id}`);
+                // Docs Button Fallback (if DocsUI.js isn't ready)
+                if (headerBtn.id === 'show-docs-button') {
+                    const docsDialog = document.getElementById('docs-dialog');
+                    if (docsDialog && !docsDialog.open) {
+                        docsDialog.showModal();
+                        if (window.docsContent) {
+                            const pre = docsDialog.querySelector('pre');
+                            if (pre) pre.innerHTML = window.docsContent;
+                        }
+                    }
+                }
+                return; // Let other listeners handle it, but don't return early and stop bubbles
+            }
+
             const trackDiv = target.closest('.track');
             if (!trackDiv) return;
 
@@ -116,31 +135,31 @@
                     if (track.state.isPlaying) {
                         // PAUSE logic
                         const now = Tone.now();
-                        const loopStart = window.audioService.getTrackLoopStart(trackId);
-                        const loopEnd = window.audioService.getTrackLoopEnd(trackId);
+                        const loopStart = track.trackAudio.player.loopStart || 0;
+                        const loopEnd = track.trackAudio.player.loopEnd || track.trackAudio.player.buffer?.duration || 0;
                         const loopDuration = loopEnd - loopStart;
 
                         if (loopDuration > 0) {
-                            const rate = window.audioService.getTrackPlaybackRate(trackId);
-                            const startTime = window.audioService.getTrackPlayStartTime(trackId);
+                            const rate = track.trackAudio.player.playbackRate;
+                            const startTime = track.playStartTime || 0;
                             const startOffset = track.state.pausePosition || loopStart;
                             const elapsed = (now - startTime) * rate;
                             const relStart = startOffset - loopStart;
                             let relPos = (relStart + elapsed) % loopDuration;
                             track.state.pausePosition = loopStart + relPos;
                         } else {
-                            track.state.pausePosition = window.audioService.getTrackPosition(trackId);
+                            track.state.pausePosition = track.trackAudio.getCurrentPosition();
                         }
 
-                        window.audioService.stopPlayback(trackId);
+                        track.trackAudio.stopPlayback();
                         track.state.isPlaying = false;
                         target.classList.remove('playing');
                     } else {
                         // START logic
                         if (Tone.context.state !== 'running') await Tone.start();
                         const offset = track.state.pausePosition;
-                        window.audioService.startPlayback(trackId, offset);
-                        window.audioService.setTrackPlayStartTime(trackId, Tone.now());
+                        track.trackAudio.startPlayback(offset);
+                        track.playStartTime = Tone.now();
                         track.state.isPlaying = true;
                         target.classList.add('playing');
                     }
@@ -158,7 +177,9 @@
 
                     if (track.state.stopClickCount >= 4) {
                         if (confirm(`Clear Track ${trackId + 1}?`)) {
-                            await window.audioService.clearTrack(trackId);
+                            if (track.trackAudio && track.trackAudio.player) track.trackAudio.player.buffer = null;
+                            track.updateFileLabel('');
+                            track.resetLoopPoints();
                             track.state.hasContent = false;
                             track.state.isPlaying = false;
                             track.state.isRecording = false;
@@ -170,7 +191,7 @@
                         return;
                     }
 
-                    window.audioService.stopPlayback(trackId);
+                    track.trackAudio.stopPlayback();
                     track.state.isPlaying = false;
                     track.state.pausePosition = 0;
                     track.elements.playBtn.classList.remove('playing');
@@ -186,11 +207,12 @@
                     const isReverse = !target.classList.contains('active');
                     if (isReverse) target.classList.add('active');
                     else target.classList.remove('active');
-                    window.audioService.setTrackReverse(trackId, isReverse);
+                    if (track.trackAudio && track.trackAudio.player) {
+                        track.trackAudio.player.reverse = isReverse;
+                    }
                 }
                 else if (action === 'toggle-monitor') {
-                    const audioTrack = window.audioService.tracks.get(trackId);
-                    if (audioTrack) audioTrack.setMonitor(target.checked);
+                    if (track.trackAudio) track.trackAudio.setMonitor(target.checked);
                 }
                 else if (action === 'close-effect-dialog' || action === 'close-audition-dialog') {
                     const dialog = target.closest('dialog');
@@ -204,7 +226,7 @@
                 const checkbox = trackDiv.querySelector(`#fx-slot-${trackId}-${slotIndex}`);
 
                 if (e.detail === 4) {
-                    window.audioService.removeEffect(trackId, slotIndex);
+                    track.trackAudio.removeEffect(slotIndex);
                     if (checkbox) checkbox.checked = false;
                     target.textContent = (slotIndex + 1).toString();
                     if (track.state.effectsChain) track.state.effectsChain[slotIndex] = null;
@@ -226,14 +248,14 @@
                 const isChecked = target.checked;
                 const paramName = target.dataset.lfoAssign;
                 const lfoIndex = parseInt(target.dataset.lfoIndex, 10);
-                const audioTrack = window.audioService.tracks.get(trackId);
-                if (!audioTrack) return;
+                const track = window.tracks[trackId];
+                if (!track) return;
 
                 if (isChecked) {
                     const otherIndex = lfoIndex === 1 ? 2 : 1;
-                    const existing = audioTrack.lfoConnections.get(paramName);
+                    const existing = track.trackAudio.lfoConnections.get(paramName);
                     if (existing) {
-                        window.audioService.removeLfoFromParameter(trackId, paramName);
+                        track.trackAudio.disconnectLFO(paramName);
                         const otherCb = trackDiv.querySelector(`.lfo-assign[data-lfo-assign="${paramName}"][data-lfo-index="${otherIndex}"]`);
                         if (otherCb) { otherCb.checked = false; otherCb.classList.remove('reversed'); }
                     }
@@ -254,9 +276,9 @@
                         track.elements.maxMarkers[paramName].style.display = 'block';
                         track.elements.maxMarkers[paramName].style.left = ((pMax - min) / (max - min) * 100) + '%';
                     }
-                    window.audioService.assignLfoToParameter(trackId, paramName, pMin, pMax, lfoIndex);
+                    track.trackAudio.connectLFO(paramName, pMin, pMax, lfoIndex);
                 } else {
-                    window.audioService.removeLfoFromParameter(trackId, paramName);
+                    track.trackAudio.disconnectLFO(paramName);
                     if (track.elements.minMarkers[paramName]) track.elements.minMarkers[paramName].style.display = 'none';
                     if (track.elements.maxMarkers[paramName]) track.elements.maxMarkers[paramName].style.display = 'none';
                 }
@@ -272,15 +294,14 @@
                 const paramName = target.dataset.lfoAssign;
                 const lfoIndex = parseInt(target.dataset.lfoIndex, 10);
                 const track = window.tracks[trackId];
-                const audioTrack = window.audioService.tracks.get(trackId);
-                if (!audioTrack) return;
+                if (!track) return;
 
-                const conn = audioTrack.lfoConnections.get(paramName);
+                const conn = track.trackAudio.lfoConnections.get(paramName);
                 if (conn) {
-                    const oldMin = conn.lfoScale.min;
-                    const oldMax = conn.lfoScale.max;
-                    conn.lfoScale.min = oldMax;
-                    conn.lfoScale.max = oldMin;
+                    const oldMin = conn.scale.min;
+                    const oldMax = conn.scale.max;
+                    conn.scale.min = oldMax;
+                    conn.scale.max = oldMin;
                     conn.min = oldMax;
                     conn.max = oldMin;
 
@@ -293,7 +314,7 @@
         });
 
         // Input handling
-        container.addEventListener('input', (e) => {
+        window.addEventListener('input', (e) => {
             const target = e.target;
             const trackDiv = target.closest('.track');
             if (!trackDiv) return;
@@ -305,23 +326,22 @@
                 const val = parseFloat(target.value);
                 
                 if (param === 'loopStart' || param === 'loopEnd') {
-                    const dur = window.audioService.getTrackDuration(trackId);
-                    if (param === 'loopStart') window.audioService.setTrackLoopStart(trackId, val);
-                    else window.audioService.setTrackLoopEnd(trackId, val);
+                    if (param === 'loopStart') track.trackAudio.setLoopStart(val);
+                    else track.trackAudio.setLoopEnd(val);
                 } else if (param === 'playbackRate' || param === 'pitch') {
-                    window.audioService.setTrackPlaybackRate(trackId, val);
+                    track.trackAudio.setPitch(val);
                 } else if (param === 'volume' || param === 'vol') {
-                    window.audioService.setTrackVolume(trackId, val);
+                    track.trackAudio.setVolume(val);
                 } else if (param === 'pan') {
-                    window.audioService.setTrackPan(trackId, val);
+                    track.trackAudio.setPan(val);
                 } else if (param === 'treble') {
-                    window.audioService.setTrackEQ(trackId, { treble: val });
+                    track.trackAudio.setEQ({ treble: val });
                 } else if (param === 'mid_gain') {
-                    window.audioService.setTrackEQ(trackId, { mid: val });
+                    track.trackAudio.setEQ({ mid: val });
                 } else if (param === 'mid_freq') {
-                    window.audioService.setTrackEQ(trackId, { midFreq: val });
+                    track.trackAudio.setEQ({ midFreq: val });
                 } else if (param === 'bass') {
-                    window.audioService.setTrackEQ(trackId, { bass: val });
+                    track.trackAudio.setEQ({ bass: val });
                 } else {
                     console.warn(`Unknown parameter update: ${param}`);
                 }
@@ -334,7 +354,7 @@
         });
 
         // Change handling (Source Select & Effects)
-        container.addEventListener('change', (e) => {
+        container.addEventListener('change', async (e) => {
             const target = e.target;
             const trackDiv = target.closest('.track');
             if (!trackDiv) return;
@@ -353,7 +373,19 @@
                 } else if (value === 'system') {
                     // System audio capture logic...
                 } else {
-                    // Standard device selection logic...
+                    // Standard device selection (Microphone, BlackHole, Aggregate, etc.)
+                    const isStereo = value !== 'default' && value !== 'mic';
+                    try {
+                        console.log(`Interactions: Switching Track ${trackId} input to device: ${value}`);
+                        await track.trackAudio.connectInput('mic', value, { isStereo });
+                        track.setStatus('Input Connected', 'ready');
+                        if (window.PersistenceService && window.PersistenceService.setInputDeviceId) {
+                            window.PersistenceService.setInputDeviceId(value);
+                        }
+                    } catch (err) {
+                        console.error(`Interactions: Failed to connect device ${value}:`, err);
+                        track.setStatus('Input Error', 'error');
+                    }
                 }
             }
 
@@ -362,7 +394,7 @@
                 const effectName = target.value;
 
                 if (effectName === 'none') {
-                    window.audioService.removeAuditioningEffect(trackId);
+                    track.trackAudio.removeAuditioningEffect();
                     if (track.elements.auditionDialog) {
                         track.elements.auditionDialog.close();
                     }
@@ -393,7 +425,7 @@
                     });
                     if (paramValues.mix === undefined) paramValues.mix = 0.5;
 
-                    const instance = window.audioService.setAuditioningEffect(trackId, effectName, paramValues);
+                    const instance = track.trackAudio.setAuditioningEffect(effectName, paramValues);
                     if (!instance) {
                         target.value = 'none';
                         return;
@@ -408,21 +440,52 @@
                     };
 
                     const dialogContent = track.elements.auditionDialog.querySelector('.audition-dialog-content');
+                    // Set title to "AUDITION: Effect Name"
+                    const headerTitle = track.elements.auditionDialog.querySelector('.dialog-header span');
+                    if (headerTitle) headerTitle.textContent = `AUDITION: ${effectName}`;
                     if (dialogContent) {
                         dialogContent.innerHTML = '';
+
+                        // Slot assignment buttons
+                        const slotArea = document.createElement('div');
+                        slotArea.className = 'audition-slot-selector';
+                        slotArea.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0 10px 0;grid-column:1/-1;';
+                        const label = document.createElement('span');
+                        label.textContent = 'Assign to Slot:';
+                        label.style.cssText = 'font-size:0.85em;font-weight:bold;color:var(--gold);';
+                        slotArea.appendChild(label);
+                        const slotGroup = document.createElement('div');
+                        slotGroup.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+                        for (let s = 0; s < 7; s++) {
+                            const btn = document.createElement('button');
+                            btn.textContent = (s + 1).toString();
+                            btn.style.cssText = 'padding:4px 8px;cursor:pointer;background:#444;border:1px solid var(--gold);color:var(--gold);border-radius:3px;';
+                            btn.addEventListener('click', () => {
+                                if (window.assignEffectToSlot) {
+                                    const trackId = parseInt(trackDiv.dataset.trackIndex, 10);
+                                    window.assignEffectToSlot(trackId, s, track.state.auditioningEffect, trackDiv, track, true);
+                                }
+                            });
+                            slotGroup.appendChild(btn);
+                        }
+                        slotArea.appendChild(slotGroup);
+                        dialogContent.appendChild(slotArea);
+
+                        // Render effect params
                         if (window.renderEffectParams) {
                             window.renderEffectParams(dialogContent, config, paramValues, (pName, val) => {
-                                window.audioService.updateEffect(trackId, -1, { [pName]: val });
+                                track.trackAudio.updateEffect(-1, { [pName]: val });
                                 if (track.state.auditioningEffect) {
                                     track.state.auditioningEffect.paramValues[pName] = val;
                                 }
                             });
                         }
                         track.elements.auditionDialog.showModal();
-                        target.value = 'none';
+                        // Reset dropdown with slight delay to prevent re-triggering 'none' logic immediately
+                        setTimeout(() => { target.value = 'none'; }, 50);
                     }
-                } catch (err) {
-                    console.error(`Failed to create audition effect: ${effectName}`, err);
+                } catch (error) {
+                    console.error(`Failed to create audition effect: ${effectName}`, error);
                     target.value = 'none';
                 }
             }
@@ -436,8 +499,8 @@
         if (gainSlider) {
             gainSlider.addEventListener('input', function () {
                 const gain = parseFloat(this.value);
-                if (window.audioService?.audioRouter) {
-                    window.audioService.audioRouter.setLoopbackGain(gain);
+                if (window.audioEngine?.audioRouter) {
+                    window.audioEngine.audioRouter.setLoopbackGain(gain);
                 }
                 if (gainLabel) gainLabel.textContent = `${gain} dB`;
             });
@@ -454,26 +517,25 @@
             const durationInput = document.getElementById('loop-length');
             const duration = durationInput ? parseFloat(durationInput.value) : 3.6;
 
-            await window.audioService.startRecording(trackId, duration);
+            await track.trackAudio.startRecording(duration);
             track.state.isRecording = true;
             btn.classList.add('recording');
             track.setStatus('Recording...', 'recording');
 
-            const audioTrack = window.audioService.tracks.get(trackId);
-            if (audioTrack?.recorder) {
-                audioTrack.recorder.onComplete = () => {
+            if (track.trackAudio.recorder) {
+                track.trackAudio.recorder.onComplete = () => {
                     if (track.state.isRecording) stopTrackRecording(trackId, btn);
                 };
             }
-        } catch (err) {
-            console.error("Recording failed", err);
+        } catch (error) {
+            console.error("Recording failed", error);
         }
     }
 
     async function stopTrackRecording(trackId, btn) {
         const track = window.tracks[trackId];
         try {
-            const blob = await window.audioService.stopRecording(trackId);
+            const blob = await track.trackAudio.stopRecording();
             track.state.isRecording = false;
             btn.classList.remove('recording');
 
@@ -483,14 +545,14 @@
                 if (window.recordingUI) window.recordingUI.addRecording(blob, name);
 
                 const url = URL.createObjectURL(blob);
-                await window.audioService.loadFileToTrack(trackId, url);
+                await track.trackAudio.loadUrl(url);
                 track.state.hasContent = true;
                 track.elements.playBtn.disabled = false;
                 track.setStatus('Ready', 'ready');
                 track.updateFileLabel(name);
             }
-        } catch (err) {
-            console.error("Stop recording failed", err);
+        } catch (error) {
+            console.error('Stop recording failed:', error);
         }
     }
 
@@ -514,9 +576,9 @@
                 if (!window.isMasterMeditation) {
                     if (Tone.context.state !== 'running') await Tone.start();
                     if (mode === 'stems') {
-                        await window.audioService.startStemsRecording();
+                        if (window.audioEngine) window.audioEngine.startStemsRecording();
                     } else {
-                        await window.audioService.startMasterRecording(format);
+                        if (window.audioEngine) window.audioEngine.startMasterRecording(format);
                     }
                     window.isMasterMeditation = true;
                     masterRecBtn.textContent = "STOP";
@@ -526,7 +588,7 @@
                 } else {
                     masterRecBtn.textContent = "Processing...";
                     if (mode === 'stems') {
-                        const stems = await window.audioService.stopStemsRecording();
+                        const stems = await window.audioEngine?.stopStemsRecording() || [];
                         for (const stem of stems) {
                             if (stem.blob) {
                                 let blob = stem.blob;
@@ -539,7 +601,8 @@
                             }
                         }
                     } else {
-                        let blob = await window.audioService.stopMasterRecording();
+                        let blob = await window.audioEngine?.stopMasterRecording();
+                        if (!blob) return;
                         let ext = 'webm';
                         if (format === 'wav' && window.AudioUtils?.blobToWav) {
                             blob = await window.AudioUtils.blobToWav(blob);
@@ -570,7 +633,7 @@
             lfo1Slider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (lfo1Val) lfo1Val.textContent = `${val}s`;
-                const lfo = window.audioService.getLfo(1);
+                const lfo = window.audioEngine?.getLfo(1);
                 if (lfo) lfo.frequency.value = 1 / val;
             });
         }
@@ -581,35 +644,118 @@
             lfo2Slider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (lfo2Val) lfo2Val.textContent = `${val}s`;
-                const lfo = window.audioService.getLfo(2);
+                const lfo = window.audioEngine?.getLfo(2);
                 if (lfo) lfo.frequency.value = 1 / val;
             });
         }
 
         const lfo1Toggle = document.getElementById('lfo-toggle');
         if (lfo1Toggle) {
+            // Sync initial state — LFOs are started in AudioContextManager.init()
+            const lfo1State = window.audioEngine?.getLfo(1);
+            if (lfo1State && lfo1State.state === 'started') lfo1Toggle.classList.add('active');
             lfo1Toggle.onclick = () => {
-                const active = window.audioService.toggleLfo(1);
+                const active = window.audioEngine?.toggleLfo(1);
                 lfo1Toggle.classList.toggle('active', active);
             };
         }
 
         const lfo2Toggle = document.getElementById('lfo2-toggle');
         if (lfo2Toggle) {
+            const lfo2State = window.audioEngine?.getLfo(2);
+            if (lfo2State && lfo2State.state === 'started') lfo2Toggle.classList.add('active');
             lfo2Toggle.onclick = () => {
-                const active = window.audioService.toggleLfo(2);
+                const active = window.audioEngine?.toggleLfo(2);
                 lfo2Toggle.classList.toggle('active', active);
             };
         }
 
+    });
+    
+    // Global Header Buttons (Media, Import, Docs)
+    document.addEventListener('DOMContentLoaded', () => {
+        const mediaBtn = document.getElementById('show-sessions-button');
+        const importBtn = document.getElementById('import-files-button');
+        const docsBtn = document.getElementById('show-docs-button');
+        
+        const sessionsDialog = document.getElementById('sessions-dialog');
+        const docsDialog = document.getElementById('docs-dialog');
+        
+        if (mediaBtn && sessionsDialog) {
+            mediaBtn.addEventListener('click', () => {
+                if (typeof sessionsDialog.showModal === 'function') {
+                    sessionsDialog.showModal();
+                } else {
+                    sessionsDialog.setAttribute('open', '');
+                }
+            });
+        }
+
+        // Close button for sessions dialog
+        const closeSessionsBtn = document.getElementById('close-sessions-button');
+        if (closeSessionsBtn && sessionsDialog) {
+            closeSessionsBtn.addEventListener('click', () => {
+                if (typeof sessionsDialog.close === 'function') {
+                    sessionsDialog.close();
+                } else {
+                    sessionsDialog.removeAttribute('open');
+                }
+            });
+        }
+        
+        if (importBtn) {
+            importBtn.addEventListener('click', async () => {
+                if (window.__TAURI__) {
+                    try {
+                        const selected = await window.__TAURI__.dialog.open({
+                            multiple: false,
+                            filters: [{
+                                name: 'Audio',
+                                extensions: ['wav', 'mp3', 'flac', 'ogg', 'aac', 'm4a', 'mp4']
+                            }]
+                        });
+                        if (selected) {
+                            const name = selected.split(/[\\/]/).pop();
+                            // Add to Sessions & Media list
+                            if (window.recordingUI) {
+                                const assetUrl = window.__TAURI__.core?.convertFileSrc
+                                    ? window.__TAURI__.core.convertFileSrc(selected)
+                                    : `asset://localhost/${encodeURIComponent(selected)}`;
+                                window.recordingUI.addRecording(assetUrl, name, selected);
+                            }
+                            // Also open Sessions dialog so user sees the import
+                            const sd = document.getElementById('sessions-dialog');
+                            if (sd && typeof sd.showModal === 'function' && !sd.open) sd.showModal();
+                        }
+                    } catch (e) {
+                        console.error('Import error:', e);
+                    }
+                } else if (window.handleFileImport) {
+                    const globalInput = document.getElementById('global-file-input');
+                    if (globalInput) globalInput.click();
+                }
+            });
+        }
+
+        // Failsafe for docs backdrop (if DocsUI.js missed it)
+        if (docsDialog) {
+            docsDialog.addEventListener('click', (e) => {
+                const rect = docsDialog.getBoundingClientRect();
+                const isInDialog = (rect.top <= e.clientY && e.clientY <= rect.top + rect.height && rect.left <= e.clientX && e.clientX <= rect.left + rect.width);
+                if (!isInDialog) docsDialog.close();
+            });
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
         const masterVol = document.getElementById('master-volume');
         const masterVolVal = document.getElementById('master-volume-value');
         if (masterVol) {
             masterVol.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (masterVolVal) masterVolVal.textContent = `${val.toFixed(1)} dB`;
-                if (window.audioService?.contextManager) {
-                    window.audioService.contextManager.setMasterVolume(val);
+                if (window.audioEngine) {
+                    window.audioEngine.setMasterVolume(val);
                 }
             });
         }

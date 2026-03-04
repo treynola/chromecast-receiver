@@ -442,21 +442,15 @@ img {
     margin: 6px;
     /* Make room for the shadow inside the parent padding */
     overflow: hidden;
+    transition: opacity 1.8s ease-in-out;
 }
 
 .hidden {
     display: none;
 }
 
-#app-curtain {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: black;
-    z-index: 9999;
-    transition: opacity 1.8s ease-in-out;
+.app-loading {
+    opacity: 0;
     pointer-events: none;
 }
 
@@ -1996,34 +1990,37 @@ select option {
 /* --- Dialog Styling --- */
 @keyframes dialog-open {
     from {
-        transform: scale(0.12);
+        transform: translateX(-50%) scale(0.12);
         opacity: 0;
     }
 
     to {
-        transform: scale(0.84);
+        transform: translateX(-50%) scale(0.84);
         opacity: 1;
     }
 }
 
 @keyframes dialog-close {
     from {
-        transform: scale(0.84);
+        transform: translateX(-50%) scale(0.84);
         opacity: 1;
     }
 
     to {
-        transform: scale(0);
+        transform: translateX(-50%) scale(0);
         opacity: 0;
     }
 }
 
 #docs-dialog,
 #qa-dialog,
-.effect-params-dialog,
-.audition-params-dialog {
-    background-color: transparent;
-    border: none;
+#cast-dialog,
+#sessions-dialog {
+    background-color: var(--off-black);
+    /* 3-color border: green inner, gold middle, red outer */
+    border: 2px solid var(--green);
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red), 0 0 20px rgba(0, 0, 0, 0.8);
     padding: 0;
     overflow: visible;
     width: 92vw;
@@ -2031,37 +2028,71 @@ select option {
     max-width: 1200px;
     transform: scale(0.12);
     opacity: 0;
+    resize: none;
+}
+
+/* --- Universal Dialog Close X Button (3-color border) --- */
+.dialog-close-x {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--off-black);
+    color: var(--gold);
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1;
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px var(--gold), 0 0 0 2px var(--red);
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.15s ease;
+    outline: none;
+}
+.dialog-close-x:hover {
+    background: var(--red);
+    color: #fff;
+    border-color: var(--gold);
+}
+.dialog-close-x:active {
+    background: var(--green);
+    transform: scale(0.92);
 }
 
 #docs-dialog[open],
 #qa-dialog[open],
-.effect-params-dialog[open],
-.audition-params-dialog[open] {
+#cast-dialog[open],
+#sessions-dialog[open] {
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.84);
     animation: dialog-open 1.44s ease-in-out forwards;
 }
 
 /* Ensure backdrop is consistent */
 #docs-dialog::backdrop,
 #qa-dialog::backdrop,
-.effect-params-dialog::backdrop,
-.audition-params-dialog::backdrop {
+#cast-dialog::backdrop,
+#sessions-dialog::backdrop {
     background: rgba(0, 0, 0, 0.7);
 }
 
 .docs-content-wrapper {
     position: relative;
-    background-color: var(--green);
+    background-color: var(--off-black);
+    color: var(--gold);
     width: 100%;
     height: 100%;
     box-sizing: border-box;
     overflow-y: auto;
     padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 0 0 3px var(--green), 0 0 0 6px var(--gold), 0 0 0 9px var(--red);
+    border-radius: 8px;
 }
 
 #docs-dialog pre {
-    background-color: var(--green);
+    background-color: var(--off-black);
     color: var(--gold);
     font-family: 'Courier New', Courier, monospace;
     font-size: 1.1em;
@@ -2096,6 +2127,63 @@ select option {
     display: block;
     font-weight: bold;
     margin: 0.5em 0 0.2em 0;
+}
+
+/* Effect Slot & Audition Dialog Components */
+.dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--mid-gray);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--gold);
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+.dialog-header span {
+    color: var(--gold);
+    font-weight: bold;
+    font-family: 'Mexcellent', sans-serif;
+    letter-spacing: 1px;
+}
+
+.dialog-content {
+    background-color: var(--off-black);
+    padding: 15px;
+    color: var(--text-color);
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.close-dialog-btn {
+    background-color: var(--red);
+    color: white;
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.close-dialog-btn:hover {
+    background-color: white;
+    color: var(--red);
+    transform: scale(1.1);
+}
+
+.audition-slot-selector button {
+    transition: all 0.2s;
+}
+
+.audition-slot-selector button:hover {
+    background-color: var(--gold) !important;
+    color: var(--off-black) !important;
 }
 
 #docs-dialog div {
@@ -3002,27 +3090,31 @@ select option {
 .effect-params-dialog,
 .audition-params-dialog {
     position: fixed;
-    /* Always floating */
     z-index: 2000;
     background: var(--off-black);
-    border: 2px solid var(--dark-gold);
+    border: 2px solid var(--green);
     border-radius: 8px;
     padding: 0;
-    width: 320px;
+    width: auto;
+    min-width: 400px;
     max-width: 95vw;
-    height: auto;
+    height: fit-content !important;
     max-height: 85vh;
-    min-height: 100px;
-    /* Small base for empty state */
     overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.9);
+    box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red), 0 8px 32px rgba(0, 0, 0, 0.9);
     display: none;
     flex-direction: column;
+    resize: none;
 }
 
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
     display: flex;
+    opacity: 1;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: fit-content !important;
 }
 
 .effect-params-dialog::backdrop,
@@ -3033,26 +3125,24 @@ select option {
 .dialog-content,
 .audition-dialog-content {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    /* Changed from 3 columns for better readability */
-    gap: 12px;
-    padding: 15px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 8px;
     overflow-y: auto;
-    flex: 1;
 }
 
 .effect-params-dialog .dialog-header,
 .audition-params-dialog .dialog-header {
-    background: var(--green);
+    background: var(--off-black);
     color: var(--gold);
     font-weight: bold;
-    padding: 10px 12px;
-    border-radius: 6px 6px 0 0;
+    padding: 6px 10px;
+    border-radius: 8px 8px 0 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: move;
     user-select: none;
+    border-bottom: none;
 }
 
 .effect-params-dialog .dialog-header span,
@@ -3063,7 +3153,7 @@ select option {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 180px;
+    flex: 1;
 }
 
 .close-dialog-btn {
@@ -3262,31 +3352,33 @@ select option {
 .effect-params-dialog .dialog-content,
 .audition-params-dialog .dialog-content {
     display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px;
     align-items: start;
-    height: auto;
-    max-height: 80vh;
+    height: auto !important;
+    max-height: none;
     overflow-y: auto;
     width: 100%;
     box-sizing: border-box;
+    padding: 8px;
+    flex: 0 0 auto !important;
 }
 
-/* Ensure controls fit */
+/* Ensure controls fit tightly */
 .effect-params-dialog .effect-control-group,
 .audition-params-dialog .effect-control-group {
     width: 100% !important;
     margin-bottom: 0 !important;
     flex: unset !important;
-    /* Override flex sizing */
+    padding: 4px 0;
 }
 
-/* Override existing responsive behavior if any */
+/* Small screens: collapse to 2 columns */
 @media (max-width: 600px) {
 
     .effect-params-dialog .dialog-content,
     .audition-params-dialog .dialog-content {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr) !important;
     }
 }
 
@@ -3366,20 +3458,20 @@ select option {
 #sessions-dialog {
     width: 600px;
     height: 600px;
-    /* Fixed centering */
+    /* Uniform center-x, 50px from top */
     position: fixed;
-    top: 50%;
+    top: 50px;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
 
-    background-color: #222;
-    border: 1px solid var(--gold);
+    background-color: var(--off-black);
+    /* 3-color border: green inner, gold middle, red outer */
+    border: 2px solid var(--green);
     color: #eee;
     padding: 0;
     margin: 0;
     z-index: 10000;
-    /* High z-index */
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red), 0 0 20px rgba(0, 0, 0, 0.8);
     border-radius: 8px;
 }
 
@@ -3400,7 +3492,6 @@ select option {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #444;
     padding-bottom: 10px;
     margin-bottom: 10px;
 }

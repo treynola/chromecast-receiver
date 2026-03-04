@@ -34,7 +34,7 @@ class ToneSimulcastRouter {
         // Resolve target context
         if (!targetNativeCtx) {
             const ctx = Tone.context;
-            targetNativeCtx = ctx.rawContext?._nativeAudioContext || ctx.rawContext || ctx;
+            targetNativeCtx = ctx.rawContext || ctx;
         }
 
         if (!targetNativeCtx) {

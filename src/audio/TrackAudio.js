@@ -9,13 +9,6 @@
             this.manager = manager;
             this.masterBus = manager.masterBus;
 
-            // --- Source Nodes ---
-            this.player = new Tone.Player().set({
-                fadeIn: 0.01,
-                fadeOut: 0.01,
-                loop: true
-            });
-
             // --- Input Handling ---
             this.trackInput = new Tone.Gain(1); // Virtual input node
             this.inputGainNode = new Tone.Gain(1);
@@ -49,8 +42,8 @@
             this.inputStream = null;
             this.inputConnection = null;
             this.monoToStereoConverter = null;
-            this.inputBoostGain = null;
-            this.lastDeviceId = null; // Store for persistent reconnection
+            this.inputBoostGain = new Tone.Gain(1); // v13.5: Physical Input Boost
+            this.lastDeviceId = null; 
 
             // --- LFO State ---
             this.lfoConnections = new Map();
@@ -81,7 +74,10 @@
             // recorder.input will be connected only during recording to save resources
             /* 
             if (this.recorder.input) {
-                this.trackInput.connect(this.recorder.input);
+                this.inputBoostGain = this.contextManager.getNativeContext().createGain();
+        this.inputBoostGain.gain.value = 1.0; // Default 0dB
+        this.trackInput.connect(this.inputBoostGain);
+        this.inputBoostGain.connect(this.recorder.input);
             }
             */
 
@@ -141,6 +137,11 @@
             }
         }
         setInputGain(db) { this.inputGainNode.gain.value = Tone.dbToGain(db); }
+        setInputBoost(db) { 
+            if (this.inputBoostGain) {
+                this.inputBoostGain.gain.setTargetAtTime(Tone.dbToGain(db), Tone.now(), 0.01); 
+            }
+        }
 
         setEQ(params) {
             if (params.bass !== undefined) this.eq.bass.gain.value = params.bass;
@@ -154,13 +155,21 @@
         }
 
         // --- Playback ---
-        async loadData(arrayBuffer, filename) {
+        async loadData(data, filename) {
             this.loadedAudioUrl = filename;
             this.castAudioUrl = null;
 
             try {
                 // Decode directly using the native context to bypass fetch/CORS entirely
                 const ctx = Tone.context.rawContext || Tone.context;
+                
+                // Ensure we have a pure ArrayBuffer for Web Audio API (Tauri fs returns Uint8Array)
+                let arrayBuffer = data;
+                if (data instanceof Uint8Array) {
+                    // Extract the underlying ArrayBuffer, handling potential offset/length from typed arrays
+                    arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+                }
+                
                 const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
                 // Assign directly to player, overriding any fetch request
@@ -394,22 +403,49 @@
             // A tiny pause ensures the recording worklet is ALIVE before it receives signal.
             await new Promise(r => setTimeout(r, 100));
 
+            // V13.3: Clean up previous recording bridge to prevent signal leak
+            if (this._recordingBridge) {
+                try {
+                    if (this._recordingBridge.direct) {
+                        // Direct bridge: trackInput was connected to old recorder's nativeInput
+                        // The old recorder.dispose() already disconnected its nativeInput
+                    } else if (this._recordingBridge.destNode) {
+                        try { Tone.disconnect(this.trackInput, this._recordingBridge.destNode); } catch(e) {}
+                        try { this._recordingBridge.destNode.disconnect(); } catch(e) {}
+                        try { this._recordingBridge.recSource.disconnect(); } catch(e) {}
+                    }
+                } catch (e) { }
+                this._recordingBridge = null;
+            }
+
             try {
                 // Correctly identify contexts
                 const rawCtx = this.manager.getNativeContext();
                 const recBaseCtx = this.recorder._baseAudioContext;
 
-                // V10.13h: DIRECT PATH OPTIMIZATION
-                // If the track source and recorder are on the identical native context,
-                // connect them directly to avoid MediaStream destination/source overhead.
+                // V13.3: DIRECT NATIVE PATH — bypass Tone.js wrappers entirely
+                // For virtual devices (BlackHole, Aggregate), the Tone.js connect()
+                // wrapper can silently fail. Use raw native node connections instead.
+                // Tone.js 15+ Native Node Extraction:
+                let trackNativeOutput = this.trackInput;
+                if (this.trackInput.output instanceof AudioNode) trackNativeOutput = this.trackInput.output;
+                else if (this.trackInput.input instanceof AudioNode) trackNativeOutput = this.trackInput.input;
+
                 if (rawCtx === recBaseCtx) {
-                    this.trackInput.connect(this.recorder.nativeInput);
-                    console.log(`TrackAudio ${this.id}: ✅ DIRECT native bridge established [trackInput -> nativeInput]`);
+                    // Both on same native context — connect native nodes directly
+                    if (trackNativeOutput instanceof AudioNode && typeof trackNativeOutput.connect === 'function') {
+                        trackNativeOutput.connect(this.recorder.nativeInput);
+                        console.log(`TrackAudio ${this.id}: ✅ DIRECT native bridge established [trackNativeOutput -> nativeInput]`);
+                    } else {
+                        // Fallback to Tone.connect if native extraction failed
+                        Tone.connect(this.trackInput, this.recorder.nativeInput);
+                        console.log(`TrackAudio ${this.id}: ✅ DIRECT native bridge established [trackInput -> nativeInput] (Tone wrapper)`);
+                    }
                     this._recordingBridge = { direct: true };
                 } else {
-                    // Fallsback to MediaStream bridge for cross-context recording (e.g. some Safari cases)
+                    // Fallback to MediaStream bridge for cross-context recording
                     const destNode = rawCtx.createMediaStreamDestination();
-                    this.trackInput.connect(destNode);
+                    Tone.connect(this.trackInput, destNode);
                     const recSource = recBaseCtx.createMediaStreamSource(destNode.stream);
                     recSource.connect(this.recorder.nativeInput);
                     this._recordingBridge = { destNode, recSource };
@@ -419,7 +455,7 @@
                 console.warn(`TrackAudio ${this.id}: Bridge fail (silent recording likely):`, e);
                 // Fallback: try Tone-layer connection
                 try {
-                    this.trackInput.connect(this.recorder.input);
+                    Tone.connect(this.trackInput, this.recorder.input);
                     console.log(`TrackAudio ${this.id}: Wrapper bridge fallback established`);
                 } catch (e2) {
                     console.error(`TrackAudio ${this.id}: All bridges failed:`, e2);
@@ -486,8 +522,51 @@
             return effect;
         }
 
+        removeEffect(slotIndex) {
+            if (this.effects[slotIndex]) {
+                this.effects[slotIndex].dispose();
+                this.effects[slotIndex] = null;
+                this.reconnectEffectChain();
+            }
+        }
+
+        setAuditioningEffect(effectName, params) {
+            // Dispose of old auditioning effect
+            if (this.auditioningEffect) {
+                this.auditioningEffect.dispose();
+                this.auditioningEffect = null;
+            }
+
+            if (effectName === 'none') {
+                this.reconnectEffectChain();
+                return null;
+            }
+
+            const instance = window.effectsService.createEffect(effectName, params);
+            if (instance) {
+                this.auditioningEffect = instance;
+                this.reconnectEffectChain();
+            }
+            return instance;
+        }
+
+        removeAuditioningEffect() {
+            if (this.auditioningEffect) {
+                this.auditioningEffect.dispose();
+                this.auditioningEffect = null;
+                this.reconnectEffectChain();
+            }
+        }
+
         getEffectState(slotIndex) {
             return this.effects[slotIndex] || null;
+        }
+
+        updateEffect(slotIndex, params) {
+            let effect = slotIndex === -1 ? this.auditioningEffect : this.effects[slotIndex];
+            if (effect && typeof effect.set === 'function') {
+                effect.set(params);
+            }
         }
 
         transferAuditionToSlot(slotIndex) {
@@ -580,53 +659,87 @@
                     try { await Tone.context.resume(); } catch (e) { console.warn('Could not resume context', e); }
                 }
 
-                let stream;
+                let sourceNode;
+                let inputMediaStream = null;
                 try {
-                    // Try to use shared stream from manager (caching)
-                    if (this.manager && this.manager.getSharedInputStream) {
-                        stream = await this.manager.getSharedInputStream(deviceId);
+                    // Try to use shared SOURCE NODE from manager (WebKit Safety Fix)
+                    if (this.manager && this.manager.getSharedInputNode) {
+                        const result = await this.manager.getSharedInputNode(deviceId);
+                        sourceNode = result.node;
+                        inputMediaStream = result.stream;
                     } else {
-                        stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        // Fallback to direct creation
+                        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        const nativeCtx = this.manager.getNativeContext();
+                        sourceNode = nativeCtx.createMediaStreamSource(stream);
+                        inputMediaStream = stream;
                     }
 
-                    if (!stream || !stream.active) {
-                        throw new Error("Stream obtained but inactive");
+                    if (!sourceNode) {
+                        throw new Error("Input source node not available");
                     }
                     this.lastDeviceId = deviceId; // Success
 
                 } catch (err) {
-                    console.warn(`TrackAudio ${this.id}: Specific constraints failed. Trying robust fallback.`);
+                    console.warn(`TrackAudio ${this.id}: Specific constraints/node failed. Trying robust fallback.`);
                     const fallbackConstraints = { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } };
                     if (deviceId && deviceId !== 'default') fallbackConstraints.audio.deviceId = { exact: deviceId };
 
+                    let fallbackStream;
                     try {
-                        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                        fallbackStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
                     } catch (err2) {
                         const minConstraints = { audio: true };
                         if (deviceId && deviceId !== 'default') minConstraints.audio = { deviceId: { exact: deviceId } };
-                        stream = await navigator.mediaDevices.getUserMedia(minConstraints);
+                        fallbackStream = await navigator.mediaDevices.getUserMedia(minConstraints);
                     }
+                    const nativeCtx = this.manager.getNativeContext();
+                    sourceNode = nativeCtx.createMediaStreamSource(fallbackStream);
+                    inputMediaStream = fallbackStream;
                 }
 
-                const trackSettings = stream.getAudioTracks()[0].getSettings();
+                // If we got here, sourceNode is defined
+                const source = sourceNode;
+                const stream = inputMediaStream;
+
+                // Note: Native MediaStreamSourceNode doesn't always expose mediaStream easily in all browsers
+                // but we know we have a working source node now.
+                
+                // Track settings check (using the actual track if available)
+                const audioTracks = (source.mediaStream || stream)?.getAudioTracks();
+                const trackSettings = audioTracks && audioTracks.length > 0 ? audioTracks[0].getSettings() : { channelCount: 1 };
                 const channelCount = trackSettings.channelCount || 1;
-                const label = stream.getAudioTracks()[0].label.toLowerCase();
+                const label = audioTracks && audioTracks.length > 0 ? audioTracks[0].label.toLowerCase() : "";
+                
                 const isMultiChannelDevice = label.includes('blackhole') || label.includes('aggregate') || channelCount > 2;
+                
+                if (label.includes('blackhole') || label.includes('aggregate')) {
+                    console.log(`TrackAudio ${this.id}: 🚀 Virtual Device detected [${label}] - Applying +12dB recovery boost.`);
+                    this.setInputBoost(12);
+                } else {
+                    this.setInputBoost(0);
+                }
+
                 const useStereoPath = options.isStereo || isMultiChannelDevice || channelCount >= 2;
 
                 // Native MediaStream Source (Unified v10.12)
                 const nativeCtx = this.manager.getNativeContext();
-                const source = nativeCtx.createMediaStreamSource(stream);
+                // source is already created above
 
                 if (useStereoPath) {
                     const targetChannels = options.inputChannels || [0, 1];
                     const chL = targetChannels[0];
                     const chR = targetChannels[1];
 
-                    // --- V13.0: Hardware-specific Boost for Virtual Drivers Removed ---
-                    // Massive boosts cause severe clipping and feedback stuttering. Default to 1 (0dB).
-                    const boost = new Tone.Gain(1);
+                    // Create a NATIVE gain node to safely bridge the native source/merge
+                    const boost = nativeCtx.createGain();
+                    boost.gain.value = 1;
                     this.inputBoostGain = boost;
+
+                    // The safe way to retrieve the native input of a Tone node
+                    let trackNativeInput = this.trackInput;
+                    if (this.trackInput.input instanceof AudioNode) trackNativeInput = this.trackInput.input;
+                    else if (this.trackInput.output instanceof AudioNode) trackNativeInput = this.trackInput.output;
 
                     // If it's a multi-channel device, we use a splitter to grab exactly what we need
                     if (isMultiChannelDevice || channelCount > 2) {
@@ -639,30 +752,41 @@
                         split.connect(merge, chL % actualChannels, 0);
                         split.connect(merge, chR % actualChannels, 1);
 
-                        // v10.13c: Use Tone.connect for native→Tone bridging
-                        Tone.connect(merge, boost);
-                        boost.connect(this.trackInput);
+                        merge.connect(boost);
+                        boost.connect(trackNativeInput);
                         this.monoToStereoConverter = { split, merge };
                     } else {
-                        Tone.connect(source, boost);
-                        boost.connect(this.trackInput);
+                        source.connect(boost);
+                        boost.connect(trackNativeInput);
                     }
                 } else {
                     if (Tone.context.state !== 'running') {
                         try { await Tone.start(); await Tone.context.resume(); } catch (e) { }
                     }
 
-                    // v10.13c: Use native merger to match native source
-                    const merger = nativeCtx.createChannelMerger(2);
-                    source.connect(merger, 0, 0);
-                    source.connect(merger, 0, 1);
+                    // v10.13c→v13.7: Use a stereo GainNode for natural mono→stereo upmix.
+                    // ChannelMerger duplicated the mono signal at full amplitude to both
+                    // channels (+6dB), causing oversampling/clipping artifacts.
+                    // A GainNode with channelCount=2 + channelCountMode='max' naturally
+                    // copies mono to both channels at correct unity gain.
+                    const stereoUpmix = nativeCtx.createGain();
+                    stereoUpmix.gain.value = 1;
+                    stereoUpmix.channelCount = 2;
+                    stereoUpmix.channelCountMode = 'max';
+                    stereoUpmix.channelInterpretation = 'speakers';
+                    source.connect(stereoUpmix);
 
-                    // Mic boost removed (was 5x). Massive gain caused severe clipping/stutter noise.
-                    const boost = new Tone.Gain(1);
+                    const boost = nativeCtx.createGain();
+                    boost.gain.value = 1;
                     this.inputBoostGain = boost;
-                    Tone.connect(merger, boost);
-                    boost.connect(this.trackInput);
-                    this.monoToStereoConverter = merger;
+                    
+                    let trackNativeInput = this.trackInput;
+                    if (this.trackInput.input instanceof AudioNode) trackNativeInput = this.trackInput.input;
+                    else if (this.trackInput.output instanceof AudioNode) trackNativeInput = this.trackInput.output;
+                    stereoUpmix.connect(boost);
+                    boost.connect(trackNativeInput);
+                    
+                    this.monoToStereoConverter = stereoUpmix;
 
                     // Keepalive hack
                     setTimeout(() => {
@@ -718,8 +842,10 @@
                 this.keepAliveAudio.srcObject = null;
             }
             if (this.inputBoostGain) {
-                this.inputBoostGain.disconnect();
-                this.inputBoostGain.dispose();
+                try { this.inputBoostGain.disconnect(); } catch(e) {}
+                if (typeof this.inputBoostGain.dispose === 'function') {
+                    this.inputBoostGain.dispose();
+                }
                 this.inputBoostGain = null;
             }
         }
@@ -777,40 +903,31 @@
                 return;
             }
 
+            // Tone.Scale expects NormalRange input (0..1), but LFO outputs -1..1.
+            // Normalize: add 1 to get 0..2, then multiply by 0.5 to get 0..1.
+            const addOne = new Tone.Add(1);
+            const half = new Tone.Multiply(0.5);
             const scale = new Tone.Scale(min, max);
-            const isReversed = this.lfoReverseState[paramName] || false;
 
-            if (isReversed) {
-                const negate = new Tone.Multiply(-1);
-                const addMax = new Tone.Add(max);
-                lfoNode.connect(scale);
-                scale.connect(negate);
-                negate.connect(addMax);
-                addMax.connect(param);
-                this.lfoConnections.set(paramName, { scale, negate, addMax, param, source: lfoNode });
-            } else {
-                lfoNode.connect(scale);
-                scale.connect(param);
-                this.lfoConnections.set(paramName, { scale, negate: null, addMax: null, param, source: lfoNode });
-            }
+            lfoNode.connect(addOne);
+            addOne.connect(half);
+            half.connect(scale);
+            scale.connect(param);
 
-            console.log(`TrackAudio ${this.id}: LFO ${lfoIndex} connected to ${paramName} (min: ${min}, max: ${max}, reversed: ${isReversed})`);
+            this.lfoConnections.set(paramName, { scale, addOne, half, param, source: lfoNode, lfoIndex, min, max });
+            console.log(`TrackAudio ${this.id}: LFO ${lfoIndex} connected to ${paramName} (min: ${min}, max: ${max})`);
         }
 
         disconnectLFO(paramName) {
             const conn = this.lfoConnections.get(paramName);
             if (conn) {
                 try {
-                    conn.source.disconnect(conn.scale);
-                    if (conn.negate) {
-                        conn.scale.disconnect(conn.negate);
-                        conn.negate.disconnect(conn.addMax);
-                        conn.addMax.disconnect(conn.param);
-                        conn.negate.dispose();
-                        conn.addMax.dispose();
-                    } else {
-                        conn.scale.disconnect(conn.param);
-                    }
+                    conn.source.disconnect(conn.addOne);
+                    conn.addOne.disconnect(conn.half);
+                    conn.half.disconnect(conn.scale);
+                    conn.scale.disconnect(conn.param);
+                    conn.addOne.dispose();
+                    conn.half.dispose();
                     conn.scale.dispose();
                 } catch (e) {
                     console.warn(`TrackAudio ${this.id}: Error disconnecting LFO from ${paramName}`, e);
@@ -825,9 +942,8 @@
             if (conn && conn.scale) {
                 conn.scale.min = min;
                 conn.scale.max = max;
-                if (conn.negate) {
-                    conn.addMax.addend.value = max;
-                }
+                conn.min = min;
+                conn.max = max;
             }
         }
 
@@ -836,16 +952,15 @@
             if (changed) {
                 this.lfoReverseState[paramName] = reversed;
                 
-                // If it is currently connected, rebuild the link
+                // Reverse by swapping Scale min/max
                 const conn = this.lfoConnections.get(paramName);
                 if (conn && conn.scale) {
-                    const min = conn.scale.min;
-                    const max = conn.scale.max;
-                    let lfoIndex = 1; // Default assumption if we need to reconnect
-                    if (conn.source === this.manager.getLfo(2)) lfoIndex = 2; // Crude lookup
-                    
-                    this.disconnectLFO(paramName);
-                    this.connectLFO(paramName, min, max, lfoIndex);
+                    const oldMin = conn.scale.min;
+                    const oldMax = conn.scale.max;
+                    conn.scale.min = oldMax;
+                    conn.scale.max = oldMin;
+                    conn.min = oldMax;
+                    conn.max = oldMin;
                 }
             }
         }
