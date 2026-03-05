@@ -129,6 +129,7 @@
         const tracksContainer = document.getElementById("tracks-container");
         const debugLog = document.getElementById("debug-log");
         
+window.addEventListener("error", (e) => { logMsg("ERROR: " + e.message + " at " + e.filename + ":" + e.lineno); });
         function logMsg(msg) {
             console.log(msg);
             const line = document.createElement("div");
