@@ -159,6 +159,8 @@
         // UI REPLICATION ENGINE
         // ==========================================================
 
+        let currentAudioUrl = null;
+
         // Generic custom message listener for Cast State Broadcaster
         context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', (event) => {
             try {
@@ -173,22 +175,25 @@
                          directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
                      }
                      
-                     logMsg("Connecting Audio Server: " + directUrl);
-                     
-                     let request = new cast.framework.messages.LoadRequestData();
-                     let mediaInfo = new cast.framework.messages.MediaInformation();
-                     mediaInfo.contentId = directUrl;
-                     mediaInfo.contentType = 'audio/webm';
-                     mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
-                     request.media = mediaInfo;
-                     
-                     playerManager.load(request);
-                     statusText.textContent = "CONNECTING TO AUDIO NODE...";
-                     
-                     // Show UI immediately on connect
-                     if(splash.style.display !== 'none') {
-                         splash.style.display = 'none';
-                         studioContainer.style.display = 'flex';
+                     if (currentAudioUrl !== directUrl) {
+                         currentAudioUrl = directUrl;
+                         logMsg("Connecting Audio Server: " + directUrl);
+                         
+                         let request = new cast.framework.messages.LoadRequestData();
+                         let mediaInfo = new cast.framework.messages.MediaInformation();
+                         mediaInfo.contentId = directUrl;
+                         mediaInfo.contentType = 'audio/webm';
+                         mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
+                         request.media = mediaInfo;
+                         
+                         playerManager.load(request);
+                         statusText.textContent = "CONNECTING TO AUDIO NODE...";
+                         
+                         // Show UI immediately on connect
+                         if(splash.style.display !== 'none') {
+                             splash.style.display = 'none';
+                             studioContainer.style.display = 'flex';
+                         }
                      }
                 }
                 
