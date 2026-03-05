@@ -69,7 +69,7 @@
             max-width: 400px;
             max-height: 200px;
             overflow: hidden;
-            display: block;
+            display: none; /* Change to block to debug */
         }
     </style>
 </head>
@@ -115,8 +115,6 @@
         </div>
     </div>
     
-    <div id="virtual-cursor" style="display: none; position: absolute; width: 20px; height: 20px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z%22 fill=%22black%22/></svg>'); z-index: 9999; pointer-events: none; transition: transform 0.05s linear;"></div>
-
     <div id="debug-log" class="debug-panel"></div>
 
     <!-- Include TrackView.js for DOM parity -->
@@ -129,7 +127,6 @@
         const tracksContainer = document.getElementById("tracks-container");
         const debugLog = document.getElementById("debug-log");
         
-window.addEventListener("error", (e) => { logMsg("ERROR: " + e.message + " at " + e.filename + ":" + e.lineno); });
         function logMsg(msg) {
             console.log(msg);
             const line = document.createElement("div");
@@ -169,8 +166,13 @@ window.addEventListener("error", (e) => { logMsg("ERROR: " + e.message + " at " 
                 
                 // Native Stream Launch message
                 const targetUrl = data.url || data.wsUrl;
-                if (data.type === 'connect' && targetUrl && targetUrl.includes("audio_stream=")) {
-                     const directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                if (data.type === 'connect' && targetUrl) {
+                     // Extract direct URL if it's wrapped in audio_stream query, otherwise use raw
+                     let directUrl = targetUrl;
+                     if (targetUrl.includes("audio_stream=")) {
+                         directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                     }
+                     
                      logMsg("Connecting Audio Server: " + directUrl);
                      
                      let request = new cast.framework.messages.LoadRequestData();
@@ -182,13 +184,19 @@ window.addEventListener("error", (e) => { logMsg("ERROR: " + e.message + " at " 
                      
                      playerManager.load(request);
                      statusText.textContent = "CONNECTING TO AUDIO NODE...";
+                     
+                     // Show UI immediately on connect
+                     if(splash.style.display !== 'none') {
+                         splash.style.display = 'none';
+                         studioContainer.style.display = 'flex';
+                     }
                 }
                 
                 // Studio State Broadcaster Message
                 if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
                     if(splash.style.display !== 'none') {
-                        splash.style.display = 'none';
-                        studioContainer.style.display = 'flex';
+                         splash.style.display = 'none';
+                         studioContainer.style.display = 'flex';
                     }
                     renderStudioState(data.state);
                 }
@@ -213,15 +221,6 @@ window.addEventListener("error", (e) => { logMsg("ERROR: " + e.message + " at " 
         // Takes the JSON tree from the sender and builds/updates the CSS UI
         // ----------------------------------------------------
         function renderStudioState(state) {
-            // Virtual Cursor updates
-            if (state.cursor) {
-                const cursorEl = document.getElementById('virtual-cursor');
-                if (cursorEl) {
-                    cursorEl.style.display = 'block';
-                    cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
-                }
-            }
-
             // Master updates
             if(state.master) {
                 const volLabel = document.querySelector("#master-vol-knob + .knob-label");
