@@ -115,6 +115,8 @@
         </div>
     </div>
     
+    <div id="virtual-cursor" style="display: none; position: absolute; width: 20px; height: 20px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z%22 fill=%22black%22/></svg>'); z-index: 9999; pointer-events: none; transition: transform 0.05s linear;"></div>
+
     <div id="debug-log" class="debug-panel"></div>
 
     <!-- Include TrackView.js for DOM parity -->
@@ -210,6 +212,15 @@
         // Takes the JSON tree from the sender and builds/updates the CSS UI
         // ----------------------------------------------------
         function renderStudioState(state) {
+            // Virtual Cursor updates
+            if (state.cursor) {
+                const cursorEl = document.getElementById('virtual-cursor');
+                if (cursorEl) {
+                    cursorEl.style.display = 'block';
+                    cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
+                }
+            }
+
             // Master updates
             if(state.master) {
                 const volLabel = document.querySelector("#master-vol-knob + .knob-label");
