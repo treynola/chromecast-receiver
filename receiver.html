@@ -242,7 +242,7 @@
             logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
         });
 
-        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', (event) => {
+        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 
