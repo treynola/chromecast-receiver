@@ -4,46 +4,127 @@
     <title>NOWMULTIMEDIA MXS-004 Studio Receiver</title>
     <!-- Google Cast Web Receiver SDK -->
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="styles_v101.css">
+    <link rel="stylesheet" href="../styles_v101.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background-color: #000 !important; overflow: hidden; margin: 0; padding: 0; width: 100vw; height: 100vh; }
-        cast-media-player { display: none; }
-        .container { display: none; opacity: 1 !important; pointer-events: none !important; }
-        #splash { text-align: center; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #000; z-index: 9999; position: absolute; top: 0; left: 0; width: 100%; }
-        #splash h1 { color: #FAD78E; font-size: 3.5em; margin-bottom: 10px; font-family: 'Mexcellent', sans-serif; }
-        #splash h2 { color: #008000; font-size: 1.5em; font-family: 'Courier New', monospace; }
-        #status-text { color: #666; margin-top: 30px; font-size: 1em; font-family: 'Courier New', monospace; }
-        #virtual-cursor { display: none; position: absolute; width: 24px; height: 24px; z-index: 10000; pointer-events: none; transition: transform 0.05s linear; }
-        #virtual-cursor svg { filter: drop-shadow(0 0 2px rgba(0,0,0,0.8)); }
-        * { pointer-events: none !important; user-select: none !important; }
-        .debug-panel { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 5px 10px; font-family: monospace; font-size: 10px; border-radius: 4px; z-index: 10001; display: none; }
+        body {
+            background-color: #000 !important;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* Hide Cast Default Player */
+        cast-media-player {
+            display: none;
+        }
+
+        .container {
+            display: none; /* Hidden until state arrives */
+            opacity: 1 !important; /* Force visible when shown */
+            pointer-events: none !important; /* Read-only */
+        }
+
+        #splash {
+            text-align: center;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            z-index: 9999;
+            position: absolute;
+            top: 0; left: 0; width: 100%;
+        }
+
+        #splash h1 {
+            color: #FAD78E;
+            font-size: 3.5em;
+            margin-bottom: 10px;
+            font-family: 'Mexcellent', sans-serif;
+        }
+        #splash h2 {
+            color: #008000;
+            font-size: 1.5em;
+            font-family: 'Courier New', monospace;
+        }
+        #status-text {
+            color: #666;
+            margin-top: 30px;
+            font-size: 1em;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Virtual Cursor */
+        #virtual-cursor {
+            display: none;
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            z-index: 10000;
+            pointer-events: none;
+            transition: transform 0.05s linear;
+        }
+        #virtual-cursor svg {
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+        }
+
+        /* Enforce Read-Only UI */
+        * {
+            pointer-events: none !important;
+            user-select: none !important;
+        }
+        
+        .debug-panel {
+            position: absolute;
+            bottom: 10px; right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            padding: 5px 10px;
+            font-family: monospace;
+            font-size: 10px;
+            border-radius: 4px;
+            z-index: 10001;
+            display: none; /* Set to block for debugging */
+        }
     </style>
 </head>
 <body>
     <cast-media-player></cast-media-player>
+
     <div id="splash">
         <h1>MXS-004 STUDIO</h1>
         <h2>HI-FI AUDIO CASTING</h2>
         <div id="status-text">INITIALIZING...</div>
     </div>
+
+    <!-- The EXACT duplicate of the app container -->
     <div id="mxs-studio-container" class="container">
         <div class="header">
             <h1>NOWMULTIMEDIA MXS-004</h1>
             <div class="header-right">
-                <button id="cast-btn" style="color: #0f0;"><i class="fa-brands fa-chromecast"></i></button>
+                <button id="cast-btn" style="color: #0f0;">
+                    <i class="fa-brands fa-chromecast"></i>
+                </button>
                 <h2>Mix Studio-004</h2>
             </div>
         </div>
+
         <div class="main-content">
+            <!-- Column 1: Master Controls (Duplicated from index.html) -->
             <div class="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
+
                 <div class="master-item master-volume-aligned">
                     <div class="track-header">Vol</div>
                     <input type="range" id="master-volume" min="-80" max="20" step="0.1" value="0">
                     <span id="master-volume-value" class="master-value">0.0 dB</span>
                 </div>
+
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels">
@@ -56,18 +137,29 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="master-item master-row-layout">
                     <div class="track-header">Loop Length</div>
                     <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
                     <span id="loop-length-value" class="master-value">4.0s</span>
                 </div>
+
                 <div class="master-item master-bottom-item">
-                    <div class="master-rec-row"><button id="master-record-button" class="button">REC</button></div>
+                    <div class="master-rec-row">
+                        <button id="master-record-button" class="button">REC</button>
+                    </div>
                 </div>
+
                 <div class="lfo-side-by-side-container">
                     <div class="lfo-column">
-                        <div class="master-item lfo-button-item"><button id="lfo-toggle">LFO 1</button></div>
-                        <div class="master-item lfo-meter-item"><div class="meter-container lfo-meter"><div id="lfo-meter-bar" class="meter-bar"></div></div></div>
+                        <div class="master-item lfo-button-item">
+                            <button id="lfo-toggle">LFO 1</button>
+                        </div>
+                        <div class="master-item lfo-meter-item">
+                            <div class="meter-container lfo-meter">
+                                <div id="lfo-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
                         <div class="master-item">
                             <label class="master-label" style="font-size:0.65em;">SWEEP 1</label>
                             <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
@@ -76,8 +168,14 @@
                     </div>
                     <div class="lfo-separator"></div>
                     <div class="lfo-column">
-                        <div class="master-item lfo-button-item"><button id="lfo2-toggle">LFO 2</button></div>
-                        <div class="master-item lfo-meter-item"><div class="meter-container lfo-meter"><div id="lfo2-meter-bar" class="meter-bar"></div></div></div>
+                        <div class="master-item lfo-button-item">
+                            <button id="lfo2-toggle">LFO 2</button>
+                        </div>
+                        <div class="master-item lfo-meter-item">
+                            <div class="meter-container lfo-meter">
+                                <div id="lfo2-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
                         <div class="master-item">
                             <label class="master-label" style="font-size:0.65em;">SWEEP 2</label>
                             <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
@@ -85,26 +183,38 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="master-item sample-center-container">
                     <div class="track-header">Sample Station</div>
-                    <div id="receiver-sample-grid" class="sample-grid"></div>
+                    <div id="receiver-sample-grid" class="sample-grid">
+                        <!-- Buttons 1-20 -->
+                    </div>
                 </div>
+
                 <div class="master-item master-bottom-buttons">
                     <button class="button"><i class="fa-solid fa-list"></i> MEDIA</button>
                     <button class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
                     <button class="button"><i class="fa-solid fa-book"></i> DOCS</button>
                 </div>
             </div>
+
+            <!-- Columns 2-5: Tracks -->
             <div id="tracks-container" class="tracks-container"></div>
         </div>
     </div>
+
+    <!-- Virtual Cursor SVG -->
     <div id="virtual-cursor">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" fill="#FAD78E" stroke="black" stroke-width="2" stroke-linejoin="round"/>
         </svg>
     </div>
+    
     <div id="debug-log" class="debug-panel"></div>
-    <script src="TrackView.js"></script>
+
+    <!-- Include TrackView.js for DOM parity -->
+    <script src="../src/ui/TrackView.js"></script>
+
     <script>
         const statusText = document.getElementById("status-text");
         const splash = document.getElementById("splash");
@@ -112,6 +222,8 @@
         const tracksContainer = document.getElementById("tracks-container");
         const debugLog = document.getElementById("debug-log");
         const cursorEl = document.getElementById("virtual-cursor");
+        
+        // Build Sample Grid
         const sampleGrid = document.getElementById("receiver-sample-grid");
         for(let i=1; i<=20; i++) {
             const btn = document.createElement("button");
@@ -120,6 +232,7 @@
             btn.textContent = i;
             sampleGrid.appendChild(btn);
         }
+
         function logMsg(msg) {
             console.log(msg);
             const line = document.createElement("div");
@@ -127,36 +240,64 @@
             debugLog.appendChild(line);
             if(debugLog.children.length > 8) debugLog.removeChild(debugLog.firstChild);
         }
+
         logMsg("MXS-004 Receiver Booting...");
+
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
+        
+        // Optimize for ultra-low latency
         const playbackConfig = new cast.framework.PlaybackConfig();
-        playbackConfig.autoResumeDuration = 0;
+        playbackConfig.autoResumeDuration = 0; // Immediate
         context.start({ playbackConfig: playbackConfig });
+
         playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
             statusText.textContent = "LIVE AUDIO ACTIVE";
             statusText.style.color = "#0f0";
         });
+        
+        playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
+            logMsg("Stream Error: " + event.detailedErrorCode);
+        });
+
+        // ==========================================================
+        // UI REPLICATION ENGINE
+        // ==========================================================
+        let currentAudioUrl = null;
+
         context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', (event) => {
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                if (data.type === 'connect') {
-                     const targetUrl = data.wsUrl || data.url || data.audio_stream;
-                     if (targetUrl) {
-                         let directUrl = targetUrl;
-                         if (targetUrl.includes("audio_stream=")) {
-                             directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
-                         }
+                
+                // Connection/Audio Launch
+                const targetUrl = data.url || data.wsUrl || data.audio_stream;
+                if (data.type === 'connect' && targetUrl) {
+                     // V115: Hide splash screen immediately on connect to show transition progress
+                     if(splash.style.display !== 'none') {
+                        splash.style.display = 'none';
+                        studioContainer.style.display = 'flex';
+                     }
+                     let directUrl = targetUrl;
+                     if (targetUrl.includes("audio_stream=")) {
+                         directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                     }
+                     
+                     if (currentAudioUrl !== directUrl) {
+                         currentAudioUrl = directUrl;
                          logMsg("Connecting Audio: " + directUrl);
+                         
                          let request = new cast.framework.messages.LoadRequestData();
                          let mediaInfo = new cast.framework.messages.MediaInformation();
                          mediaInfo.contentId = directUrl;
-                         mediaInfo.contentType = 'audio/wav';
+                         mediaInfo.contentType = 'audio/wav'; // PCM Stream
                          mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
                          request.media = mediaInfo;
+                         
                          playerManager.load(request);
                      }
                 }
+                
+                // Studio State Sync
                 if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
                     if(splash.style.display !== 'none') {
                         splash.style.display = 'none';
@@ -164,34 +305,50 @@
                     }
                     renderStudioState(data.state || data);
                 }
-            } catch (err) { }
+                
+            } catch (err) {
+                // logMsg("State Err: " + err.message);
+            }
         });
+
         function renderStudioState(state) {
             if (!state) return;
+
+            // 1. Cursor Sync
             if (state.cursor) {
                 cursorEl.style.display = 'block';
                 cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
             }
+
+            // 2. Master Sync
             if (state.master) {
                 const volSlider = document.getElementById("master-volume");
                 const volVal = document.getElementById("master-volume-value");
                 if (volSlider) volSlider.value = state.master.volume;
                 if (volVal) volVal.textContent = state.master.volume.toFixed(1) + " dB";
+
                 const loopSlider = document.getElementById("loop-length");
                 const loopVal = document.getElementById("loop-length-value");
                 if (loopSlider) loopSlider.value = state.master.loopLength;
                 if (loopVal) loopVal.textContent = state.master.loopLength.toFixed(1) + "s";
+
                 const recBtn = document.getElementById("master-record-button");
                 if (recBtn) recBtn.className = state.master.isRecording ? "button recording" : "button";
+
                 const lfo1 = document.getElementById("lfo-toggle");
                 if (lfo1) lfo1.className = state.master.lfo1Active ? "active sweeping" : "";
+                
                 const lfo2 = document.getElementById("lfo2-toggle");
                 if (lfo2) lfo2.className = state.master.lfo2Active ? "active sweeping" : "";
             }
+
+            // 3. Transport Sync
             if (state.transport) {
                 const timeDisp = document.getElementById("recording-time-display");
                 if (timeDisp) timeDisp.textContent = state.transport.position || "00:00:00";
             }
+
+            // 4. Sampler Sync
             if (state.sampler && Array.isArray(state.sampler)) {
                 state.sampler.forEach(pad => {
                     const btn = sampleGrid.querySelector(`button[data-sample="${pad.id}"]`);
@@ -202,37 +359,63 @@
                     }
                 });
             }
+
+            // 5. Track Sync
             if (state.tracks && Array.isArray(state.tracks)) {
                 state.tracks.forEach((trackState) => {
                     let trackDiv = document.querySelector(`.track[data-track-index="${trackState.id}"]`);
+                    
                     if (!trackDiv) {
                         const tv = new TrackView(trackState.id);
                         trackDiv = tv.buildElement();
                         tracksContainer.appendChild(trackDiv);
                         trackDiv.__tv = tv;
                     }
+
+                    // Sync Track UI via TrackView elements if available, else query
+                    const tv = trackDiv.__tv;
+                    
+                    // Volume
                     const volSlider = trackDiv.querySelector("input[data-param='vol']");
                     const volDisp = trackDiv.querySelector("span[data-value-for='vol']");
                     if(volSlider) volSlider.value = trackState.volume;
                     if(volDisp) volDisp.textContent = trackState.volume.toFixed(1) + "dB";
+
+                    // Pan
                     const panSlider = trackDiv.querySelector("input[data-param='pan']");
                     const panDisp = trackDiv.querySelector("span[data-value-for='pan']");
                     if(panSlider) panSlider.value = trackState.pan;
                     if(panDisp) panDisp.textContent = trackState.pan.toFixed(2);
+
+                    // Pitch
                     const pitchSlider = trackDiv.querySelector("input[data-param='pitch']");
                     const pitchDisp = trackDiv.querySelector("span[data-value-for='pitch']");
                     if(pitchSlider) pitchSlider.value = trackState.pitch;
                     if(pitchDisp) pitchDisp.textContent = trackState.pitch.toFixed(1) + "%";
+
+                    // Buttons
                     const playBtn = trackDiv.querySelector("button[data-action='play']");
                     if(playBtn) playBtn.className = trackState.isPlaying ? "active playing" : "";
+                    
                     const recBtn = trackDiv.querySelector("button[data-action='record']");
                     if(recBtn) recBtn.className = trackState.armed ? "active recording" : "";
+
+                    // Status
                     const status = trackDiv.querySelector(".status-indicator");
                     if(status) {
-                        if(trackState.armed) { status.textContent = "RECORDING"; status.className = "status-indicator status-recording"; }
-                        else if(trackState.isPlaying) { status.textContent = "PLAYING"; status.className = "status-indicator status-playing"; }
-                        else { status.textContent = "READY"; status.className = "status-indicator status-ready"; }
+                        if(trackState.armed) {
+                            status.textContent = "RECORDING";
+                            status.className = "status-indicator status-recording";
+                        } else if(trackState.isPlaying) {
+                            status.textContent = "PLAYING";
+                            status.className = "status-indicator status-playing";
+                        } else {
+                            status.textContent = "READY";
+                            status.className = "status-indicator status-ready";
+                        }
                     }
+
+                    // FX Chain
                     if (trackState.effects) {
                         trackState.effects.forEach(fx => {
                             const slot = trackDiv.querySelector(`.fx-chain-slot input[data-slot-index="${fx.slot}"]`);
@@ -246,6 +429,8 @@
                         });
                     }
                 });
+
+                // Cleanup
                 const activeIds = state.tracks.map(t => String(t.id));
                 Array.from(tracksContainer.children).forEach(child => {
                     if(!activeIds.includes(child.dataset.trackIndex)) child.remove();
