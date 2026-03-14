@@ -100,6 +100,21 @@
     <div id="debug-log"></div>
 
     <script>
+        var _debugLogQueue = [];
+        window.onerror = function(msg, url, line) { 
+            var errStr = "❌ ERR: " + msg + " (" + line + ")";
+            console.error(errStr);
+            var logEl = document.getElementById("debug-log");
+            if(logEl) {
+                var d = document.createElement("div");
+                d.textContent = "> " + errStr;
+                logEl.appendChild(d);
+            } else {
+                _debugLogQueue.push(errStr);
+            }
+            return false;
+        };
+        
         // Inline TrackView Logic to avoid Script Error (Line 0) from external JS loading on Chromecast
         class MiniTrackView {
             constructor(id) {
@@ -192,6 +207,7 @@
         const debugLog = document.getElementById("debug-log");
         const cursorEl = document.getElementById("virtual-cursor");
         const sampleGrid = document.getElementById("receiver-sample-grid");
+        if (!sampleGrid) { console.error("sampleGrid not found"); window.onerror("sampleGrid not found", "", 0); }
         
         for(let i=1; i<=20; i++) {
             const btn = document.createElement("button");
