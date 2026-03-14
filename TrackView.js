@@ -396,6 +396,11 @@
 
                 dialog.append(header, content);
                 dialogsContainer.appendChild(dialog);
+                
+                if (typeof window.makeDraggable === 'function') {
+                    window.makeDraggable(dialog, header);
+                }
+                
                 this.elements.effectDialogs.push(dialog);
             }
             trackDiv.appendChild(dialogsContainer);
@@ -421,6 +426,11 @@
 
             auditionDialog.append(auditionHeader, auditionContent);
             trackDiv.appendChild(auditionDialog);
+            
+            if (typeof window.makeDraggable === 'function') {
+                window.makeDraggable(auditionDialog, auditionHeader);
+            }
+            
             this.elements.auditionDialog = auditionDialog;
 
             // 12. Main Controls
@@ -647,9 +657,6 @@
                     this.elements.loopControls.classList.remove('active');
                     this.elements.loopControls.classList.add('hidden');
                 }
-
-                this.elements.loopControls.style.display = show ? 'flex' : 'none';
-                this.elements.loopControls.style.opacity = show ? '1' : '0';
                 console.warn(`✨ Visibility applied for Track ${this.id}. ClassList: ${this.elements.loopControls.classList}`);
             } else {
                 console.error(`❌ TrackView ${this.id}: loopControls element NOT FOUND!`);
@@ -684,6 +691,10 @@
             if (duration > 0 && this.trackAudio) {
                 this.trackAudio.setLoopStart(0);
                 this.trackAudio.setLoopEnd(duration);
+            }
+
+            if (this.state) {
+                this.state.pausePosition = 0;
             }
         }
 

@@ -34,6 +34,12 @@
     --dark-red: #8B0000;
 }
 
+html, body {
+    height: 100% !important;
+    margin: 0;
+    padding: 0;
+}
+
 body {
     font-family: 'Courier New', Courier, monospace;
     background-color: #000000 !important;
@@ -41,10 +47,9 @@ body {
     color: var(--text-color);
     display: flex;
     justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 2px;
-    /* Strict 2px border via padding */
+    align-items: stretch; /* Stretch to fill vertical space */
+    height: 100% !important;
+    padding: 0 !important;
     box-sizing: border-box;
     margin: 0;
     width: 100vw;
@@ -55,6 +60,23 @@ body {
     user-select: none;
     overflow: hidden;
     /* strict no-scroll */
+}
+
+/* Global Box-Sizing for layout predictability */
+* {
+    box-sizing: border-box !important;
+}
+
+/* Global unselectable text */
+* {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+}
+
+/* Ensure inputs and editable areas still work if any were added */
+input, select, textarea, [contenteditable="true"] {
+    -webkit-user-select: auto !important;
+    user-select: auto !important;
 }
 
 /* Force hide global hidden inputs and containers to prevent layout shifts */
@@ -430,19 +452,21 @@ img {
        
        Margin needed = 6px (shadow size).
     */
-    width: calc(100% - 12px);
-    /* 100% minus 6px*2 for shadows */
-    height: calc(100% - 12px);
-    max-width: none;
+    width: 100%;
+    max-width: 1440px;
+    height: 100% !important; 
+    box-sizing: border-box !important;
+    /* Ensures padding/borders are included in 100% height */
     background-color: var(--dark-gray);
     border-radius: 15px;
-    padding: 8px;
-    box-shadow: 0 0 0 2px var(--green), 0 0 0 4px var(--gold), 0 0 0 6px var(--red);
+    /* Restored full 15px radius for all corners */
+    padding: 8px; /* Restored uniform padding */
+    box-shadow: inset 0 0 0 2px var(--green), inset 0 0 0 4px var(--gold), inset 0 0 0 6px var(--red);
     position: relative;
-    margin: 6px;
-    /* Make room for the shadow inside the parent padding */
+    margin: 0 auto !important;
     overflow: hidden;
-    transition: opacity 1.8s ease-in-out;
+    transition: opacity 1.2s ease-in-out;
+    z-index: 10;
 }
 
 .hidden {
@@ -459,9 +483,11 @@ img {
     justify-content: space-between;
     align-items: center;
     padding: 5px 20px;
-    height: 40px;
+    height: 60px; /* Increased from 40px to redistribute reclaimed space */
     background-color: var(--off-black);
     flex-shrink: 0;
+    position: relative;
+    z-index: 1000; /* Ensure header is above track containers */
 }
 
 .header h1,
@@ -476,6 +502,7 @@ img {
 
 .header h1 {
     font-size: 2em;
+    margin: 0 !important; /* Vertically centered by flex parent */
 }
 
 .header h2 {
@@ -526,12 +553,11 @@ img {
     gap: 5px;
     border: 1px solid var(--green);
     border-radius: 10px;
-    padding: 5px;
+    padding: 5px 5px 0 5px; /* Reclaimed 5px from bottom */
     background-color: var(--dark-gray);
     overflow: hidden;
     position: relative;
     top: 0;
-    /* Push whole column down specifically for alignment if needed? No, user wanted specific shifts. */
 }
 
 /* QA: Align Master Recording with tracks */
@@ -624,7 +650,7 @@ img {
     width: 95%;
     justify-content: center;
     align-items: center;
-    margin: 2px auto;
+    margin: 0 auto 5px auto; /* Tightened */
 }
 
 .master-rec-row button,
@@ -638,7 +664,7 @@ img {
 
 /* Tighten LFO spacing */
 .lfo-button-item {
-    margin-bottom: -5px !important;
+    margin-bottom: 5px !important;
 }
 
 .lfo-meter-item {
@@ -735,7 +761,7 @@ img {
     align-items: flex-start;
     border-bottom: 1px solid var(--mid-gray);
     padding: 4px 0;
-    margin: 7px 0 5px 0;
+    margin: 2px 0 5px 0; /* Moved up to compensate for extra space */
     background-color: rgba(0, 0, 0, 0.2);
 }
 
@@ -859,10 +885,15 @@ img {
     background-color: var(--dark-gray);
     border: 1px solid var(--green);
     border-radius: 10px;
-    padding: 5px;
+    padding: 5px 5px 0 5px; /* Reclaimed 5px from bottom */
     display: flex;
     flex-direction: column;
     gap: 5px;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .track-header {
@@ -1108,11 +1139,12 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* FX Chain Container Styles */
 .fx-chain-container {
-    margin-top: 5px;
+    margin-top: 10px !important; /* Pushed down 5px more */
     border: 1px solid var(--mid-gray);
-    padding: 4px;
+    padding: 2px;
     border-radius: 4px;
     background: rgba(0, 0, 0, 0.2);
+    width: 100%;
 }
 
 .fx-slot-container {
@@ -1869,39 +1901,43 @@ select option {
 
 .effect-control-group {
     width: 100%;
-    margin-bottom: 0;
+    margin-bottom: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
-.effect-control-group .knob-label-group {
+.effect-control-group .effect-param-title {
     font-size: 0.85em;
-    /* Increased from 0.75em */
-    justify-content: space-between;
-    position: relative;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 0px;
 }
 
-.effect-control-group .knob-label-group label {
+.effect-control-group .effect-param-title label {
     margin-right: 0;
 }
 
-.effect-control-group .param-value {
+.effect-control-group .effect-param-value {
+    font-size: 0.85em;
+    width: 100%;
+    text-align: center;
+    margin-top: 0px;
+}
+
+.effect-control-group .effect-param-value .param-value {
+    color: var(--gold, #FFD700);
     position: static;
     transform: none;
-    text-align: right;
-    width: auto;
-    min-width: 60px;
-    font-size: 0.85em;
-    /* Increased from 0.75em (inherited) */
+    display: inline-block;
 }
 
 .effect-control-group .slider-wrapper {
     width: 100%;
 }
 
-.fx-chain-container {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid var(--mid-gray);
-}
+/* Merged into consolidated .fx-chain-container above */
+
 
 .fx-chain-title {
     color: var(--green);
@@ -1926,6 +1962,7 @@ select option {
     flex-direction: column;
     align-items: center;
     flex: 1;
+    min-width: 0;
 }
 
 .fx-chain-slot input[type="checkbox"] {
@@ -1947,6 +1984,9 @@ select option {
     font-size: 0.7em;
     text-align: center;
     padding: 1px;
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
     transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     background-color: var(--green);
     color: var(--gold);
@@ -3080,23 +3120,21 @@ select option {
 
 /* Effect Parameter Dialogs (vNewStrategy) */
 .effect-dialogs-container {
-    position: relative;
     width: 100%;
-    z-index: 10;
-    /* Base z-index */
 }
 
 /* --- Effect Params Dialogs (Universal Styling) --- */
 .effect-params-dialog,
 .audition-params-dialog {
     position: fixed;
-    z-index: 2000;
-    background: var(--off-black);
+    z-index: 30000;
+    background: rgba(26, 26, 26, 0.84); /* Matches --off-black with 84% opacity */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 2px solid var(--green);
     border-radius: 8px;
     padding: 0;
-    width: auto;
-    min-width: 400px;
+    width: 320px;
     max-width: 95vw;
     height: fit-content !important;
     max-height: 85vh;
@@ -3111,9 +3149,10 @@ select option {
 .audition-params-dialog[open] {
     display: flex;
     opacity: 1;
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 100px;
+    left: 100px;
+    margin: 0;
+    transform: none;
     height: fit-content !important;
 }
 
@@ -3126,23 +3165,29 @@ select option {
 .audition-dialog-content {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    padding: 8px;
+    gap: 4px;
+    padding: 5px;
     overflow-y: auto;
 }
 
 .effect-params-dialog .dialog-header,
 .audition-params-dialog .dialog-header {
-    background: var(--off-black);
+    background: rgba(10, 10, 10, 0.8);
     color: var(--gold);
     font-weight: bold;
-    padding: 6px 10px;
+    padding: 4px 8px;
     border-radius: 8px 8px 0 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
     user-select: none;
     border-bottom: none;
+    cursor: grab;
+}
+
+.effect-params-dialog .dialog-header:active,
+.audition-params-dialog .dialog-header:active {
+    cursor: grabbing;
 }
 
 .effect-params-dialog .dialog-header span,
@@ -3172,31 +3217,31 @@ select option {
 
 /* Ensure z-index stacking for 7 slots - increased to stay above other UI */
 .effect-params-dialog[data-slot-index="0"] {
-    z-index: 500;
+    z-index: 30000;
 }
 
 .effect-params-dialog[data-slot-index="1"] {
-    z-index: 501;
+    z-index: 30001;
 }
 
 .effect-params-dialog[data-slot-index="2"] {
-    z-index: 502;
+    z-index: 30002;
 }
 
 .effect-params-dialog[data-slot-index="3"] {
-    z-index: 503;
+    z-index: 30003;
 }
 
 .effect-params-dialog[data-slot-index="4"] {
-    z-index: 504;
+    z-index: 30004;
 }
 
 .effect-params-dialog[data-slot-index="5"] {
-    z-index: 505;
+    z-index: 30005;
 }
 
 .effect-params-dialog[data-slot-index="6"] {
-    z-index: 506;
+    z-index: 30006;
 }
 
 /* Audition Params Panel */
@@ -3272,33 +3317,12 @@ select option {
 }
 
 /* --- Chromecast UI --- */
-#cast-dialog {
-    width: 350px;
-    background: var(--off-black);
-    border: 2px solid var(--gold);
-    color: var(--white);
-    padding: 20px;
-    border-radius: 8px;
-}
 
 .cast-content-wrapper {
     position: relative;
     padding: 10px;
 }
 
-#close-cast-button {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: var(--red);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
-    cursor: pointer;
-    z-index: 10;
-}
 
 .cast-device-list {
     max-height: 240px;
@@ -3370,7 +3394,7 @@ select option {
     width: 100% !important;
     margin-bottom: 0 !important;
     flex: unset !important;
-    padding: 4px 0;
+    padding: 2px 0;
 }
 
 /* Small screens: collapse to 2 columns */
@@ -3383,30 +3407,6 @@ select option {
 }
 
 /* --- PREMIUM CAST DIALOG (v6.6) --- */
-#cast-dialog {
-    background: transparent;
-    border: none;
-    padding: 0;
-    margin: auto;
-    overflow: visible;
-    color: white;
-}
-
-#cast-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(5px);
-}
-
-.cast-content-wrapper {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-    border: 2px solid var(--gold);
-    border-radius: 12px;
-    padding: 25px;
-    width: 400px;
-    box-shadow: 0 0 30px rgba(179, 134, 0, 0.3);
-    position: relative;
-    font-family: 'Courier New', Courier, monospace;
-}
 
 #cast-device-list {
     min-height: 150px;
@@ -3431,23 +3431,6 @@ select option {
     background: #111;
 }
 
-#close-cast-button {
-    position: absolute;
-    top: 10px;
-    right: 15px;
-    background: none;
-    border: none;
-    color: var(--gold);
-    font-size: 1.5em;
-    cursor: pointer;
-    font-weight: bold;
-    transition: color 0.3s;
-}
-
-#close-cast-button:hover {
-    color: white;
-    text-shadow: 0 0 10px var(--gold);
-}
 
 .cast-device-item:hover {
     transform: translateX(5px);
@@ -3455,7 +3438,7 @@ select option {
 }
 
 /* --- Sessions Dialog (New Modal) --- */
-#sessions-dialog {
+#sessions-dialog, #cast-dialog {
     width: 600px;
     height: 600px;
     /* Uniform center-x, 50px from top */
@@ -3476,7 +3459,7 @@ select option {
 }
 
 /* Ensure backdrop is dark */
-#sessions-dialog::backdrop {
+#sessions-dialog::backdrop, #cast-dialog::backdrop {
     background: rgba(0, 0, 0, 0.7);
 }
 
@@ -3519,8 +3502,7 @@ select option {
     /* Reduced from 95% to prevent side clipping */
     box-sizing: border-box;
     /* Ensure padding/border doesn't add to width */
-    margin: 15px auto 10px auto;
-    /* Reverted to 15px (stable) from 5px (broken) */
+    margin: 5px auto 0 auto; /* Reclaimed 15px (5px top shift + 10px bottom gap) */
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -3530,11 +3512,12 @@ select option {
     height: auto !important;
     min-height: auto !important;
 
-    /* Dark Grey Background */
-    background-color: #222222 !important;
-    border: 4px solid var(--green) !important;
-    border-radius: 10px;
-    padding: 10px;
+    /* Dark Grey Background - Matched to Track Background */
+    background-color: var(--dark-gray) !important;
+    border: 1px solid var(--green) !important;
+    box-shadow: none !important;
+    border-radius: 12px;
+    padding: 8px; /* Slightly tighter */
 }
 
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
@@ -3559,34 +3542,37 @@ select option {
 #show-sessions-button,
 #show-docs-button,
 #import-files-button {
-    line-height: 18px !important;
+    height: 22px !important;
+    line-height: normal !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 8px !important;
 }
 
-/* Sample Center Updates */
 .sample-btn {
-    /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
-    /* Normal State: Match REV Button Scheme */
+    /* Normal State: Gold BG, Green Text, 3-color border (Visible) */
     background-color: var(--gold) !important;
     color: var(--green) !important;
-    border: 4px solid var(--green) !important;
+    border: 2px solid var(--green) !important;
+    box-shadow: inset 0 0 0 2px var(--gold), inset 0 0 0 4px var(--red) !important;
 
     font-family: 'Mexcellent', sans-serif !important;
-    font-size: 1.8em !important;
+    font-size: 1.4em !important;
     font-weight: 720 !important;
-    /* Match REV weight */
-    letter-spacing: 1px !important;
+    /* vertical centering fix for Mexcellent font */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: normal !important;
+    padding: 0 !important;
 
     /* Reduced Size Further */
     aspect-ratio: 1.0;
-    padding: 1px;
     cursor: pointer;
-    border-radius: 12px;
+    border-radius: 8px;
     transition: all 0.1s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     text-shadow: none;
-    /* Removed shadow */
     position: relative;
     z-index: 5;
 }
@@ -3658,15 +3644,19 @@ select option {
 
 /* Loop Control Styling (Match LFO) */
 .loop-controls {
-    display: flex;
-    /* Default flex for debugging, JS can override */
+    display: flex !important;
+    visibility: visible !important;
     flex-direction: column;
     background-color: rgba(0, 0, 0, 0.2);
-    /* border lines REMOVED per user request */
     padding: 0;
     gap: 0;
-    margin: 5px 0 0 0;
+    margin: 10px 0 0 0; /* Pushed down 5px more */
     width: 100%;
+    opacity: 0.5; /* Semi-transparent when dormant */
+    transition: opacity 0.72s ease;
+    border-bottom: 1px solid var(--mid-gray); /* Match LFO closure */
+    height: 74px !important; /* Reclaimed 10px from height redistribution */
+    box-sizing: border-box !important;
 }
 
 /* Labels Match Sweep 1/2 */
@@ -3690,6 +3680,24 @@ select option {
     /* Match value size */
 }
 
+.loop-line-1 {
+    padding: 2px 0 7px 0 !important; /* Scissors/Labels area + 5px bottom padding */
+    display: flex;
+    align-items: center;
+}
+
+.loop-line-2 {
+    padding: 4px 0 9px 0 !important; /* Slider Area + 5px bottom padding */
+    display: flex;
+    align-items: center;
+}
+
+.loop-line-3 {
+    padding: 2px 0 !important; /* Sweep Time/Values */
+    display: flex;
+    align-items: center;
+}
+
 /* Separator for Loop Start/End? 
    Since they are flex items, we can add a border to the first one?
    But we don't have a dedicated separator element.
@@ -3697,19 +3705,13 @@ select option {
 */
 /* 3-Line Loop Control Layout */
 .loop-controls.active {
-    display: flex !important;
-    visibility: visible !important;
     opacity: 1 !important;
-    height: auto !important;
-    min-height: 40px !important;
-    /* border removed - final styling */
 }
 
 .loop-controls.hidden {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
-    height: 0 !important;
+    /* No longer display:none - always visible but dormant */
+    opacity: 0.5 !important;
+    pointer-events: none;
 }
 
 .loop-control-block {

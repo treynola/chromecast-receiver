@@ -5,10 +5,15 @@
     <!-- Google Cast Web Receiver SDK -->
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="styles_v101.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body {
-            background-color: transparent !important;
-            overflow: hidden; /* Cast receiver shouldn't scroll */
+            background-color: #000 !important;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
         }
         
         /* Hide Cast Default Player */
@@ -16,13 +21,10 @@
             display: none;
         }
 
-        #mxs-studio-container {
+        .container {
             display: none; /* Hidden until state arrives */
-            width: 100vw;
-            height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-            background: linear-gradient(135deg, #1a1a1a 0%, #000 100%);
+            opacity: 1 !important; /* Force visible when shown */
+            pointer-events: none !important; /* Read-only */
         }
 
         #splash {
@@ -32,14 +34,17 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            background: #000;
+            z-index: 9999;
+            position: absolute;
+            top: 0; left: 0; width: 100%;
         }
 
         #splash h1 {
             color: #FAD78E;
-            font-size: 3em;
-            margin-bottom: 20px;
-            text-shadow: 0 0 20px rgba(250, 215, 142, 0.5);
-            font-family: 'Courier New', monospace;
+            font-size: 3.5em;
+            margin-bottom: 10px;
+            font-family: 'Mexcellent', sans-serif;
         }
         #splash h2 {
             color: #008000;
@@ -47,29 +52,43 @@
             font-family: 'Courier New', monospace;
         }
         #status-text {
-            color: #ccc;
-            margin-top: 15px;
-            font-size: 1.2em;
+            color: #666;
+            margin-top: 30px;
+            font-size: 1em;
             font-family: 'Courier New', monospace;
         }
 
-        /* Enforce Read-Only UI on Cast */
-        .track * {
+        /* Virtual Cursor */
+        #virtual-cursor {
+            display: none;
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            z-index: 10000;
+            pointer-events: none;
+            transition: transform 0.05s linear;
+        }
+        #virtual-cursor svg {
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+        }
+
+        /* Enforce Read-Only UI */
+        * {
             pointer-events: none !important;
+            user-select: none !important;
         }
         
         .debug-panel {
             position: absolute;
-            top: 10px; right: 10px;
-            background: rgba(0,0,0,0.8);
-            border: 1px solid #333;
+            bottom: 10px; right: 10px;
+            background: rgba(0,0,0,0.7);
             color: #0f0;
-            padding: 10px;
+            padding: 5px 10px;
             font-family: monospace;
-            max-width: 400px;
-            max-height: 200px;
-            overflow: hidden;
-            display: block;
+            font-size: 10px;
+            border-radius: 4px;
+            z-index: 10001;
+            display: none; /* Set to block for debugging */
         }
     </style>
 </head>
@@ -78,12 +97,22 @@
 
     <div id="splash">
         <h1>MXS-004 STUDIO</h1>
-        <h2>HI-FI AUDIO PLAYBACK</h2>
-        <div id="status-text">INITIALIZING RECEIVER...</div>
+        <h2>HI-FI AUDIO CASTING</h2>
+        <div id="status-text">INITIALIZING...</div>
     </div>
 
-    <!-- The mirror of the desktop App UI -->
+    <!-- The EXACT duplicate of the app container -->
     <div id="mxs-studio-container" class="container">
+        <div class="header">
+            <h1>NOWMULTIMEDIA MXS-004</h1>
+            <div class="header-right">
+                <button id="cast-btn" style="color: #0f0;">
+                    <i class="fa-brands fa-chromecast"></i>
+                </button>
+                <h2>Mix Studio-004</h2>
+            </div>
+        </div>
+
         <div class="main-content">
             <!-- Column 1: Master Controls -->
             <div class="master-column">
@@ -108,15 +137,79 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="master-item master-row-layout">
+                    <div class="track-header">Loop Length</div>
+                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="master-value">4.0s</span>
+                </div>
+
+                <div class="master-item master-bottom-item">
+                    <div class="master-rec-row">
+                        <button id="master-record-button" class="button">REC</button>
+                    </div>
+                </div>
+
+                <div class="lfo-side-by-side-container">
+                    <div class="lfo-column">
+                        <div class="master-item lfo-button-item">
+                            <button id="lfo-toggle">LFO 1</button>
+                        </div>
+                        <div class="master-item lfo-meter-item">
+                            <div class="meter-container lfo-meter">
+                                <div id="lfo-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <div class="master-item">
+                            <label class="master-label" style="font-size:0.65em;">SWEEP 1</label>
+                            <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo-time-value" class="master-value">1.8s</span>
+                        </div>
+                    </div>
+                    <div class="lfo-separator"></div>
+                    <div class="lfo-column">
+                        <div class="master-item lfo-button-item">
+                            <button id="lfo2-toggle">LFO 2</button>
+                        </div>
+                        <div class="master-item lfo-meter-item">
+                            <div class="meter-container lfo-meter">
+                                <div id="lfo2-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <div class="master-item">
+                            <label class="master-label" style="font-size:0.65em;">SWEEP 2</label>
+                            <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo2-time-value" class="master-value">1.8s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="master-item sample-center-container">
+                    <div class="track-header">Sample Station</div>
+                    <div id="receiver-sample-grid" class="sample-grid">
+                        <!-- Buttons 1-20 -->
+                    </div>
+                </div>
+
+                <div class="master-item master-bottom-buttons">
+                    <button class="button"><i class="fa-solid fa-list"></i> MEDIA</button>
+                    <button class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
+                    <button class="button"><i class="fa-solid fa-book"></i> DOCS</button>
+                </div>
             </div>
 
             <!-- Columns 2-5: Tracks -->
             <div id="tracks-container" class="tracks-container"></div>
         </div>
     </div>
-    
-    <div id="virtual-cursor" style="display: none; position: absolute; width: 20px; height: 20px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22white%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><path d=%22M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z%22 fill=%22black%22/></svg>'); z-index: 9999; pointer-events: none; transition: transform 0.05s linear;"></div>
 
+    <!-- Virtual Cursor SVG -->
+    <div id="virtual-cursor">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" fill="#FAD78E" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+    </div>
+    
     <div id="debug-log" class="debug-panel"></div>
 
     <!-- Include TrackView.js for DOM parity -->
@@ -128,189 +221,207 @@
         const studioContainer = document.getElementById("mxs-studio-container");
         const tracksContainer = document.getElementById("tracks-container");
         const debugLog = document.getElementById("debug-log");
+        const cursorEl = document.getElementById("virtual-cursor");
         
-window.addEventListener("error", (e) => { logMsg("ERROR: " + e.message + " at " + e.filename + ":" + e.lineno); });
+        // Build Sample Grid
+        const sampleGrid = document.getElementById("receiver-sample-grid");
+        for(let i=1; i<=20; i++) {
+            const btn = document.createElement("button");
+            btn.className = "sample-btn";
+            btn.dataset.sample = i;
+            btn.textContent = i;
+            sampleGrid.appendChild(btn);
+        }
+
         function logMsg(msg) {
             console.log(msg);
             const line = document.createElement("div");
             line.textContent = `> ${msg}`;
             debugLog.appendChild(line);
-            if(debugLog.children.length > 5) debugLog.removeChild(debugLog.firstChild);
+            if(debugLog.children.length > 8) debugLog.removeChild(debugLog.firstChild);
         }
 
-        logMsg("Initializing Cast Receiver...");
+        logMsg("MXS-004 Receiver Booting...");
 
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
         
+        // Optimize for ultra-low latency
         const playbackConfig = new cast.framework.PlaybackConfig();
-        playbackConfig.autoResumeDuration = 5;
+        playbackConfig.autoResumeDuration = 0; // Immediate
         context.start({ playbackConfig: playbackConfig });
 
         playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
-            statusText.textContent = "AUDIO STREAM ACTIVE";
+            statusText.textContent = "LIVE AUDIO ACTIVE";
             statusText.style.color = "#0f0";
-            // Do not hide splash until we receive UI layout data
         });
         
         playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
-            statusText.textContent = "STREAM ERROR";
-            statusText.style.color = "#f00";
+            logMsg("Stream Error: " + event.detailedErrorCode);
         });
 
         // ==========================================================
         // UI REPLICATION ENGINE
         // ==========================================================
+        let currentAudioUrl = null;
 
-        // Generic custom message listener for Cast State Broadcaster
         context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', (event) => {
             try {
-                const data = JSON.parse(event.data);
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 
-                // Native Stream Launch message
-                const targetUrl = data.url || data.wsUrl;
-                if (data.type === 'connect' && targetUrl && targetUrl.includes("audio_stream=")) {
-                     const directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
-                     logMsg("Connecting Audio Server: " + directUrl);
+                // Connection/Audio Launch
+                const targetUrl = data.url || data.wsUrl || data.audio_stream;
+                if (data.type === 'connect' && targetUrl) {
+                     let directUrl = targetUrl;
+                     if (targetUrl.includes("audio_stream=")) {
+                         directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                     }
                      
-                     let request = new cast.framework.messages.LoadRequestData();
-                     let mediaInfo = new cast.framework.messages.MediaInformation();
-                     mediaInfo.contentId = directUrl;
-                     mediaInfo.contentType = 'audio/webm';
-                     mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
-                     request.media = mediaInfo;
-                     
-                     playerManager.load(request);
-                     statusText.textContent = "CONNECTING TO AUDIO NODE...";
+                     if (currentAudioUrl !== directUrl) {
+                         currentAudioUrl = directUrl;
+                         logMsg("Connecting Audio: " + directUrl);
+                         
+                         let request = new cast.framework.messages.LoadRequestData();
+                         let mediaInfo = new cast.framework.messages.MediaInformation();
+                         mediaInfo.contentId = directUrl;
+                         mediaInfo.contentType = 'audio/wav'; // PCM Stream
+                         mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
+                         request.media = mediaInfo;
+                         
+                         playerManager.load(request);
+                     }
                 }
                 
-                // Studio State Broadcaster Message
+                // Studio State Sync
                 if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
                     if(splash.style.display !== 'none') {
                         splash.style.display = 'none';
                         studioContainer.style.display = 'flex';
                     }
-                    renderStudioState(data.state);
+                    renderStudioState(data.state || data);
                 }
                 
             } catch (err) {
-                logMsg("Parse Error: " + err.message);
+                // logMsg("State Err: " + err.message);
             }
         });
 
-        // Intercept native LOAD requests for legacy fallback
-        playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, request => {
-            statusText.textContent = "CONNECTING NATIVE STREAM...";
-            if (request.media) {
-                request.media.streamType = cast.framework.messages.StreamType.LIVE;
-                if (!request.media.contentType) request.media.contentType = 'audio/webm';
-            }
-            return request;
-        });
-
-        // ----------------------------------------------------
-        // DOM Rendering Logic
-        // Takes the JSON tree from the sender and builds/updates the CSS UI
-        // ----------------------------------------------------
         function renderStudioState(state) {
-            // Virtual Cursor updates
+            if (!state) return;
+
+            // 1. Cursor Sync
             if (state.cursor) {
-                const cursorEl = document.getElementById('virtual-cursor');
-                if (cursorEl) {
-                    cursorEl.style.display = 'block';
-                    cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
-                }
+                cursorEl.style.display = 'block';
+                cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
             }
 
-            // Master updates
-            if(state.master) {
-                const volLabel = document.querySelector("#master-vol-knob + .knob-label");
-                if(volLabel && state.master.volume !== undefined) {
-                    volLabel.textContent = `Vol: ${state.master.volume.toFixed(1)}dB`;
-                }
+            // 2. Master Sync
+            if (state.master) {
+                const volSlider = document.getElementById("master-volume");
+                const volVal = document.getElementById("master-volume-value");
+                if (volSlider) volSlider.value = state.master.volume;
+                if (volVal) volVal.textContent = state.master.volume.toFixed(1) + " dB";
+
+                const loopSlider = document.getElementById("loop-length");
+                const loopVal = document.getElementById("loop-length-value");
+                if (loopSlider) loopSlider.value = state.master.loopLength;
+                if (loopVal) loopVal.textContent = state.master.loopLength.toFixed(1) + "s";
+
+                const recBtn = document.getElementById("master-record-button");
+                if (recBtn) recBtn.className = state.master.isRecording ? "button recording" : "button";
+
+                const lfo1 = document.getElementById("lfo-toggle");
+                if (lfo1) lfo1.className = state.master.lfo1Active ? "active sweeping" : "";
+                
+                const lfo2 = document.getElementById("lfo2-toggle");
+                if (lfo2) lfo2.className = state.master.lfo2Active ? "active sweeping" : "";
             }
 
-            // Track updates
-            if(!state.tracks || !Array.isArray(state.tracks)) return;
-            
-            state.tracks.forEach((trackState, index) => {
-                let trackDiv = document.querySelector(`.track[data-id="${trackState.id}"]`);
-                
-                // Create if missing
-                if (!trackDiv) {
-                    const tv = new TrackView(trackState.id);
-                    trackDiv = tv.buildElement();
-                    trackDiv.dataset.id = trackState.id;
-                    tracksContainer.appendChild(trackDiv);
-                    trackDiv.__tv = tv; // Save ref for helper methods if needed
-                }
+            // 3. Transport Sync
+            if (state.transport) {
+                const timeDisp = document.getElementById("recording-time-display");
+                if (timeDisp) timeDisp.textContent = state.transport.position || "00:00:00";
+            }
 
-                // Update Name
-                const nameEl = trackDiv.querySelector(".file-name-display");
-                if(nameEl && trackState.name) nameEl.textContent = trackState.name;
+            // 4. Sampler Sync
+            if (state.sampler && Array.isArray(state.sampler)) {
+                state.sampler.forEach(pad => {
+                    const btn = sampleGrid.querySelector(`button[data-sample="${pad.id}"]`);
+                    if (btn) {
+                        btn.className = "sample-btn";
+                        if (pad.active) btn.classList.add("active");
+                        if (pad.loaded) btn.classList.add("loaded");
+                    }
+                });
+            }
 
-                // Update Colors
-                if (trackState.color) {
-                    trackDiv.style.borderColor = trackState.color;
-                    const header = trackDiv.querySelector(".track-header");
-                    if(header) header.style.background = `linear-gradient(to right, ${trackState.color}, rgba(0,0,0,0.8))`;
-                }
+            // 5. Track Sync
+            if (state.tracks && Array.isArray(state.tracks)) {
+                state.tracks.forEach((trackState) => {
+                    let trackDiv = document.querySelector(`.track[data-track-index="${trackState.id}"]`);
+                    
+                    if (!trackDiv) {
+                        const tv = new TrackView(trackState.id);
+                        trackDiv = tv.buildElement();
+                        tracksContainer.appendChild(trackDiv);
+                        trackDiv.__tv = tv;
+                    }
 
-                // Update Button States (Toggle colors)
-                const playBtn = trackDiv.querySelector("button[data-action='play']");
-                if(playBtn) {
-                     if(trackState.isPlaying) {
-                         playBtn.classList.add("active");
-                         playBtn.style.color = "#0f0";
-                         playBtn.style.borderColor = "#0f0";
-                     } else {
-                         playBtn.classList.remove("active");
-                         playBtn.style.color = "";
-                         playBtn.style.borderColor = "";
-                     }
-                }
-                
-                // Sliders/Knobs Text
-                const volSlider = trackDiv.querySelector("input[data-param='vol']");
-                const volVal = trackDiv.querySelector("span[data-value-for='vol']");
-                if(volSlider && trackState.volume !== undefined) {
-                    volSlider.value = trackState.volume;
-                    if(volVal) volVal.textContent = trackState.volume.toFixed(1) + "dB";
-                }
-                
-                const panSlider = trackDiv.querySelector("input[data-param='pan']");
-                const panVal = trackDiv.querySelector("span[data-value-for='pan']");
-                if(panSlider && trackState.pan !== undefined) {
-                    panSlider.value = trackState.pan;
-                    if(panVal) panVal.textContent = trackState.pan.toFixed(2);
-                }
-                
-                // Track FX List
-                const fxSlots = trackDiv.querySelectorAll(".fx-chain-slot label");
-                if(fxSlots.length > 0 && trackState.effects) {
-                    trackState.effects.forEach((eff, i) => {
-                        if (i < fxSlots.length) {
-                            fxSlots[i].textContent = eff ? eff.name.substring(0,3) : (i+1);
-                            fxSlots[i].style.opacity = (eff && !eff.enabled) ? "0.5" : "1";
-                            if(eff) {
-                                fxSlots[i].style.background = "#0f0";
-                                fxSlots[i].style.color = "#000";
-                            } else {
-                                fxSlots[i].style.background = "";
-                                fxSlots[i].style.color = "";
-                            }
+                    // Sync Track UI
+                    const volSlider = trackDiv.querySelector("input[data-param='vol']");
+                    const volDisp = trackDiv.querySelector("span[data-value-for='vol']");
+                    if(volSlider) volSlider.value = trackState.volume;
+                    if(volDisp) volDisp.textContent = trackState.volume.toFixed(1) + "dB";
+
+                    const panSlider = trackDiv.querySelector("input[data-param='pan']");
+                    const panDisp = trackDiv.querySelector("span[data-value-for='pan']");
+                    if(panSlider) panSlider.value = trackState.pan;
+                    if(panDisp) panDisp.textContent = trackState.pan.toFixed(2);
+
+                    const pitchSlider = trackDiv.querySelector("input[data-param='pitch']");
+                    const pitchDisp = trackDiv.querySelector("span[data-value-for='pitch']");
+                    if(pitchSlider) pitchSlider.value = trackState.pitch;
+                    if(pitchDisp) pitchDisp.textContent = trackState.pitch.toFixed(1) + "%";
+
+                    const playBtn = trackDiv.querySelector("button[data-action='play']");
+                    if(playBtn) playBtn.className = trackState.isPlaying ? "active playing" : "";
+                    
+                    const recBtn = trackDiv.querySelector("button[data-action='record']");
+                    if(recBtn) recBtn.className = trackState.armed ? "active recording" : "";
+
+                    const status = trackDiv.querySelector(".status-indicator");
+                    if(status) {
+                        if(trackState.armed) {
+                            status.textContent = "RECORDING";
+                            status.className = "status-indicator status-recording";
+                        } else if(trackState.isPlaying) {
+                            status.textContent = "PLAYING";
+                            status.className = "status-indicator status-playing";
+                        } else {
+                            status.textContent = "READY";
+                            status.className = "status-indicator status-ready";
                         }
-                    });
-                }
-            });
-            
-            // Cleanup deleted tracks
-            const currentIds = state.tracks.map(t => String(t.id));
-            Array.from(tracksContainer.children).forEach(child => {
-                 if(!currentIds.includes(child.dataset.id)) {
-                     child.remove();
-                 }
-            });
+                    }
+
+                    if (trackState.effects) {
+                        trackState.effects.forEach(fx => {
+                            const slot = trackDiv.querySelector(`.fx-chain-slot input[data-slot-index="${fx.slot}"]`);
+                            const label = trackDiv.querySelector(`.fx-chain-slot-label[data-slot-label-index="${fx.slot}"]`);
+                            if(slot) slot.checked = fx.enabled;
+                            if(label) {
+                                label.textContent = fx.name || (fx.slot + 1);
+                                if(fx.enabled) label.classList.add("active");
+                                else label.classList.remove("active");
+                            }
+                        });
+                    }
+                });
+
+                const activeIds = state.tracks.map(t => String(t.id));
+                Array.from(tracksContainer.children).forEach(child => {
+                    if(!activeIds.includes(child.dataset.trackIndex)) child.remove();
+                });
+            }
         }
     </script>
 </body>
