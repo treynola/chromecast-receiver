@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MXS-004 Studio Receiver v1.2</title>
+    <title>MXS-004 Studio Receiver v1.3</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <!-- Corrected paths for repo root -->
     <link rel="stylesheet" href="styles_v101.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -89,11 +88,6 @@
                     <div class="track-header">Sample Station</div>
                     <div id="receiver-sample-grid" class="sample-grid"></div>
                 </div>
-                <div class="master-item master-bottom-buttons">
-                    <button class="button"><i class="fa-solid fa-list"></i> MEDIA</button>
-                    <button class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
-                    <button class="button"><i class="fa-solid fa-book"></i> DOCS</button>
-                </div>
             </div>
             <div id="tracks-container" class="tracks-container"></div>
         </div>
@@ -104,8 +98,93 @@
         </svg>
     </div>
     <div id="debug-log"></div>
-    <script src="TrackView.js"></script>
+
     <script>
+        // Inline TrackView Logic to avoid Script Error (Line 0) from external JS loading on Chromecast
+        class MiniTrackView {
+            constructor(id) {
+                this.id = id;
+                this.elements = { knobs: {}, valueDisplays: {} };
+            }
+            buildElement() {
+                const div = document.createElement('div');
+                div.className = 'track';
+                div.dataset.trackIndex = this.id;
+                
+                const header = document.createElement('div');
+                header.className = 'track-header';
+                header.textContent = `TRACK ${parseInt(this.id) + 1}`;
+                div.appendChild(header);
+
+                const status = document.createElement('div');
+                status.className = 'status-indicator status-ready';
+                status.textContent = 'READY';
+                this.elements.status = status;
+                div.appendChild(status);
+
+                const mainControls = document.createElement('div');
+                mainControls.className = 'main-controls';
+                
+                const addKnob = (label, param, unit) => {
+                    const cont = document.createElement('div');
+                    cont.className = 'knob-container';
+                    const lg = document.createElement('div');
+                    lg.className = 'knob-label-group';
+                    lg.innerHTML = `<label>${label}</label>`;
+                    const val = document.createElement('span');
+                    val.className = 'param-value';
+                    val.textContent = `0${unit}`;
+                    lg.appendChild(val);
+                    cont.appendChild(lg);
+                    
+                    const inp = document.createElement('input');
+                    inp.type = 'range';
+                    inp.className = 'track-knob';
+                    
+                    this.elements.knobs[param] = inp;
+                    this.elements.valueDisplays[param] = val;
+                    cont.appendChild(inp);
+                    mainControls.appendChild(cont);
+                };
+
+                addKnob('Pitch', 'pitch', '%');
+                addKnob('Volume', 'vol', 'dB');
+                addKnob('Pan', 'pan', '');
+                addKnob('Treble', 'treble', 'dB');
+                addKnob('Mid', 'mid_gain', 'dB');
+                addKnob('Bass', 'bass', 'dB');
+                
+                div.appendChild(mainControls);
+                
+                const fxGroup = document.createElement('div');
+                fxGroup.className = 'control-group track-fx-layout';
+                const fxTitle = document.createElement('div');
+                fxTitle.className = 'fx-chain-title';
+                fxTitle.textContent = 'Effects Chain:';
+                fxGroup.appendChild(fxTitle);
+                
+                const fxChainControls = document.createElement('div');
+                fxChainControls.className = 'fx-chain-controls';
+                for(let i=0; i<7; i++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'fx-chain-slot';
+                    const c = document.createElement('input');
+                    c.type = 'checkbox';
+                    c.dataset.slotIndex = i;
+                    const l = document.createElement('label');
+                    l.className = 'fx-chain-slot-label';
+                    l.dataset.slotLabelIndex = i;
+                    l.textContent = i+1;
+                    slot.append(c, l);
+                    fxChainControls.appendChild(slot);
+                }
+                fxGroup.appendChild(fxChainControls);
+                div.appendChild(fxGroup);
+
+                return div;
+            }
+        }
+
         const statusText = document.getElementById("status-text");
         const splash = document.getElementById("splash");
         const studioContainer = document.getElementById("mxs-studio-container");
@@ -113,60 +192,78 @@
         const debugLog = document.getElementById("debug-log");
         const cursorEl = document.getElementById("virtual-cursor");
         const sampleGrid = document.getElementById("receiver-sample-grid");
+        
         for(let i=1; i<=20; i++) {
             const btn = document.createElement("button");
             btn.className = "sample-btn";
-            btn.dataset.sample = i;
             btn.textContent = i;
+            btn.dataset.sample = i;
             sampleGrid.appendChild(btn);
         }
+
         function logMsg(msg) {
-            console.log(msg);
             const line = document.createElement("div");
             line.textContent = `> ${msg}`;
             debugLog.appendChild(line);
             if(debugLog.children.length > 15) debugLog.removeChild(debugLog.firstChild);
         }
-        window.onerror = (msg, url, line) => { logMsg("❌ ERR: " + msg + " line " + line); };
+        
+        window.onerror = (msg, url, line) => { logMsg(`❌ ERR: ${msg} (${line})`); };
+
         logMsg("🚀 MXS-004 Receiver Booting...");
+
         const context = cast.framework.CastReceiverContext.getInstance();
         const playerManager = context.getPlayerManager();
         context.start({ playbackConfig: new cast.framework.PlaybackConfig() });
+        
         playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
             logMsg("🔊 Audio stream playing!");
             statusText.textContent = "LIVE AUDIO ACTIVE";
             statusText.style.color = "#0f0";
         });
+        
+        playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
+            logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
+        });
+
         context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', (event) => {
-            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-            if (data.type === 'connect' || data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
-                if(splash.style.display !== 'none') {
-                    splash.style.display = 'none';
-                    studioContainer.style.display = 'flex';
-                    logMsg("✨ UI Revealed");
-                }
-            }
-            if (data.type === 'connect') {
-                const targetUrl = data.wsUrl || data.url || data.audio_stream;
-                if (targetUrl) {
-                    let directUrl = targetUrl;
-                    if (targetUrl.includes("audio_stream=")) {
-                        directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+            try {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                
+                if (data.type === 'connect' || data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                    if(splash.style.display !== 'none') {
+                        splash.style.display = 'none';
+                        studioContainer.style.display = 'flex';
+                        logMsg("✨ UI Revealed");
                     }
-                    logMsg("🔗 Connecting Audio: " + directUrl);
-                    let request = new cast.framework.messages.LoadRequestData();
-                    let mediaInfo = new cast.framework.messages.MediaInformation();
-                    mediaInfo.contentId = directUrl;
-                    mediaInfo.contentType = 'audio/wav';
-                    mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
-                    request.media = mediaInfo;
-                    playerManager.load(request);
                 }
-            }
-            if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
-                renderStudioState(data.state || data);
+
+                if (data.type === 'connect') {
+                    const targetUrl = data.wsUrl || data.url || data.audio_stream;
+                    if (targetUrl) {
+                        let directUrl = targetUrl;
+                        if (targetUrl.includes("audio_stream=")) {
+                            directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                        }
+                        logMsg("🔗 Connecting Audio: " + directUrl);
+                        let request = new cast.framework.messages.LoadRequestData();
+                        let mediaInfo = new cast.framework.messages.MediaInformation();
+                        mediaInfo.contentId = directUrl;
+                        mediaInfo.contentType = 'audio/wav';
+                        mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
+                        request.media = mediaInfo;
+                        playerManager.load(request);
+                    }
+                }
+                
+                if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                    renderStudioState(data.state || data);
+                }
+            } catch(e) {
+                logMsg(`❌ Parse Error: ${e.message}`);
             }
         });
+
         function renderStudioState(state) {
             if (!state) return;
             if (state.cursor) {
@@ -183,11 +280,10 @@
                 state.tracks.forEach((ts) => {
                     let div = document.querySelector(`.track[data-track-index="${ts.id}"]`);
                     if (!div) {
-                        const tv = new TrackView(ts.id);
+                        const tv = new MiniTrackView(ts.id);
                         div = tv.buildElement();
                         tracksContainer.appendChild(div);
                         div.__tv = tv;
-                        logMsg("➕ Track " + ts.id + " added");
                     }
                     const tv = div.__tv;
                     if (tv && tv.elements && tv.elements.knobs) {
@@ -197,6 +293,18 @@
                             tv.elements.status.className = ts.armed ? "status-indicator status-recording" : (ts.isPlaying ? "status-indicator status-playing" : "status-indicator status-ready");
                             tv.elements.status.textContent = ts.armed ? "RECORDING" : (ts.isPlaying ? "PLAYING" : "READY");
                         }
+                    }
+                    if (ts.effects) {
+                        ts.effects.forEach(fx => {
+                            const lbl = div.querySelector(`label[data-slot-label-index="${fx.slot}"]`);
+                            const chk = div.querySelector(`input[data-slot-index="${fx.slot}"]`);
+                            if(chk) chk.checked = fx.enabled;
+                            if(lbl) {
+                                lbl.textContent = fx.name || (fx.slot + 1);
+                                if(fx.enabled) lbl.classList.add("active");
+                                else lbl.classList.remove("active");
+                            }
+                        });
                     }
                 });
             }
