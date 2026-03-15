@@ -195,6 +195,56 @@
                 fxGroup.appendChild(fxChainControls);
                 div.appendChild(fxGroup);
 
+                // Add Track Buttons
+                var btnRow = document.createElement('div');
+                btnRow.className = 'track-buttons';
+                
+                var createBtn = function(label, action) {
+                    var b = document.createElement('button');
+                    b.className = 'track-btn track-btn-' + action;
+                    b.dataset.action = action;
+                    b.innerHTML = '<span>' + label + '</span>';
+                    return b;
+                };
+                
+                var recBtn = createBtn('REC', 'record');
+                var stopBtn = createBtn('STOP', 'stop');
+                var playBtn = createBtn('PLAY', 'play');
+                var revBtn = createBtn('REV', 'reverse');
+                
+                btnRow.append(recBtn, stopBtn, playBtn, revBtn);
+                div.appendChild(btnRow);
+
+                // Add Loop Controls
+                var loopControls = document.createElement('div');
+                loopControls.className = 'loop-controls hidden';
+                
+                var loopRow = document.createElement('div');
+                loopRow.className = 'loop-row-layout';
+                loopRow.style.display = 'flex';
+                loopRow.style.gap = '8px';
+                loopRow.style.width = '100%';
+                loopRow.style.alignItems = 'flex-end';
+                
+                var loopLayout = document.createElement('div');
+                loopLayout.className = 'loop-grid-layout';
+                
+                var line1 = document.createElement('div');
+                line1.className = 'loop-line-1';
+                line1.style.display = 'flex';
+                line1.style.width = '100%';
+                
+                var startLabel = document.createElement('label');
+                startLabel.textContent = 'LOOP START';
+                var endLabel = document.createElement('label');
+                endLabel.textContent = 'LOOP END';
+                
+                line1.append(startLabel, endLabel);
+                loopLayout.appendChild(line1);
+                loopRow.appendChild(loopLayout);
+                loopControls.appendChild(loopRow);
+                div.appendChild(loopControls);
+
                 return div;
             }
         }
