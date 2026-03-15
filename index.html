@@ -232,8 +232,6 @@
         try {
             context = cast.framework.CastReceiverContext.getInstance();
             playerManager = context.getPlayerManager();
-            context.start(); // Simplify start to see if playbackConfig was crashing it
-            logMsg("✅ Cast Context Started");
         } catch(e) {
             logMsg(`❌ Init Error: ${e.name} - ${e.message}`);
         }
@@ -252,45 +250,54 @@
 
         if (context) {
             const handleCustomMessage = (event) => {
-            try {
-                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                
-                if (data.type === 'connect' || data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
-                    if(splash.style.display !== 'none') {
-                        splash.style.display = 'none';
-                        studioContainer.style.display = 'flex';
-                        logMsg("✨ UI Revealed");
-                    }
-                }
-
-                if (data.type === 'connect') {
-                    const targetUrl = data.wsUrl || data.url || data.audio_stream;
-                    if (targetUrl) {
-                        let directUrl = targetUrl;
-                        if (targetUrl.includes("audio_stream=")) {
-                            directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                try {
+                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                    
+                    if (data.type === 'connect' || data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                        if(splash.style.display !== 'none') {
+                            splash.style.display = 'none';
+                            studioContainer.style.display = 'flex';
+                            logMsg("✨ UI Revealed");
                         }
-                        logMsg("🔗 Connecting Audio: " + directUrl);
-                        let request = new cast.framework.messages.LoadRequestData();
-                        let mediaInfo = new cast.framework.messages.MediaInformation();
-                        mediaInfo.contentId = directUrl;
-                        mediaInfo.contentType = 'audio/wav';
-                        mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
-                        request.media = mediaInfo;
-                        playerManager.load(request);
                     }
-                }
-                
-                if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
-                    renderStudioState(data.state || data);
-                }
-            } catch(e) {
-                logMsg(`❌ Parse Error: ${e.message}`);
-            }
-        };
 
-        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', handleCustomMessage);
-        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', handleCustomMessage);
+                    if (data.type === 'connect') {
+                        const targetUrl = data.wsUrl || data.url || data.audio_stream;
+                        if (targetUrl) {
+                            let directUrl = targetUrl;
+                            if (targetUrl.includes("audio_stream=")) {
+                                directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                            }
+                            logMsg("🔗 Connecting Audio: " + directUrl);
+                            let request = new cast.framework.messages.LoadRequestData();
+                            let mediaInfo = new cast.framework.messages.MediaInformation();
+                            mediaInfo.contentId = directUrl;
+                            mediaInfo.contentType = 'audio/wav';
+                            mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
+                            request.media = mediaInfo;
+                            playerManager.load(request);
+                        }
+                    }
+                    
+                    if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                        renderStudioState(data.state || data);
+                    }
+                } catch(e) {
+                    logMsg(`❌ Parse Error: ${e.message}`);
+                }
+            };
+
+            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', handleCustomMessage);
+            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', handleCustomMessage);
+            
+            // IMPORTANT: context.start() MUST be called AFTER all listeners are added!
+            try {
+                context.start(); 
+                logMsg("✅ Cast Context Started");
+            } catch(e) {
+                logMsg(`❌ Start Error: ${e.message}`);
+            }
+        }
 
         function renderStudioState(state) {
             if (!state) return;
