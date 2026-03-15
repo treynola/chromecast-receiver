@@ -139,7 +139,7 @@
                 var mainControls = document.createElement('div');
                 mainControls.className = 'main-controls';
                 
-                var addKnob = (label, param, unit) => {
+                var addKnob = function(label, param, unit) {
                     var cont = document.createElement('div');
                     cont.className = 'knob-container';
                     var lg = document.createElement('div');
@@ -329,7 +329,7 @@
                         }
                     }
                     if (ts.effects) {
-                        ts.effects.forEach(fx => {
+                        ts.effects.forEach(function(fx) {
                             var lbl = div.querySelector(`label[data-slot-label-index="${fx.slot}"]`);
                             var chk = div.querySelector(`input[data-slot-index="${fx.slot}"]`);
                             if(chk) chk.checked = fx.enabled;
