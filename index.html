@@ -127,7 +127,7 @@
                 
                 var header = document.createElement('div');
                 header.className = 'track-header';
-                header.textContent = `TRACK ${parseInt(this.id) + 1}`;
+                header.textContent = "TRACK " + (parseInt(this.id) + 1);
                 div.appendChild(header);
 
                 var status = document.createElement('div');
@@ -144,10 +144,10 @@
                     cont.className = 'knob-container';
                     var lg = document.createElement('div');
                     lg.className = 'knob-label-group';
-                    lg.innerHTML = `<label>${label}</label>`;
+                    lg.innerHTML = "<label>" + label + "</label>";
                     var val = document.createElement('span');
                     val.className = 'param-value';
-                    val.textContent = `0${unit}`;
+                    val.textContent = "0" + unit;
                     lg.appendChild(val);
                     cont.appendChild(lg);
                     
@@ -218,12 +218,12 @@
 
         function logMsg(msg) {
             var line = document.createElement("div");
-            line.textContent = `> ${msg}`;
+            line.textContent = "> " + msg;
             debugLog.appendChild(line);
             if(debugLog.children.length > 15) debugLog.removeChild(debugLog.firstChild);
         }
         
-        window.onerror = function(msg, url, line) { logMsg(`❌ ERR: ${msg} (${line})`); };
+        window.onerror = function(msg, url, line) { logMsg("❌ ERR: " + msg + " (" + line + ")"); };
 
         logMsg("🚀 MXS-004 Receiver Booting...");
 
@@ -232,7 +232,7 @@
             context = cast.framework.CastReceiverContext.getInstance();
             playerManager = context.getPlayerManager();
         } catch(e) {
-            logMsg(`❌ Init Error: ${e.name} - ${e.message}`);
+            logMsg("❌ Init Error: " + e.name + " - " + e.message);
         }
         
         if (playerManager) {
@@ -243,7 +243,7 @@
             });
             
             playerManager.addEventListener(cast.framework.events.EventType.ERROR, function(event) {
-                logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
+                logMsg("❌ Stream Error: " + event.detailedErrorCode);
             });
         }
 
@@ -282,7 +282,7 @@
                         renderStudioState(data.state || data);
                     }
                 } catch(e) {
-                    logMsg(`❌ Parse Error: ${e.message}`);
+                    logMsg("❌ Parse Error: " + e.message);
                 }
             };
 
@@ -294,7 +294,7 @@
                 context.start(); 
                 logMsg("✅ Cast Context Started");
             } catch(e) {
-                logMsg(`❌ Start Error: ${e.message}`);
+                logMsg("❌ Start Error: " + e.message);
             }
         }
 
@@ -302,7 +302,7 @@
             if (!state) return;
             if (state.cursor) {
                 cursorEl.style.display = 'block';
-                cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
+                cursorEl.style.transform = "translate(" + (state.cursor.x * window.innerWidth) + "px, " + (state.cursor.y * window.innerHeight) + "px)";
             }
             if (state.master) {
                 var vol = document.getElementById("master-volume");
@@ -312,7 +312,7 @@
             }
             if (state.tracks && Array.isArray(state.tracks)) {
                 state.tracks.forEach(function(ts) {
-                    var div = document.querySelector(`.track[data-track-index="${ts.id}"]`);
+                    var div = document.querySelector(".track[data-track-index=\"" + ts.id + "\"]");
                     if (!div) {
                         var tv = new MiniTrackView(ts.id);
                         div = tv.buildElement();
@@ -330,8 +330,8 @@
                     }
                     if (ts.effects) {
                         ts.effects.forEach(function(fx) {
-                            var lbl = div.querySelector(`label[data-slot-label-index="${fx.slot}"]`);
-                            var chk = div.querySelector(`input[data-slot-index="${fx.slot}"]`);
+                            var lbl = div.querySelector("label[data-slot-label-index=\"" + fx.slot + "\"]");
+                            var chk = div.querySelector("input[data-slot-index=\"" + fx.slot + "\"]");
                             if(chk) chk.checked = fx.enabled;
                             if(lbl) {
                                 lbl.textContent = fx.name || (fx.slot + 1);
