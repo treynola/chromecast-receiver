@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MXS-004 Studio Receiver v1.4</title>
+    <title>MXS-004 Studio Receiver v1.5</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="styles_v101.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background-color: #000 !important; overflow: hidden; margin: 0; padding: 0; width: 100vw; height: 100vh; }
         cast-media-player { display: none; }
@@ -228,21 +228,30 @@
 
         logMsg("🚀 MXS-004 Receiver Booting...");
 
-        const context = cast.framework.CastReceiverContext.getInstance();
-        const playerManager = context.getPlayerManager();
-        context.start({ playbackConfig: new cast.framework.PlaybackConfig() });
+        let context, playerManager;
+        try {
+            context = cast.framework.CastReceiverContext.getInstance();
+            playerManager = context.getPlayerManager();
+            context.start(); // Simplify start to see if playbackConfig was crashing it
+            logMsg("✅ Cast Context Started");
+        } catch(e) {
+            logMsg(`❌ Init Error: ${e.name} - ${e.message}`);
+        }
         
-        playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
-            logMsg("🔊 Audio stream playing!");
-            statusText.textContent = "LIVE AUDIO ACTIVE";
-            statusText.style.color = "#0f0";
-        });
-        
-        playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
-            logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
-        });
+        if (playerManager) {
+            playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
+                logMsg("🔊 Audio stream playing!");
+                statusText.textContent = "LIVE AUDIO ACTIVE";
+                statusText.style.color = "#0f0";
+            });
+            
+            playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
+                logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
+            });
+        }
 
-        const handleCustomMessage = (event) => {
+        if (context) {
+            const handleCustomMessage = (event) => {
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 
