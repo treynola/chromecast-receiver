@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>MXS-004 Studio Receiver v1.3</title>
-    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <title>MXS-004 Studio Receiver v1.4</title>
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="styles_v101.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
     <style>
         body { background-color: #000 !important; overflow: hidden; margin: 0; padding: 0; width: 100vw; height: 100vh; }
         cast-media-player { display: none; }
@@ -242,7 +242,7 @@
             logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
         });
 
-        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', (event) => {
+        const handleCustomMessage = (event) => {
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                 
@@ -278,7 +278,10 @@
             } catch(e) {
                 logMsg(`❌ Parse Error: ${e.message}`);
             }
-        });
+        };
+
+        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', handleCustomMessage);
+        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', handleCustomMessage);
 
         function renderStudioState(state) {
             if (!state) return;
