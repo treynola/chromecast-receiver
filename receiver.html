@@ -116,43 +116,42 @@
         };
         
         // Inline TrackView Logic to avoid Script Error (Line 0) from external JS loading on Chromecast
-        class MiniTrackView {
-            constructor(id) {
-                this.id = id;
-                this.elements = { knobs: {}, valueDisplays: {} };
-            }
-            buildElement() {
-                const div = document.createElement('div');
+        function MiniTrackView(id) {
+            this.id = id;
+            this.elements = { knobs: {}, valueDisplays: {} };
+        }
+        MiniTrackView.prototype.buildElement = function() {
+                var div = document.createElement('div');
                 div.className = 'track';
                 div.dataset.trackIndex = this.id;
                 
-                const header = document.createElement('div');
+                var header = document.createElement('div');
                 header.className = 'track-header';
                 header.textContent = `TRACK ${parseInt(this.id) + 1}`;
                 div.appendChild(header);
 
-                const status = document.createElement('div');
+                var status = document.createElement('div');
                 status.className = 'status-indicator status-ready';
                 status.textContent = 'READY';
                 this.elements.status = status;
                 div.appendChild(status);
 
-                const mainControls = document.createElement('div');
+                var mainControls = document.createElement('div');
                 mainControls.className = 'main-controls';
                 
-                const addKnob = (label, param, unit) => {
-                    const cont = document.createElement('div');
+                var addKnob = (label, param, unit) => {
+                    var cont = document.createElement('div');
                     cont.className = 'knob-container';
-                    const lg = document.createElement('div');
+                    var lg = document.createElement('div');
                     lg.className = 'knob-label-group';
                     lg.innerHTML = `<label>${label}</label>`;
-                    const val = document.createElement('span');
+                    var val = document.createElement('span');
                     val.className = 'param-value';
                     val.textContent = `0${unit}`;
                     lg.appendChild(val);
                     cont.appendChild(lg);
                     
-                    const inp = document.createElement('input');
+                    var inp = document.createElement('input');
                     inp.type = 'range';
                     inp.className = 'track-knob';
                     
@@ -171,22 +170,22 @@
                 
                 div.appendChild(mainControls);
                 
-                const fxGroup = document.createElement('div');
+                var fxGroup = document.createElement('div');
                 fxGroup.className = 'control-group track-fx-layout';
-                const fxTitle = document.createElement('div');
+                var fxTitle = document.createElement('div');
                 fxTitle.className = 'fx-chain-title';
                 fxTitle.textContent = 'Effects Chain:';
                 fxGroup.appendChild(fxTitle);
                 
-                const fxChainControls = document.createElement('div');
+                var fxChainControls = document.createElement('div');
                 fxChainControls.className = 'fx-chain-controls';
-                for(let i=0; i<7; i++) {
-                    const slot = document.createElement('div');
+                for(var i=0; i<7; i++) {
+                    var slot = document.createElement('div');
                     slot.className = 'fx-chain-slot';
-                    const c = document.createElement('input');
+                    var c = document.createElement('input');
                     c.type = 'checkbox';
                     c.dataset.slotIndex = i;
-                    const l = document.createElement('label');
+                    var l = document.createElement('label');
                     l.className = 'fx-chain-slot-label';
                     l.dataset.slotLabelIndex = i;
                     l.textContent = i+1;
@@ -200,17 +199,17 @@
             }
         }
 
-        const statusText = document.getElementById("status-text");
-        const splash = document.getElementById("splash");
-        const studioContainer = document.getElementById("mxs-studio-container");
-        const tracksContainer = document.getElementById("tracks-container");
-        const debugLog = document.getElementById("debug-log");
-        const cursorEl = document.getElementById("virtual-cursor");
-        const sampleGrid = document.getElementById("receiver-sample-grid");
+        var statusText = document.getElementById("status-text");
+        var splash = document.getElementById("splash");
+        var studioContainer = document.getElementById("mxs-studio-container");
+        var tracksContainer = document.getElementById("tracks-container");
+        var debugLog = document.getElementById("debug-log");
+        var cursorEl = document.getElementById("virtual-cursor");
+        var sampleGrid = document.getElementById("receiver-sample-grid");
         if (!sampleGrid) { console.error("sampleGrid not found"); window.onerror("sampleGrid not found", "", 0); }
         
-        for(let i=1; i<=20; i++) {
-            const btn = document.createElement("button");
+        for(var i=1; i<=20; i++) {
+            var btn = document.createElement("button");
             btn.className = "sample-btn";
             btn.textContent = i;
             btn.dataset.sample = i;
@@ -218,17 +217,17 @@
         }
 
         function logMsg(msg) {
-            const line = document.createElement("div");
+            var line = document.createElement("div");
             line.textContent = `> ${msg}`;
             debugLog.appendChild(line);
             if(debugLog.children.length > 15) debugLog.removeChild(debugLog.firstChild);
         }
         
-        window.onerror = (msg, url, line) => { logMsg(`❌ ERR: ${msg} (${line})`); };
+        window.onerror = function(msg, url, line) { logMsg(`❌ ERR: ${msg} (${line})`); };
 
         logMsg("🚀 MXS-004 Receiver Booting...");
 
-        let context, playerManager;
+        var context, playerManager;
         try {
             context = cast.framework.CastReceiverContext.getInstance();
             playerManager = context.getPlayerManager();
@@ -237,21 +236,21 @@
         }
         
         if (playerManager) {
-            playerManager.addEventListener(cast.framework.events.EventType.PLAYING, () => {
+            playerManager.addEventListener(cast.framework.events.EventType.PLAYING, function() {
                 logMsg("🔊 Audio stream playing!");
                 statusText.textContent = "LIVE AUDIO ACTIVE";
                 statusText.style.color = "#0f0";
             });
             
-            playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
+            playerManager.addEventListener(cast.framework.events.EventType.ERROR, function(event) {
                 logMsg(`❌ Stream Error: ${event.detailedErrorCode}`);
             });
         }
 
         if (context) {
-            const handleCustomMessage = (event) => {
+            var handleCustomMessage = function(event) {
                 try {
-                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                    var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
                     
                     if (data.type === 'connect' || data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
                         if(splash.style.display !== 'none') {
@@ -262,15 +261,15 @@
                     }
 
                     if (data.type === 'connect') {
-                        const targetUrl = data.wsUrl || data.url || data.audio_stream;
+                        var targetUrl = data.wsUrl || data.url || data.audio_stream;
                         if (targetUrl) {
-                            let directUrl = targetUrl;
+                            var directUrl = targetUrl;
                             if (targetUrl.includes("audio_stream=")) {
                                 directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
                             }
                             logMsg("🔗 Connecting Audio: " + directUrl);
-                            let request = new cast.framework.messages.LoadRequestData();
-                            let mediaInfo = new cast.framework.messages.MediaInformation();
+                            var request = new cast.framework.messages.LoadRequestData();
+                            var mediaInfo = new cast.framework.messages.MediaInformation();
                             mediaInfo.contentId = directUrl;
                             mediaInfo.contentType = 'audio/wav';
                             mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
@@ -306,21 +305,21 @@
                 cursorEl.style.transform = `translate(${state.cursor.x * window.innerWidth}px, ${state.cursor.y * window.innerHeight}px)`;
             }
             if (state.master) {
-                const vol = document.getElementById("master-volume");
+                var vol = document.getElementById("master-volume");
                 if (vol) vol.value = state.master.volume;
-                const rec = document.getElementById("master-record-button");
+                var rec = document.getElementById("master-record-button");
                 if (rec) rec.className = state.master.isRecording ? "button recording" : "button";
             }
             if (state.tracks && Array.isArray(state.tracks)) {
-                state.tracks.forEach((ts) => {
-                    let div = document.querySelector(`.track[data-track-index="${ts.id}"]`);
+                state.tracks.forEach(function(ts) {
+                    var div = document.querySelector(`.track[data-track-index="${ts.id}"]`);
                     if (!div) {
-                        const tv = new MiniTrackView(ts.id);
+                        var tv = new MiniTrackView(ts.id);
                         div = tv.buildElement();
                         tracksContainer.appendChild(div);
                         div.__tv = tv;
                     }
-                    const tv = div.__tv;
+                    var tv = div.__tv;
                     if (tv && tv.elements && tv.elements.knobs) {
                         if (tv.elements.knobs.vol) tv.elements.knobs.vol.value = ts.volume;
                         if (tv.elements.knobs.pan) tv.elements.knobs.pan.value = ts.pan;
@@ -331,8 +330,8 @@
                     }
                     if (ts.effects) {
                         ts.effects.forEach(fx => {
-                            const lbl = div.querySelector(`label[data-slot-label-index="${fx.slot}"]`);
-                            const chk = div.querySelector(`input[data-slot-index="${fx.slot}"]`);
+                            var lbl = div.querySelector(`label[data-slot-label-index="${fx.slot}"]`);
+                            var chk = div.querySelector(`input[data-slot-index="${fx.slot}"]`);
                             if(chk) chk.checked = fx.enabled;
                             if(lbl) {
                                 lbl.textContent = fx.name || (fx.slot + 1);
