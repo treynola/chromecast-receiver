@@ -2,15 +2,17 @@
 <html lang="en">
 
 <head>
-    <title>MXS-004 PRO MONITOR V9.4</title>
+    <title>MXS-004 PRO MONITOR V12.30 (Loop Slicing)</title>
     <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
+    <meta name="version" content="v12.30">
+    <meta name="timestamp" content="2026-03-22T09:42:00Z">
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_v101.css">
+    <link rel="stylesheet" href="styles_main.css">
     <style>
         body {
             background-color: #000000 !important;
@@ -264,16 +266,20 @@
 
         #ws-active-status {
             position: fixed;
-            bottom: 10px;
-            right: 10px;
+            bottom: 5px;
+            right: 5px;
             font-size: 0.7em;
-            color: rgba(255, 255, 255, 0.5);
+            color: #00ff00;
             font-family: 'Courier New', monospace;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            background: rgba(0, 0, 0, 0.7);
             padding: 4px 8px;
             border-radius: 4px;
-            border: 1px solid var(--green);
+            border: 1px solid #00ff00;
+            text-shadow: 0 0 5px #00ff00;
+            max-width: 320px;
+            word-wrap: break-word;
+            pointer-events: none;
         }
 
         #audio-unmute-btn {
@@ -342,6 +348,8 @@
         <div class="loader"></div>
         <h1 style="font-size: 3em;">NOWMULTIMEDIA MXS-004</h1>
         <div id="boot-status" style="font-family: monospace; color: #888;">Synchronizing UI...</div>
+        <div style="font-family: monospace; color: #555; font-size: 0.8em; margin-top: 5px;">v12.16 | 12:16 PM Feb 8
+        </div>
         <div id="ws-status"
             style="font-family: monospace; font-size: 1.2em; color: #555; margin-top: 10px; background: rgba(20,20,20,0.8); padding: 5px;">
             Waiting for signal...</div>
@@ -360,25 +368,26 @@
             <div class="main-content">
                 <!-- Column 1: Master Controls -->
                 <div class="master-column">
-                    <!-- 1. Master Recording (Direct children to match TrackView structure) -->
+                    <!-- 1. Master Recording (Direct children to match main app) -->
                     <div class="track-header">Master Recording:</div>
                     <div id="recording-time-display" class="track-time-display">00:00:00</div>
 
+                    <!-- Ghost "Status" to align with Tracks -->
                     <!-- Replaced by Master Volume on Line 3 -->
                     <div class="master-item master-volume-aligned">
                         <div class="track-header">Vol</div>
-                        <input type="range" id="master-volume" min="-80" max="20" step="0.1" value="0">
+                        <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
                         <span id="master-volume-value" class="master-value">0.0 dB</span>
                     </div>
 
-                    <!-- 2. Master Waveform (Shifted to match track visualizer level) -->
+                    <!-- 2. Master Waveform -->
                     <div class="master-item master-waveform-item">
                         <div class="waveform-box master-waveform-box">
                             <div class="waveform-labels">
                                 <div class="waveform-label-external" style="margin-top: 2px;">L</div>
                                 <div class="waveform-label-external">R</div>
                             </div>
-                            <div id="master-waveform-container" class="waveform-canvas-container flex-grow">
+                            <div id="master-waveform-container" class="flex-grow">
                                 <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
                                 <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
                             </div>
@@ -386,25 +395,32 @@
                     </div>
 
                     <!-- 3. Loop Length -->
+                    <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
+                    <!-- 3. Loop Length (Top, Compact Row) -->
                     <div class="master-item master-row-layout">
                         <div class="track-header">Loop Length</div>
                         <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
                         <span id="loop-length-value" class="master-value">4.0s</span>
                     </div>
 
+                    <!-- Spacer removed -->
+                    <!-- <div class="master-spacer"></div> -->
+
                     <!-- 4. Combined REC and Format -->
                     <div class="master-item master-bottom-item">
                         <div class="master-rec-row">
                             <button id="master-record-button" class="button">REC</button>
-                            <select id="record-as-select" class="font-small" disabled>
-                                <option value="stereo" data-format="wav">Stereo (WAV)</option>
-                                <option value="stereo" data-format="mp4">Stereo (MP4)</option>
-                                <option value="stereo" data-format="alac">Stereo (ALAC)</option>
-                                <option value="stems" data-format="wav">Stems (WAV)</option>
-                            </select>
+                            <div id="record-format-display"
+                                style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
+                                Stereo (WAV)</div>
                         </div>
                     </div>
 
+                    <!-- Spacer 1 (Now top border of LFO block) -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- NEW: Side-by-Side LFO Container -->
+                    <!-- 3. Loop Length (Moved down, Compact Row) -->
                     <!-- Side-by-Side LFO Container (Bottom) -->
                     <div class="lfo-side-by-side-container">
                         <!-- Column Left: LFO 1 -->
@@ -445,7 +461,10 @@
                         </div>
                     </div>
 
-                    <!-- 4. Sample Station -->
+                    <!-- Spacer 3 (Now bottom border of LFO block) -->
+                    <div class="master-spacer"></div>
+
+                    <!-- 4. Sample Station (Mirrored) -->
                     <div class="master-item sample-center-container">
                         <div class="track-header">Sample Station</div>
                         <div class="sample-grid">
@@ -472,11 +491,16 @@
                         </div>
                     </div>
 
-                    <!-- 12. Import & Media Buttons -->
-                    <div class="master-item master-bottom-buttons">
-                        <button id="show-sessions-button" class="button"><i class="fa-solid fa-list"></i> MEDIA</button>
-                        <button id="import-files-button" class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
-                        <button id="show-docs-button" class="button"><i class="fa-solid fa-book"></i> DOCS</button>
+                    <!-- Spacer 3 (Now bottom border of LFO block) -->
+                    <!-- <div class="master-spacer"></div> -->
+
+                    <!-- 11. Master Volume (Moved up to Line 3) -->
+                    <!-- Removed from here -->
+
+                    <!-- 12. Bottom Buttons -->
+                    <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
+                        <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
+                        <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
                     </div>
                 </div>
 
@@ -488,22 +512,24 @@
 
     <div id="cursor"></div>
     <div id="ws-active-status">Waiting for data...</div>
+    <audio id="cast-audio" preload="none"></audio>
     <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
 
     <script>
+        // Buffer the last state so we can retry when TrackView.js loads
+        let _pendingState = null;
+
         function handleScriptError(src) {
             const status = document.getElementById('ws-active-status');
             if (status) {
-                status.innerHTML = `<span style="color:#f44336">❌ Failed to load ${src}. Attempting fallback...</span>`;
+                status.innerHTML = `<span style="color:#f44336">❌ Failed to load ${src}.</span>`;
             }
-            if (src === 'TrackView.js') {
-                const s = document.createElement('script');
-                s.src = 'src/ui/TrackView.js';
-                document.head.appendChild(s);
-            }
+            console.error('Script load failed:', src);
         }
     </script>
-    <script src="TrackView.js" onerror="handleScriptError('TrackView.js')"></script>
+    <script src="src/ui/TrackView.js" onerror="handleScriptError('src/ui/TrackView.js')"
+        onload="console.log('✅ TrackView.js loaded!'); if (_pendingState) { applyState(_pendingState); }"></script>
+
     <script>
         let trackViews = [];
         let tracksInited = false;
@@ -513,9 +539,10 @@
                 // FIX: Only initialize tracks if they are present in the state AND not already inited
                 if (!tracksInited && state.tracks && state.tracks.length > 0) {
                     if (typeof TrackView === 'undefined') {
-                        console.warn("⏳ TrackView.js not loaded yet (or failed)...");
+                        console.warn("⏳ TrackView.js not loaded yet, buffering state...");
+                        _pendingState = state; // Buffer for retry when script loads
                         const activeEl = document.getElementById('ws-active-status');
-                        if (activeEl) activeEl.textContent = "⏳ Waiting for TrackView.js...";
+                        if (activeEl) activeEl.textContent = "⏳ Loading TrackView.js...";
                         return;
                     }
                     const container = document.getElementById('tracks-container');
@@ -574,12 +601,17 @@
                 }
 
                 if (state.transport) {
-                    // Detect sample rate from sender and pre-initialize audio context
-                    if (state.transport.sampleRate && state.transport.sampleRate !== detectedSampleRate) {
-                        detectedSampleRate = state.transport.sampleRate;
-                        console.log('📡 Detected sender sample rate:', detectedSampleRate, 'Hz');
-                        // Pre-initialize audio with correct sample rate
-                        initAudioPlayback(detectedSampleRate);
+                    // V21: Dynamic Sample Rate Sync
+                    // Detect rate from sender and update scheduling clock
+                    if (state.transport.sampleRate && state.transport.sampleRate !== activeSampleRate) {
+                        console.log(`📡 Sample Rate Sync: ${activeSampleRate}Hz -> ${state.transport.sampleRate}Hz`);
+                        activeSampleRate = state.transport.sampleRate;
+
+                        // Resync scheduler on rate change to prevent time-axis jump
+                        wavNextPlayTime = 0;
+
+                        // Pre-warm context if needed
+                        initAudioPlayback();
                     }
 
                     const timeDisplay = document.getElementById('recording-time-display');
@@ -592,7 +624,6 @@
                             const bars = parseInt(parts[0]) || 0;
                             const beats = parseInt(parts[1]) || 0;
                             const ticks = parseInt(parts[2]) || 0;
-                            // Convert to seconds (assuming 120 BPM, 4/4 time: 1 bar = 2s)
                             const bpm = state.transport.bpm || 120;
                             const secondsPerBeat = 60 / bpm;
                             const totalSeconds = (bars * 4 * secondsPerBeat) + (beats * secondsPerBeat) + (ticks * secondsPerBeat / 4);
@@ -631,9 +662,14 @@
 
                         // Meter Update (Hack for receiver display)
                         if (tv.elements.waveformCanvasL) {
-                            const ctx = tv.elements.waveformCanvasL.getContext('2d');
-                            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 300, 100);
-                            ctx.fillStyle = '#0f0'; ctx.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                            const ctxL = tv.elements.waveformCanvasL.getContext('2d');
+                            ctxL.fillStyle = '#000'; ctxL.fillRect(0, 0, 300, 100);
+                            ctxL.fillStyle = '#0f0'; ctxL.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
+                        }
+                        if (tv.elements.waveformCanvasR) {
+                            const ctxR = tv.elements.waveformCanvasR.getContext('2d');
+                            ctxR.fillStyle = '#000'; ctxR.fillRect(0, 0, 300, 100);
+                            ctxR.fillStyle = '#0f0'; ctxR.fillRect(0, 0, 300 * (t.meters?.r || 0), 100);
                         }
                     });
                 }
@@ -642,148 +678,247 @@
             }
         }
 
-        // ============= AUDIO STREAMING PLAYBACK =============
+        // ============= AUDIO STREAMING PLAYBACK (V18 - Live WebSocket) =============
+        // WebSocket delivers audio in real-time (~5ms). HTTP WAV added ~1.5s of
+        // TCP/chunked buffering. The garbling was a sender-side shared buffer race
+        // fixed by .buffer.slice(0) — independent of delivery method.
+        // Data: Int16 interleaved stereo from WS (after 4-byte header stripped)
         let audioCtx = null;
         let audioQueue = [];
         let isAudioPlaying = false;
 
-        // WebRTC State
+        // WebRTC State (kept for signaling)
         let peerConnection = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        let detectedSampleRate = 48000; // Default, will be updated from sender state
-        const CHANNELS = 2;
-        const BUFFER_SIZE = 4096; // Increased for smoother playback (~85ms @ 48kHz)
+        let activeSampleRate = 48000; // Synchronized with sender via state metadata
 
-        function initAudioPlayback(sampleRate) {
-            // Use sender's sample rate if provided, otherwise use default
-            const targetRate = sampleRate || detectedSampleRate || 48000;
+        // Audio Sync Controls
+        const SCHEDULE_AHEAD = 0.150; // V114.14: Restored to 150ms to buffer > 1x 85ms chunk
+        let wavNextPlayTime = 0;
+        let isBuffering = true; // V114: Pre-roll state
+        let smoothedDrift = 0;  // V114: EWMA Filtered drift
+        let pendingBuffers = []; // V114.1: Queue for pre-roll
+        let _activeWsUrl = null; // V114.29: Bulletproof WS String Lock
 
-            if (audioCtx) {
-                // If sample rate changed, recreate context
-                if (audioCtx.sampleRate !== targetRate) {
-                    console.log(`🔊 Sample rate mismatch: ${audioCtx.sampleRate} vs ${targetRate}, recreating context...`);
-                    audioCtx.close();
-                    audioCtx = null;
-                    audioQueue = [];
-                } else {
-                    return; // Already initialized with correct rate
-                }
-            }
-
+        function initAudioPlayback() {
+            if (audioCtx) return;
             try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: targetRate,
-                    latencyHint: 'playback' // 'playback' for smoother audio vs 'interactive' for low latency
-                });
-                console.log('🔊 Receiver AudioContext created:', audioCtx.sampleRate, 'Hz');
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
             } catch (e) {
-                // Fallback if specific sample rate not supported
-                console.warn('⚠️ Failed to create AudioContext with rate', targetRate, 'falling back to default');
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
-                console.log('🔊 Receiver AudioContext (fallback):', audioCtx.sampleRate, 'Hz');
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             }
-
-            const unmuteBtn = document.getElementById('audio-unmute-btn');
+            console.log('🔊 AudioContext:', audioCtx.sampleRate, 'Hz');
+            wavNextPlayTime = 0;
             if (audioCtx.state === 'suspended') {
+                const unmuteBtn = document.getElementById('audio-unmute-btn');
                 if (unmuteBtn) unmuteBtn.classList.add('visible');
             }
+        }
 
-            // Create ScriptProcessor for real-time playback
-            const processor = audioCtx.createScriptProcessor(BUFFER_SIZE, 0, CHANNELS);
-            processor.onaudioprocess = (e) => {
-                const left = e.outputBuffer.getChannelData(0);
-                const right = e.outputBuffer.getChannelData(1);
+        function handleAudioChunk(pcmData) {
+            // V115: Extract A/V Sync timestamp from the 4-byte header
+            // We read from the buffer directly before the pcmData offset
+            try {
+                const headerView = new DataView(pcmData.buffer, pcmData.byteOffset - 4, 4);
+                window._lastAudioTimestamp = headerView.getUint32(0, true);
+                window._lastAudioReceiveTime = performance.now();
+                
+                // V115: Calculate dynamic latency for A/V Sync
+                if (audioCtx) {
+                    const bufferLevel = (wavNextPlayTime - audioCtx.currentTime);
+                    window._currentAudioLatency = bufferLevel * 1000;
+                }
+            } catch (e) { }
 
-                // Fill from queue
-                let samplesNeeded = BUFFER_SIZE;
-                let offset = 0;
+            // V114.3: Silence any HTML audio stream if PCM data is arriving
+            const streamAudio = document.getElementById('cast-audio-stream');
+            if (streamAudio && !streamAudio.paused) {
+                console.log("🔇 Silencing HTTP stream (PCM active)");
+                streamAudio.pause();
+                streamAudio.src = "";
+            }
 
-                // Jitter management: skip if queue > 200ms to prevent lag buildup
-                const maxSamplesInQueue = audioCtx.sampleRate * 0.20;
-                let totalBuffered = audioQueue.reduce((acc, chunk) => acc + (chunk.data.length / 2 - chunk.offset), 0);
+            // V114.2: Hard exit if WebRTC is active to prevent dual-stream phasing
+            const webrtcActive = !!(peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.iceConnectionState === 'connected'));
+            if (webrtcActive) {
+                if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+                return;
+            }
 
-                if (totalBuffered > maxSamplesInQueue) {
-                    // Skip old audio to catch up
-                    let skipSamples = audioCtx.sampleRate * 0.08; // Skip 80ms
-                    while (skipSamples > 0 && audioQueue.length > 0) {
-                        const chunk = audioQueue[0];
-                        const available = chunk.data.length / 2 - chunk.offset;
-                        const toSkip = Math.min(skipSamples, available);
-                        chunk.offset += toSkip;
-                        skipSamples -= toSkip;
-                        if (chunk.offset * 2 >= chunk.data.length) audioQueue.shift();
-                    }
+            if (!audioCtx) initAudioPlayback();
+            if (!audioCtx || audioCtx.state !== 'running') return;
+
+            try {
+                const dataView = new DataView(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
+                const sampleCount = Math.floor(pcmData.byteLength / 2);
+                const frameCount = sampleCount / 2; // stereo
+
+                const audioBuffer = audioCtx.createBuffer(2, frameCount, activeSampleRate);
+                const L = audioBuffer.getChannelData(0);
+                const R = audioBuffer.getChannelData(1);
+
+                for (let i = 0; i < frameCount; i++) {
+                    // Indexing: (i * 2 channels) * 2 bytes per sample
+                    L[i] = dataView.getInt16((i * 2) * 2, true) / 32768.0;
+                    R[i] = dataView.getInt16((i * 2 + 1) * 2, true) / 32768.0;
                 }
 
-                let maxPeak = 0;
-                while (samplesNeeded > 0 && audioQueue.length > 0) {
-                    const chunk = audioQueue[0];
-                    const availableStereoSamples = chunk.data.length / 2 - chunk.offset;
-                    const toRead = Math.min(samplesNeeded, availableStereoSamples);
+                const now = audioCtx.currentTime;
+                const duration = frameCount / activeSampleRate;
 
-                    for (let i = 0; i < toRead; i++) {
-                        const idx = (chunk.offset + i) * 2;
-                        // Read interleaved stereo: L, R, L, R...
-                        left[offset + i] = chunk.data[idx] || 0;
-                        right[offset + i] = chunk.data[idx + 1] || 0;
+                if (isBuffering) {
+                    pendingBuffers.push(audioBuffer);
+                    const totalQueuedSecs = pendingBuffers.length * duration;
+                    
+                    if (totalQueuedSecs >= SCHEDULE_AHEAD) {
+                        isBuffering = false;
+                        console.log("🚀 Buffer Zone reached, flushing", pendingBuffers.length, "chunks");
+                        wavNextPlayTime = audioCtx.currentTime + 0.050; // V114.13: Hardware padding (Web Audio needs 50ms decode buffer)
+                        pendingBuffers.forEach(buf => {
+                            const source = audioCtx.createBufferSource();
+                            source.buffer = buf;
+                            source.connect(audioCtx.destination);
+                            source.start(wavNextPlayTime);
+                            wavNextPlayTime += buf.duration;
+                        });
+                        pendingBuffers = [];
                     }
-
-                    // Track peak for debugging
-                    if (toRead > 0) {
-                        for (let k = 0; k < toRead; k += 64) {
-                            const val = Math.abs(chunk.data[(chunk.offset + k) * 2]);
-                            if (val > maxPeak) maxPeak = val;
-                        }
-                    }
-
-                    chunk.offset += toRead;
-                    offset += toRead;
-                    samplesNeeded -= toRead;
-
-                    if (chunk.offset * 2 >= chunk.data.length) {
-                        audioQueue.shift();
-                    }
+                    window._lastIsBuffering = true;
+                    window._lastBufferLevel = totalQueuedSecs;
+                    return;
                 }
 
-                if (offset > 0) window._lastAudioPeak = maxPeak;
+                // Regular Playback Path
+                const source = audioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioCtx.destination);
 
-                // Fill remaining with silence
-                for (let i = offset; i < BUFFER_SIZE; i++) {
-                    left[i] = 0;
-                    right[i] = 0;
+                const bufferLevel = wavNextPlayTime - now;
+                const targetBuffer = 0.150; // V114.14: Restored margin to prevent instant network starvation
+                let currentDrift = bufferLevel - targetBuffer;
+                
+                // V114.9: Removed Adaptive PLL (Dynamic playbackRate).
+                // Dynamic pitch bending causes audible "wow and flutter" (waviness).
+                // We lock the rate to exactly 1.0 for perfect musical fidelity, 
+                // and rely solely on buffer resets to handle extreme drift.
+                source.playbackRate.value = 1.0; 
+
+                // Emergency Reset (V114.8: Stop overlapping sources)
+                if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
+                    console.warn(`⚠️ Buffer sync lost (Drift: ${bufferLevel.toFixed(3)}s), re-buffering...`);
+                    wavNextPlayTime = now + 0.050; // V114.13: Hardware padding (Reset)
+                    isBuffering = true;
+                    pendingBuffers = [audioBuffer]; 
+                    
+                    // NEW V114.8: Stop all previously scheduled nodes to prevent overlapping/waviness
+                    if (window._activeSources) {
+                        window._activeSources.forEach(s => {
+                            try { s.stop(); s.disconnect(); } catch(e){}
+                        });
+                    }
+                    window._activeSources = [];
+                    
+                    wavNextPlayTime += duration;
+                    smoothedDrift = 0;
+                    return;
                 }
-            };
 
-            processor.connect(audioCtx.destination);
-            isAudioPlaying = true;
+                source.start(wavNextPlayTime);
+                wavNextPlayTime += duration;
+                
+                // Track active sources so we can stop them safely on lag resets
+                if (!window._activeSources) window._activeSources = [];
+                window._activeSources.push(source);
+                source.onended = () => {
+                    if (window._activeSources) {
+                        const idx = window._activeSources.indexOf(source);
+                        if (idx > -1) window._activeSources.splice(idx, 1);
+                    }
+                };
+
+                window._lastBufferLevel = bufferLevel;
+                window._lastPlaybackRate = source.playbackRate.value;
+                window._lastIsBuffering = false;
+            } catch (e) {
+                console.error('Audio error:', e);
+            }
         }
 
         async function handleWebRTCOffer(sdp) {
-            console.log("🔊 WebRTC Offer Received");
+            console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
+            const statusEl = document.getElementById('ws-active-status');
+            if (statusEl) statusEl.textContent = "🔊 WebRTC: Setting up...";
+
             if (peerConnection) peerConnection.close();
 
             peerConnection = new RTCPeerConnection(rtcConfig);
 
+            // Connection state monitoring
+            peerConnection.onconnectionstatechange = () => {
+                console.log("🔗 WebRTC Connection State:", peerConnection.connectionState);
+                if (statusEl) statusEl.textContent = `WebRTC: ${peerConnection.connectionState}`;
+            };
+
+            peerConnection.oniceconnectionstatechange = () => {
+                console.log("🧊 ICE Connection State:", peerConnection.iceConnectionState);
+            };
+
             peerConnection.ontrack = (e) => {
-                console.log("🔊 WebRTC Audio Track Received");
+                console.log("🔊 WebRTC Audio Track Received!", e.streams.length, "streams");
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Track received!";
+
+                // Create or get audio element
                 let audioEl = document.getElementById('webrtc-audio');
                 if (!audioEl) {
                     audioEl = document.createElement('audio');
                     audioEl.id = 'webrtc-audio';
-                    audioEl.autoplay = true;
                     document.body.appendChild(audioEl);
                 }
-                audioEl.srcObject = e.streams[0];
-                audioEl.play().then(() => {
-                    console.log("✅ WebRTC Audio Playing");
-                    const btn = document.getElementById('audio-unmute-btn');
-                    if (btn) btn.classList.remove('visible');
-                }).catch(e => console.warn("Autoplay block:", e));
 
-                // Stop PCM processor if running
+                // AGGRESSIVE PLAYBACK for Chromecast
+                audioEl.autoplay = true;
+                audioEl.muted = false;
+                audioEl.volume = 1.0;
+                audioEl.srcObject = e.streams[0];
+
+                // Force play with retry
+                const tryPlay = () => {
+                    audioEl.play().then(() => {
+                        console.log("✅ WebRTC Audio Playing Successfully!");
+                        if (statusEl) statusEl.textContent = "✅ WebRTC AUDIO PLAYING";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.remove('visible');
+                    }).catch(err => {
+                        console.warn("⚠️ WebRTC Autoplay blocked:", err);
+                        if (statusEl) statusEl.textContent = "⚠️ WebRTC: Tap to unmute";
+                        const btn = document.getElementById('audio-unmute-btn');
+                        if (btn) btn.classList.add('visible');
+                        // Retry after 1 second
+                        setTimeout(tryPlay, 1000);
+                    });
+                };
+                tryPlay();
+
+                // V114.3: Absolute silencing of other paths
+                const streamAudio = document.getElementById('cast-audio-stream');
+                if (streamAudio) {
+                    streamAudio.pause();
+                    streamAudio.src = "";
+                }
+
+                // V114.2: ABSOLUTE PCM MUTING when WebRTC arrives
                 if (audioCtx) {
-                    audioCtx.suspend();
-                    isAudioPlaying = false;
+                    console.log("🔇 Suspending PCM context (WebRTC OVERLORD active)");
+                    try {
+                        audioCtx.suspend();
+                        isAudioPlaying = false;
+                        pendingBuffers = []; // Clear V114.1 queue
+                        audioQueue = []; 
+                        wavNextPlayTime = 0;
+                        isBuffering = true; // Reset so PCM has to re-buffer if WebRTC drops
+                    } catch (e) {
+                         console.warn("Error suspending AudioContext:", e);
+                    }
                 }
             };
 
@@ -808,8 +943,10 @@
                         sdp: answer.sdp
                     }));
                 }
+                if (statusEl) statusEl.textContent = "🔊 WebRTC: Answer sent, waiting for track...";
             } catch (err) {
                 console.error("WebRTC Error:", err);
+                if (statusEl) statusEl.textContent = "❌ WebRTC Error: " + err.message;
             }
         }
 
@@ -821,37 +958,19 @@
             }
         }
 
-        function handleAudioChunk(pcmData) {
-            // Initialize audio context with detected sample rate if not already done
-            if (!audioCtx) initAudioPlayback(detectedSampleRate);
-
-            // 4-byte padding header in backend ensures alignment.
-            try {
-                // pcmData is already aligned (starts at offset 4 from original message)
-                const floatView = new Float32Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength / 4);
-
-                // Add to queue with read offset
-                audioQueue.push({ data: floatView, offset: 0 });
-
-                // Limit queue to ~500ms of audio using the actual sample rate
-                const currentRate = audioCtx ? audioCtx.sampleRate : detectedSampleRate;
-                const maxChunks = Math.ceil((currentRate * 0.5) / (BUFFER_SIZE / 2));
-                while (audioQueue.length > maxChunks) {
-                    audioQueue.shift();
-                }
-            } catch (e) {
-                console.error("Audio Alignment Error:", e);
-            }
-        }
 
         function startAudioManually() {
-            if (audioCtx) {
-                audioCtx.resume().then(() => {
-                    console.log("🔊 Audio Context Resumed Manually");
+            // V16: Play the native <audio> element (user gesture unlocks autoplay)
+            const audioEl = document.getElementById('cast-audio');
+            if (audioEl && audioEl.src) {
+                audioEl.play().then(() => {
+                    console.log('🔊 Audio started manually');
                     const btn = document.getElementById('audio-unmute-btn');
                     if (btn) btn.classList.remove('visible');
-                });
+                }).catch(e => console.error('Play failed:', e));
             }
+            // Also resume AudioContext if it exists (legacy)
+            if (audioCtx) audioCtx.resume();
         }
 
 
@@ -889,9 +1008,11 @@
                 lastDataTime = Date.now();
 
                 if (statusEl) {
-                    statusEl.textContent = "✅ WS Connected - Waiting for state...";
+                    statusEl.textContent = "✅ WS Connected - Starting WAV stream...";
                     statusEl.style.color = "#4CAF50";
                 }
+
+                // V18: Audio comes via WebSocket directly (no HTTP WAV fetch needed)
 
                 // Start heartbeat check (every 10s, detect stale after 30s of no data)
                 heartbeatInterval = setInterval(() => {
@@ -917,19 +1038,24 @@
                 msgCount++;
                 const debugEl = document.getElementById('debug-info');
                 const activeEl = document.getElementById('ws-active-status');
-
                 if (activeEl && msgCount % 20 === 0) {
                     const peak = (window._lastAudioPeak || 0).toFixed(3);
-                    activeEl.textContent = `Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Bytes: ${e.data.byteLength}`;
+                    const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
+                    const buff = (window._lastBufferLevel || 0).toFixed(3);
+                    const rate = (window._lastPlaybackRate || 1.0).toFixed(4);
+                    const stateTxt = window._lastIsBuffering ? 'BUFFERING' : 'STABLE';
+                    activeEl.innerHTML = `v12.28 V114 | ${stateTxt} | Buffer: ${buff}s | Rate: ${rate}x<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState}`;
                 }
 
                 if (typeof e.data === 'string') {
                     try {
                         const msg = JSON.parse(e.data);
                         if (msg.type === 'offer') {
-                            handleWebRTCOffer(msg.sdp);
-                        } else if (msg.type === 'ice-candidate') {
-                            handleIceCandidate(msg.candidate);
+                            handleWebRTCOffer(msg.sdp || msg.data?.sdp);
+                        } else if (msg.type === 'answer') {
+                            // Should not happen on receiver usually
+                        } else if (msg.type === 'ice-candidate' || msg.candidate) {
+                            handleIceCandidate(msg.candidate || msg.data?.candidate || msg);
                         }
                     } catch (err) { }
                     return;
@@ -938,45 +1064,70 @@
                     const view = new Uint8Array(e.data);
 
                     if (view[0] === 3) {
-                        const json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+                        let json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
+
+                        // DEBUG: Log what we received
+                        console.log("📦 MSG_META received, raw type:", json.type, "data.type:", json.data?.type);
+
+                        // CRITICAL FIX: Unwrap nested data from push_ws_json({ data: ... })
+                        if (json.data && typeof json.data === 'object' && json.data.type) {
+                            console.log("📦 Unwrapping nested data, inner type:", json.data.type);
+                            json = json.data;
+                        }
+
+                        // DEBUG: Log final type after unwrap
+                        console.log("📦 Final message type:", json.type);
+
                         if (json.type === 'state') {
-                            if (audioCtx && audioCtx.state === 'suspended') {
-                                // Background resume attempt
+                            // V114.2: Only resume PCM context if WebRTC is NOT active
+                            const webrtcActive = !!(peerConnection && peerConnection.connectionState === 'connected');
+                            if (audioCtx && audioCtx.state === 'suspended' && !webrtcActive) {
                                 audioCtx.resume();
                             }
-
-                            // VISUAL SYNC: Reverted complex delay logic. 
-                            // Prioritizing immediate visual feedback. Audio buffer is reduced to 2048 (~42ms)
                             applyState(json);
-
-                            if (debugEl && debugEl.textContent.includes('Waiting')) debugEl.textContent = "✅ Valid State Received";
+                            if (debugEl && (msgCount % 50 === 0)) {
+                                debugEl.textContent = `✅ State Rx | Mode: ${peerConnection ? 'WebRTC' : 'PCM'} | Q: ${audioQueue.length}`;
+                            }
                         }
                         else if (json.type === 'cursor') {
+                            // ... cursor logic is fine ...
                             const cur = document.getElementById('cursor');
                             const scaler = document.getElementById('app-scaler');
                             if (cur && scaler) {
                                 const rect = scaler.getBoundingClientRect();
                                 cur.style.display = 'block';
-                                // Position relative to scaled container (accounts for CSS transform)
-                                // Cursor hotspot is at top-left, so no offset needed
                                 const x = rect.left + json.x * rect.width;
                                 const y = rect.top + json.y * rect.height;
-                                cur.style.left = x + "px";
-                                cur.style.top = y + "px";
+                                // V114.29: Hardware accelerated cursor for ~60fps smooth tracking
+                                cur.style.transform = `translate(${x}px, ${y}px)`;
+                                cur.style.left = "0px";
+                                cur.style.top = "0px";
                             }
                         }
                         else if (json.type === 'offer') {
-                            handleWebRTCOffer(json.sdp || json.data?.sdp);
+                            console.log("🔊 WebRTC Offer Extracted from binary frame!");
+                            const statusEl = document.getElementById('ws-active-status');
+                            if (statusEl) statusEl.textContent = "🔊 GOT OFFER! Creating answer...";
+                            handleWebRTCOffer(json.sdp);
                         }
-                        else if (json.type === 'ice-candidate') {
-                            handleIceCandidate(json.candidate || json.data?.candidate);
+                        else if (json.type === 'ice-candidate' || json.candidate) {
+                            handleIceCandidate(json.candidate || json);
                         }
                     } else if (view[0] === 2) {
-                        // Audio chunk - f32le stereo PCM
-                        // Use 4-byte offset for alignment
+                        // Audio chunk - Float32 stereo PCM (V20 High Fidelity)
                         audioCount++;
-                        const pcmData = new Uint8Array(e.data, 4);
-                        handleAudioChunk(pcmData);
+                        
+                        // V114.7: Strict Single-Path Enforcement
+                        // If we are getting PCM packets, MUTE the WebRTC audio element to prevent phasing/waviness
+                        const webrtcEl = document.getElementById('webrtc-audio');
+                        if (webrtcEl && !webrtcEl.paused) {
+                            webrtcEl.pause();
+                            webrtcEl.muted = true;
+                        }
+
+                        // V22/115: Skip 4 bytes (MSG_AUDIO + 3 padding bytes) for 4-byte alignment
+                        // The first 4 bytes now contain our timestamp (V115)
+                        handleAudioChunk(new Uint8Array(e.data, 4));
                     }
                 } catch (err) {
                     console.error("Parse Error:", err);
@@ -1011,16 +1162,104 @@
             if (typeof cast !== 'undefined') {
                 const ctx = cast.framework.CastReceiverContext.getInstance();
                 ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
-                    const url = e.data.wsUrl || e.data;
-                    if (url) connectWS(url);
+                    console.log("📨 Received Cast Message:", e.data);
+                    
+                    // V12.31: Universal Payload Handling
+                    const data = (typeof e.data === 'string') ? JSON.parse(e.data) : e.data;
+                    
+                    // 1. Check for STATE_UPDATE (Direct Mirroring)
+                    if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                        const state = data.state || data.data;
+                        if (state) applyState(state);
+                        return;
+                    }
+
+                    // 2. Check for WebSocket Connection URL
+                    let url = data.wsUrl || data;
+                    if (url && typeof url === 'string' && (url.startsWith('ws') || url.includes(':8083'))) {
+                        // V114.29: Bulletproof Resiliency Fix - Ignore redundant connect messages using strict global var lock
+                        if (_activeWsUrl === url && currentWS && (currentWS.readyState === WebSocket.CONNECTING || currentWS.readyState === WebSocket.OPEN)) {
+                            console.log("♻️ Already connecting/connected to same WS URL, ignoring redundant connect message");
+                            return;
+                        }
+                        _activeWsUrl = url;
+
+                        // Check for embedded audio stream in WS URL query params
+                        try {
+                            const parsed = new URL(url.replace('ws://', 'http://').replace('wss://', 'https://'));
+                            const audioUrl = parsed.searchParams.get('audio_stream');
+
+                            if (audioUrl) {
+                                console.log("🎵 Found Audio Stream in Message:", audioUrl);
+                                playAudioStream(audioUrl);
+                            }
+                        } catch (err) {
+                            console.warn("Error parsing WS URL for audio:", err);
+                        }
+
+                        connectWS(url);
+                    }
                 });
-                const options = new cast.framework.CastReceiverOptions();
                 options.disableIdleTimeout = true;
-                options.statusText = 'Ready to Mix (v1:18 PM)';
-                console.log("🚀 MxsReceiver v9.4 - TIMESTAMP 1:18 PM");
+                options.statusText = 'MXS-004 v12.30 (March 20, 2026 - 0.25x Gain)';
+                console.log("🚀 MxsReceiver v12.30 - TIMESTAMP Friday, March 20, 2026 - 10:30 AM - Low Distortion");
                 ctx.start(options);
             }
         };
+
+        // --- Audio Stream Playback ---
+        function playAudioStream(initialUrl) {
+            let url = initialUrl;
+            // Handle URL-encoded strings if needed (though usually decoded by caller)
+            try { url = decodeURIComponent(url); } catch (e) { }
+
+            if (!url) return;
+
+            console.log("🎵 Initiating Audio Stream Playback:", url);
+
+            // Check if audio element already exists
+            let audio = document.getElementById('cast-audio-stream');
+            if (audio) {
+                console.log("♻️ Updating existing audio stream...");
+                audio.src = url;
+            } else {
+                audio = new Audio(url);
+                audio.id = 'cast-audio-stream';
+                audio.crossOrigin = "anonymous";
+                audio.preload = "auto";
+            }
+
+            // Auto-play handling
+            const playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log("✅ Audio playback started successfully");
+                }).catch(e => {
+                    console.warn("⚠️ Audio autoplay blocked or failed:", e);
+                });
+            }
+
+            // Error handling/Retries
+            audio.onerror = (e) => {
+                console.error("❌ Audio stream error:", e);
+                // Simple retry logic after 2s
+                setTimeout(() => {
+                    console.log("🔄 Retrying audio stream...");
+                    audio.src = url; // Force reload
+                    audio.load();
+                    audio.play().catch(e => console.warn("Retry play failed:", e));
+                }, 2000);
+            };
+        }
+
+        // Check URL params on load
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialAudioUrl = urlParams.get('audio_stream');
+        if (initialAudioUrl) {
+            playAudioStream(initialAudioUrl);
+        } else {
+            console.log("ℹ️ No audio_stream parameter found on load.");
+        }
 
         // --- Auto-Scaler Logic ---
         function scaleApp() {
@@ -1048,4 +1287,4 @@
     </script>
 </body>
 
-</html>
+</html>// Trigger Rebuild Fri Mar 20 10:30:00 CST 2026
