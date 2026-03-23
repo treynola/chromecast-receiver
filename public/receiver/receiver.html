@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MXS-004 PRO RECEIVER V12.30</title>
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link rel="stylesheet" href="styles_main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #000 !important; overflow: hidden; margin: 0; padding: 0; width: 100vw; height: 100vh; }
+        cast-media-player { display: none; }
+        .container { display: none; opacity: 1 !important; pointer-events: none !important; }
+        #splash { text-align: center; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #000; z-index: 9999; position: absolute; top: 0; left: 0; width: 100%; }
+        #splash h1 { color: #FAD78E; font-size: 3.5em; margin-bottom: 10px; font-family: 'Mexcellent', sans-serif; }
+        #splash h2 { color: #008000; font-size: 1.5em; font-family: 'Courier New', monospace; }
+        #status-text { color: #666; margin-top: 30px; font-size: 1.2em; font-family: 'Courier New', monospace; }
+        #virtual-cursor { display: none; position: absolute; width: 24px; height: 24px; z-index: 10000; pointer-events: none; transition: transform 0.05s linear; }
+        #virtual-cursor svg { filter: drop-shadow(0 0 2px rgba(0,0,0,0.8)); }
+        * { pointer-events: none !important; user-select: none !important; }
+        #debug-log { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; border-radius: 4px; z-index: 10001; max-width: 80%; pointer-events: none !important; }
+    </style>
+</head>
+<body>
+    <cast-media-player></cast-media-player>
+    <div id="splash">
+        <h1>MXS-004 STUDIO</h1>
+        <h2>LIVE MIRROR ACTIVE</h2>
+        <div id="status-text">WAITING FOR SENDER...</div>
+    </div>
+    <div id="mxs-studio-container" class="container">
+        <div class="header">
+            <h1>NOWMULTIMEDIA MXS-004</h1>
+            <div class="header-right">
+                <button id="cast-btn" style="color: #0f0;"><i class="fa-brands fa-chromecast"></i></button>
+                <h2>Mix Studio-004</h2>
+            </div>
+        </div>
+        <div class="main-content">
+            <div class="master-column">
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                <div class="master-item master-volume-aligned">
+                    <div class="track-header">Vol</div>
+                    <input type="range" id="master-volume" min="-80" max="20" step="0.1" value="0">
+                    <span id="master-volume-value" class="master-value">0.0 dB</span>
+                </div>
+                <div class="master-item master-waveform-item">
+                    <div class="waveform-box master-waveform-box">
+                        <div class="waveform-labels">
+                            <div class="waveform-label-external">L</div>
+                            <div class="waveform-label-external">R</div>
+                        </div>
+                        <div id="master-waveform-container" class="waveform-canvas-container flex-grow">
+                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
+                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="master-item master-row-layout">
+                    <div class="track-header">Loop Length</div>
+                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="master-value">4.0s</span>
+                </div>
+                <div class="master-item master-bottom-item">
+                    <div class="master-rec-row"><button id="master-record-button" class="button">REC</button></div>
+                </div>
+                <div class="lfo-side-by-side-container">
+                    <div class="lfo-column">
+                        <div class="master-item lfo-button-item"><button id="lfo-toggle">LFO 1</button></div>
+                        <div class="master-item lfo-meter-item"><div class="meter-container lfo-meter"><div id="lfo-meter-bar" class="meter-bar"></div></div></div>
+                        <div class="master-item">
+                            <label class="master-label" style="font-size:0.65em;">SWEEP 1</label>
+                            <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo-time-value" class="master-value">1.8s</span>
+                        </div>
+                    </div>
+                    <div class="lfo-separator"></div>
+                    <div class="lfo-column">
+                        <div class="master-item lfo-button-item"><button id="lfo2-toggle">LFO 2</button></div>
+                        <div class="master-item lfo-meter-item"><div class="meter-container lfo-meter"><div id="lfo2-meter-bar" class="meter-bar"></div></div></div>
+                        <div class="master-item">
+                            <label class="master-label" style="font-size:0.65em;">SWEEP 2</label>
+                            <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo2-time-value" class="master-value">1.8s</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="master-item sample-center-container">
+                    <div class="track-header">Sample Station</div>
+                    <div id="receiver-sample-grid" class="sample-grid"></div>
+                </div>
+            </div>
+            <div id="tracks-container" class="tracks-container"></div>
+        </div>
+    </div>
+    <div id="virtual-cursor">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" fill="#FAD78E" stroke="black" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+    </div>
+    <div id="debug-log"></div>
+
+    <script>
+        var _debugLogQueue = [];
+        window.onerror = function(msg, url, line) { 
+            var errStr = "❌ ERR: " + msg + " (" + line + ")";
+            console.error(errStr);
+            var logEl = document.getElementById("debug-log");
+            if(logEl) {
+                var d = document.createElement("div");
+                d.textContent = "> " + errStr;
+                logEl.appendChild(d);
+            } else {
+                _debugLogQueue.push(errStr);
+            }
+            return false;
+        };
+        
+        // Inline TrackView Logic to avoid Script Error (Line 0) from external JS loading on Chromecast
+        function MiniTrackView(id) {
+            this.id = id;
+            this.elements = { knobs: {}, valueDisplays: {} };
+        }
+        MiniTrackView.prototype.buildElement = function() {
+                var div = document.createElement('div');
+                div.className = 'track';
+                div.dataset.trackIndex = this.id;
+                
+                var header = document.createElement('div');
+                header.className = 'track-header';
+                header.textContent = "TRACK " + (parseInt(this.id) + 1);
+                div.appendChild(header);
+
+                var status = document.createElement('div');
+                status.className = 'status-indicator status-ready';
+                status.textContent = 'READY';
+                this.elements.status = status;
+                div.appendChild(status);
+
+                var mainControls = document.createElement('div');
+                mainControls.className = 'main-controls';
+                
+                var addKnob = function(label, param, unit) {
+                    var cont = document.createElement('div');
+                    cont.className = 'knob-container';
+                    var lg = document.createElement('div');
+                    lg.className = 'knob-label-group';
+                    lg.innerHTML = "<label>" + label + "</label>";
+                    var val = document.createElement('span');
+                    val.className = 'param-value';
+                    val.textContent = "0" + unit;
+                    lg.appendChild(val);
+                    cont.appendChild(lg);
+                    
+                    var inp = document.createElement('input');
+                    inp.type = 'range';
+                    inp.className = 'track-knob';
+                    
+                    this.elements.knobs[param] = inp;
+                    this.elements.valueDisplays[param] = val;
+                    cont.appendChild(inp);
+                    mainControls.appendChild(cont);
+                };
+
+                addKnob('Pitch', 'pitch', '%');
+                addKnob('Volume', 'vol', 'dB');
+                addKnob('Pan', 'pan', '');
+                addKnob('Treble', 'treble', 'dB');
+                addKnob('Mid', 'mid_gain', 'dB');
+                addKnob('Bass', 'bass', 'dB');
+                
+                div.appendChild(mainControls);
+                
+                var fxGroup = document.createElement('div');
+                fxGroup.className = 'control-group track-fx-layout';
+                var fxTitle = document.createElement('div');
+                fxTitle.className = 'fx-chain-title';
+                fxTitle.textContent = 'Effects Chain:';
+                fxGroup.appendChild(fxTitle);
+                
+                var fxChainControls = document.createElement('div');
+                fxChainControls.className = 'fx-chain-controls';
+                for(var i=0; i<7; i++) {
+                    var slot = document.createElement('div');
+                    slot.className = 'fx-chain-slot';
+                    var c = document.createElement('input');
+                    c.type = 'checkbox';
+                    c.dataset.slotIndex = i;
+                    var l = document.createElement('label');
+                    l.className = 'fx-chain-slot-label';
+                    l.dataset.slotLabelIndex = i;
+                    l.textContent = i+1;
+                    slot.append(c, l);
+                    fxChainControls.appendChild(slot);
+                }
+                fxGroup.appendChild(fxChainControls);
+                div.appendChild(fxGroup);
+
+                return div;
+            }
+
+
+        var statusText = document.getElementById("status-text");
+        var splash = document.getElementById("splash");
+        var studioContainer = document.getElementById("mxs-studio-container");
+        var tracksContainer = document.getElementById("tracks-container");
+        var debugLog = document.getElementById("debug-log");
+        var cursorEl = document.getElementById("virtual-cursor");
+        var sampleGrid = document.getElementById("receiver-sample-grid");
+        if (!sampleGrid) { console.error("sampleGrid not found"); window.onerror("sampleGrid not found", "", 0); }
+        
+        for(var i=1; i<=20; i++) {
+            var btn = document.createElement("button");
+            btn.className = "sample-btn";
+            btn.textContent = i;
+            btn.dataset.sample = i;
+            sampleGrid.appendChild(btn);
+        }
+
+        function logMsg(msg) {
+            var line = document.createElement("div");
+            line.textContent = "> " + msg;
+            debugLog.appendChild(line);
+            if(debugLog.children.length > 15) debugLog.removeChild(debugLog.firstChild);
+        }
+        
+        window.onerror = function(msg, url, line) { logMsg("❌ ERR: " + msg + " (" + line + ")"); };
+
+        logMsg("🚀 MXS-004 Receiver (March 20, 2026) Booting...");
+
+        var context, playerManager;
+        try {
+            context = cast.framework.CastReceiverContext.getInstance();
+            playerManager = context.getPlayerManager();
+        } catch(e) {
+            logMsg("❌ Init Error: " + e.name + " - " + e.message);
+        }
+        
+        if (playerManager) {
+            playerManager.addEventListener(cast.framework.events.EventType.PLAYING, function() {
+                logMsg("🔊 Audio stream playing!");
+                statusText.textContent = "LIVE AUDIO ACTIVE";
+                statusText.style.color = "#0f0";
+            });
+            
+            playerManager.addEventListener(cast.framework.events.EventType.ERROR, function(event) {
+                logMsg("❌ Stream Error: " + event.detailedErrorCode);
+            });
+        }
+
+        if (context) {
+            var handleCustomMessage = function(event) {
+                try {
+                    var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                    
+                    // UNWRAP FCast / mxs_state logic
+                    // FCast relay wraps the inner JSON payload in a 'data' field.
+                    if (data.type === 'mxs_state' && typeof data.data === 'string') {
+                        try {
+                            data = JSON.parse(data.data);
+                        } catch(e) {
+                            logMsg("❌ FCast Parse Error: " + e.message);
+                        }
+                    }
+
+                    if (data.type === 'connect' || data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                        if(splash.style.display !== 'none') {
+                            splash.style.display = 'none';
+                            studioContainer.style.display = 'flex';
+                            logMsg("✨ UI Revealed");
+                        }
+                    }
+
+                    if (data.type === 'connect') {
+                        var targetUrl = data.wsUrl || data.url || data.audio_stream;
+                        if (targetUrl) {
+                            var directUrl = targetUrl;
+                            // Backwards-compat: handle query-string format
+                            if (targetUrl.includes("audio_stream=")) {
+                                directUrl = decodeURIComponent(targetUrl.split("audio_stream=")[1].split("&")[0]);
+                            }
+                            // Handle case where wsUrl starts with '?' (legacy format)
+                            if (directUrl.startsWith('?')) {
+                                if (directUrl.includes("audio_stream=")) {
+                                    directUrl = decodeURIComponent(directUrl.split("audio_stream=")[1].split("&")[0]);
+                                }
+                            }
+                            logMsg("🔗 Connecting Audio: " + directUrl);
+                            statusText.textContent = "LOADING AUDIO...";
+                            statusText.style.color = "#ff0";
+                            var request = new cast.framework.messages.LoadRequestData();
+                            var mediaInfo = new cast.framework.messages.MediaInformation();
+                            mediaInfo.contentId = directUrl;
+                            mediaInfo.contentType = 'audio/wav';
+                            mediaInfo.streamType = cast.framework.messages.StreamType.LIVE;
+                            request.media = mediaInfo;
+                            request.autoplay = true;
+                            playerManager.load(request);
+                        }
+                    }
+                    
+                    if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
+                        renderStudioState(data.state || data);
+                    }
+                } catch(e) {
+                    logMsg("❌ Parse Error: " + e.message);
+                }
+            };
+
+            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', handleCustomMessage);
+            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.hybrid', handleCustomMessage);
+            
+            // IMPORTANT: context.start() MUST be called AFTER all listeners are added!
+            try {
+                context.start(); 
+                logMsg("✅ Cast Context Started");
+            } catch(e) {
+                logMsg("❌ Start Error: " + e.message);
+            }
+        }
+
+        function renderStudioState(state) {
+            if (!state) return;
+            if (state.cursor) {
+                cursorEl.style.display = 'block';
+                cursorEl.style.transform = "translate(" + (state.cursor.x * window.innerWidth) + "px, " + (state.cursor.y * window.innerHeight) + "px)";
+            }
+            if (state.master) {
+                var vol = document.getElementById("master-volume");
+                if (vol) vol.value = state.master.volume;
+                var rec = document.getElementById("master-record-button");
+                if (rec) rec.className = state.master.isRecording ? "button recording" : "button";
+            }
+            if (state.tracks && Array.isArray(state.tracks)) {
+                state.tracks.forEach(function(ts) {
+                    var div = document.querySelector(".track[data-track-index=\"" + ts.id + "\"]");
+                    if (!div) {
+                        var tv = new MiniTrackView(ts.id);
+                        div = tv.buildElement();
+                        tracksContainer.appendChild(div);
+                        div.__tv = tv;
+                    }
+                    var tv = div.__tv;
+                    if (tv && tv.elements && tv.elements.knobs) {
+                        if (tv.elements.knobs.vol) tv.elements.knobs.vol.value = ts.volume;
+                        if (tv.elements.knobs.pan) tv.elements.knobs.pan.value = ts.pan;
+                        if (tv.elements.status) {
+                            tv.elements.status.className = ts.armed ? "status-indicator status-recording" : (ts.isPlaying ? "status-indicator status-playing" : "status-indicator status-ready");
+                            tv.elements.status.textContent = ts.armed ? "RECORDING" : (ts.isPlaying ? "PLAYING" : "READY");
+                        }
+                    }
+                    if (ts.effects) {
+                        ts.effects.forEach(function(fx) {
+                            var lbl = div.querySelector("label[data-slot-label-index=\"" + fx.slot + "\"]");
+                            var chk = div.querySelector("input[data-slot-index=\"" + fx.slot + "\"]");
+                            if(chk) chk.checked = fx.enabled;
+                            if(lbl) {
+                                lbl.textContent = fx.name || (fx.slot + 1);
+                                if(fx.enabled) lbl.classList.add("active");
+                                else lbl.classList.remove("active");
+                            }
+                        });
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

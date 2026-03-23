@@ -1,0 +1,294 @@
+<!--
+ * Filename: index.html
+ * Version: NOV25_AntiGravity Version 1.0
+ * Date: November 25, 2025
+ * Time: 16:28 CST
+ * Description: Main HTML structure for the 8-Track Loop De Loup application.
+ -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOWMULTIMEDIA MXS-004</title>
+    <!-- Tone.js (Sync load for audio engine) -->
+    <script src="src/utils/Tone.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/png" href="icons/32x32.png">
+    <script>console.log("⚛️ app_v101.html: Early HTML Load Detected (Session: " + Date.now() + ")");</script>
+
+    <!-- CRITICAL: Inline styles to prevent white flash on startup -->
+    <style>body { background-color: #000000 !important; color: #ffffff; }</style>
+
+    <link rel="stylesheet" href="styles.css?v=20260321">
+
+    <!-- CRITICAL: Inline Error Trap -->
+    <script>
+        window.onerror = function (msg, url, line, col, error) {
+            const errorBox = document.getElementById('critical-error-display') || document.createElement('div');
+            errorBox.id = 'critical-error-display';
+            errorBox.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(100,0,0,0.9);color:white;z-index:99999;padding:20px;font-family:monospace;font-size:14px;white-space:pre-wrap;';
+            errorBox.innerHTML += `❌ ERROR: ${msg}\n   at ${url}:${line}:${col}\n   Stack: ${error ? error.stack : 'N/A'}\n\n`;
+            document.body.appendChild(errorBox);
+            console.error('❌ CRITICAL:', msg, url, line, error);
+            return false;
+        };
+
+        window.addEventListener('unhandledrejection', function (event) {
+            const errorBox = document.getElementById('critical-error-display') || document.createElement('div');
+            errorBox.id = 'critical-error-display';
+            errorBox.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(100,0,0,0.9);color:white;z-index:99999;padding:20px;font-family:monospace;font-size:14px;white-space:pre-wrap;';
+            errorBox.innerHTML += `⚠️ PROMISE REJECTION: ${event.reason}\n\n`;
+            document.body.appendChild(errorBox);
+        });
+
+        console.log('🚀 MXS-004 v54.1 - Inline Failsafe Active');
+        console.log('🚀 MXS-004 v54.5 - Error Trap Installed');
+    </script>
+</head>
+
+<body>
+    <div id="global-hidden-container" class="layout-hider">
+        <input type="file" id="global-file-input" multiple accept="audio/*,video/mp4,.mp3,.raw,.flac,.wav">
+        <input type="file" id="global-dir-input" webkitdirectory directory multiple>
+    </div>
+
+    <div class="container app-loading">
+        <div class="header">
+            <h1>NOWMULTIMEDIA MXS-004</h1>
+            <div class="header-right">
+                <button id="cast-btn" title="Cast Screen">
+                    <i class="fa-brands fa-chromecast"></i>
+                </button>
+                <h2>Mix Studio-004</h2>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="master-column">
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+
+                <div class="master-item master-volume-aligned">
+                    <div class="track-header">Vol</div>
+                    <input type="range" id="master-volume" min="-80" max="20" step="0.1" value="0">
+                    <span id="master-volume-value" class="master-value">0.0 dB</span>
+                </div>
+
+                <div class="master-item master-waveform-item">
+                    <div class="waveform-box master-waveform-box">
+                        <div class="waveform-labels">
+                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                            <div class="waveform-label-external">R</div>
+                        </div>
+                        <div id="master-waveform-container" class="waveform-canvas-container flex-grow">
+                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
+                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="master-item master-row-layout">
+                    <div class="track-header">Loop Length</div>
+                    <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="master-value">4.0s</span>
+                </div>
+
+                <div class="master-item master-bottom-item">
+                    <div class="master-rec-row">
+                        <button id="master-record-button" class="button">REC</button>
+                        <select id="record-as-select" class="font-small">
+                            <option value="stereo" data-format="wav">Stereo (WAV)</option>
+                            <option value="stereo" data-format="mp4">Stereo (MP4)</option>
+                            <option value="stereo" data-format="alac">Stereo (ALAC)</option>
+                            <option value="stems" data-format="wav">Stems (WAV)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="lfo-side-by-side-container">
+                    <div class="lfo-column">
+                        <div class="master-item lfo-button-item">
+                            <button id="lfo-toggle">LFO 1</button>
+                        </div>
+                        <div class="master-item lfo-meter-item">
+                            <div class="meter-container lfo-meter">
+                                <div id="lfo-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <div class="master-item">
+                            <label for="lfo-time" class="master-label" style="font-size:0.65em;">SWEEP 1</label>
+                            <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo-time-value" class="master-value">1.8s</span>
+                        </div>
+                    </div>
+
+                    <div class="lfo-separator"></div>
+
+                    <div class="lfo-column">
+                        <div class="master-item lfo-button-item">
+                            <button id="lfo2-toggle">LFO 2</button>
+                        </div>
+                        <div class="master-item lfo-meter-item">
+                            <div class="meter-container lfo-meter">
+                                <div id="lfo2-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <div class="master-item">
+                            <label for="lfo2-time" class="master-label" style="font-size:0.65em;">SWEEP 2</label>
+                            <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo2-time-value" class="master-value">1.8s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="master-item sample-center-container">
+                    <div class="track-header">Sample Station</div>
+                    <div class="sample-grid">
+                        <button class="sample-btn" data-sample="1">1</button>
+                        <button class="sample-btn" data-sample="2">2</button>
+                        <button class="sample-btn" data-sample="3">3</button>
+                        <button class="sample-btn" data-sample="4">4</button>
+                        <button class="sample-btn" data-sample="5">5</button>
+                        <button class="sample-btn" data-sample="6">6</button>
+                        <button class="sample-btn" data-sample="7">7</button>
+                        <button class="sample-btn" data-sample="8">8</button>
+                        <button class="sample-btn" data-sample="9">9</button>
+                        <button class="sample-btn" data-sample="10">10</button>
+                        <button class="sample-btn" data-sample="11">11</button>
+                        <button class="sample-btn" data-sample="12">12</button>
+                        <button class="sample-btn" data-sample="13">13</button>
+                        <button class="sample-btn" data-sample="14">14</button>
+                        <button class="sample-btn" data-sample="15">15</button>
+                        <button class="sample-btn" data-sample="16">16</button>
+                        <button class="sample-btn" data-sample="17">17</button>
+                        <button class="sample-btn" data-sample="18">18</button>
+                        <button class="sample-btn" data-sample="19">19</button>
+                        <button class="sample-btn" data-sample="20">20</button>
+                    </div>
+                </div>
+
+                <div class="master-item master-bottom-buttons">
+                    <button id="show-sessions-button" class="button"><i class="fa-solid fa-list"></i> MEDIA</button>
+                    <button id="import-files-button" class="button"><i class="fa-solid fa-file-import"></i> IMPORT</button>
+                    <button id="show-docs-button" class="button"><i class="fa-solid fa-book"></i> DOCS</button>
+                </div>
+            </div>
+
+            <div class="tracks-container"></div>
+        </div>
+
+        <dialog id="sessions-dialog">
+            <div class="sessions-content-wrapper">
+                <div class="sessions-header">
+                    <h2>SESSIONS &amp; MEDIA</h2>
+                    <button id="close-sessions-button" class="dialog-close-x" aria-label="Close">&times;</button>
+                </div>
+                <div id="recordings-list"></div>
+            </div>
+        </dialog>
+    </div>
+
+    <dialog id="docs-dialog">
+        <div class="docs-content-wrapper">
+            <button id="close-docs-button" class="dialog-close-x" aria-label="Close">&times;</button>
+            <pre></pre>
+        </div>
+    </dialog>
+
+    <dialog id="cast-dialog">
+        <div class="sessions-content-wrapper">
+            <div class="sessions-header">
+                <h2>CAST TO DEVICE</h2>
+                <button id="close-cast-button" class="dialog-close-x" aria-label="Close">&times;</button>
+            </div>
+            <div id="cast-device-list" class="cast-device-list">
+                <p class="text-center">Searching for devices...</p>
+            </div>
+            <div class="cast-controls text-center margin-top-10">
+                <button id="refresh-cast-btn" class="control-btn">🔄 Refresh</button>
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444;">
+                <p style="font-size: 0.85em; opacity: 0.7; margin-bottom: 8px;">Or enter Chromecast IP manually:</p>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="manual-cast-ip" placeholder="192.168.1.x"
+                        style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #555; background: #2a2a2a; color: #fff;">
+                    <button id="manual-cast-btn" class="control-btn" style="padding: 8px 16px;">Connect</button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- MODULE SCRIPTS -->
+    <script src="src/audio/EffectBase.js" defer></script>
+    <script src="src/effects/effects_chorus.js" defer></script>
+    <script src="src/effects/effects_compressor.js" defer></script>
+    <script src="src/effects/effects_delay.js" defer></script>
+    <script src="src/effects/effects_distortion.js" defer></script>
+    <script src="src/effects/effects_eq.js" defer></script>
+    <script src="src/effects/effects_flanger.js" defer></script>
+    <script src="src/effects/effects_mod_pitch_filter.js" defer></script>
+    <script src="src/effects/effects_phaser.js" defer></script>
+    <script src="src/effects/effects_reverb.js" defer></script>
+    <script src="src/effects/effects_gate.js" defer></script>
+    <script src="src/effects/effects_tremolo.js" defer></script>
+    <script src="src/effects/effects_microphone.js" defer></script>
+    <script src="src/effects/effects_lespeakers.js" defer></script>
+    <script src="src/effects/effects_moog.js" defer></script>
+
+    <!-- CORE LOGIC -->
+    <script src="src/utils/AudioUtils.js" defer></script>
+    <script src="src/utils/Helpers.js" defer></script>
+    <script src="src/utils/TauriUtils.js" defer></script>
+    <script src="src/config/Config.js" defer></script>
+    <script src="src/audio/AudioContextManager.js" defer></script>
+    <script src="src/audio/DeviceManager.js" defer></script>
+    <script src="src/services/PersistenceService.js" defer></script>
+    <script src="src/audio/ToneSimulcastRouter.js" defer></script>
+    <script src="src/audio/ToneCastManager.js" defer></script>
+    <script src="src/audio/AudioRouter.js" defer></script>
+    <script src="src/cast/AudioCastManager.js" defer></script>
+    <script src="src/cast/HybridCastSender.js" defer></script>
+    <script src="src/cast/CastStateBroadcaster.js" defer></script>
+    <script src="src/cast/CastManager.js" defer></script>
+    <script src="src/audio/SamplerVoice.js" defer></script>
+    <script src="src/audio/SamplerService.js" defer></script>
+    <script src="src/audio/EffectsService.js" defer></script>
+    <script src="src/audio/TrackAudio.js" defer></script>
+    <script src="src/audio/AudioEngine.js" defer></script>
+    
+    <!-- UI LAYERS -->
+    <script src="src/ui/DeviceUI.js" defer></script>
+    <script src="src/ui/TrackView.js" defer></script>
+    <script src="src/ui/RecordingUI.js" defer></script>
+    <script src="src/ui/FileSelectionUI.js" defer></script>
+    <script src="src/ui/Modals.js" defer></script>
+    <script src="src/ui/Interactions.js" defer></script>
+    <script src="src/ui/SamplerUI.js" defer></script>
+    <script src="src/ui/docs.js" defer></script>
+    <script src="src/ui/DocsUI.js" defer></script>
+    <script src="src/ui/EffectUI.js" defer></script>
+    <script src="src/ui/MetersUI.js" defer></script>
+    <script src="src/ui/GlobalUIMethods.js" defer></script>
+    <script src="src/ui/Orchestrator.js" defer></script>
+    <script src="scripts.js" defer></script>
+
+    <script>
+        (function () {
+            console.log("🛠️ DIAGNOSTICS: Failsafe Timer Started (5s)...");
+            setTimeout(() => {
+                const container = document.querySelector('.container');
+                if (container && container.classList.contains('app-loading')) {
+                    console.warn("⚠️ FAILSAFE TRIGGERED: Forcing UI display...");
+                    container.classList.remove('app-loading');
+                }
+            }, 5000);
+        })();
+    </script>
+</body>
+</html>
