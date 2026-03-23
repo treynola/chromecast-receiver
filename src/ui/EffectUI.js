@@ -41,42 +41,64 @@
                 content.innerHTML = '';
                 content.style = '';
 
-                const slotSelectArea = document.createElement('div');
-                slotSelectArea.className = 'audition-slot-selector';
-                slotSelectArea.style.display = 'flex';
-                slotSelectArea.style.flexDirection = 'row';
-                slotSelectArea.style.alignItems = 'center';
-                slotSelectArea.style.justifyContent = 'flex-start';
-                slotSelectArea.style.padding = '5px 0 15px 0';
-                slotSelectArea.style.gap = '8px';
+                // LINE 1: Title / Auditioning
+                const titleLine = document.createElement('div');
+                titleLine.className = 'audition-header-line';
+                titleLine.style.textAlign = 'center';
+                titleLine.style.marginBottom = '10px';
+                titleLine.style.fontSize = '1.1em';
+                titleLine.style.fontWeight = 'bold';
+                
+                const mainTitle = document.createElement('span');
+                mainTitle.textContent = name;
+                mainTitle.style.color = '#FFD700';
 
-                const selectorLabel = document.createElement('span');
-                selectorLabel.textContent = "Assign to Slot:";
-                selectorLabel.style.fontSize = '0.85em';
-                selectorLabel.style.fontWeight = 'bold';
-                selectorLabel.style.color = '#ccc';
-                slotSelectArea.appendChild(selectorLabel);
+                const auditionSpan = document.createElement('span');
+                auditionSpan.className = 'audition-status-text';
+                auditionSpan.textContent = ' / Auditioning';
+                auditionSpan.style.color = '#0f0';
+                auditionSpan.style.opacity = '1';
+                auditionSpan.style.transition = 'opacity 1s ease';
 
-                const slotGroup = document.createElement('div');
-                slotGroup.style.display = 'flex';
-                slotGroup.style.flexWrap = 'wrap';
-                slotGroup.style.gap = '6px';
+                titleLine.appendChild(mainTitle);
+                titleLine.appendChild(auditionSpan);
+                content.appendChild(titleLine);
+
+                // LINE 2: 7-slot Audition Selector (Centered, No Arrows)
+                const slotSelectWrap = document.createElement('div');
+                slotSelectWrap.className = 'fx-chain-controls audition-slot-selector-wrap';
+                slotSelectWrap.style.justifyContent = 'center';
+                slotSelectWrap.style.marginBottom = '15px';
 
                 for (let i = 0; i < 7; i++) {
-                    const btn = document.createElement('button');
-                    btn.textContent = (i + 1).toString();
-                    btn.style.padding = '4px 8px';
-                    btn.style.cursor = 'pointer';
-                    btn.style.background = '#444';
-                    btn.style.border = '1px solid #666';
-                    btn.style.color = 'white';
-                    btn.style.borderRadius = '3px';
-                    btn.dataset.action = 'assign-from-audition';
-                    btn.dataset.assignSlot = i;
-                    slotGroup.appendChild(btn);
+                    const slotDiv = document.createElement('div');
+                    slotDiv.className = 'fx-chain-slot';
+                    
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    const cbId = `audition-fx-slot-${trackId}-${i}`;
+                    cb.id = cbId;
+                    cb.dataset.slotIndex = i;
+                    if (i === slotIndex) cb.checked = true;
+
+                    const lbl = document.createElement('label');
+                    lbl.htmlFor = cbId;
+                    lbl.className = 'fx-chain-slot-label';
+                    lbl.textContent = i + 1;
+
+                    slotDiv.appendChild(cb);
+                    slotDiv.appendChild(lbl);
+                    slotSelectWrap.appendChild(slotDiv);
+
+                    // Click handler for assignment
+                    lbl.addEventListener('click', (e) => {
+                         e.preventDefault(); // Stop default checkbox behavior
+                         assignEffectToSlot(trackId, i, auditionState, trackDiv, track, false);
+                         // Fade out "Auditioning" text
+                         auditionSpan.style.opacity = '0';
+                    });
                 }
-                slotSelectArea.appendChild(slotGroup);
-                content.appendChild(slotSelectArea);
+                content.appendChild(slotSelectWrap);
 
                 const paramsWrapper = document.createElement('div');
                 paramsWrapper.style.width = '100%';
@@ -111,21 +133,36 @@
      */
     function renderEffectParams(container, config, currentParams, onUpdate) {
         if (!config || !config.columns) return;
-        const allParams = config.columns.flat();
+        
+        // Flatten parameters and ensure 'Effect Level' and 'Stereo Width' are at the top
+        let allParams = config.columns.flat();
+        
+        // Re-order: Move 'Effect Level' and 'Stereo Width' to the front if they exist
+        const levelIdx = allParams.findIndex(p => p.l === 'Effect Level' || p.p === 'level');
+        if (levelIdx > -1) {
+             const [levelP] = allParams.splice(levelIdx, 1);
+             allParams.unshift(levelP);
+        }
+        const widthIdx = allParams.findIndex(p => p.l === 'Stereo Width' || p.p === 'width');
+        if (widthIdx > -1) {
+             // If level was moved to 0, width goes to 1
+             const [widthP] = allParams.splice(widthIdx, 1);
+             const targetIdx = allParams[0]?.l === 'Effect Level' ? 1 : 0;
+             allParams.splice(targetIdx, 0, widthP);
+        }
 
         // Use Grid layout (Managed by CSS .effect-params-grid)
-        container.classList.add('dialog-content'); // Keep generic logic
+        container.classList.add('dialog-content');
         container.classList.add('effect-params-grid');
-        container.style.display = 'grid'; // Ensure explicit display
-        // container.style.gridTemplateColumns handled by CSS now
-        container.style.gap = '8px';
+        container.style.display = 'grid';
+        container.style.gridTemplateColumns = 'repeat(3, 1fr)'; // FORCE 3 COLUMNS
+        container.style.gap = '15px';
+        container.style.padding = '10px 0';
 
         allParams.forEach(p => {
-            // Current Value
             const currentVal = (currentParams && currentParams[p.p] !== undefined) ? currentParams[p.p] : p.def;
             const unit = p.unit || '';
 
-            // Decimals Logic
             let decimals = (Math.abs(currentVal) < 10 && currentVal !== 0) ? 2 : 1;
             if (Math.abs(currentVal) < 1 && currentVal !== 0) decimals = 3;
             const lower = p.p.toLowerCase();
@@ -135,17 +172,21 @@
 
             const grp = document.createElement('div');
             grp.className = 'control-group effect-control-group';
-            grp.style.flex = '1 1 120px'; // Responsive sizing
+            grp.style.display = 'flex';
+            grp.style.flexDirection = 'column';
+            grp.style.alignItems = 'center'; // CENTERED LAYOUT
+            grp.style.textAlign = 'center';
 
             grp.innerHTML = `
-                     <div class="effect-param-title">
+                     <div class="effect-param-title" style="margin-bottom: 8px; font-weight: bold; font-size: 0.85em; color: var(--gold);">
                          <label>${p.l}</label>
                      </div>
-                     <div class="slider-wrapper">
+                     <div class="slider-wrapper" style="width: 100%; display: flex; justify-content: center; margin-bottom: 8px;">
                          <input type="range" class="effect-param-slider" 
+                             style="width: 100%; max-width: 120px;"
                              min="${p.min}" max="${p.max}" step="${p.s || 0.01}" value="${currentVal}">
                      </div>
-                     <div class="effect-param-value">
+                     <div class="effect-param-value" style="font-family: monospace; font-size: 0.9em; color: #fff;">
                          <span class="param-value">${displayVal}${unit}</span>
                      </div>
                  `;
@@ -153,10 +194,8 @@
             const slider = grp.querySelector('input');
             slider.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
-                // Update Display
                 const display = grp.querySelector('.param-value');
                 if (display) {
-                    // format again
                     let d = (Math.abs(val) < 10 && val !== 0) ? 2 : 1;
                     if (Math.abs(val) < 1 && val !== 0) d = 3;
                     if (lower.includes('freq') || lower === 'pitch' || p.s === 1) d = 0;

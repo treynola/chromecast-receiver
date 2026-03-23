@@ -1,1 +1,12 @@
-node_modules/\n.tmp_build/\ntmp_build/\ntmp/\ntarget/\nsrc-tauri/target/\n.DS_Store\n*.log\n*.txt\n*.bak_recovered_today\nsrc-tauri/assets/\nsrc-tauri/gen/
+node_modules/
+.tmp_build/
+tmp_build/
+tmp/
+target/
+src-tauri/target/
+.DS_Store
+*.log
+*.txt
+*.bak_recovered_today
+src-tauri/assets/
+src-tauri/gen/

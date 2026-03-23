@@ -1615,3 +1615,51 @@ select option {
 }
 
 /* Rebuild Trigger: 2026-03-18 */
+
+/* Effect UI 3.0 Layout */
+.audition-header-line {
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+}
+
+.audition-status-text {
+    opacity: 1;
+    transition: opacity 1s ease-in-out;
+}
+
+.effect-params-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 15px !important;
+    align-items: start;
+}
+
+/* Column-Centered Layout for Params */
+.effect-control-group {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+}
+
+.effect-param-title label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.85em;
+    font-weight: bold;
+    color: var(--gold);
+}
+
+.effect-param-slider {
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+.effect-param-value {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+    color: #fff;
+}
