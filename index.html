@@ -2,51 +2,47 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.105 [ABSOLUTE PARITY]</title>
+    <title>MXS-004 Studio Mirror v13.8.106 [ABSOLUTE MIRROR]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css">
     <style>
-        /* [V13.8.105] Chromecast-Specific Overrides to ensure 1:1 Mirroring */
-        html, body { 
-            background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; 
-        }
+        /* [V13.8.106] Failsafe Overrides */
+        html, body { background: #1e90ff !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        .app-loading { opacity: 1 !important; visibility: visible !important; } /* Failsafe: Don't hide the app if class persists */
+        
         .container {
             position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
             opacity: 1 !important; visibility: visible !important; display: flex !important;
-            box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red); /* Re-enforce borders */
+            background-color: #2c2c2c !important;
+            box-shadow: 0 0 0 2px #FAD78E, 0 0 0 4px #FF0000;
         }
         #cursor-mirror {
             position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.8); 
             border-radius: 50%; pointer-events: none; z-index: 10000; border: 2px solid white; 
-            display: none; box-shadow: 0 0 8px rgba(0,0,0,0.5);
-            transition: transform 0.1s linear;
+            display: none; transition: transform 0.1s linear;
         }
-        #audio-heartbeat { position: fixed; top: 5px; right: 5px; font-size: 8px; color: #333; z-index: 9999; }
         cast-media-player { display: none; }
     </style>
 </head>
-<body class="app-loading" style="background-color: #000000;">
+<body class="app-loading">
     <audio id="silent-loop" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
     <cast-media-player></cast-media-player>
-    <div id="audio-heartbeat">v13.8.105</div>
     <div id="cursor-mirror"></div>
 
-    <!-- 1:1 MIRROR OF public/index.html BODY -->
     <div class="container" id="studio-root">
         <div class="header">
             <div class="header-left">
-                <h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1>
+                <h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E;">NOWMULTIMEDIA MXS-004</h1>
             </div>
             <div class="header-right">
-                <h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold); letter-spacing: 0.5px; line-height: 1;">Mix N Studio 004 :: MIRROR</h2>
+                <h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E; letter-spacing: 0.5px; line-height: 1;">Mix N Studio 004 :: MIRROR</h2>
             </div>
         </div>
 
         <div class="main-content">
-            <!-- Column 1: MASTER -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
@@ -64,21 +60,12 @@
                         </div>
                     </div>
                 </div>
-                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
-                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Loop</label>
-                    <input type="range" class="pa-mic-slider" value="4">
-                    <span class="pa-mic-value" style="font-size: 0.72em;">4.0s</span>
-                </div>
                 <div class="master-item sample-center-container">
                     <div class="track-header" style="text-align:center;">Sample Station</div>
                     <div class="sample-grid" id="sample-grid"></div>
                 </div>
-                <div class="master-bottom-buttons" style="margin-top: 8px; display: flex; flex-direction: row; gap: 4px;">
-                    <button>IMPORT</button><button>DOCS</button><button>MEDIA</button><button>SETTINGS</button>
-                </div>
                 <div class="meter-container" style="margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
-            <!-- Columns 2-5: TRACKS -->
             <div class="tracks-container" id="tracks-container"></div>
         </div>
     </div>
@@ -102,12 +89,12 @@
                         '<div class="status-indicator status-ready">Ready</div>' +
                         '<div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>' +
                         '<div class="waveform-canvas-container"><canvas class="waveform-canvas"></canvas><canvas class="waveform-canvas"></canvas></div></div>' +
-                        '<div class="control-group"><label style="font-size:0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" value="0"><span class="pa-mic-value" style="font-size:0.72em;">0.0 dB</span></div>' +
-                        '<div class="track-buttons"><button>REC</button><button>STOP</button><button>PLAY</button><button>REV</button></div>' +
                         '<div class="meter-container"><div id="t-meter-'+i+'" class="meter-bar"></div></div>';
                     tc.appendChild(t);
                 }
                 updateScale();
+                // Failsafe: Transition from DodgerBlue to Black background
+                setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 1000);
             }
 
             function updateScale() {
