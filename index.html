@@ -2,164 +2,123 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.89 [SIGNAL LOCK]</title>
+    <title>MXS-004 Studio Mirror v13.8.90 [AUDIO RESTORE]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
-        /* INLINED ESSENTIAL CSS v13.8.89 */
-        :root {
-            --red: #FF0000; --gold: #FAD78E; --green: #008000;
-            --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; --text-color: #f0f0f0;
+        :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; }
+        body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; }
+        #audio-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,50,0.9); z-index: 2000000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
         }
-        body { 
-            background: #000 !important; color: var(--text-color); 
-            font-family: 'Courier New', monospace; margin:0; padding:0; overflow:hidden;
-            display: flex; justify-content: center; align-items: center; height: 100vh;
+        .enable-btn {
+            background: var(--gold); color: #000; border: none; padding: 20px 40px;
+            font-size: 2em; font-weight: bold; border-radius: 10px; cursor: pointer;
+            box-shadow: 0 0 20px var(--gold); margin-top: 20px;
         }
-        #failsafe-reveal {
-            position: fixed; inset: 0; background: #008; color: white;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 1000000; font-family: sans-serif; text-align: center;
-        }
-        .container {
-            width: 1432px; height: 802px; background: var(--dark-gray);
-            border: 1px solid var(--green); border-radius: 12px;
-            box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
-            display: flex; flex-direction: column; padding: 6px; box-sizing: border-box;
-            opacity: 0; transition: opacity 0.5s;
-        }
-        .header { height: 36px; background: var(--off-black); display: flex; align-items: center; padding: 0 10px; border-radius: 8px; margin-bottom: 6px; }
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1; min-height: 0; }
-        .track, .master-column { border: 1px solid var(--green); border-radius: 8px; padding: 4px; background: var(--dark-gray); display: flex; flex-direction: column; gap: 4px; }
-        .track-header { color: var(--gold); font-weight: bold; font-size: 0.8em; border-bottom: 1px solid var(--mid-gray); padding-bottom: 2px; }
-        .track-time-display { font-size: 1.2em; color: var(--green); text-align: center; margin: 5px 0; }
-        .waveform-box { height: 60px; border: 1px solid var(--mid-gray); display: flex; align-items: center; }
-        .waveform-canvas { flex: 1; height: 100%; background: #000; border-left: 1px solid var(--gold); }
-        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-        .sample-btn { background: #333; color: var(--gold); border: 1px solid #555; font-size: 0.7em; height: 30px; border-radius: 4px; }
-        .sample-btn.active { background: var(--gold); color: #000; box-shadow: 0 0 10px var(--gold); }
-        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-width: 300px; max-height: 150px; overflow-y: auto; pointer-events: none; }
-        #ghost-cursor { position: absolute; width: 24px; height: 24px; border: 2px solid gold; border-radius: 50%; display: none; z-index: 99999; }
+        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-height: 120px; overflow-y: auto; pointer-events: none; }
+        .container { width: 1432px; height: 802px; position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); opacity: 0; transition: opacity 0.5s; }
+        /* GUI styles same as before */
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 10px; }
+        .track, .master-column { border: 1px solid var(--green); border-radius: 8px; padding: 8px; background: var(--dark-gray); }
+        .track-header { color: var(--gold); border-bottom: 1px solid #444; margin-bottom: 5px; }
     </style>
 </head>
-<body class="app-loading">
-    <div id="failsafe-reveal">
-        <h1 style="font-size: 3em; margin: 0;">MXS-004 MIRROR</h1>
-        <p style="font-size: 1.2em; color: #ccc;">v13.8.89 SIGNAL LOCK</p>
-        <p id="failsafe-status" style="font-size: 1.1em; color: #f90;">URL LOADED - WAITING FOR SIGNAL...</p>
-        <div style="margin-top: 20px; font-size: 0.8em; color: #66f;">Check Debug Console Bottom Left</div>
+<body>
+    <div id="audio-overlay">
+        <h1 style="color: var(--gold); font-size: 3em;">MXS-004 STUDIO</h1>
+        <p style="font-size: 1.5em;">SIGNAL LOCKED - READY FOR AUDIO</p>
+        <button id="enable-audio-btn" class="enable-btn">TAP TO START AUDIO</button>
+        <p style="margin-top: 20px; color: #666;">v13.8.90 [High-Fidelity Pipeline]</p>
     </div>
 
-    <div id="debug-log">🚀 Diagnostic v13.8.89</div>
-    <div id="ghost-cursor"></div>
+    <div id="debug-log">🚀 Initializing Audio Pipeline...</div>
 
     <div class="container" id="studio-root">
-        <div class="header">
-            <h1 style="font-size: 1em; color: var(--gold); margin:0;">NOWMULTIMEDIA MXS-004 STUDIO</h1>
-        </div>
         <div class="main-content">
-            <div class="master-column">
-                <div class="track-header">MASTER</div>
-                <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                <div id="sample-grid" class="sample-grid"></div>
-            </div>
+            <div class="master-column"><div class="track-header">MASTER</div><div id="recording-time" style="font-size: 2em; color: var(--green);">00:00:00</div></div>
             <div id="tracks-container" style="display:contents;"></div>
         </div>
     </div>
 
     <script>
-        /* INLINED LOGIC v13.8.89 */
         (function() {
-            var ws = null;
+            var audioCtx = null; var ws = null;
+            var ringBuffer = new Float32Array(48000 * 2); // 1 sec of stereo
+            var writePtr = 0; var readPtr = 0;
             var debugEl = document.getElementById('debug-log');
-            var overlay = document.getElementById('failsafe-reveal');
+            var overlay = document.getElementById('audio-overlay');
             var studioRoot = document.getElementById('studio-root');
-            var cursorEl = document.getElementById('ghost-cursor');
 
             function log(m) {
-                console.log(m);
-                if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; }
+                console.log(m); if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; }
             }
 
-            function buildGUI() {
-                var grid = document.getElementById('sample-grid');
-                for (var p = 1; p <= 20; p++) {
-                    var btn = document.createElement('button'); btn.className = 'sample-btn';
-                    btn.id = 'sample-' + p; btn.textContent = p; grid.appendChild(btn);
-                }
-                var tc = document.getElementById('tracks-container');
-                for (var i = 0; i < 4; i++) {
-                    var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
-                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display">00:00:00</div><div class="waveform-box"><div class="waveform-canvas"></div></div><div style="display:flex; gap:2px;"><button class="sample-btn" style="flex:1;">REC</button><button class="sample-btn" style="flex:1;">PLAY</button></div>';
-                    tc.appendChild(t);
-                }
-            }
+            function initAudio() {
+                if (audioCtx) return;
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                log("🔊 AudioContext Active (48kHz)");
+                
+                var scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
+                scriptNode.onaudioprocess = function(e) {
+                    var outL = e.outputBuffer.getChannelData(0);
+                    var outR = e.outputBuffer.getChannelData(1);
+                    var available = (writePtr - readPtr + ringBuffer.length) % ringBuffer.length;
+                    
+                    if (available < 8192) { // Buffer underflow protection
+                        outL.fill(0); outR.fill(0); return;
+                    }
 
-            function renderState(state) {
-                if (!state) return;
-                if (overlay && overlay.style.display !== 'none') {
-                    overlay.style.display = 'none'; studioRoot.style.opacity = '1';
-                    log("🎬 SIGNAL ACQUIRED: Displaying Studio GUI.");
-                }
-                if (state.cursor && cursorEl) {
-                    cursorEl.style.display = 'block';
-                    cursorEl.style.left = (state.cursor.x * 100) + '%';
-                    cursorEl.style.top = (state.cursor.y * 100) + '%';
-                }
+                    for (var i = 0; i < 4096; i++) {
+                        outL[i] = ringBuffer[readPtr];
+                        outR[i] = ringBuffer[(readPtr + 1) % ringBuffer.length];
+                        readPtr = (readPtr + 2) % ringBuffer.length;
+                    }
+                };
+                scriptNode.connect(audioCtx.destination);
+                overlay.style.display = 'none'; studioRoot.style.opacity = '1';
+                log("🎬 Audio Pipeline Unlocked.");
             }
 
             function connect(url) {
                 log("🔌 Connecting: " + url);
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
-                ws.onopen = function() { log("✅ Handshake Success!"); };
                 ws.onmessage = function(e) {
-                    if (!(e.data instanceof ArrayBuffer)) {
+                    if (e.data instanceof ArrayBuffer) {
+                        var pcm = new Float32Array(e.data);
+                        for (var i = 0; i < pcm.length; i++) {
+                            ringBuffer[writePtr] = pcm[i];
+                            writePtr = (writePtr + 1) % ringBuffer.length;
+                        }
+                    } else {
                         try {
                             var m = JSON.parse(e.data);
-                            if (m.type==='STATE_UPDATE') renderState(m.state);
+                            if (m.type === 'STATE_UPDATE') {
+                                document.getElementById('recording-time').textContent = m.state.transport ? m.state.transport.position : '00:00:00';
+                            }
                         } catch(x){}
                     }
                 };
+                ws.onopen = function() { log("✅ Binary Stream Connected"); };
                 ws.onclose = function() { setTimeout(function(){ connect(url); }, 2000); };
-                ws.onerror = function(e) { log("❌ WS Error"); };
             }
 
+            document.getElementById('enable-audio-btn').onclick = initAudio;
+
             window.onload = function() {
-                buildGUI();
-                try {
-                    var ctx = cast.framework.CastReceiverContext.getInstance();
-                    ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
-                        log("📥 LOAD Intercepted");
-                        if (req.media && req.media.contentId) {
-                            try {
-                                var u = new URL(req.media.contentId);
-                                connect("ws://" + u.hostname + ":8080");
-                            } catch(x) { log("❌ URL Parse Error"); }
-                        }
-                        return null;
-                    });
-                    
-                    ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
-                        log("📩 Signal Received");
-                        try {
-                            var d = e.data;
-                            // Resilient parsing for CAF e.data
-                            if (typeof d === 'string') d = JSON.parse(d);
-                            if (d.payload && typeof d.payload === 'string') d = JSON.parse(d.payload);
-                            
-                            if (d.type === 'STATE_UPDATE') renderState(d.state);
-                        } catch(x) { log("❌ Signal Parse Error: " + x.message); }
-                    });
-                    
-                    ctx.start({ disableIdleTimeout: true });
-                    log("📡 Signal Lock Suite v13.8.89 Active.");
-                    
-                    // Fallback: If we got URL params, try connecting even without LOAD
-                    var params = new URLSearchParams(window.location.search);
-                    if (params.has('ws')) {
-                        log("🌀 Manual WS Fallback Triggered");
-                        connect(params.get('ws'));
+                var ctx = cast.framework.CastReceiverContext.getInstance();
+                ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
+                    if (req.media && req.media.contentId) {
+                        var u = new URL(req.media.contentId);
+                        connect("ws://" + u.hostname + ":8080");
                     }
-                } catch(x) { log("❌ Cast SDK Error: " + x.message); }
+                    return null;
+                });
+                ctx.start({ disableIdleTimeout: true });
+                log("📡 Signal Suite v13.8.90 Active.");
+                
+                var params = new URLSearchParams(window.location.search);
+                if (params.has('ws')) connect(params.get('ws'));
             };
         })();
     </script>
