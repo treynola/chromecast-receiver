@@ -2,68 +2,97 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.103 [MIRROR EXACT]</title>
+    <title>MXS-004 Studio Mirror v13.8.104 [PREMIUM AESTHETIC]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        /* [V13.8.103] NUCLEAR CSS MIRROR */
-        :root { --red: #FF0000; --gold: #FAD78E; --green: #008000; --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; --text-color: #f0f0f0; }
+        /* [V13.8.104] PREMIUM DESIGN SYSTEM */
+        :root { 
+            --red: #FF0000; --gold: #FAD78E; --green: #008000; --neon-green: #00FF00;
+            --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; --text-color: #f0f0f0;
+            --glass: rgba(44, 44, 44, 0.85);
+        }
         
         @font-face { font-family: 'Mexcellent'; src: url('../fonts/MexcellentRg.otf') format('opentype'); }
         @font-face { font-family: 'Mexcellent 3D'; src: url('../fonts/Mexcellent3d.otf') format('opentype'); }
 
-        html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: 'Courier New', monospace; }
+        html, body { 
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%) !important; 
+            margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; 
+            font-family: 'Courier Prime', 'Courier New', monospace; 
+        }
         
         .container {
             width: 1432px; height: 802px; position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
-            background-color: var(--dark-gray); border-radius: 12px; padding: 6px; box-sizing: border-box;
-            border: 1px solid var(--green); box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
-            display: flex; flex-direction: column; opacity: 1;
+            background-color: var(--glass); backdrop-filter: blur(10px);
+            border-radius: 14px; padding: 10px; box-sizing: border-box;
+            border: 2px solid var(--green); 
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
+            display: flex; flex-direction: column; opacity: 0;
+            transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .container.visible { opacity: 1; }
+
+        .header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 6px 12px; background: linear-gradient(180deg, #111 0%, #000 100%); 
+            border-radius: 8px; margin-bottom: 8px; border: 1px solid #333;
+            box-shadow: inset 0 1px 1px rgba(255,255,255,0.1);
+        }
+        .header h1 { font-family: 'Mexcellent 3D', sans-serif; font-size: 1.3em; margin: 0; color: var(--gold); text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .live-tag { color: var(--neon-green); font-weight: bold; font-size: 0.85em; letter-spacing: 1px; animation: pulse 2s infinite; }
+        
+        @keyframes pulse { 0% { opacity: 0.6; text-shadow: 0 0 0 var(--neon-green); } 50% { opacity: 1; text-shadow: 0 0 10px var(--neon-green); } 100% { opacity: 0.6; text-shadow: 0 0 0 var(--neon-green); } }
+
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; flex: 1; min-height: 0; }
+        
+        .track-col { 
+            display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--green); 
+            border-radius: 10px; padding: 8px; background: rgba(0,0,0,0.3); 
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        
+        .track-header { 
+            color: var(--gold); font-weight: bold; font-size: 0.8em; text-align: center;
+            border-bottom: 1px solid var(--mid-gray); padding-bottom: 4px; text-transform: uppercase;
+        }
+        
+        .time-display { 
+            font-size: 2.2em; color: var(--neon-green); text-align: center; 
+            background: #000; border: 1px solid var(--gold); border-radius: 6px;
+            margin: 6px 0; padding: 4px; box-shadow: inset 0 0 10px rgba(0,255,0,0.1);
         }
 
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background-color: var(--off-black); border-radius: 8px; margin-bottom: 6px; height: 36px; }
-        .header h1 { font-family: 'Mexcellent 3D', sans-serif; font-size: 1.1em; margin: 0; color: var(--gold); }
-        
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1; overflow: hidden; }
-        
-        /* Unified Column Styles */
-        .master-column, .track { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--green); border-radius: 8px; padding: 4px; background-color: var(--dark-gray); overflow: hidden; }
-        .track-header { color: var(--gold); font-weight: bold; font-size: 0.75em; border-bottom: 1px solid var(--mid-gray); padding-bottom: 2px; text-transform: uppercase; margin-bottom: 4px; }
-        .track-time-display { font-size: 1.8em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; margin: 5px 0; }
-        
-        /* Waveform Styles */
-        .waveform-box { height: 60px; border: 1px solid var(--mid-gray); display: flex; align-items: center; background: #000; margin-bottom: 5px; }
-        .waveform-labels { display: flex; flex-direction: column; justify-content: space-around; height: 100%; width: 18px; text-align: center; border-right: 1px solid var(--gold); }
-        .waveform-label-external { font-size: 0.6em; color: var(--red); font-weight: bold; }
-        .waveform-canvas-container { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; height: 100%; }
-        .waveform-canvas { width: 100%; height: 26px; border: 1px solid var(--gold); border-radius: 4px; box-sizing: border-box; }
+        /* Premium Sliders */
+        .slider-group { display: flex; align-items: center; gap: 6px; padding: 4px; background: #222; border-radius: 4px; margin-bottom: 4px; }
+        .slider-group label { font-size: 0.7em; color: var(--green); font-weight: bold; width: 30px; }
+        .slider-group input { flex: 1; -webkit-appearance: none; height: 4px; background: #444; border-radius: 2px; }
+        .slider-group input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--gold); border-radius: 50%; border: 2px solid var(--dark-gray); box-shadow: 0 0 8px var(--gold); }
+        .val-text { color: var(--gold); font-size: 0.7em; width: 45px; text-align: right; }
 
-        /* Control Styles */
-        .control-group { margin-bottom: 4px; }
-        .pa-mic-slider { width: 100%; height: 4px; background: #333; accent-color: var(--gold); }
-        .pa-mic-value { color: var(--gold); font-size: 0.7em; }
-        
-        /* Meter Styles */
-        .meter-container { height: 6px; background: #111; border-radius: 3px; overflow: hidden; margin-top: auto; border: 1px solid #333; }
-        .meter-bar { height: 100%; width: 0%; background: linear-gradient(to right, #004d00, #00ff00); transition: width 0.1s; }
+        /* Premium Waveform */
+        .wf-box { height: 60px; background: #000; border: 1px solid var(--mid-gray); display: flex; margin-bottom: 6px; border-radius: 4px; overflow: hidden; }
+        .wf-side { width: 20px; display: flex; flex-direction: column; justify-content: space-around; border-right: 1px solid var(--gold); font-size: 0.6em; color: var(--red); font-weight: bold; text-align: center; }
+        .wf-canvases { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 2px; }
+        .wf-canvas { width: 100%; height: 24px; border: 1px solid rgba(250, 215, 142, 0.3); border-radius: 2px; }
 
-        /* Sample Grid */
-        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 5px; flex: 1; }
-        .sample-btn { background: #1a1a1a; color: var(--gold); border: 1px solid #444; font-size: 0.7em; height: 30px; border-radius: 4px; font-weight: bold; }
-        .sample-btn.active { background: var(--gold); color: #000; box-shadow: 0 0 10px var(--gold); }
+        /* Meter System */
+        .meter-sys { height: 10px; background: #111; border: 1px solid var(--gold); border-radius: 5px; overflow: hidden; position: relative; margin-top: auto; }
+        .meter-sys-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--green) 0%, var(--neon-green) 70%, var(--red) 100%); transition: width 0.08s ease-out; }
 
-        /* Button Rows */
-        .track-buttons { display: flex; gap: 2px; margin-top: 5px; }
-        .track-buttons button { flex: 1; height: 24px; font-size: 0.7em; background: var(--green); border: 1px solid var(--gold); color: var(--gold); border-radius: 4px; font-weight: bold; }
+        /* Sample Pad Grid */
+        .pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; flex: 1; }
+        .pad { background: linear-gradient(135deg, #222 0%, #111 100%); color: var(--gold); border: 1px solid #444; border-radius: 4px; font-size: 0.75em; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+        .pad.active { background: var(--gold); color: #000; box-shadow: 0 0 15px var(--gold); transform: scale(1.05); }
 
-        /* Debug & Status Overlay */
-        #audio-debug { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); border: 1px solid #555; padding: 10px; color: #0f0; font-size: 11px; z-index: 2000; border-radius: 4px; }
-        .meter-mini { height: 10px; width: 100px; background: #222; border: 1px solid #444; position: relative; margin-top: 5px; }
-        .meter-mini-fill { height: 100%; width: 0%; background: #0f0; transition: width 0.05s; }
-        
+        /* Floating Debug Overlay */
+        #diag { position: fixed; top: 12px; right: 12px; background: rgba(0,0,0,0.85); border: 1px solid #555; padding: 10px; color: var(--neon-green); font-size: 10px; border-radius: 6px; z-index: 5000; }
+        .mini-mtr { height: 8px; width: 120px; background: #222; border: 1px solid #444; margin-top: 6px; border-radius: 4px; overflow: hidden; }
+        .mini-mtr-fill { height: 100%; width: 0%; background: var(--neon-green); transition: width 0.05s; }
+
         cast-media-player { display: none; }
     </style>
 </head>
@@ -71,151 +100,132 @@
     <audio id="silent-loop" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
     <cast-media-player></cast-media-player>
     
-    <div id="audio-debug">
-        <div>STATE: <span id="as-val">WAITING...</span></div>
-        <div class="meter-mini"><div id="as-meter" class="meter-mini-fill"></div></div>
-        <div id="as-msg" style="color:#aaa; font-size:9px; margin-top:5px;">v13.8.103 MIRROR EXACT</div>
+    <div id="diag">
+        <div style="display:flex; justify-content:space-between;"><span>ENGINE:</span> <span id="st-val">OFFLINE</span></div>
+        <div class="mini-mtr"><div id="st-mtr" class="mini-mtr-fill"></div></div>
+        <div style="color:#777; margin-top:6px; font-size:9px;">MXS-004 MIRROR v13.8.104</div>
     </div>
 
-    <div class="container" id="studio-root">
-        <!-- Exact Header Mirror -->
+    <div class="container" id="root">
         <div class="header">
-            <div class="header-left"><h1>NOWMULTIMEDIA MXS-004</h1></div>
-            <div class="header-right"><h2 style="font-size:0.85em; margin:0; color:var(--gold);">Mix N Studio 004 :: MIRROR</h2></div>
+            <h1>NOWMULTIMEDIA MXS-004</h1>
+            <div class="live-tag">● LIVE STUDIO MIRROR</div>
         </div>
 
         <div class="main-content">
-            <!-- Exact Master Column Mirror -->
-            <div class="master-column" id="master-column">
-                <div class="track-header">Master Recording:</div>
-                <div id="m-time" class="track-time-display">00:00:00</div>
-                
-                <div class="control-group" style="display:flex; align-items:center; gap:4px;">
-                    <label style="color:var(--green); font-size:0.7em;">Vol</label>
-                    <input type="range" class="pa-mic-slider" id="m-vol" min="-60" max="6" value="0">
-                    <span id="m-vol-val" class="pa-mic-value">0.0 dB</span>
+            <!-- Master Column -->
+            <div class="track-col">
+                <div class="track-header">MASTER CONTROL</div>
+                <div id="m-tm" class="time-display">00:00:00</div>
+                <div class="slider-group"><label>Vol</label><input type="range" id="m-sl-vol" min="-60" max="6" value="0"><span class="val-text">0.0 dB</span></div>
+                <div class="wf-box">
+                    <div class="wf-side"><div>L</div><div>R</div></div>
+                    <div class="wf-canvases"><canvas class="wf-canvas"></canvas><canvas class="wf-canvas"></canvas></div>
                 </div>
-
-                <div class="waveform-box">
-                    <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
-                    <div class="waveform-canvas-container">
-                        <canvas class="waveform-canvas" id="m-wf-l"></canvas>
-                        <canvas class="waveform-canvas" id="m-wf-r"></canvas>
-                    </div>
-                </div>
-
-                <div class="track-header" style="text-align:center;">Sample Station</div>
-                <div id="sample-grid" class="sample-grid"></div>
-
-                <div class="meter-container"><div id="m-meter-bar" class="meter-bar"></div></div>
+                <div class="track-header" style="font-size:0.7em;">SAMPLE STATION</div>
+                <div id="p-grid" class="pad-grid"></div>
+                <div class="meter-sys"><div id="m-mtr" class="meter-sys-fill"></div></div>
             </div>
 
-            <!-- Track Columns (Injected) -->
-            <div id="tracks-container" style="display:contents;"></div>
+            <!-- Tracks 1-4 -->
+            <div id="t-cont" style="display:contents;"></div>
         </div>
     </div>
 
     <script>
         (function() {
             var audioCtx = null; var scriptNode = null; var ws = null;
-            var BUFFER_SIZE = 192000; var ringBuffer = new Float32Array(BUFFER_SIZE);
-            var writePtr = 0; var readPtr = 0; var lastLevel = 0;
+            var ringBuffer = new Float32Array(192000); var wPtr = 0; var rPtr = 0; var pk = 0;
             
-            function buildGUI() {
-                var grid = document.getElementById('sample-grid');
-                for (var p = 1; p <= 20; p++) {
-                    var btn = document.createElement('button'); btn.className = 'sample-btn';
-                    btn.id = 'sample-' + p; btn.textContent = p; grid.appendChild(btn);
+            function build() {
+                var g = document.getElementById('p-grid');
+                for (var i = 1; i <= 20; i++) {
+                    var p = document.createElement('div'); p.className = 'pad'; p.id = 'p-'+i; p.textContent = i; g.appendChild(p);
                 }
-                var tc = document.getElementById('tracks-container');
+                var tc = document.getElementById('t-cont');
                 for (var i = 0; i < 4; i++) {
-                    var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
-                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div>' +
-                        '<div class="track-time-display" id="t-time-'+i+'">00:00:00</div>' +
-                        '<div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>' +
-                        '<div class="waveform-canvas-container"><canvas class="waveform-canvas"></canvas><canvas class="waveform-canvas"></canvas></div></div>' +
-                        '<div class="control-group"><label style="color:var(--gold); font-size:0.7em;">Gain</label><input type="range" class="pa-mic-slider"><span class="pa-mic-value">0.0 dB</span></div>' +
-                        '<div class="track-buttons"><button>REC</button><button>STOP</button><button>PLAY</button><button>REV</button></div>' +
-                        '<div class="meter-container"><div id="t-meter-'+i+'" class="meter-bar"></div></div>';
-                    tc.appendChild(t);
+                    var col = document.createElement('div'); col.className = 'track-col';
+                    col.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="time-display" id="t-tm-'+i+'">00:00:00</div>' +
+                        '<div class="slider-group"><label>Gain</label><input type="range" min="-48" max="48" value="0"><span class="val-text">0.0 dB</span></div>' +
+                        '<div class="wf-box"><div class="wf-side"><div>L</div><div>R</div></div><div class="wf-canvases"><canvas class="wf-canvas"></canvas><canvas class="wf-canvas"></canvas></div></div>' +
+                        '<div style="display:flex; gap:3px; margin-bottom:5px;"><button style="flex:1; background:var(--red); color:var(--gold); border:1px solid var(--gold); border-radius:4px; font-size:0.65em; font-weight:bold; height:20px;">REC</button><button style="flex:1; background:var(--green); color:var(--gold); border:1px solid var(--gold); border-radius:4px; font-size:0.65em; font-weight:bold; height:20px;">PLAY</button></div>' +
+                        '<div class="meter-sys"><div id="t-mtr-'+i+'" class="meter-sys-fill"></div></div>';
+                    tc.appendChild(col);
                 }
-                updateScale();
+                document.getElementById('root').classList.add('visible');
+                fit();
             }
 
-            function updateScale() {
-                const winW = window.innerWidth; const winH = window.innerHeight;
-                document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98);
+            function fit() { document.documentElement.style.setProperty('--scale', Math.min(window.innerWidth/1440, window.innerHeight/810) * 0.97); }
+
+            function unlock() {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                if (audioCtx.state === 'suspended') audioCtx.resume().then(() => { if (audioCtx.state === 'running') go(); });
+                else if (audioCtx.state === 'running') go();
             }
 
-            function startAudio() {
+            function go() {
                 if (scriptNode) return;
                 scriptNode = audioCtx.createScriptProcessor(2048, 0, 2);
                 scriptNode.onaudioprocess = (e) => {
-                    const outL = e.outputBuffer.getChannelData(0); const outR = e.outputBuffer.getChannelData(1);
-                    const available = (writePtr - readPtr + BUFFER_SIZE) % BUFFER_SIZE;
-                    if (available < 4096) { outL.fill(0); outR.fill(0); return; }
-                    let maxVal = 0;
+                    const l = e.outputBuffer.getChannelData(0); const r = e.outputBuffer.getChannelData(1);
+                    const av = (wPtr - rPtr + 192000) % 192000;
+                    if (av < 4096) { l.fill(0); r.fill(0); return; }
+                    let mx = 0;
                     for (let i = 0; i < 2048; i++) {
-                        const vL = ringBuffer[readPtr]; const vR = ringBuffer[(readPtr + 1) % BUFFER_SIZE];
-                        outL[i] = vL; outR[i] = vR;
-                        maxVal = Math.max(maxVal, Math.abs(vL), Math.abs(vR));
-                        readPtr = (readPtr + 2) % BUFFER_SIZE;
+                        const vL = ringBuffer[rPtr]; const vR = ringBuffer[(rPtr+1)%192000];
+                        l[i] = vL; r[i] = vR;
+                        mx = Math.max(mx, Math.abs(vL), Math.abs(vR));
+                        rPtr = (rPtr+2)%192000;
                     }
-                    lastLevel = maxVal;
+                    pk = mx;
                 };
                 scriptNode.connect(audioCtx.destination);
             }
 
-            function tryUnlock() {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                if (audioCtx.state === 'suspended') audioCtx.resume().then(() => { if (audioCtx.state === 'running') startAudio(); });
-                else if (audioCtx.state === 'running') startAudio();
+            function sync(s) {
+                if (!s) return;
+                if (s.transport) document.getElementById('m-tm').textContent = s.transport.position;
+                if (s.samples) s.samples.forEach((p,i) => {
+                    var el = document.getElementById('p-'+(i+1)); if (el) el.className = p.isPlaying ? 'pad active' : 'pad';
+                });
+                if (s.tracks) s.tracks.forEach((t,i) => {
+                    var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
+                    var tm = document.getElementById('t-tm-'+i); if (tm) tm.textContent = s.transport.position;
+                });
+                var mm = document.getElementById('m-mtr'); if (mm) mm.style.width = (pk * 100) + '%';
+                unlock();
             }
 
-            function renderState(state) {
-                if (!state) return;
-                if (state.transport) document.getElementById('m-time').textContent = state.transport.position;
-                if (state.samples) state.samples.forEach((s,i) => {
-                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = s.isPlaying ? 'sample-btn active' : 'sample-btn';
-                });
-                if (state.tracks) state.tracks.forEach((t,i) => {
-                    var m = document.getElementById('t-meter-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
-                    var tm = document.getElementById('t-time-'+i); if (tm) tm.textContent = state.transport.position;
-                });
-                var mm = document.getElementById('m-meter-bar'); if (mm) mm.style.width = (lastLevel * 100) + '%';
-                tryUnlock();
-            }
-
-            function connect(url) {
+            function conn(url) {
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
-                        const pcm = new Float32Array(e.data);
-                        for (let i = 0; i < pcm.length; i++) { ringBuffer[writePtr] = pcm[i]; writePtr = (writePtr + 1) % BUFFER_SIZE; }
+                        const p = new Float32Array(e.data);
+                        for (let i = 0; i < p.length; i++) { ringBuffer[wPtr] = p[i]; wPtr = (wPtr + 1) % 192000; }
                     } else {
-                        try { var m = JSON.parse(e.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
+                        try { var d = JSON.parse(e.data); if (d.type === 'STATE_UPDATE') sync(d.state); } catch(x){}
                     }
                 };
             }
 
             window.onload = function() {
-                buildGUI();
-                const context = cast.framework.CastReceiverContext.getInstance();
-                context.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
-                    if (req.media && req.media.contentId) {
-                        const u = new URL(req.media.contentId);
-                        const wsUrl = u.searchParams.get('ws');
-                        if (wsUrl) connect("ws://" + wsUrl);
+                build();
+                const ctx = cast.framework.CastReceiverContext.getInstance();
+                ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (r) => {
+                    if (r.media && r.media.contentId) {
+                        const u = new URL(r.media.contentId); const w = u.searchParams.get('ws');
+                        if (w) conn("ws://" + w);
                     }
-                    return req;
+                    return r;
                 });
-                context.start({ disableIdleTimeout: true });
-                window.addEventListener('resize', updateScale);
+                ctx.start({ disableIdleTimeout: true });
+                window.onresize = fit;
                 setInterval(() => {
-                    document.getElementById('as-meter').style.width = (lastLevel * 100) + '%';
-                    if (audioCtx) document.getElementById('as-val').textContent = audioCtx.state.toUpperCase();
+                    document.getElementById('st-mtr').style.width = (pk * 100) + '%';
+                    if (audioCtx) document.getElementById('st-val').textContent = audioCtx.state.toUpperCase();
                 }, 100);
-                setInterval(tryUnlock, 1000);
+                setInterval(unlock, 1000);
             };
         })();
     </script>
