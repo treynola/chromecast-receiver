@@ -132,6 +132,23 @@
         }
         .checklist-item .done { color: #00ff00; }
         .checklist-item .pending { color: #666; }
+        #debug-log {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #0f0;
+            z-index: 99999;
+            line-height: 1.4;
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
@@ -139,12 +156,13 @@
     <div id="diagnostic-label">📡 MXS-004 RECEIVER</div>
     <div id="status-overlay">WAITING FOR HANDSHAKE...</div>
     <div id="ghost-cursor"></div>
+    <div id="debug-log">🚀 Receiver v13.8.71 boot...</div>
     
     <div id="init-view">
         <div class="spinner"></div>
         <div id="message">MXS-004 STUDIO<br>
             <span style="font-size: 0.5em; opacity: 0.5;">READY TO RECEIVE</span><br>
-            <span style="font-size: 0.3em; opacity: 0.3; letter-spacing: 1px;">v13.8.70 [8080]</span>
+            <span style="font-size: 0.3em; opacity: 0.3; letter-spacing: 1px;">v13.8.71 [DIAG]</span>
         </div>
         <div style="margin-top: 30px; text-align: left; width: 280px;">
             <div class="checklist-item">1. WebSocket Signal... <span id="check-signal" class="pending">⏳</span></div>
@@ -251,8 +269,16 @@
         // ============================================================
         // REMOTE LOGGING — sends logs back to the Studio Mac console
         // ============================================================
+        var _debugEl = document.getElementById('debug-log');
+        var _logCount = 0;
         function remoteLog(msg) {
             console.log(msg);
+            // ON-SCREEN DEBUG (visible on TV)
+            _logCount++;
+            if (_debugEl && _logCount <= 50) {
+                _debugEl.innerHTML += '<br>' + msg;
+                _debugEl.scrollTop = _debugEl.scrollHeight;
+            }
             // Priority: WebSocket (if open)
             if (ws && ws.readyState === WebSocket.OPEN) {
                 try {
@@ -266,7 +292,7 @@
             }
         }
 
-        remoteLog("🚀 Receiver v13.8.70 booting...");
+        remoteLog("🚀 Receiver v13.8.71 booting...");
         remoteLog("🔗 Page URL: " + window.location.href);
 
         // ============================================================
