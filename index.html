@@ -6,6 +6,7 @@
     <title>MXS-004 Studio Receiver v13.8.70</title>
     <link rel="icon" href="data:,">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         :root {
             --gold: #ffcc00;
@@ -162,7 +163,7 @@
         <div class="spinner"></div>
         <div id="message">MXS-004 STUDIO<br>
             <span style="font-size: 0.5em; opacity: 0.5;">READY TO RECEIVE</span><br>
-            <span style="font-size: 0.3em; opacity: 0.3; letter-spacing: 1px;">v13.8.71 [DIAG]</span>
+            <span style="font-size: 0.3em; opacity: 0.3; letter-spacing: 1px;">v13.8.72</span>
         </div>
         <div style="margin-top: 30px; text-align: left; width: 280px;">
             <div class="checklist-item">1. WebSocket Signal... <span id="check-signal" class="pending">⏳</span></div>
@@ -292,25 +293,25 @@
             }
         }
 
-        remoteLog("🚀 Receiver v13.8.71 booting...");
+        remoteLog("🚀 Receiver v13.8.72 booting...");
         remoteLog("🔗 Page URL: " + window.location.href);
 
         // ============================================================
         // GOOGLE CAST RECEIVER SDK INITIALIZATION
+        // SDK loaded via <script> in <head> (official Google approach)
         // ============================================================
-        var castScript = document.createElement('script');
-        castScript.src = 'https://www.gstatic.com/cast/sdk/libs/caf/3.0/cast_receiver_framework.js';
-        castScript.onload = function() {
-            remoteLog("[OK] Cast SDK script loaded.");
+        function initCastSDK() {
+            if (typeof cast === 'undefined' || !cast.framework) {
+                remoteLog("❌ Cast SDK not available (typeof cast=" + typeof cast + ")");
+                return;
+            }
+            remoteLog("[OK] Cast SDK detected.");
             try {
                 var context = cast.framework.CastReceiverContext.getInstance();
                 var playerManager = context.getPlayerManager();
 
                 // -------------------------------------------------------
                 // LOAD INTERCEPTOR — This is where we get the Studio URL
-                // The Studio app sends a LOAD with contentId like:
-                //   http://192.168.1.11:8080/receiver/index.html?ws=ws%3A...&audioUrl=http%3A...
-                // We extract ws= and audioUrl= from that URL.
                 // -------------------------------------------------------
                 playerManager.setMessageInterceptor(
                     cast.framework.messages.MessageType.LOAD,
@@ -318,80 +319,72 @@
                         remoteLog("📥 LOAD intercepted!");
                         if (request.media && request.media.contentId) {
                             var contentId = request.media.contentId;
-                            remoteLog("📥 contentId: " + contentId);
+                            remoteLog("📥 contentId: " + contentId.substring(0, 80) + "...");
                             
                             try {
-                                // Parse the contentId URL to extract query params
                                 var url = new URL(contentId);
                                 var extractedWs = url.searchParams.get('ws');
                                 var extractedAudio = url.searchParams.get('audioUrl');
 
                                 if (extractedWs) {
                                     wsUrl = decodeURIComponent(extractedWs);
-                                    remoteLog("✅ Extracted WS URL: " + wsUrl);
+                                    remoteLog("✅ WS URL: " + wsUrl);
                                 }
                                 if (extractedAudio) {
                                     audioUrl = decodeURIComponent(extractedAudio);
-                                    remoteLog("✅ Extracted Audio URL: " + audioUrl);
+                                    remoteLog("✅ Audio URL: " + audioUrl);
                                 }
 
-                                // Derive the base HTTP URL for logging
                                 if (wsUrl) {
                                     window._studioBaseUrl = wsUrl.replace('ws://', 'http://').replace('wss://', 'https://');
-                                }
-
-                                // Connect!
-                                if (wsUrl) {
                                     connectWebSocket();
                                 }
                                 if (audioUrl) {
                                     startAudio(audioUrl);
                                 }
-
                             } catch(e) {
-                                remoteLog("❌ Error parsing LOAD contentId: " + e.message);
-                                // Fallback: try raw string parsing
+                                remoteLog("❌ LOAD parse error: " + e.message);
+                                // Fallback: raw string parsing
                                 if (contentId.indexOf('ws=') !== -1) {
-                                    var parts = contentId.split('ws=');
-                                    if (parts[1]) {
-                                        var wsRaw = parts[1].split('&')[0];
-                                        wsUrl = decodeURIComponent(wsRaw);
-                                        window._studioBaseUrl = wsUrl.replace('ws://', 'http://');
-                                        remoteLog("⚠️ Fallback WS URL: " + wsUrl);
-                                        connectWebSocket();
-                                    }
+                                    var wsRaw = contentId.split('ws=')[1].split('&')[0];
+                                    wsUrl = decodeURIComponent(wsRaw);
+                                    window._studioBaseUrl = wsUrl.replace('ws://', 'http://');
+                                    remoteLog("⚠️ Fallback WS: " + wsUrl);
+                                    connectWebSocket();
                                 }
                             }
                         }
-                        // Return null to suppress the default media player (we handle everything)
                         return null;
                     }
                 );
 
                 // -------------------------------------------------------
-                // NATIVE CAST CHANNEL — for WebRTC signaling (bypass WS)
+                // NATIVE CAST CHANNEL — for state + signaling (bypass WS mixed content)
                 // -------------------------------------------------------
                 context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(event) {
-                    remoteLog("📥 Native signal received");
+                    remoteLog("📥 Native signal received!");
                     var data = event.data;
                     if (data && typeof data.payload === 'string') {
-                        try { data = JSON.parse(data.payload); } catch(e) {}
+                        try { data = JSON.parse(data.payload); } catch(e) {
+                            remoteLog("❌ Native parse error: " + e.message);
+                        }
                     }
                     handleSignal(data);
                 });
 
                 context.start({ disableIdleTimeout: true });
-                remoteLog("[OK] Google Cast Receiver SDK Initialized!");
+                remoteLog("✅ Cast SDK Started! Waiting for LOAD...");
                 diagLabel.textContent = "📡 CAST SDK READY";
+                document.getElementById('check-signal').textContent = '✅';
+                document.getElementById('check-signal').className = 'done';
 
             } catch(e) {
-                remoteLog("❌ Cast SDK init failed: " + e.message);
+                remoteLog("❌ Cast SDK init error: " + e.message);
             }
-        };
-        castScript.onerror = function() {
-            remoteLog("❌ Failed to load Cast SDK script. Running in standalone mode.");
-        };
-        document.head.appendChild(castScript);
+        }
+
+        // Initialize immediately (SDK loaded in <head>)
+        initCastSDK();
 
         // ============================================================
         // WEBSOCKET CONNECTION
