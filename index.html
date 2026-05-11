@@ -2,142 +2,78 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.78</title>
-    <!-- Cast SDK -->
+    <title>MXS-004 Studio Mirror v13.8.79</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style id="studio-styles">
-        /* --- CORE MIRROR STYLES (BULLETPROOF) --- */
-        :root {
-            --red: #FF0000; --gold: #FAD78E; --dark-gold: #b38600; --green: #008000;
-            --off-black: #1a1a1a; --dark-gray: #2c2c2c; --text-color: #f0f0f0;
-        }
-        html, body {
-            background-color: #000 !important; margin: 0; padding: 0;
-            width: 100%; height: 100%; overflow: hidden;
-            font-family: 'Inter', 'Helvetica', sans-serif; color: var(--text-color);
-        }
-        #init-overlay {
-            position: fixed; inset: 0; background: #000; z-index: 99999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.5s ease-out;
-        }
-        .container {
-            width: 100vw; height: 100vh; display: flex; flex-direction: column;
-            padding: 10px; box-sizing: border-box; opacity: 0; transition: opacity 0.5s ease-in;
-        }
-        .main-content { display: grid; grid-template-columns: 280px 1fr; gap: 10px; flex: 1; overflow: hidden; }
-        .tracks-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .master-column, .track {
-            background: #111; border: 1px solid #333; border-radius: 4px;
-            padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative;
-        }
-        .track-header { font-size: 0.9em; color: var(--gold); border-bottom: 1px solid #444; padding-bottom: 4px; text-transform: uppercase; font-family: 'Courier New', monospace; font-weight: bold; }
-        .track-time-display { font-family: monospace; font-size: 1.5em; color: var(--green); text-align: center; background: #000; padding: 5px; border-radius: 4px; }
-        .status-indicator { font-size: 0.7em; text-align: center; padding: 2px; border-radius: 2px; background: #222; }
-        .waveform-box { height: 60px; background: #222; border: 1px solid #333; position: relative; border-radius: 2px; }
-        .meter-container { width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
-        .meter-bar { height: 100%; width: 0%; background: var(--gold); }
-        .rec-btn { background: none; border: 1px solid #444; color: #888; padding: 4px; font-size: 0.7em; cursor: pointer; border-radius: 2px; text-transform: uppercase; }
-        .rec-btn.recording { background: var(--red) !important; color: #fff !important; border-color: var(--red) !important; }
-        #debug-log {
-            position: fixed; bottom: 10px; left: 10px; right: 10px; max-height: 80px;
-            overflow-y: auto; background: rgba(0,0,0,0.85); color: #0f0; font-family: monospace;
-            font-size: 10px; padding: 10px; z-index: 100000; pointer-events: none; border: 1px solid rgba(0,255,0,0.2); border-radius: 8px;
-        }
-        #ghost-cursor {
-            position: absolute; width: 24px; height: 24px; background: rgba(250, 215, 142, 0.4);
-            border: 2px solid var(--gold); border-radius: 50%; pointer-events: none;
-            z-index: 90000; transform: translate(-50%, -50%); display: none;
-        }
-        .spinner { width: 40px; height: 40px; border: 3px solid rgba(250, 215, 142, 0.1); border-top: 3px solid var(--gold); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    <style>
+        :root { --red: #FF0000; --gold: #FAD78E; --green: #008000; --bg: #000; }
+        html, body { background: #000; margin:0; padding:0; width:100%; height:100%; overflow:hidden; color:#fff; font-family:sans-serif; }
         
-        #reveal-btn {
-            margin-top: 20px; padding: 10px 20px; background: #333; color: var(--gold);
-            border: 1px solid var(--gold); border-radius: 4px; font-family: inherit; cursor: pointer;
-            text-transform: uppercase; letter-spacing: 1px; font-size: 0.8em;
+        #init-overlay {
+            position:fixed; inset:0; background:#000; z-index:99999;
+            display:flex; flex-direction:column; justify-content:center; align-items:center;
         }
-        #reveal-btn:hover { background: var(--gold); color: #000; }
+        
+        #studio-root {
+            width:100vw; height:100vh; display:flex; flex-direction:column;
+            padding:20px; box-sizing:border-box; background:#050505;
+            border: 4px solid #222; /* High-visibility border */
+            display: none; /* Hidden by default */
+        }
+
+        .header { display:flex; justify-content:space-between; border-bottom:1px solid var(--gold); padding-bottom:10px; margin-bottom:10px; }
+        .main-content { display:grid; grid-template-columns:300px 1fr; gap:20px; flex:1; }
+        .tracks-container { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+        .master-column, .track { background:#111; border:1px solid #333; border-radius:8px; padding:15px; display:flex; flex-direction:column; gap:10px; }
+        
+        .track-header { color:var(--gold); font-size:1.2em; font-weight:bold; }
+        .time-display { font-family:monospace; font-size:2em; color:var(--green); text-align:center; background:#000; padding:10px; border-radius:4px; }
+        .status { font-size:0.8em; text-align:center; color:#888; }
+        
+        .meter-box { height:6px; background:#222; border-radius:3px; overflow:hidden; }
+        .meter-fill { height:100%; width:0%; background:var(--gold); }
+        
+        .btn { border:1px solid #444; background:none; color:#aaa; padding:8px; font-size:0.7em; }
+        .btn.active { background:var(--red); color:#fff; border-color:var(--red); }
+        
+        #debug-log {
+            position:fixed; bottom:20px; left:20px; right:20px; max-height:100px;
+            overflow-y:auto; background:rgba(0,0,0,0.9); color:#0f0; font-family:monospace;
+            font-size:11px; padding:10px; z-index:100000; border:1px solid #0f0;
+        }
+        
+        .spinner { width:50px; height:50px; border:4px solid rgba(250,215,142,0.1); border-top:4px solid var(--gold); border-radius:50%; animation:spin 1s linear infinite; margin-bottom:20px; }
+        @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
     </style>
 </head>
 <body>
     <div id="init-overlay">
         <div class="spinner"></div>
-        <div style="font-size: 2.5em; color: var(--gold); margin-bottom: 5px; font-weight: bold; letter-spacing: 3px;">MXS-004</div>
-        <div id="init-status" style="color: #888; font-family: monospace; font-size: 0.9em; letter-spacing: 1px;">WAITING FOR STUDIO SIGNAL...</div>
-        <button id="reveal-btn" onclick="reveal()">Force Reveal GUI</button>
+        <div style="font-size:3em; color:var(--gold); font-weight:bold;">MXS-004</div>
+        <div id="init-status" style="color:#888; font-family:monospace; margin-top:10px;">CONNECTING TO STUDIO...</div>
+        <button onclick="reveal()" style="margin-top:20px; padding:10px; background:var(--gold); border:none; cursor:pointer;">FORCE REVEAL</button>
     </div>
 
-    <div id="debug-log">🚀 Studio Mirror v13.8.78</div>
-    <div id="ghost-cursor"></div>
+    <div id="debug-log">🚀 Studio Mirror v13.8.79</div>
 
-    <div class="container" id="studio-root">
-        <div class="header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--gold); margin-bottom: 10px; height: 40px;">
-            <h1 style="color:var(--gold); margin:0; font-size: 1.5em; letter-spacing: 2px;">NOWMULTIMEDIA MXS-004</h1>
-            <div style="color:var(--gold); font-size: 0.8em; opacity: 0.7;">HIGH-FIDELITY MIRROR v13.8.78</div>
+    <div id="studio-root">
+        <div class="header">
+            <div style="font-size:2em; color:var(--gold);">STUDIO MIRROR</div>
+            <div id="sync-status" style="color:var(--green);">SYNC ACTIVE</div>
         </div>
-
         <div class="main-content">
-            <!-- Master Column -->
             <div class="master-column">
-                <div class="track-header">Master Recording</div>
-                <div id="master-time" class="track-time-display">00:00:00</div>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <label style="font-size:0.6em; color:var(--gold);">VOL</label>
-                    <input type="range" id="master-volume" min="-60" max="6" value="0" style="flex:1;">
-                </div>
-                <div class="waveform-box"></div>
-                <div style="display:flex; gap:10px;">
-                    <div class="meter-container"><div id="lfo-meter-bar" class="meter-bar"></div></div>
-                    <div class="meter-container"><div id="lfo2-meter-bar" class="meter-bar"></div></div>
-                </div>
-                <button id="master-record-button" class="rec-btn" style="width:100%; margin-top:10px; font-weight:bold; height:32px; border-color:var(--red); color:var(--red);">RECORD MASTER</button>
+                <div class="track-header">MASTER</div>
+                <div id="m-time" class="time-display">00:00:00</div>
+                <div class="meter-box"><div id="lfo1" class="meter-fill"></div></div>
+                <div class="meter-box"><div id="lfo2" class="meter-fill"></div></div>
+                <button id="m-rec" class="btn" style="width:100%; font-weight:bold; height:40px;">RECORD</button>
             </div>
-
-            <!-- Tracks Container -->
-            <div class="tracks-container" id="tracks-root">
-                <!-- Track 1 -->
-                <div class="track" id="track-0">
-                    <div class="track-header">TRACK 1</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                        <button class="rec-btn">REC</button><button class="rec-btn">PLAY</button>
-                    </div>
-                </div>
-                <!-- Track 2 -->
-                <div class="track" id="track-1">
-                    <div class="track-header">TRACK 2</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                        <button class="rec-btn">REC</button><button class="rec-btn">PLAY</button>
-                    </div>
-                </div>
-                <!-- Track 3 -->
-                <div class="track" id="track-2">
-                    <div class="track-header">TRACK 3</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                        <button class="rec-btn">REC</button><button class="rec-btn">PLAY</button>
-                    </div>
-                </div>
-                <!-- Track 4 -->
-                <div class="track" id="track-3">
-                    <div class="track-header">TRACK 4</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                        <button class="rec-btn">REC</button><button class="rec-btn">PLAY</button>
-                    </div>
-                </div>
+            <div class="tracks-container">
+                <div class="track" id="t0"><div class="track-header">TRACK 1</div><div class="time-display">00:00:00</div><div class="status">Ready</div><button class="btn">REC</button></div>
+                <div class="track" id="t1"><div class="track-header">TRACK 2</div><div class="time-display">00:00:00</div><div class="status">Ready</div><button class="btn">REC</button></div>
+                <div class="track" id="t2"><div class="track-header">TRACK 3</div><div class="time-display">00:00:00</div><div class="status">Ready</div><button class="btn">REC</button></div>
+                <div class="track" id="t3"><div class="track-header">TRACK 4</div><div class="time-display">00:00:00</div><div class="status">Ready</div><button class="btn">REC</button></div>
             </div>
         </div>
     </div>
@@ -145,106 +81,69 @@
     <script>
         (function() {
             var ws = null; var lastState = null; var audioCtx = null;
-            var lfoPhase1 = 0; var lfoPhase2 = 0; var lastFrameTime = performance.now();
-            var debugEl = document.getElementById('debug-log');
+            var debug = document.getElementById('debug-log');
             var overlay = document.getElementById('init-overlay');
             var root = document.getElementById('studio-root');
             var status = document.getElementById('init-status');
-            var cursor = document.getElementById('ghost-cursor');
 
-            function log(msg) {
-                console.log(msg);
-                debugEl.innerHTML += '<br>' + msg;
-                debugEl.scrollTop = debugEl.scrollHeight;
-            }
-
-            // REDUCED FAILSAFE: Reveal GUI after 4 seconds automatically
-            setTimeout(function() {
-                if (overlay.style.display !== 'none') {
-                    log("✨ Automatic Reveal Triggered.");
-                    reveal();
-                }
-            }, 4000);
+            function log(m) { console.log(m); debug.innerHTML += '<br>' + m; debug.scrollTop = debug.scrollHeight; }
 
             window.reveal = function() {
-                overlay.style.opacity = '0';
-                setTimeout(function() { 
-                    overlay.style.display = 'none';
-                    root.style.opacity = '1';
-                }, 500);
-                log("🎬 GUI Mirror Active.");
-            }
+                log("🎬 REVEALING GUI...");
+                overlay.style.display = 'none';
+                root.style.display = 'flex';
+            };
+
+            // Failsafe reveal
+            setTimeout(reveal, 3000);
 
             function initAudio() {
                 if (audioCtx) return;
-                log("🔊 Ingesting Binary Audio Stream...");
+                log("🔊 Starting PCM Audio...");
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                var bufferQueue = [];
-                var scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
-                scriptNode.onaudioprocess = function(e) {
-                    var outL = e.outputBuffer.getChannelData(0);
-                    var outR = e.outputBuffer.getChannelData(1);
-                    if (bufferQueue.length > 0) {
-                        var chunk = bufferQueue.shift();
-                        for (var i = 0; i < outL.length; i++) {
-                            if (i*2 < chunk.length) {
-                                outL[i] = chunk[i*2] / 32768;
-                                outR[i] = chunk[i*2+1] / 32768;
-                            }
-                        }
-                    } else { outL.fill(0); outR.fill(0); }
+                var queue = [];
+                var node = audioCtx.createScriptProcessor(4096, 0, 2);
+                node.onaudioprocess = function(e) {
+                    var oL = e.outputBuffer.getChannelData(0);
+                    var oR = e.outputBuffer.getChannelData(1);
+                    if (queue.length > 0) {
+                        var c = queue.shift();
+                        for (var i=0; i<oL.length; i++) { if (i*2<c.length) { oL[i]=c[i*2]/32768; oR[i]=c[i*2+1]/32768; } }
+                    } else { oL.fill(0); oR.fill(0); }
                 };
-                scriptNode.connect(audioCtx.destination);
-                window._pcmFeed = function(data) {
-                    bufferQueue.push(new Int16Array(data));
-                    if (bufferQueue.length > 30) bufferQueue.shift(); // Low latency
-                };
+                node.connect(audioCtx.destination);
+                window._feed = function(d) { queue.push(new Int16Array(d)); if (queue.length > 20) queue.shift(); };
             }
 
-            function renderState(state) {
-                if (!state) return;
-                lastState = state;
+            function update(s) {
+                if (!s) return;
+                lastState = s;
                 if (overlay.style.display !== 'none') reveal();
-
-                if (state.cursor && cursor) {
-                    cursor.style.display = 'block';
-                    cursor.style.left = (state.cursor.x * 100) + '%';
-                    cursor.style.top = (state.cursor.y * 100) + '%';
+                
+                if (s.master) {
+                    document.getElementById('m-rec').className = s.master.isRecording ? 'btn active' : 'btn';
+                    if (s.transport) document.getElementById('m-time').textContent = s.transport.position;
                 }
-
-                if (state.master) {
-                    var mv = document.getElementById('master-volume');
-                    if (mv) mv.value = state.master.volume;
-                    var rb = document.getElementById('master-record-button');
-                    if (rb) rb.className = state.master.isRecording ? 'rec-btn recording' : 'rec-btn';
-                    var mt = document.getElementById('master-time');
-                    if (mt && state.transport) mt.textContent = state.transport.position;
-                }
-
-                if (state.tracks) {
-                    state.tracks.forEach(function(t, i) {
-                        var el = document.getElementById('track-' + i);
-                        if (!el) return;
-                        var si = el.querySelector('.status-indicator');
-                        if (si) {
-                            si.textContent = t.statusText || 'Ready';
-                            si.className = 'status-indicator status-' + (t.statusType || 'ready');
+                if (s.tracks) {
+                    s.tracks.forEach(function(t, i) {
+                        var el = document.getElementById('t' + i);
+                        if (el) {
+                            el.querySelector('.status').textContent = t.statusText || 'Ready';
+                            el.querySelector('.btn').className = t.isRecording ? 'btn active' : 'btn';
                         }
-                        var rb = el.querySelector('.rec-btn');
-                        if (rb) rb.className = t.isRecording ? 'rec-btn recording' : 'rec-btn';
                     });
                 }
             }
 
-            function connectWS(url) {
-                log("🔌 Connecting to Studio: " + url);
+            function connect(url) {
+                log("🔌 Connecting: " + url);
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onopen = function() { log("✅ Handshake Success!"); status.textContent = "CONNECTED"; initAudio(); };
                 ws.onmessage = function(e) {
-                    if (e.data instanceof ArrayBuffer) { if (window._pcmFeed) window._pcmFeed(e.data); }
-                    else { try { var msg = JSON.parse(e.data); if (msg.type === 'STATE_UPDATE') renderState(msg.state); } catch(err){} }
+                    if (e.data instanceof ArrayBuffer) { if (window._feed) window._feed(e.data); }
+                    else { try { var m = JSON.parse(e.data); if (m.type==='STATE_UPDATE') update(m.state); } catch(err){} }
                 };
-                ws.onclose = function() { log("🛑 Stream Closed. Retrying..."); setTimeout(function(){ connectWS(url); }, 2000); };
+                ws.onclose = function() { log("🛑 Lost. Retrying..."); setTimeout(function(){ connect(url); }, 2000); };
             }
 
             window.onload = function() {
@@ -254,38 +153,18 @@
                     if (req.media && req.media.contentId) {
                         try {
                             var u = new URL(req.media.contentId);
-                            var ip = u.hostname;
-                            connectWS("ws://" + ip + ":8080");
-                        } catch(e) { log("❌ IP Parse Err: " + e.message); }
+                            connect("ws://" + u.hostname + ":8080");
+                        } catch(e) { log("❌ Parse Err: " + e.message); }
                     }
                     return null;
                 });
                 ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
                     var d = e.data; if (typeof d.payload === 'string') try { d = JSON.parse(d.payload); } catch(err){}
-                    if (d.type === 'STATE_UPDATE') renderState(d.state);
+                    if (d.type === 'STATE_UPDATE') update(d.state);
                 });
                 ctx.start({ disableIdleTimeout: true });
-                log("📡 Cast SDK Listening...");
+                log("📡 SDK Active.");
             };
-
-            function animate() {
-                var now = performance.now(); var dt = (now - lastFrameTime) / 1000; lastFrameTime = now;
-                if (lastState && lastState.master) {
-                    var m = lastState.master;
-                    if (m.lfo1Active) {
-                        lfoPhase1 += 2 * Math.PI * (m.lfo1Freq || 0.5) * dt;
-                        var b1 = document.getElementById('lfo-meter-bar');
-                        if (b1) b1.style.width = (Math.abs(Math.sin(lfoPhase1)) * 100) + '%';
-                    }
-                    if (m.lfo2Active) {
-                        lfoPhase2 += 2 * Math.PI * (m.lfo2Freq || 0.5) * dt;
-                        var b2 = document.getElementById('lfo2-meter-bar');
-                        if (b2) b2.style.width = (Math.abs(Math.sin(lfoPhase2)) * 100) + '%';
-                    }
-                }
-                requestAnimationFrame(animate);
-            }
-            requestAnimationFrame(animate);
 
             document.addEventListener('click', function() { if (audioCtx) audioCtx.resume(); }, { once: false });
         })();
