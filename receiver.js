@@ -12,7 +12,7 @@
     var lfoPhase2 = 0;
 
     var debugEl = document.getElementById('debug-log');
-    var overlay = document.getElementById('init-overlay');
+    var overlay = document.getElementById('failsafe-reveal');
     var studioRoot = document.getElementById('studio-root');
     var cursorEl = document.getElementById('ghost-cursor');
 
@@ -110,9 +110,12 @@
     function renderState(state) {
         if (!state) return;
         lastState = state;
-        if (overlay.style.display !== 'none') {
+        
+        // Hide Failsafe Overlay
+        if (overlay && overlay.style.display !== 'none') {
             overlay.style.display = 'none';
-            studioRoot.style.opacity = '1';
+            if (studioRoot) studioRoot.style.opacity = '1';
+            log("🎬 GUI REVEALED: Signal Lock Established.");
         }
 
         // Cursor
