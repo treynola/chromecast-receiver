@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.99 [AUTO-SCALE 16:9]</title>
+    <title>MXS-004 Studio Mirror v13.8.100 [COLOR FAILSAFE]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
-    
     <style>
         :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; --scale: 1; }
-        body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; width: 100vw; height: 100vh; }
+        
+        /* [V13.8.100] COLOR FAILSAFES: DodgerBlue = Loaded/Waiting | Black = Signal Active */
+        body { background: #1e90ff; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; width: 100vw; height: 100vh; transition: background 0.5s; }
         
         cast-media-player { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; visibility: hidden; }
 
@@ -17,30 +18,30 @@
             position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%) scale(var(--scale));
             transform-origin: center;
-            background: var(--dark-gray); border: 1px solid var(--green); border-radius: 12px;
-            padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; 
+            background: var(--dark-gray); border: 2px solid var(--green); border-radius: 12px;
+            padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; 
             z-index: 100; opacity: 0; transition: opacity 0.5s;
         }
 
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; flex: 1; min-height: 0; }
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; flex: 1; min-height: 0; }
         .column { border: 2px solid #444; border-radius: 10px; padding: 15px; background: #1a1a1a; display: flex; flex-direction: column; box-shadow: inset 0 0 15px #000; }
-        .header-text { color: var(--gold); font-weight: bold; font-size: 1.1em; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
-        .time-display { font-size: 2.8em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; text-shadow: 0 0 10px var(--green); margin: auto 0; }
+        .header-text { color: var(--gold); font-weight: bold; font-size: 1.1em; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
+        .time-display { font-size: 3em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; margin: auto 0; }
         
-        /* Debug Console Overlay Adjustment */
-        #cast-debug-overlay { z-index: 1000 !important; transform: scale(0.8); transform-origin: top left; }
+        #overlay-status { position: fixed; top: 10px; right: 10px; font-size: 12px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; border: 1px solid #555; z-index: 2000; }
     </style>
 </head>
 <body>
     <cast-media-player></cast-media-player>
+    <div id="overlay-status">v13.8.100 | Standby...</div>
 
     <div class="container" id="studio-root">
-        <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:20px; border-bottom: 2px solid var(--gold); padding-bottom: 10px;">
+        <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:25px; border-bottom: 2px solid var(--gold); padding-bottom: 10px;">
             <div style="display:flex; align-items:center; gap: 20px;">
-                <h1 style="color: var(--gold); margin:0; font-size: 1.8em; font-family: 'Mexcellent', sans-serif;">NOWMULTIMEDIA MXS-004</h1>
-                <div id="status-tag" style="background: #333; color: #666; padding: 4px 12px; border-radius: 6px; font-size: 0.8em; font-weight: bold; letter-spacing: 1px;">STANDBY</div>
+                <h1 style="color: var(--gold); margin:0; font-size: 2em; font-family: 'Mexcellent', sans-serif;">NOWMULTIMEDIA MXS-004</h1>
+                <div id="status-tag" style="background: #444; color: #888; padding: 4px 15px; border-radius: 6px; font-size: 0.9em; font-weight: bold;">DISCONNECTED</div>
             </div>
-            <div style="color: var(--gold); font-size: 1em; font-weight: bold; letter-spacing: 2px;">V13.8.99 :: 1440x810 NATIVE</div>
+            <div style="color: var(--gold); font-size: 1.1em; font-weight: bold;">1440x810 MIRROR ENGINE</div>
         </div>
         <div class="main-content">
             <div class="column"><div class="header-text">MASTER</div><div id="recording-time" class="time-display">00:00:00</div></div>
@@ -58,45 +59,65 @@
             const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
             const studioRoot = document.getElementById('studio-root');
             const statusTag = document.getElementById('status-tag');
+            const overlayStatus = document.getElementById('overlay-status');
 
-            // [V13.8.99] Auto-Scaling Logic for Perfect 16:9 Fit
             function updateScale() {
                 const targetW = 1440; const targetH = 810;
-                const winW = window.innerWidth; const winH = window.innerHeight;
+                const winW = window.innerWidth || 1920; const winH = window.innerHeight || 1080;
                 const scaleW = winW / targetW; const scaleH = winH / targetH;
-                const finalScale = Math.min(scaleW, scaleH);
+                const finalScale = Math.min(scaleW, scaleH) * 0.95; // 5% Margin for overscan
                 document.documentElement.style.setProperty('--scale', finalScale);
-                castDebugLogger.info('SCALE', `Viewport: ${winW}x${winH} | Scale: ${finalScale.toFixed(3)}`);
+                castDebugLogger.info('UI', `Scale Fixed: ${finalScale.toFixed(3)}`);
+            }
+
+            function renderState(state) {
+                if (!state) return;
+                if (studioRoot.style.opacity !== '1') {
+                    studioRoot.style.opacity = '1';
+                    document.body.style.background = '#000'; // Signal lock = Black background
+                    overlayStatus.style.display = 'none';
+                    statusTag.textContent = "CONNECTED"; statusTag.style.color = "#0f0"; statusTag.style.background = "#004400";
+                    castDebugLogger.warn('UI', '🎬 STUDIO SIGNAL ACQUIRED');
+                }
+                if (state.transport) document.getElementById('recording-time').textContent = state.transport.position;
             }
 
             castDebugLogger.setEnabled(true);
             castDebugLogger.showDebugLogs(true);
-            
-            function renderState(state) {
-                if (!state) return;
-                studioRoot.style.opacity = '1';
-                statusTag.textContent = "STUDIO LIVE"; statusTag.style.color = "#0f0"; statusTag.style.background = "#004400";
-                if (state.transport) document.getElementById('recording-time').textContent = state.transport.position;
-            }
 
             context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
+                castDebugLogger.debug('SIGNAL', 'Msg Received: ' + JSON.stringify(e.data).substring(0, 50));
                 try {
                     let d = e.data;
                     if (typeof d === 'string') d = JSON.parse(d);
                     if (d.payload) d = (typeof d.payload === 'string') ? JSON.parse(d.payload) : d.payload;
                     if (d.type === 'STATE_UPDATE') renderState(d.state);
-                } catch(x) {}
+                } catch(x) { castDebugLogger.error('PARSE', x.message); }
             });
 
             playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
-                castDebugLogger.info('LOAD', 'Handshake Received');
+                castDebugLogger.warn('CORE', 'LOAD Request Received');
+                if (req.media && req.media.contentId) {
+                    try {
+                        const u = new URL(req.media.contentId);
+                        const wsUrl = u.searchParams.get('ws');
+                        if (wsUrl) {
+                            castDebugLogger.info('WS', 'Handshaking: ' + wsUrl);
+                            const ws = new WebSocket("ws://" + wsUrl);
+                            ws.onmessage = (ev) => {
+                                try { const m = JSON.parse(ev.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
+                            };
+                        }
+                    } catch(x) {}
+                }
                 return req;
             });
 
             context.addEventListener(cast.framework.system.EventType.READY, () => {
                 updateScale();
                 window.addEventListener('resize', updateScale);
-                castDebugLogger.info('SYSTEM', 'Ready for 16:9 Broadcast');
+                castDebugLogger.info('BOOT', 'System Ready (v13.8.100)');
+                overlayStatus.textContent = "READY - Waiting for Studio...";
             });
 
             context.start({ disableIdleTimeout: true });
