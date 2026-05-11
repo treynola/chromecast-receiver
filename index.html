@@ -2,72 +2,71 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.90 [AUDIO RESTORE]</title>
+    <title>MXS-004 Studio Mirror v13.8.91 [AUTO-AUDIO]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
         :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; }
         body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; }
-        #audio-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,50,0.9); z-index: 2000000;
-            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
-        }
-        .enable-btn {
-            background: var(--gold); color: #000; border: none; padding: 20px 40px;
-            font-size: 2em; font-weight: bold; border-radius: 10px; cursor: pointer;
-            box-shadow: 0 0 20px var(--gold); margin-top: 20px;
-        }
         #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-height: 120px; overflow-y: auto; pointer-events: none; }
         .container { width: 1432px; height: 802px; position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); opacity: 0; transition: opacity 0.5s; }
-        /* GUI styles same as before */
         .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 10px; }
         .track, .master-column { border: 1px solid var(--green); border-radius: 8px; padding: 8px; background: var(--dark-gray); }
         .track-header { color: var(--gold); border-bottom: 1px solid #444; margin-bottom: 5px; }
     </style>
 </head>
 <body>
-    <div id="audio-overlay">
-        <h1 style="color: var(--gold); font-size: 3em;">MXS-004 STUDIO</h1>
-        <p style="font-size: 1.5em;">SIGNAL LOCKED - READY FOR AUDIO</p>
-        <button id="enable-audio-btn" class="enable-btn">TAP TO START AUDIO</button>
-        <p style="margin-top: 20px; color: #666;">v13.8.90 [High-Fidelity Pipeline]</p>
-    </div>
+    <div id="debug-log">🚀 Auto-Audio v13.8.91 Booting...</div>
 
-    <div id="debug-log">🚀 Initializing Audio Pipeline...</div>
-
-    <div class="container" id="studio-root">
+    <div class="container" id="studio-root" style="opacity: 1;">
+        <div class="header" style="padding: 10px; background: #111; border-bottom: 1px solid gold;">
+            <h1 style="margin:0; color: gold;">MXS-004 STUDIO :: LIVE MIRROR</h1>
+        </div>
         <div class="main-content">
-            <div class="master-column"><div class="track-header">MASTER</div><div id="recording-time" style="font-size: 2em; color: var(--green);">00:00:00</div></div>
+            <div class="master-column">
+                <div class="track-header">MASTER</div>
+                <div id="recording-time" style="font-size: 2.5em; color: var(--green);">00:00:00</div>
+                <div id="audio-status" style="color: #666; font-size: 0.8em; margin-top: 10px;">Audio: Initializing...</div>
+            </div>
             <div id="tracks-container" style="display:contents;"></div>
         </div>
     </div>
 
     <script>
         (function() {
-            var audioCtx = null; var ws = null;
-            var ringBuffer = new Float32Array(48000 * 2); // 1 sec of stereo
+            var audioCtx = null; var ws = null; var scriptNode = null;
+            var ringBuffer = new Float32Array(48000 * 2); 
             var writePtr = 0; var readPtr = 0;
             var debugEl = document.getElementById('debug-log');
-            var overlay = document.getElementById('audio-overlay');
-            var studioRoot = document.getElementById('studio-root');
+            var statusEl = document.getElementById('audio-status');
 
             function log(m) {
                 console.log(m); if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; }
             }
 
-            function initAudio() {
-                if (audioCtx) return;
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                log("🔊 AudioContext Active (48kHz)");
-                
-                var scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
+            function tryUnlockAudio() {
+                if (audioCtx && audioCtx.state === 'running') return;
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                    log("🔊 Context Created.");
+                }
+                audioCtx.resume().then(() => {
+                    if (audioCtx.state === 'running') {
+                        if (!scriptNode) startPipeline();
+                        statusEl.textContent = "Audio: LIVE"; statusEl.style.color = "#0f0";
+                    }
+                }).catch(e => {
+                    statusEl.textContent = "Audio: Blocked by TV (Waiting for Signal)";
+                });
+            }
+
+            function startPipeline() {
+                scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
                 scriptNode.onaudioprocess = function(e) {
                     var outL = e.outputBuffer.getChannelData(0);
                     var outR = e.outputBuffer.getChannelData(1);
                     var available = (writePtr - readPtr + ringBuffer.length) % ringBuffer.length;
                     
-                    if (available < 8192) { // Buffer underflow protection
-                        outL.fill(0); outR.fill(0); return;
-                    }
+                    if (available < 8192) { outL.fill(0); outR.fill(0); return; }
 
                     for (var i = 0; i < 4096; i++) {
                         outL[i] = ringBuffer[readPtr];
@@ -76,14 +75,14 @@
                     }
                 };
                 scriptNode.connect(audioCtx.destination);
-                overlay.style.display = 'none'; studioRoot.style.opacity = '1';
-                log("🎬 Audio Pipeline Unlocked.");
+                log("🎬 Pipeline Connected.");
             }
 
             function connect(url) {
                 log("🔌 Connecting: " + url);
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = function(e) {
+                    tryUnlockAudio(); // Attempt unlock on every message
                     if (e.data instanceof ArrayBuffer) {
                         var pcm = new Float32Array(e.data);
                         for (var i = 0; i < pcm.length; i++) {
@@ -99,11 +98,9 @@
                         } catch(x){}
                     }
                 };
-                ws.onopen = function() { log("✅ Binary Stream Connected"); };
+                ws.onopen = function() { log("✅ Handshake Success"); };
                 ws.onclose = function() { setTimeout(function(){ connect(url); }, 2000); };
             }
-
-            document.getElementById('enable-audio-btn').onclick = initAudio;
 
             window.onload = function() {
                 var ctx = cast.framework.CastReceiverContext.getInstance();
@@ -115,10 +112,13 @@
                     return null;
                 });
                 ctx.start({ disableIdleTimeout: true });
-                log("📡 Signal Suite v13.8.90 Active.");
+                log("📡 Auto-Audio Suite v13.8.91 Active.");
                 
                 var params = new URLSearchParams(window.location.search);
                 if (params.has('ws')) connect(params.get('ws'));
+                
+                // Nuclear Unlock Interval
+                setInterval(tryUnlockAudio, 1000);
             };
         })();
     </script>
