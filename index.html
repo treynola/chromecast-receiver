@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.88 [DIAGNOSTIC]</title>
+    <title>MXS-004 Studio Mirror v13.8.89 [SIGNAL LOCK]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <style>
-        /* INLINED ESSENTIAL CSS v13.8.88 */
+        /* INLINED ESSENTIAL CSS v13.8.89 */
         :root {
             --red: #FF0000; --gold: #FAD78E; --green: #008000;
             --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; --text-color: #f0f0f0;
         }
         body { 
-            background: #000044 !important; color: var(--text-color); 
+            background: #000 !important; color: var(--text-color); 
             font-family: 'Courier New', monospace; margin:0; padding:0; overflow:hidden;
             display: flex; justify-content: center; align-items: center; height: 100vh;
         }
@@ -37,22 +37,19 @@
         .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
         .sample-btn { background: #333; color: var(--gold); border: 1px solid #555; font-size: 0.7em; height: 30px; border-radius: 4px; }
         .sample-btn.active { background: var(--gold); color: #000; box-shadow: 0 0 10px var(--gold); }
-        .rec-btn { background: #400; color: #f00; border: 1px solid #f00; border-radius: 4px; font-weight: bold; padding: 2px 5px; }
-        .rec-btn.recording { background: #f00; color: #fff; animation: blink 1s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-width: 300px; }
+        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-width: 300px; max-height: 150px; overflow-y: auto; pointer-events: none; }
         #ghost-cursor { position: absolute; width: 24px; height: 24px; border: 2px solid gold; border-radius: 50%; display: none; z-index: 99999; }
     </style>
 </head>
 <body class="app-loading">
     <div id="failsafe-reveal">
         <h1 style="font-size: 3em; margin: 0;">MXS-004 MIRROR</h1>
-        <p style="font-size: 1.2em; color: #ccc;">v13.8.88 DIAGNOSTIC BOOT</p>
-        <p id="failsafe-status" style="font-size: 1.1em; color: #f90;">IF YOU SEE BLUE, THE URL LOADED!</p>
-        <p style="color: #66f;">Waiting for Studio Signal...</p>
+        <p style="font-size: 1.2em; color: #ccc;">v13.8.89 SIGNAL LOCK</p>
+        <p id="failsafe-status" style="font-size: 1.1em; color: #f90;">URL LOADED - WAITING FOR SIGNAL...</p>
+        <div style="margin-top: 20px; font-size: 0.8em; color: #66f;">Check Debug Console Bottom Left</div>
     </div>
 
-    <div id="debug-log">🚀 Booting Diagnostic v13.8.88...</div>
+    <div id="debug-log">🚀 Diagnostic v13.8.89</div>
     <div id="ghost-cursor"></div>
 
     <div class="container" id="studio-root">
@@ -70,9 +67,9 @@
     </div>
 
     <script>
-        /* INLINED LOGIC v13.8.88 */
+        /* INLINED LOGIC v13.8.89 */
         (function() {
-            var ws = null; var lastState = null;
+            var ws = null;
             var debugEl = document.getElementById('debug-log');
             var overlay = document.getElementById('failsafe-reveal');
             var studioRoot = document.getElementById('studio-root');
@@ -92,7 +89,7 @@
                 var tc = document.getElementById('tracks-container');
                 for (var i = 0; i < 4; i++) {
                     var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
-                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display">00:00:00</div><div class="waveform-box"><div class="waveform-canvas"></div></div><div style="display:flex; gap:2px;"><button class="rec-btn">REC</button><button class="sample-btn" style="flex:1;">PLAY</button></div>';
+                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display">00:00:00</div><div class="waveform-box"><div class="waveform-canvas"></div></div><div style="display:flex; gap:2px;"><button class="sample-btn" style="flex:1;">REC</button><button class="sample-btn" style="flex:1;">PLAY</button></div>';
                     tc.appendChild(t);
                 }
             }
@@ -116,10 +113,14 @@
                 ws.onopen = function() { log("✅ Handshake Success!"); };
                 ws.onmessage = function(e) {
                     if (!(e.data instanceof ArrayBuffer)) {
-                        try { var m = JSON.parse(e.data); if (m.type==='STATE_UPDATE') renderState(m.state); } catch(x){}
+                        try {
+                            var m = JSON.parse(e.data);
+                            if (m.type==='STATE_UPDATE') renderState(m.state);
+                        } catch(x){}
                     }
                 };
                 ws.onclose = function() { setTimeout(function(){ connect(url); }, 2000); };
+                ws.onerror = function(e) { log("❌ WS Error"); };
             }
 
             window.onload = function() {
@@ -136,13 +137,28 @@
                         }
                         return null;
                     });
+                    
                     ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
                         log("📩 Signal Received");
-                        var d = e.data; if (typeof d.payload === 'string') try { d = JSON.parse(d.payload); } catch(x){}
-                        if (d.type === 'STATE_UPDATE') renderState(d.state);
+                        try {
+                            var d = e.data;
+                            // Resilient parsing for CAF e.data
+                            if (typeof d === 'string') d = JSON.parse(d);
+                            if (d.payload && typeof d.payload === 'string') d = JSON.parse(d.payload);
+                            
+                            if (d.type === 'STATE_UPDATE') renderState(d.state);
+                        } catch(x) { log("❌ Signal Parse Error: " + x.message); }
                     });
+                    
                     ctx.start({ disableIdleTimeout: true });
-                    log("📡 Diagnostic Suite v13.8.88 Active.");
+                    log("📡 Signal Lock Suite v13.8.89 Active.");
+                    
+                    // Fallback: If we got URL params, try connecting even without LOAD
+                    var params = new URLSearchParams(window.location.search);
+                    if (params.has('ws')) {
+                        log("🌀 Manual WS Fallback Triggered");
+                        connect(params.get('ws'));
+                    }
                 } catch(x) { log("❌ Cast SDK Error: " + x.message); }
             };
         })();
