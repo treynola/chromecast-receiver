@@ -1,1290 +1,635 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <title>MXS-004 PRO MONITOR V12.30 (Loop Slicing)</title>
-    <meta name="viewport" content="width=1920, initial-scale=1">
     <meta charset="UTF-8">
-    <meta name="version" content="v12.30">
-    <meta name="timestamp" content="2026-03-22T09:42:00Z">
-    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MXS-004 Studio Receiver v13.8.70</title>
+    <link rel="icon" href="data:,">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --gold: #ffcc00;
+            --dark-bg: #0a0a0a;
+            --glass: rgba(255, 255, 255, 0.05);
+        }
         body {
-            background-color: #000000 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            overflow: hidden !important;
+            background: #111 !important;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
         }
-
-        /* SCALING WRAPPER to enforce 16:9 aspect ratio (1440x810) on any TV */
-        #app-scaler {
-            /* Position: Center in viewport */
-            position: absolute !important;
-            top: 50% !important;
-            left: 50% !important;
-            transform-origin: center center !important;
-            /* Will be scaled and translated by JS */
-
-            /* Fixed internal dimensions */
-            width: 1440px !important;
-            height: 810px !important;
-
-            /* Contain the container */
-            display: flex !important;
-            justify-content: center !important;
-            align-items: center !important;
-            overflow: visible !important;
-        }
-
-        .container {
-            width: 1440px !important;
-            height: 810px !important;
-            max-width: 1440px !important;
-            max-height: 810px !important;
-            min-width: 1440px !important;
-            min-height: 810px !important;
-            display: flex !important;
-            flex-direction: column !important;
-            padding: 8px !important;
-            margin: 0 !important;
-            box-sizing: border-box !important;
-            border: 3px solid var(--green) !important;
-            border-radius: 10px !important;
-            background-color: var(--dark-gray) !important;
-            overflow: hidden !important;
-            /* Triple-layer border effect for visibility */
-            box-shadow:
-                0 0 0 3px var(--gold),
-                0 0 0 6px var(--red),
-                0 0 20px rgba(0, 0, 0, 0.8) !important;
-        }
-
-        /* Essential Layout Mirroring */
-        .header {
-            margin-bottom: 5px !important;
-            flex-shrink: 0;
-            height: 40px !important;
-            padding: 5px 20px !important;
-        }
-
-        /* NEW: 5-Column Layout mirrored from app */
-        .main-content {
-            flex: 1 !important;
-            display: grid !important;
-            grid-template-columns: repeat(5, 1fr) !important;
-            gap: 8px !important;
-            padding: 0 4px !important;
-            overflow: hidden !important;
-        }
-
-        .master-column {
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 5px !important;
-            overflow: hidden !important;
-            padding: 5px !important;
-            background-color: var(--dark-gray) !important;
-            border-radius: 10px !important;
-            border: 1px solid var(--green) !important;
-            position: relative !important;
-            top: 0 !important;
-        }
-
-        .master-recording-area {
-            margin-top: 5px !important;
-        }
-
-        /* Combined REC and Format look */
-        .master-rec-row {
-            display: flex !important;
-            flex-direction: row !important;
-            gap: 5px !important;
-            width: 95% !important;
-            justify-content: center !important;
-            align-items: center !important;
-            margin: 25px 0 0 0 !important;
-        }
-
-        .master-rec-row button,
-        .master-rec-row select {
-            flex: 1 !important;
-            font-size: 0.8em !important;
-        }
-
-        /* Tighten LFO spacing */
-        .lfo-button-item {
-            margin-bottom: -5px !important;
-        }
-
-        .lfo-meter-item {
-            padding-top: 0 !important;
-            margin-bottom: 0 !important;
-        }
-
-        .master-waveform-item {
-            margin-top: 0 !important;
-            height: 60px !important;
-            flex: 0 0 auto !important;
-        }
-
-        .master-item {
-            flex-shrink: 0 !important;
-            padding: 3px !important;
-        }
-
-        .master-label,
-        .track-header {
-            font-family: 'Mexcellent', sans-serif !important;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-size: 0.8em !important;
-            color: var(--gold) !important;
-        }
-
-
-
-
-
-        .sample-btn {
-            background-color: var(--gold) !important;
-            color: var(--green) !important;
-            border: 4px solid var(--green) !important;
-            font-family: 'Mexcellent', sans-serif !important;
-            font-size: 1.8em !important;
-            font-weight: 720 !important;
-            letter-spacing: 1px !important;
-            aspect-ratio: 1.0;
-        }
-
-        .sample-center-container {
-            background-color: #222222 !important;
-            border: 4px solid var(--green) !important;
+        #diagnostic-label {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
             border-radius: 10px;
-            padding: 10px;
-        }
-
-        .param-value,
-        .master-value,
-        label,
-        .status-indicator,
-        .button,
-        button,
-        select {
-            font-family: 'Courier New', Courier, monospace !important;
+            border: 2px solid #00ff00;
+            z-index: 9999;
+            font-size: 24px;
             font-weight: bold;
         }
-
-        .master-spacer {
-            height: 1px !important;
-            background: linear-gradient(to right, transparent, var(--gold), transparent) !important;
-            margin: 5px 0 !important;
-        }
-
-        .master-spacer-invisible {
-            height: 5px !important;
-        }
-
-        .tracks-container {
-            display: contents !important;
-        }
-
-        .track {
-            height: 100% !important;
-            border: 1px solid var(--green) !important;
-        }
-
-        /* Disable Interactivity on Receiver */
-        input[type="range"] {
-            pointer-events: none !important;
-        }
-
-        button,
-        select {
-            pointer-events: none !important;
-            cursor: default !important;
-        }
-
-        /* macOS-style cursor: small arrow with white border and black interior */
-        #cursor {
+        #status-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 16px;
-            height: 16px;
-            z-index: 20000;
-            display: none;
-            pointer-events: none;
-            background: transparent;
-            /* macOS cursor arrow shape via SVG data URI - smaller and sharper */
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='M3 1 L3 13 L6 10 L9 15 L10.5 14 L7.5 9 L12 9 Z' fill='black' stroke='white' stroke-width='1'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-size: contain;
-            /* Hotspot is at top-left corner of cursor */
-            transform: translate(0, 0);
-            /* Cursor tip is at top-left */
+            top: 20px; right: 20px;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid rgba(255, 204, 0, 0.3);
+            border-radius: 20px;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+            z-index: 9999;
         }
-
-        @font-face {
-            font-family: 'Mexcellent';
-            src: url('fonts/MexcellentRg.otf') format('opentype');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        @font-face {
-            font-family: 'Mexcellent 3D';
-            src: url('fonts/Mexcellent3d.otf') format('opentype');
-            font-weight: normal;
-            font-style: normal;
-        }
-
-        #loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            z-index: 10000;
+        #init-view {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: var(--gold);
-            font-family: 'Mexcellent', sans-serif;
-        }
-
-        #ws-active-status {
+            height: 100vh;
+            width: 100vw;
             position: fixed;
-            bottom: 5px;
-            right: 5px;
-            font-size: 0.7em;
-            color: #00ff00;
-            font-family: 'Courier New', monospace;
-            z-index: 10000;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid #00ff00;
-            text-shadow: 0 0 5px #00ff00;
-            max-width: 320px;
-            word-wrap: break-word;
-            pointer-events: none;
+            top: 0; left: 0;
+            background: #111;
+            z-index: 500;
         }
-
-        #audio-unmute-btn {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 30px;
-            background: var(--red);
-            color: #fff;
-            border: 3px solid var(--gold);
-            font-family: 'Mexcellent', sans-serif;
-            font-size: 1.5em;
-            cursor: pointer;
-            z-index: 10001;
+        #studio-mirror {
+            width: 90vw;
+            height: 80vh;
+            background: #111;
+            border: 2px solid #222;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             display: none;
-            border-radius: 8px;
-            box-shadow: 0 0 25px var(--red);
-            animation: pulse 2s infinite;
+            flex-direction: column;
+            position: relative;
+            transform: scale(0.9);
+            transition: transform 0.5s ease;
         }
-
-        #audio-unmute-btn.visible {
-            display: block;
+        #studio-mirror.active {
+            display: flex;
+            transform: scale(1);
         }
-
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                opacity: 1;
-            }
-
-            50% {
-                transform: scale(1.05);
-                opacity: 0.8;
-            }
-
-            100% {
-                transform: scale(1);
-                opacity: 1;
-            }
+        .vumeter-container {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%;
+            height: 100px;
+            display: flex;
+            gap: 2px;
+            padding: 0 10px;
+            box-sizing: border-box;
+            opacity: 0.3;
         }
-
-        .loader {
-            border: 8px solid #333;
-            border-top: 8px solid var(--gold);
+        .vubar {
+            flex: 1;
+            background: var(--gold);
+            align-self: flex-end;
+            min-height: 2px;
+            transition: height 0.05s ease;
+        }
+        #message {
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            color: #666;
+            text-align: center;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid rgba(255,204,0,0.1);
+            border-top: 3px solid var(--gold);
             border-radius: 50%;
-            width: 60px;
-            height: 60px;
             animation: spin 1s linear infinite;
             margin-bottom: 20px;
         }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
+        #ghost-cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 204, 0, 0.4);
+            border: 2px solid var(--gold);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            transition: left 0.05s linear, top 0.05s linear;
+            display: none;
         }
+        #ghost-cursor.clicking {
+            transform: scale(1.5);
+            background: rgba(255, 204, 0, 0.8);
+        }
+        .checklist-item {
+            font-size: 14px;
+            opacity: 0.6;
+            line-height: 2;
+        }
+        .checklist-item .done { color: #00ff00; }
+        .checklist-item .pending { color: #666; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-
 <body>
-    <div id="loading-overlay">
-        <div class="loader"></div>
-        <h1 style="font-size: 3em;">NOWMULTIMEDIA MXS-004</h1>
-        <div id="boot-status" style="font-family: monospace; color: #888;">Synchronizing UI...</div>
-        <div style="font-family: monospace; color: #555; font-size: 0.8em; margin-top: 5px;">v12.30 | March 22, 2026
+    <div id="diagnostic-label">📡 MXS-004 RECEIVER</div>
+    <div id="status-overlay">WAITING FOR HANDSHAKE...</div>
+    <div id="ghost-cursor"></div>
+    
+    <div id="init-view">
+        <div class="spinner"></div>
+        <div id="message">MXS-004 STUDIO<br>
+            <span style="font-size: 0.5em; opacity: 0.5;">READY TO RECEIVE</span><br>
+            <span style="font-size: 0.3em; opacity: 0.3; letter-spacing: 1px;">v13.8.70 [8080]</span>
         </div>
-        <div id="ws-status"
-            style="font-family: monospace; font-size: 1.2em; color: #555; margin-top: 10px; background: rgba(20,20,20,0.8); padding: 5px;">
-            Waiting for signal...</div>
-        <div id="debug-info"
-            style="font-family: monospace; font-size: 0.8em; color: #444; margin-top: 20px; max-width: 80%; word-break: break-all;">
+        <div style="margin-top: 30px; text-align: left; width: 280px;">
+            <div class="checklist-item">1. WebSocket Signal... <span id="check-signal" class="pending">⏳</span></div>
+            <div class="checklist-item">2. UI State Data... <span id="check-ui" class="pending">⏳</span></div>
+            <div class="checklist-item">3. Audio Stream... <span id="check-data" class="pending">⏳</span></div>
         </div>
     </div>
 
-    <div id="app-scaler">
-        <div class="container" id="mirror-ui" style="display:none;">
-            <div class="header">
-                <h1>NOWMULTIMEDIA MXS-004</h1><br>
-                <h2> Mix N Studio 004</h2>
-            </div>
-            <!-- NEW: 5-Column Main Content (Master + 4 Tracks) -->
-            <div class="main-content">
-                <!-- Column 1: Master Controls -->
-                <div class="master-column">
-                    <!-- 1. Master Recording (Direct children to match main app) -->
-                    <div class="track-header">Master Recording:</div>
-                    <div id="recording-time-display" class="track-time-display">00:00:00</div>
-
-                    <!-- Ghost "Status" to align with Tracks -->
-                    <!-- Replaced by Master Volume on Line 3 -->
-                    <div class="master-item master-volume-aligned">
-                        <div class="track-header">Vol</div>
-                        <input type="range" id="master-volume" min="-40" max="6" step="0.1" value="0">
-                        <span id="master-volume-value" class="master-value">0.0 dB</span>
-                    </div>
-
-                    <!-- 2. Master Waveform -->
-                    <div class="master-item master-waveform-item">
-                        <div class="waveform-box master-waveform-box">
-                            <div class="waveform-labels">
-                                <div class="waveform-label-external" style="margin-top: 2px;">L</div>
-                                <div class="waveform-label-external">R</div>
-                            </div>
-                            <div id="master-waveform-container" class="flex-grow">
-                                <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
-                                <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 3. Loop Length -->
-                    <!-- NEW: Side-by-Side LFO Container (Swapped with Loop Length) -->
-                    <!-- 3. Loop Length (Top, Compact Row) -->
-                    <div class="master-item master-row-layout">
-                        <div class="track-header">Loop Length</div>
-                        <input type="range" id="loop-length" min="0.5" max="180" step="0.1" value="4">
-                        <span id="loop-length-value" class="master-value">4.0s</span>
-                    </div>
-
-                    <!-- Spacer removed -->
-                    <!-- <div class="master-spacer"></div> -->
-
-                    <!-- 4. Combined REC and Format -->
-                    <div class="master-item master-bottom-item">
-                        <div class="master-rec-row">
-                            <button id="master-record-button" class="button">REC</button>
-                            <div id="record-format-display"
-                                style="font-size: 0.8em; color: var(--gold); border: 1px solid var(--gold); padding: 2px 5px; border-radius: 4px; text-align: center; flex: 1.5;">
-                                Stereo (WAV)</div>
-                        </div>
-                    </div>
-
-                    <!-- Spacer 1 (Now top border of LFO block) -->
-                    <!-- <div class="master-spacer"></div> -->
-
-                    <!-- NEW: Side-by-Side LFO Container -->
-                    <!-- 3. Loop Length (Moved down, Compact Row) -->
-                    <!-- Side-by-Side LFO Container (Bottom) -->
-                    <div class="lfo-side-by-side-container">
-                        <!-- Column Left: LFO 1 -->
-                        <div class="lfo-column">
-                            <div class="master-item lfo-button-item">
-                                <button id="lfo-toggle">LFO 1</button>
-                            </div>
-                            <div class="master-item lfo-meter-item">
-                                <div class="meter-container lfo-meter">
-                                    <div id="lfo-meter-bar" class="meter-bar"></div>
-                                </div>
-                            </div>
-                            <div class="master-item">
-                                <label for="lfo-time" class="master-label" style="font-size:0.65em;">Sweep 1</label>
-                                <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
-                                <span id="lfo-time-value" class="master-value">1.8s</span>
-                            </div>
-                        </div>
-
-                        <!-- Vertical Separator -->
-                        <div class="lfo-separator"></div>
-
-                        <!-- Column Right: LFO 2 -->
-                        <div class="lfo-column">
-                            <div class="master-item lfo-button-item">
-                                <button id="lfo2-toggle">LFO 2</button>
-                            </div>
-                            <div class="master-item lfo-meter-item">
-                                <div class="meter-container lfo-meter">
-                                    <div id="lfo2-meter-bar" class="meter-bar"></div>
-                                </div>
-                            </div>
-                            <div class="master-item">
-                                <label for="lfo2-time" class="master-label" style="font-size:0.65em;">Sweep 2</label>
-                                <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
-                                <span id="lfo2-time-value" class="master-value">1.8s</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Spacer 3 (Now bottom border of LFO block) -->
-                    <div class="master-spacer"></div>
-
-                    <!-- 4. Sample Station (Mirrored) -->
-                    <div class="master-item sample-center-container">
-                        <div class="track-header">Sample Station</div>
-                        <div class="sample-grid">
-                            <button class="sample-btn" data-sample="1">1</button>
-                            <button class="sample-btn" data-sample="2">2</button>
-                            <button class="sample-btn" data-sample="3">3</button>
-                            <button class="sample-btn" data-sample="4">4</button>
-                            <button class="sample-btn" data-sample="5">5</button>
-                            <button class="sample-btn" data-sample="6">6</button>
-                            <button class="sample-btn" data-sample="7">7</button>
-                            <button class="sample-btn" data-sample="8">8</button>
-                            <button class="sample-btn" data-sample="9">9</button>
-                            <button class="sample-btn" data-sample="10">10</button>
-                            <button class="sample-btn" data-sample="11">11</button>
-                            <button class="sample-btn" data-sample="12">12</button>
-                            <button class="sample-btn" data-sample="13">13</button>
-                            <button class="sample-btn" data-sample="14">14</button>
-                            <button class="sample-btn" data-sample="15">15</button>
-                            <button class="sample-btn" data-sample="16">16</button>
-                            <button class="sample-btn" data-sample="17">17</button>
-                            <button class="sample-btn" data-sample="18">18</button>
-                            <button class="sample-btn" data-sample="19">19</button>
-                            <button class="sample-btn" data-sample="20">20</button>
-                        </div>
-                    </div>
-
-                    <!-- Spacer 3 (Now bottom border of LFO block) -->
-                    <!-- <div class="master-spacer"></div> -->
-
-                    <!-- 11. Master Volume (Moved up to Line 3) -->
-                    <!-- Removed from here -->
-
-                    <!-- 12. Bottom Buttons -->
-                    <div class="master-item" style="margin-top: 10px; display: flex; flex-direction: row; gap: 5px;">
-                        <button id="import-files-button" style="flex:1; font-size: 0.7em; padding: 4px;">IMPORT</button>
-                        <button id="show-docs-button" style="flex:1; font-size: 0.7em; padding: 4px;">DOCS</button>
-                    </div>
+    <div id="studio-mirror">
+        <div style="padding: 40px; text-align: center;">
+            <h1 style="color: var(--gold); margin: 0; font-size: 3em;">MXS-004</h1>
+            <p style="opacity: 0.5; letter-spacing: 4px;">STUDIO PRODUCTION MIRROR</p>
+        </div>
+        <div id="mirror-content" style="flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 20px;">
+            <!-- Tracks mirrored here -->
+        </div>
+        
+        <div id="lfo-visualizer" style="display: flex; gap: 20px; padding: 20px; background: rgba(0,0,0,0.3); border-top: 1px solid #222;">
+            <div style="flex: 1;">
+                <div style="font-size: 10px; opacity: 0.5; margin-bottom: 5px;">LFO 1</div>
+                <div style="height: 4px; background: #222; border-radius: 2px; overflow: hidden;">
+                    <div id="lfo1-bar" style="height: 100%; width: 0%; background: var(--gold); transition: width 0.05s linear;"></div>
                 </div>
-
-                <!-- Columns 2-5: Tracks -->
-                <div class="tracks-container" id="tracks-container"></div>
             </div>
+            <div style="flex: 1;">
+                <div style="font-size: 10px; opacity: 0.5; margin-bottom: 5px;">LFO 2</div>
+                <div style="height: 4px; background: #222; border-radius: 2px; overflow: hidden;">
+                    <div id="lfo2-bar" style="height: 100%; width: 0%; background: #00ffcc; transition: width 0.05s linear;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="vumeter-container" id="vumeter">
+            <!-- VU Bars generated by JS -->
         </div>
     </div>
 
-    <div id="cursor"></div>
-    <div id="ws-active-status">Waiting for data...</div>
-    <audio id="cast-audio" preload="none"></audio>
-    <button id="audio-unmute-btn" onclick="startAudioManually()">TAP TO START AUDIO</button>
-
+    <audio id="receiver-audio" autoplay crossorigin="anonymous"></audio>
+    
     <script>
-        // Buffer the last state so we can retry when TrackView.js loads
-        let _pendingState = null;
+    /**
+     * MXS-004 Studio Cast Receiver v13.8.70
+     * 
+     * This file runs on the Chromecast device.
+     * It is loaded from GitHub Pages when Cast App D18A9B3A launches.
+     * It connects BACK to the Studio Mac via WebSocket for state updates
+     * and via HTTP for the live audio stream.
+     * 
+     * Signal flow:
+     *   1. Google Cast SDK loads this page on the TV
+     *   2. SDK sends a LOAD command with contentId containing ws= and audioUrl= params
+     *   3. This receiver extracts those URLs and connects back to the Mac
+     *   4. State updates (cursor, tracks, LFOs) arrive via WebSocket
+     *   5. Audio streams via HTTP WAV from the Mac's Warp server on port 8080
+     */
 
-        function handleScriptError(src) {
-            const status = document.getElementById('ws-active-status');
-            if (status) {
-                status.innerHTML = `<span style="color:#f44336">❌ Failed to load ${src}.</span>`;
-            }
-            console.error('Script load failed:', src);
+    // ============================================================
+    // GLOBAL ERROR TRAP — reports errors back to the Studio Mac
+    // ============================================================
+    window.onerror = function(msg, url, line, col, error) {
+        var errStr = "[RECEIVER ERROR] " + msg + " at " + line + ":" + col;
+        console.error(errStr);
+        // Try to report back to studio
+        if (window._studioBaseUrl) {
+            fetch(window._studioBaseUrl + "/log?m=" + encodeURIComponent(errStr), { mode: 'no-cors' }).catch(function(){});
         }
-    </script>
-    <script src="src/ui/TrackView.js" onerror="handleScriptError('src/ui/TrackView.js')"
-        onload="console.log('✅ TrackView.js loaded!'); if (_pendingState) { applyState(_pendingState); }"></script>
+        return false;
+    };
 
-    <script>
-        let trackViews = [];
-        let tracksInited = false;
+    (function() {
+        'use strict';
 
-        function applyState(state) {
-            try {
-                // FIX: Only initialize tracks if they are present in the state AND not already inited
-                if (!tracksInited && state.tracks && state.tracks.length > 0) {
-                    if (typeof TrackView === 'undefined') {
-                        console.warn("⏳ TrackView.js not loaded yet, buffering state...");
-                        _pendingState = state; // Buffer for retry when script loads
-                        const activeEl = document.getElementById('ws-active-status');
-                        if (activeEl) activeEl.textContent = "⏳ Loading TrackView.js...";
-                        return;
-                    }
-                    const container = document.getElementById('tracks-container');
-                    container.innerHTML = '';
-                    trackViews = [];
+        // ============================================================
+        // DOM REFERENCES
+        // ============================================================
+        var statusEl     = document.getElementById('status-overlay');
+        var initView     = document.getElementById('init-view');
+        var mirrorEl     = document.getElementById('studio-mirror');
+        var audioEl      = document.getElementById('receiver-audio');
+        var mirrorContent= document.getElementById('mirror-content');
+        var vumeter      = document.getElementById('vumeter');
+        var lfo1Bar      = document.getElementById('lfo1-bar');
+        var lfo2Bar      = document.getElementById('lfo2-bar');
+        var cursorEl     = document.getElementById('ghost-cursor');
+        var diagLabel    = document.getElementById('diagnostic-label');
 
-                    console.log(`📡 Building Receiver UI for ${state.tracks.length} tracks...`);
+        // ============================================================
+        // STATE
+        // ============================================================
+        var ws = null;
+        var wsConnected = false;
+        var lastState = null;
+        var lfoPhase1 = 0;
+        var lfoPhase2 = 0;
+        var lastFrameTime = performance.now();
+        var audioStarted = false;
+        var connectAttempts = 0;
 
-                    state.tracks.forEach((t) => {
-                        const tv = new TrackView(t.id);
-                        container.appendChild(tv.buildElement());
-                        trackViews.push(tv);
-                    });
+        // These will be populated from the LOAD command's contentId
+        var wsUrl = null;
+        var audioUrl = null;
+        window._studioBaseUrl = null; // For error reporting
 
-                    tracksInited = true;
-                    document.getElementById('loading-overlay').style.display = 'none';
-                    document.getElementById('mirror-ui').style.display = 'flex';
-                    console.log(`✅ Receiver UI Initialized with ${trackViews.length} tracks.`);
-                }
-
-                // Master Update
-                if (state.master) {
-                    const volS = document.getElementById('master-volume');
-                    const volV = document.getElementById('master-volume-value');
-                    const lenS = document.getElementById('loop-length');
-                    const lenV = document.getElementById('loop-length-value');
-                    const recB = document.getElementById('master-record-button');
-
-                    if (volS) volS.value = state.master.volume;
-                    if (volV) volV.textContent = (state.master.volume || 0).toFixed(1) + " dB";
-                    if (lenS) lenS.value = state.master.loopLength;
-                    if (lenV) lenV.textContent = (state.master.loopLength || 0).toFixed(1) + "s";
-                    if (recB) recB.classList.toggle('recording', state.master.isRecording);
-
-                    const lfo1Bar = document.getElementById('lfo-meter-bar');
-                    const lfo2Bar = document.getElementById('lfo2-meter-bar');
-                    const lfo1Btn = document.getElementById('lfo-toggle');
-                    const lfo2Btn = document.getElementById('lfo2-toggle');
-                    if (lfo1Bar) lfo1Bar.style.width = (state.master.lfo1Meter * 100) + "%";
-                    if (lfo2Bar) lfo2Bar.style.width = (state.master.lfo2Meter * 100) + "%";
-                    if (lfo1Btn) lfo1Btn.classList.toggle('sweeping', state.master.lfo1Active);
-                    if (lfo2Btn) lfo2Btn.classList.toggle('sweeping', state.master.lfo2Active);
-                }
-
-                // Sampler Update (Mirrored)
-                if (state.sampler) {
-                    state.sampler.forEach(pad => {
-                        const btn = document.querySelector(`.sample-btn[data-sample="${pad.id}"]`);
-                        if (btn) {
-                            if (btn.textContent !== pad.label) btn.textContent = pad.label;
-                            btn.classList.toggle('active', pad.active);
-                            btn.classList.toggle('loaded', pad.loaded);
-                            btn.classList.toggle('drag-over', pad.dragOver);
-                        }
-                    });
-                }
-
-                if (state.transport) {
-                    // V21: Dynamic Sample Rate Sync
-                    // Detect rate from sender and update scheduling clock
-                    if (state.transport.sampleRate && state.transport.sampleRate !== activeSampleRate) {
-                        console.log(`📡 Sample Rate Sync: ${activeSampleRate}Hz -> ${state.transport.sampleRate}Hz`);
-                        activeSampleRate = state.transport.sampleRate;
-
-                        // Resync scheduler on rate change to prevent time-axis jump
-                        wavNextPlayTime = 0;
-
-                        // Pre-warm context if needed
-                        initAudioPlayback();
-                    }
-
-                    const timeDisplay = document.getElementById('recording-time-display');
-                    // Only update time display if master is recording (not constantly during playback)
-                    if (timeDisplay && state.master && state.master.isRecording) {
-                        // Format transport.position from "bars:beats:sixteenths" to "MM:SS:FF"
-                        const pos = state.transport.position || "0:0:0";
-                        const parts = pos.split(':');
-                        if (parts.length >= 3) {
-                            const bars = parseInt(parts[0]) || 0;
-                            const beats = parseInt(parts[1]) || 0;
-                            const ticks = parseInt(parts[2]) || 0;
-                            const bpm = state.transport.bpm || 120;
-                            const secondsPerBeat = 60 / bpm;
-                            const totalSeconds = (bars * 4 * secondsPerBeat) + (beats * secondsPerBeat) + (ticks * secondsPerBeat / 4);
-                            const mins = Math.floor(totalSeconds / 60);
-                            const secs = Math.floor(totalSeconds % 60);
-                            const frames = Math.floor((totalSeconds * 100) % 100);
-                            timeDisplay.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}:${String(frames).padStart(2, '0')}`;
-                        }
-                    } else if (timeDisplay && !state.master?.isRecording) {
-                        // Keep last recorded time or show 00:00:00 when not recording
-                        // Don't update continuously to prevent scrolling effect
-                    }
-                }
-
-                // Tracks Update
-                if (state.tracks && trackViews.length > 0) {
-                    state.tracks.forEach(t => {
-                        const tv = trackViews[t.id];
-                        if (!tv) return;
-
-                        // Sync sliders
-                        const params = ['vol', 'pan', 'pitch', 'treble', 'mid_gain', 'bass'];
-                        params.forEach(p => {
-                            const val = t[p === 'mid_gain' ? 'midGain' : p];
-                            if (tv.elements.knobs && tv.elements.knobs[p]) tv.elements.knobs[p].value = val;
-                            if (tv.elements.valueDisplays && tv.elements.valueDisplays[p]) tv.elements.valueDisplays[p].textContent = parseFloat(val).toFixed(1);
-                        });
-
-                        // Sync status & buttons
-                        if (t.armed) tv.setStatus('Recording', 'recording');
-                        else if (t.isPlaying) tv.setStatus('Playing', 'playing');
-                        else tv.setStatus('Ready', 'ready');
-
-                        if (tv.elements.recBtn) tv.elements.recBtn.classList.toggle('recording', t.armed);
-                        if (tv.elements.playBtn) tv.elements.playBtn.classList.toggle('playing', t.isPlaying);
-
-                        // Meter Update (Hack for receiver display)
-                        if (tv.elements.waveformCanvasL) {
-                            const ctxL = tv.elements.waveformCanvasL.getContext('2d');
-                            ctxL.fillStyle = '#000'; ctxL.fillRect(0, 0, 300, 100);
-                            ctxL.fillStyle = '#0f0'; ctxL.fillRect(0, 0, 300 * (t.meters?.l || 0), 100);
-                        }
-                        if (tv.elements.waveformCanvasR) {
-                            const ctxR = tv.elements.waveformCanvasR.getContext('2d');
-                            ctxR.fillStyle = '#000'; ctxR.fillRect(0, 0, 300, 100);
-                            ctxR.fillStyle = '#0f0'; ctxR.fillRect(0, 0, 300 * (t.meters?.r || 0), 100);
-                        }
-                    });
-                }
-            } catch (err) {
-                console.error('❌ applyState error:', err);
+        // ============================================================
+        // REMOTE LOGGING — sends logs back to the Studio Mac console
+        // ============================================================
+        function remoteLog(msg) {
+            console.log(msg);
+            // Priority: WebSocket (if open)
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({ type: 'LOG', message: msg, timestamp: Date.now() }));
+                } catch(e) {}
+                return;
+            }
+            // Fallback: HTTP beacon
+            if (window._studioBaseUrl) {
+                fetch(window._studioBaseUrl + "/log?m=" + encodeURIComponent(msg) + "&t=" + Date.now(), { mode: 'no-cors' }).catch(function(){});
             }
         }
 
-        // ============= AUDIO STREAMING PLAYBACK (V18 - Live WebSocket) =============
-        // WebSocket delivers audio in real-time (~5ms). HTTP WAV added ~1.5s of
-        // TCP/chunked buffering. The garbling was a sender-side shared buffer race
-        // fixed by .buffer.slice(0) — independent of delivery method.
-        // Data: Int16 interleaved stereo from WS (after 4-byte header stripped)
-        let audioCtx = null;
-        let audioQueue = [];
-        let isAudioPlaying = false;
+        remoteLog("🚀 Receiver v13.8.70 booting...");
+        remoteLog("🔗 Page URL: " + window.location.href);
 
-        // WebRTC State (kept for signaling)
-        let peerConnection = null;
-        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-        let activeSampleRate = 48000; // Synchronized with sender via state metadata
-
-        // Audio Sync Controls
-        const SCHEDULE_AHEAD = 0.150; // V114.14: Restored to 150ms to buffer > 1x 85ms chunk
-        let wavNextPlayTime = 0;
-        let isBuffering = true; // V114: Pre-roll state
-        let smoothedDrift = 0;  // V114: EWMA Filtered drift
-        let pendingBuffers = []; // V114.1: Queue for pre-roll
-        let _activeWsUrl = null; // V114.29: Bulletproof WS String Lock
-
-        function initAudioPlayback() {
-            if (audioCtx) return;
+        // ============================================================
+        // GOOGLE CAST RECEIVER SDK INITIALIZATION
+        // ============================================================
+        var castScript = document.createElement('script');
+        castScript.src = 'https://www.gstatic.com/cast/sdk/libs/caf/3.0/cast_receiver_framework.js';
+        castScript.onload = function() {
+            remoteLog("[OK] Cast SDK script loaded.");
             try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-            } catch (e) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            console.log('🔊 AudioContext:', audioCtx.sampleRate, 'Hz');
-            wavNextPlayTime = 0;
-            if (audioCtx.state === 'suspended') {
-                const unmuteBtn = document.getElementById('audio-unmute-btn');
-                if (unmuteBtn) unmuteBtn.classList.add('visible');
-            }
-        }
+                var context = cast.framework.CastReceiverContext.getInstance();
+                var playerManager = context.getPlayerManager();
 
-        function handleAudioChunk(pcmData) {
-            // V115: Extract A/V Sync timestamp from the 4-byte header
-            // We read from the buffer directly before the pcmData offset
-            try {
-                const headerView = new DataView(pcmData.buffer, pcmData.byteOffset - 4, 4);
-                window._lastAudioTimestamp = headerView.getUint32(0, true);
-                window._lastAudioReceiveTime = performance.now();
-                
-                // V115: Calculate dynamic latency for A/V Sync
-                if (audioCtx) {
-                    const bufferLevel = (wavNextPlayTime - audioCtx.currentTime);
-                    window._currentAudioLatency = bufferLevel * 1000;
-                }
-            } catch (e) { }
+                // -------------------------------------------------------
+                // LOAD INTERCEPTOR — This is where we get the Studio URL
+                // The Studio app sends a LOAD with contentId like:
+                //   http://192.168.1.11:8080/receiver/index.html?ws=ws%3A...&audioUrl=http%3A...
+                // We extract ws= and audioUrl= from that URL.
+                // -------------------------------------------------------
+                playerManager.setMessageInterceptor(
+                    cast.framework.messages.MessageType.LOAD,
+                    function(request) {
+                        remoteLog("📥 LOAD intercepted!");
+                        if (request.media && request.media.contentId) {
+                            var contentId = request.media.contentId;
+                            remoteLog("📥 contentId: " + contentId);
+                            
+                            try {
+                                // Parse the contentId URL to extract query params
+                                var url = new URL(contentId);
+                                var extractedWs = url.searchParams.get('ws');
+                                var extractedAudio = url.searchParams.get('audioUrl');
 
-            // V114.3: Silence any HTML audio stream if PCM data is arriving
-            const streamAudio = document.getElementById('cast-audio-stream');
-            if (streamAudio && !streamAudio.paused) {
-                console.log("🔇 Silencing HTTP stream (PCM active)");
-                streamAudio.pause();
-                streamAudio.src = "";
+                                if (extractedWs) {
+                                    wsUrl = decodeURIComponent(extractedWs);
+                                    remoteLog("✅ Extracted WS URL: " + wsUrl);
+                                }
+                                if (extractedAudio) {
+                                    audioUrl = decodeURIComponent(extractedAudio);
+                                    remoteLog("✅ Extracted Audio URL: " + audioUrl);
+                                }
+
+                                // Derive the base HTTP URL for logging
+                                if (wsUrl) {
+                                    window._studioBaseUrl = wsUrl.replace('ws://', 'http://').replace('wss://', 'https://');
+                                }
+
+                                // Connect!
+                                if (wsUrl) {
+                                    connectWebSocket();
+                                }
+                                if (audioUrl) {
+                                    startAudio(audioUrl);
+                                }
+
+                            } catch(e) {
+                                remoteLog("❌ Error parsing LOAD contentId: " + e.message);
+                                // Fallback: try raw string parsing
+                                if (contentId.indexOf('ws=') !== -1) {
+                                    var parts = contentId.split('ws=');
+                                    if (parts[1]) {
+                                        var wsRaw = parts[1].split('&')[0];
+                                        wsUrl = decodeURIComponent(wsRaw);
+                                        window._studioBaseUrl = wsUrl.replace('ws://', 'http://');
+                                        remoteLog("⚠️ Fallback WS URL: " + wsUrl);
+                                        connectWebSocket();
+                                    }
+                                }
+                            }
+                        }
+                        // Return null to suppress the default media player (we handle everything)
+                        return null;
+                    }
+                );
+
+                // -------------------------------------------------------
+                // NATIVE CAST CHANNEL — for WebRTC signaling (bypass WS)
+                // -------------------------------------------------------
+                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(event) {
+                    remoteLog("📥 Native signal received");
+                    var data = event.data;
+                    if (data && typeof data.payload === 'string') {
+                        try { data = JSON.parse(data.payload); } catch(e) {}
+                    }
+                    handleSignal(data);
+                });
+
+                context.start({ disableIdleTimeout: true });
+                remoteLog("[OK] Google Cast Receiver SDK Initialized!");
+                diagLabel.textContent = "📡 CAST SDK READY";
+
+            } catch(e) {
+                remoteLog("❌ Cast SDK init failed: " + e.message);
             }
+        };
+        castScript.onerror = function() {
+            remoteLog("❌ Failed to load Cast SDK script. Running in standalone mode.");
+        };
+        document.head.appendChild(castScript);
 
-            // V114.2: Hard exit if WebRTC is active to prevent dual-stream phasing
-            const webrtcActive = !!(peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.iceConnectionState === 'connected'));
-            if (webrtcActive) {
-                if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+        // ============================================================
+        // WEBSOCKET CONNECTION
+        // ============================================================
+        function connectWebSocket() {
+            if (!wsUrl) {
+                remoteLog("⚠️ No WS URL, cannot connect.");
+                return;
+            }
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+                remoteLog("⚠️ WebSocket already connected/connecting, skipping.");
                 return;
             }
 
-            if (!audioCtx) initAudioPlayback();
-            if (!audioCtx || audioCtx.state !== 'running') return;
+            connectAttempts++;
+            remoteLog("🔗 Connecting to WebSocket: " + wsUrl + " (attempt " + connectAttempts + ")");
 
             try {
-                const dataView = new DataView(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
-                const sampleCount = Math.floor(pcmData.byteLength / 2);
-                const frameCount = sampleCount / 2; // stereo
+                ws = new WebSocket(wsUrl);
 
-                const audioBuffer = audioCtx.createBuffer(2, frameCount, activeSampleRate);
-                const L = audioBuffer.getChannelData(0);
-                const R = audioBuffer.getChannelData(1);
+                ws.onopen = function() {
+                    wsConnected = true;
+                    statusEl.textContent = "CONNECTED • WAITING FOR STATE";
+                    diagLabel.textContent = "📡 STUDIO CONNECTED";
+                    document.getElementById('check-signal').textContent = '✅';
+                    document.getElementById('check-signal').className = 'done';
+                    remoteLog("[OK] WebSocket Connected!");
+                    connectAttempts = 0;
+                };
 
-                for (let i = 0; i < frameCount; i++) {
-                    // Indexing: (i * 2 channels) * 2 bytes per sample
-                    L[i] = dataView.getInt16((i * 2) * 2, true) / 32768.0;
-                    R[i] = dataView.getInt16((i * 2 + 1) * 2, true) / 32768.0;
-                }
-
-                const now = audioCtx.currentTime;
-                const duration = frameCount / activeSampleRate;
-
-                if (isBuffering) {
-                    pendingBuffers.push(audioBuffer);
-                    const totalQueuedSecs = pendingBuffers.length * duration;
-                    
-                    if (totalQueuedSecs >= SCHEDULE_AHEAD) {
-                        isBuffering = false;
-                        console.log("🚀 Buffer Zone reached, flushing", pendingBuffers.length, "chunks");
-                        wavNextPlayTime = audioCtx.currentTime + 0.050; // V114.13: Hardware padding (Web Audio needs 50ms decode buffer)
-                        pendingBuffers.forEach(buf => {
-                            const source = audioCtx.createBufferSource();
-                            source.buffer = buf;
-                            source.connect(audioCtx.destination);
-                            source.start(wavNextPlayTime);
-                            wavNextPlayTime += buf.duration;
-                        });
-                        pendingBuffers = [];
-                    }
-                    window._lastIsBuffering = true;
-                    window._lastBufferLevel = totalQueuedSecs;
-                    return;
-                }
-
-                // Regular Playback Path
-                const source = audioCtx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioCtx.destination);
-
-                const bufferLevel = wavNextPlayTime - now;
-                const targetBuffer = 0.150; // V114.14: Restored margin to prevent instant network starvation
-                let currentDrift = bufferLevel - targetBuffer;
-                
-                // V114.9: Removed Adaptive PLL (Dynamic playbackRate).
-                // Dynamic pitch bending causes audible "wow and flutter" (waviness).
-                // We lock the rate to exactly 1.0 for perfect musical fidelity, 
-                // and rely solely on buffer resets to handle extreme drift.
-                source.playbackRate.value = 1.0; 
-
-                // Emergency Reset (V114.8: Stop overlapping sources)
-                if (wavNextPlayTime < now - 0.100 || bufferLevel > 0.400) {
-                    console.warn(`⚠️ Buffer sync lost (Drift: ${bufferLevel.toFixed(3)}s), re-buffering...`);
-                    wavNextPlayTime = now + 0.050; // V114.13: Hardware padding (Reset)
-                    isBuffering = true;
-                    pendingBuffers = [audioBuffer]; 
-                    
-                    // NEW V114.8: Stop all previously scheduled nodes to prevent overlapping/waviness
-                    if (window._activeSources) {
-                        window._activeSources.forEach(s => {
-                            try { s.stop(); s.disconnect(); } catch(e){}
-                        });
-                    }
-                    window._activeSources = [];
-                    
-                    wavNextPlayTime += duration;
-                    smoothedDrift = 0;
-                    return;
-                }
-
-                source.start(wavNextPlayTime);
-                wavNextPlayTime += duration;
-                
-                // Track active sources so we can stop them safely on lag resets
-                if (!window._activeSources) window._activeSources = [];
-                window._activeSources.push(source);
-                source.onended = () => {
-                    if (window._activeSources) {
-                        const idx = window._activeSources.indexOf(source);
-                        if (idx > -1) window._activeSources.splice(idx, 1);
+                ws.onmessage = function(event) {
+                    try {
+                        var data = JSON.parse(event.data);
+                        handleSignal(data);
+                    } catch(e) {
+                        remoteLog("[ERR] WS Parse Error: " + e.message);
                     }
                 };
 
-                window._lastBufferLevel = bufferLevel;
-                window._lastPlaybackRate = source.playbackRate.value;
-                window._lastIsBuffering = false;
-            } catch (e) {
-                console.error('Audio error:', e);
+                ws.onclose = function() {
+                    wsConnected = false;
+                    remoteLog("🛑 WebSocket Closed. Reconnecting in 3s...");
+                    statusEl.textContent = "DISCONNECTED • RECONNECTING...";
+                    setTimeout(connectWebSocket, 3000);
+                };
+
+                ws.onerror = function() {
+                    remoteLog("❌ WebSocket Error on attempt " + connectAttempts);
+                };
+
+            } catch(e) {
+                remoteLog("❌ WebSocket Init Failed: " + e.message);
+                setTimeout(connectWebSocket, 5000);
             }
         }
 
-        async function handleWebRTCOffer(sdp) {
-            console.log("🔊 WebRTC Offer Received - Setting up PeerConnection");
-            const statusEl = document.getElementById('ws-active-status');
-            if (statusEl) statusEl.textContent = "🔊 WebRTC: Setting up...";
+        // ============================================================
+        // SIGNAL HANDLER — processes all incoming messages
+        // ============================================================
+        function handleSignal(payload) {
+            // Unwrap if wrapped in {payload: ...}
+            var data = payload;
+            if (payload && payload.payload && typeof payload.payload === 'object') {
+                data = payload.payload;
+            }
 
-            if (peerConnection) peerConnection.close();
+            if (!data || !data.type) return;
 
-            peerConnection = new RTCPeerConnection(rtcConfig);
-
-            // Connection state monitoring
-            peerConnection.onconnectionstatechange = () => {
-                console.log("🔗 WebRTC Connection State:", peerConnection.connectionState);
-                if (statusEl) statusEl.textContent = `WebRTC: ${peerConnection.connectionState}`;
-            };
-
-            peerConnection.oniceconnectionstatechange = () => {
-                console.log("🧊 ICE Connection State:", peerConnection.iceConnectionState);
-            };
-
-            peerConnection.ontrack = (e) => {
-                console.log("🔊 WebRTC Audio Track Received!", e.streams.length, "streams");
-                if (statusEl) statusEl.textContent = "🔊 WebRTC: Track received!";
-
-                // Create or get audio element
-                let audioEl = document.getElementById('webrtc-audio');
-                if (!audioEl) {
-                    audioEl = document.createElement('audio');
-                    audioEl.id = 'webrtc-audio';
-                    document.body.appendChild(audioEl);
+            if (data.type === 'init' || data.type === 'LOAD') {
+                // Init signal from CastStateBroadcaster — provides audio URL
+                var initAudio = data.audioUrl || (data.wsUrl ? data.wsUrl.replace('ws://', 'http://') + '/stream.wav' : null);
+                if (initAudio && !audioStarted) {
+                    remoteLog("🎵 Init signal received. Starting audio: " + initAudio);
+                    startAudio(initAudio);
                 }
+            } else if (data.type === 'STATE_UPDATE') {
+                // First state update → reveal the mirror UI
+                if (initView && initView.style.display !== 'none') {
+                    remoteLog("🎬 First STATE_UPDATE received. Revealing mirror UI.");
+                    document.getElementById('check-ui').textContent = '✅';
+                    document.getElementById('check-ui').className = 'done';
+                    setTimeout(function() {
+                        initView.style.display = 'none';
+                        mirrorEl.classList.add('active');
+                        statusEl.textContent = "LIVE • DATA SYNC ACTIVE";
+                    }, 400);
+                }
+                renderState(data.state);
+            } else if (data.type === 'offer') {
+                remoteLog("📩 WebRTC Offer received (legacy)");
+                handleOffer(data.sdp);
+            } else if (data.type === 'ice-candidate') {
+                if (window._pc) {
+                    window._pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            }
+        }
 
-                // AGGRESSIVE PLAYBACK for Chromecast
-                audioEl.autoplay = true;
-                audioEl.muted = false;
-                audioEl.volume = 1.0;
+        // ============================================================
+        // AUDIO PLAYBACK — streams live WAV from the Studio Mac
+        // ============================================================
+        function startAudio(url) {
+            if (!audioEl || audioStarted) return;
+            audioStarted = true;
+            remoteLog("🔊 Starting audio stream: " + url);
+
+            audioEl.src = url;
+            audioEl.play().then(function() {
+                remoteLog("[OK] Audio Playback Started!");
+                document.getElementById('check-data').textContent = '✅';
+                document.getElementById('check-data').className = 'done';
+                statusEl.textContent = "LIVE • AUDIO + DATA ACTIVE";
+            }).catch(function(e) {
+                remoteLog("[ERR] Audio blocked: " + e.message + " — waiting for user tap");
+                audioStarted = false; // Allow retry
+                statusEl.textContent = "TAP SCREEN TO ENABLE AUDIO";
+                document.addEventListener('click', function() {
+                    startAudio(url);
+                }, { once: true });
+            });
+        }
+
+        // ============================================================
+        // WEBRTC (Legacy fallback for peer-to-peer audio)
+        // ============================================================
+        function handleOffer(sdp) {
+            var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            window._pc = pc;
+
+            pc.onicecandidate = function(e) {
+                if (e.candidate) sendSignal({ type: 'ice-candidate', candidate: e.candidate });
+            };
+            pc.ontrack = function(e) {
+                remoteLog("🎤 WebRTC Audio track received!");
                 audioEl.srcObject = e.streams[0];
-
-                // Force play with retry
-                const tryPlay = () => {
-                    audioEl.play().then(() => {
-                        console.log("✅ WebRTC Audio Playing Successfully!");
-                        if (statusEl) statusEl.textContent = "✅ WebRTC AUDIO PLAYING";
-                        const btn = document.getElementById('audio-unmute-btn');
-                        if (btn) btn.classList.remove('visible');
-                    }).catch(err => {
-                        console.warn("⚠️ WebRTC Autoplay blocked:", err);
-                        if (statusEl) statusEl.textContent = "⚠️ WebRTC: Tap to unmute";
-                        const btn = document.getElementById('audio-unmute-btn');
-                        if (btn) btn.classList.add('visible');
-                        // Retry after 1 second
-                        setTimeout(tryPlay, 1000);
-                    });
-                };
-                tryPlay();
-
-                // V114.3: Absolute silencing of other paths
-                const streamAudio = document.getElementById('cast-audio-stream');
-                if (streamAudio) {
-                    streamAudio.pause();
-                    streamAudio.src = "";
-                }
-
-                // V114.2: ABSOLUTE PCM MUTING when WebRTC arrives
-                if (audioCtx) {
-                    console.log("🔇 Suspending PCM context (WebRTC OVERLORD active)");
-                    try {
-                        audioCtx.suspend();
-                        isAudioPlaying = false;
-                        pendingBuffers = []; // Clear V114.1 queue
-                        audioQueue = []; 
-                        wavNextPlayTime = 0;
-                        isBuffering = true; // Reset so PCM has to re-buffer if WebRTC drops
-                    } catch (e) {
-                         console.warn("Error suspending AudioContext:", e);
-                    }
-                }
+                statusEl.textContent = "LIVE • WEBRTC AUDIO";
             };
 
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate && currentWS) {
-                    currentWS.send(JSON.stringify({
-                        type: 'ice-candidate',
-                        candidate: e.candidate
-                    }));
-                }
-            };
-
-            try {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-
-                console.log("📤 Sending WebRTC Answer");
-                if (currentWS) {
-                    currentWS.send(JSON.stringify({
-                        type: 'answer',
-                        sdp: answer.sdp
-                    }));
-                }
-                if (statusEl) statusEl.textContent = "🔊 WebRTC: Answer sent, waiting for track...";
-            } catch (err) {
-                console.error("WebRTC Error:", err);
-                if (statusEl) statusEl.textContent = "❌ WebRTC Error: " + err.message;
-            }
+            pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sdp }))
+                .then(function() { return pc.createAnswer(); })
+                .then(function(answer) {
+                    pc.setLocalDescription(answer);
+                    sendSignal({ type: 'answer', sdp: answer.sdp });
+                })
+                .catch(function(e) { remoteLog("❌ WebRTC error: " + e.message); });
         }
 
-        async function handleIceCandidate(candidate) {
-            if (peerConnection && peerConnection.remoteDescription) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) { console.warn("ICE Error:", e); }
-            }
-        }
-
-
-        function startAudioManually() {
-            // V16: Play the native <audio> element (user gesture unlocks autoplay)
-            const audioEl = document.getElementById('cast-audio');
-            if (audioEl && audioEl.src) {
-                audioEl.play().then(() => {
-                    console.log('🔊 Audio started manually');
-                    const btn = document.getElementById('audio-unmute-btn');
-                    if (btn) btn.classList.remove('visible');
-                }).catch(e => console.error('Play failed:', e));
-            }
-            // Also resume AudioContext if it exists (legacy)
-            if (audioCtx) audioCtx.resume();
-        }
-
-
-        // Track reconnection attempts for exponential backoff
-        let reconnectAttempt = 0;
-        let heartbeatInterval = null;
-        let currentWS = null;
-
-        function connectWS(url) {
-            console.log("Connecting to WS:", url);
-            const statusEl = document.getElementById('ws-status');
-            const debugEl = document.getElementById('debug-info');
-
-            if (statusEl) statusEl.textContent = "Connecting to " + url + "...";
-            if (debugEl) debugEl.textContent = "Target: " + url;
-
-            // Clean up previous connection
-            if (heartbeatInterval) {
-                clearInterval(heartbeatInterval);
-                heartbeatInterval = null;
-            }
-            if (currentWS) {
-                try { currentWS.close(); } catch (e) { }
-            }
-
-            const ws = new WebSocket(url);
-            currentWS = ws;
-            ws.binaryType = 'arraybuffer';
-
-            let lastDataTime = Date.now();
-
-            ws.onopen = () => {
-                console.log("WS Connected");
-                reconnectAttempt = 0; // Reset backoff on successful connect
-                lastDataTime = Date.now();
-
-                if (statusEl) {
-                    statusEl.textContent = "✅ WS Connected - Starting WAV stream...";
-                    statusEl.style.color = "#4CAF50";
-                }
-
-                // V18: Audio comes via WebSocket directly (no HTTP WAV fetch needed)
-
-                // Start heartbeat check (every 10s, detect stale after 30s of no data)
-                heartbeatInterval = setInterval(() => {
-                    const elapsed = Date.now() - lastDataTime;
-                    if (elapsed > 30000) {
-                        console.warn("⚠️ No data for 30s, closing stale connection");
-                        ws.close();
-                    }
-                }, 10000);
-            };
-            ws.onerror = (err) => {
-                console.error("WS Error:", err);
-                if (statusEl) {
-                    statusEl.textContent = "❌ WS Connection Failed";
-                    statusEl.style.color = "#f44336";
-                }
-                if (debugEl) debugEl.textContent += " [ERR]";
-            };
-            let msgCount = 0;
-            let audioCount = 0;
-            ws.onmessage = (e) => {
-                lastDataTime = Date.now(); // Update heartbeat timestamp
-                msgCount++;
-                const debugEl = document.getElementById('debug-info');
-                const activeEl = document.getElementById('ws-active-status');
-                if (activeEl && msgCount % 20 === 0) {
-                    const peak = (window._lastAudioPeak || 0).toFixed(3);
-                    const ctxState = audioCtx ? audioCtx.state.toUpperCase() : 'OFF';
-                    const buff = (window._lastBufferLevel || 0).toFixed(3);
-                    const rate = (window._lastPlaybackRate || 1.0).toFixed(4);
-                    const stateTxt = window._lastIsBuffering ? 'BUFFERING' : 'STABLE';
-                    activeEl.innerHTML = `v12.28 V114 | ${stateTxt} | Buffer: ${buff}s | Rate: ${rate}x<br>Rx: ${msgCount} | Audio: ${audioCount} | Peak: ${peak} | Ctx: ${ctxState}`;
-                }
-
-                if (typeof e.data === 'string') {
-                    try {
-                        const msg = JSON.parse(e.data);
-                        if (msg.type === 'offer') {
-                            handleWebRTCOffer(msg.sdp || msg.data?.sdp);
-                        } else if (msg.type === 'answer') {
-                            // Should not happen on receiver usually
-                        } else if (msg.type === 'ice-candidate' || msg.candidate) {
-                            handleIceCandidate(msg.candidate || msg.data?.candidate || msg);
-                        }
-                    } catch (err) { }
-                    return;
-                }
-                try {
-                    const view = new Uint8Array(e.data);
-
-                    if (view[0] === 3) {
-                        let json = JSON.parse(new TextDecoder().decode(e.data.slice(1)));
-
-                        // DEBUG: Log what we received
-                        console.log("📦 MSG_META received, raw type:", json.type, "data.type:", json.data?.type);
-
-                        // CRITICAL FIX: Unwrap nested data from push_ws_json({ data: ... })
-                        if (json.data && typeof json.data === 'object' && json.data.type) {
-                            console.log("📦 Unwrapping nested data, inner type:", json.data.type);
-                            json = json.data;
-                        }
-
-                        // DEBUG: Log final type after unwrap
-                        console.log("📦 Final message type:", json.type);
-
-                        if (json.type === 'state') {
-                            // V114.2: Only resume PCM context if WebRTC is NOT active
-                            const webrtcActive = !!(peerConnection && peerConnection.connectionState === 'connected');
-                            if (audioCtx && audioCtx.state === 'suspended' && !webrtcActive) {
-                                audioCtx.resume();
-                            }
-                            applyState(json);
-                            if (debugEl && (msgCount % 50 === 0)) {
-                                debugEl.textContent = `✅ State Rx | Mode: ${peerConnection ? 'WebRTC' : 'PCM'} | Q: ${audioQueue.length}`;
-                            }
-                        }
-                        else if (json.type === 'cursor') {
-                            // ... cursor logic is fine ...
-                            const cur = document.getElementById('cursor');
-                            const scaler = document.getElementById('app-scaler');
-                            if (cur && scaler) {
-                                const rect = scaler.getBoundingClientRect();
-                                cur.style.display = 'block';
-                                const x = rect.left + json.x * rect.width;
-                                const y = rect.top + json.y * rect.height;
-                                // V114.29: Hardware accelerated cursor for ~60fps smooth tracking
-                                cur.style.transform = `translate(${x}px, ${y}px)`;
-                                cur.style.left = "0px";
-                                cur.style.top = "0px";
-                            }
-                        }
-                        else if (json.type === 'offer') {
-                            console.log("🔊 WebRTC Offer Extracted from binary frame!");
-                            const statusEl = document.getElementById('ws-active-status');
-                            if (statusEl) statusEl.textContent = "🔊 GOT OFFER! Creating answer...";
-                            handleWebRTCOffer(json.sdp);
-                        }
-                        else if (json.type === 'ice-candidate' || json.candidate) {
-                            handleIceCandidate(json.candidate || json);
-                        }
-                    } else if (view[0] === 2) {
-                        // Audio chunk - Float32 stereo PCM (V20 High Fidelity)
-                        audioCount++;
-                        
-                        // V114.7: Strict Single-Path Enforcement
-                        // If we are getting PCM packets, MUTE the WebRTC audio element to prevent phasing/waviness
-                        const webrtcEl = document.getElementById('webrtc-audio');
-                        if (webrtcEl && !webrtcEl.paused) {
-                            webrtcEl.pause();
-                            webrtcEl.muted = true;
-                        }
-
-                        // V22/115: Skip 4 bytes (MSG_AUDIO + 3 padding bytes) for 4-byte alignment
-                        // The first 4 bytes now contain our timestamp (V115)
-                        handleAudioChunk(new Uint8Array(e.data, 4));
-                    }
-                } catch (err) {
-                    console.error("Parse Error:", err);
-                    if (debugEl) debugEl.textContent = `Rx Error: ${err.message}`;
-                }
-            };
-            ws.onclose = () => {
-                console.log("WS Closed, scheduling reconnect...");
-                if (heartbeatInterval) {
-                    clearInterval(heartbeatInterval);
-                    heartbeatInterval = null;
-                }
-                currentWS = null;
-
-                // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
-                reconnectAttempt++;
-                const delay = Math.min(2000 * Math.pow(2, reconnectAttempt - 1), 30000);
-                console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempt})`);
-
-                if (statusEl) {
-                    statusEl.textContent = `⏳ Reconnecting in ${delay / 1000}s...`;
-                    statusEl.style.color = "#FFC107";
-                }
-
-                setTimeout(() => connectWS(url), delay);
-            };
-        }
-
-        window.onload = () => {
-            const params = new URLSearchParams(window.location.search);
-            if (params.has('ws')) connectWS(params.get('ws'));
-            if (typeof cast !== 'undefined') {
-                const ctx = cast.framework.CastReceiverContext.getInstance();
-                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.mxs004', e => {
-                    console.log("📨 Received Cast Message:", e.data);
-                    
-                    // V12.31: Universal Payload Handling
-                    const data = (typeof e.data === 'string') ? JSON.parse(e.data) : e.data;
-                    
-                    // 1. Check for STATE_UPDATE (Direct Mirroring)
-                    if (data.type === 'STATE_UPDATE' || data.type === 'mxs_state') {
-                        const state = data.state || data.data;
-                        if (state) applyState(state);
-                        return;
-                    }
-
-                    // 2. Check for WebSocket Connection URL
-                    let url = data.wsUrl || data;
-                    if (url && typeof url === 'string' && (url.startsWith('ws') || url.includes(':8083'))) {
-                        // V114.29: Bulletproof Resiliency Fix - Ignore redundant connect messages using strict global var lock
-                        if (_activeWsUrl === url && currentWS && (currentWS.readyState === WebSocket.CONNECTING || currentWS.readyState === WebSocket.OPEN)) {
-                            console.log("♻️ Already connecting/connected to same WS URL, ignoring redundant connect message");
-                            return;
-                        }
-                        _activeWsUrl = url;
-
-                        // Check for embedded audio stream in WS URL query params
-                        try {
-                            const parsed = new URL(url.replace('ws://', 'http://').replace('wss://', 'https://'));
-                            const audioUrl = parsed.searchParams.get('audio_stream');
-
-                            if (audioUrl) {
-                                console.log("🎵 Found Audio Stream in Message:", audioUrl);
-                                playAudioStream(audioUrl);
-                            }
-                        } catch (err) {
-                            console.warn("Error parsing WS URL for audio:", err);
-                        }
-
-                        connectWS(url);
-                    }
-                });
-                options.disableIdleTimeout = true;
-                options.statusText = 'MXS-004 v12.30 (March 20, 2026 - 0.25x Gain)';
-                console.log("🚀 MxsReceiver v12.30 - TIMESTAMP Friday, March 20, 2026 - 10:30 AM - Low Distortion");
-                ctx.start(options);
-            }
-        };
-
-        // --- Audio Stream Playback ---
-        function playAudioStream(initialUrl) {
-            let url = initialUrl;
-            // Handle URL-encoded strings if needed (though usually decoded by caller)
-            try { url = decodeURIComponent(url); } catch (e) { }
-
-            if (!url) return;
-
-            console.log("🎵 Initiating Audio Stream Playback:", url);
-
-            // Check if audio element already exists
-            let audio = document.getElementById('cast-audio-stream');
-            if (audio) {
-                console.log("♻️ Updating existing audio stream...");
-                audio.src = url;
+        function sendSignal(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ payload: data }));
             } else {
-                audio = new Audio(url);
-                audio.id = 'cast-audio-stream';
-                audio.crossOrigin = "anonymous";
-                audio.preload = "auto";
+                // Fallback to native Cast channel
+                try {
+                    var ctx = cast.framework.CastReceiverContext.getInstance();
+                    ctx.sendCustomMessage('urn:x-cast:com.nowmultimedia.webrtc', undefined, {
+                        payload: JSON.stringify(data)
+                    });
+                } catch(e) {
+                    remoteLog("⚠️ Could not send signal: " + e.message);
+                }
+            }
+        }
+
+        // ============================================================
+        // STATE RENDERING — mirrors the Studio UI on the TV
+        // ============================================================
+        function renderState(state) {
+            if (!state) return;
+            lastState = state;
+
+            // Cursor mirroring
+            if (state.cursor && cursorEl) {
+                cursorEl.style.display = 'block';
+                cursorEl.style.left = (state.cursor.x * 100) + '%';
+                cursorEl.style.top = (state.cursor.y * 100) + '%';
+                if (state.cursor.isClicking) {
+                    cursorEl.classList.add('clicking');
+                } else {
+                    cursorEl.classList.remove('clicking');
+                }
             }
 
-            // Auto-play handling
-            const playPromise = audio.play();
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    console.log("✅ Audio playback started successfully");
-                }).catch(e => {
-                    console.warn("⚠️ Audio autoplay blocked or failed:", e);
+            // Track cards
+            if (state.tracks) {
+                mirrorContent.innerHTML = '';
+                state.tracks.forEach(function(t, i) {
+                    var div = document.createElement('div');
+                    div.style.cssText = 'background:#222; padding:15px; border-radius:8px; border-left:4px solid ' + (t.hasContent ? 'var(--gold)' : '#444');
+                    div.innerHTML =
+                        '<div style="font-size:10px; opacity:0.5;">TRACK ' + (i + 1) + '</div>' +
+                        '<div style="font-weight:bold; margin:5px 0;">' + (t.label || 'EMPTY') + '</div>' +
+                        '<div style="font-size:10px; color:' + (t.isPlaying ? 'var(--gold)' : '#666') + '">' + (t.isPlaying ? '▶ PLAYING' : 'IDLE') + '</div>';
+                    mirrorContent.appendChild(div);
                 });
             }
-
-            // Error handling/Retries
-            audio.onerror = (e) => {
-                console.error("❌ Audio stream error:", e);
-                // Simple retry logic after 2s
-                setTimeout(() => {
-                    console.log("🔄 Retrying audio stream...");
-                    audio.src = url; // Force reload
-                    audio.load();
-                    audio.play().catch(e => console.warn("Retry play failed:", e));
-                }, 2000);
-            };
         }
 
-        // Check URL params on load
-        const urlParams = new URLSearchParams(window.location.search);
-        const initialAudioUrl = urlParams.get('audio_stream');
-        if (initialAudioUrl) {
-            playAudioStream(initialAudioUrl);
-        } else {
-            console.log("ℹ️ No audio_stream parameter found on load.");
+        // ============================================================
+        // ANIMATION LOOP — smooth LFO visualizers and VU meters
+        // ============================================================
+        function animate() {
+            var now = performance.now();
+            var dt = (now - lastFrameTime) / 1000;
+            lastFrameTime = now;
+
+            if (lastState && lastState.master) {
+                var m = lastState.master;
+                if (m.lfo1Active) {
+                    lfoPhase1 += 2 * Math.PI * (m.lfo1Freq || 0.5) * dt;
+                    if (lfoPhase1 > 2 * Math.PI) lfoPhase1 -= 2 * Math.PI;
+                    if (lfo1Bar) lfo1Bar.style.width = (Math.abs(Math.sin(lfoPhase1)) * 100) + '%';
+                } else if (lfo1Bar) {
+                    lfo1Bar.style.width = '0%';
+                }
+
+                if (m.lfo2Active) {
+                    lfoPhase2 += 2 * Math.PI * (m.lfo2Freq || 0.5) * dt;
+                    if (lfoPhase2 > 2 * Math.PI) lfoPhase2 -= 2 * Math.PI;
+                    if (lfo2Bar) lfo2Bar.style.width = (Math.abs(Math.sin(lfoPhase2)) * 100) + '%';
+                } else if (lfo2Bar) {
+                    lfo2Bar.style.width = '0%';
+                }
+            }
+
+            updateVU(lastState);
+            requestAnimationFrame(animate);
         }
 
-        // --- Auto-Scaler Logic ---
-        function scaleApp() {
-            const scaler = document.getElementById('app-scaler');
-            if (!scaler) return;
-
-            const targetW = 1440;
-            const targetH = 810;
-            const winW = window.innerWidth;
-            const winH = window.innerHeight;
-
-            // Calculate scale to fit TV screen with small margin (95% of available space)
-            const scale = Math.min(winW / targetW, winH / targetH) * 0.95;
-
-            // Apply scale AND translate to center
-            // translate(-50%, -50%) centers the element, then scale
-            scaler.style.transform = `translate(-50%, -50%) scale(${scale})`;
-
-            console.log(`📺 Scaled app: ${winW}x${winH} -> scale ${scale.toFixed(3)}`);
+        function updateVU(state) {
+            if (!state) return;
+            if (vumeter.children.length === 0) {
+                for (var i = 0; i < 64; i++) {
+                    var bar = document.createElement('div');
+                    bar.className = 'vubar';
+                    vumeter.appendChild(bar);
+                }
+            }
+            var bars = vumeter.children;
+            var hasAudio = state && state.tracks && state.tracks.some(function(t) { return t.isPlaying; });
+            for (var i = 0; i < bars.length; i++) {
+                var targetH = 2;
+                if (hasAudio) {
+                    var trackIdx = Math.floor(i / 16);
+                    var trackMeter = (state.tracks[trackIdx] && state.tracks[trackIdx].meters) ? state.tracks[trackIdx].meters.l : 0;
+                    targetH = (trackMeter * 80) + (Math.random() * 20);
+                } else {
+                    targetH = 2 + (Math.random() * 3);
+                }
+                bars[i].style.height = Math.min(100, targetH) + 'px';
+                bars[i].style.opacity = hasAudio ? 0.8 : 0.2;
+            }
         }
 
-        window.addEventListener('resize', scaleApp);
-        scaleApp(); // Initial call
+        // ============================================================
+        // HEARTBEAT — periodic status report back to Studio
+        // ============================================================
+        setInterval(function() {
+            remoteLog("💓 Heartbeat [WS:" + (ws ? ws.readyState : 'OFF') + "] [Audio:" + (audioStarted ? 'ON' : 'OFF') + "]");
+        }, 5000);
 
+        // Start the animation loop
+        animate();
+
+    })();
     </script>
 </body>
-
-</html>// Trigger Rebuild Fri Mar 20 10:30:00 CST 2026
+</html>
