@@ -7,12 +7,11 @@
     var ws = null;
     var lastState = null;
     var audioCtx = null;
-    var lastFrameTime = performance.now();
+    var lastFrameTime = window.performance.now();
     var lfoPhase1 = 0;
     var lfoPhase2 = 0;
 
     var debugEl = document.getElementById('debug-log');
-    var statusEl = document.getElementById('init-status');
     var overlay = document.getElementById('init-overlay');
     var studioRoot = document.getElementById('studio-root');
     var cursorEl = document.getElementById('ghost-cursor');
@@ -169,7 +168,7 @@
         ws.onopen = function() { log("✅ Handshake Success!"); initAudio(); };
         ws.onmessage = function(e) {
             if (e.data instanceof ArrayBuffer) { feedPCM(e.data); }
-            else { try { var m = JSON.parse(e.data); if (m.type==='STATE_UPDATE') renderState(m.state); } catch(err){} }
+            else { try { var m = JSON.parse(e.data); if (m.type==='STATE_UPDATE') renderState(m.state); } catch {} }
         };
         ws.onclose = function() { log("🛑 Connection Lost. Retrying..."); setTimeout(function(){ connect(url); }, 2000); };
     }
@@ -188,12 +187,12 @@
                         @font-face { font-family: 'Mexcellent 3D'; src: url('http://${u.hostname}:8080/fonts/Mexcellent3d.otf'); }
                     `;
                     document.head.appendChild(style);
-                } catch(e) {}
+                } catch {}
             }
             return null;
         });
         ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
-            var d = e.data; if (typeof d.payload === 'string') try { d = JSON.parse(d.payload); } catch(err){}
+            var d = e.data; if (typeof d.payload === 'string') try { d = JSON.parse(d.payload); } catch {}
             if (d.type === 'STATE_UPDATE') renderState(d.state);
         });
         ctx.start({ disableIdleTimeout: true });
@@ -201,7 +200,7 @@
     };
 
     function animate() {
-        var now = performance.now(); var dt = (now - lastFrameTime) / 1000; lastFrameTime = now;
+        var now = window.performance.now(); var dt = (now - lastFrameTime) / 1000; lastFrameTime = now;
         if (lastState && lastState.master) {
             var m = lastState.master;
             if (m.lfo1Active) {
