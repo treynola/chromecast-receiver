@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.106 [ABSOLUTE MIRROR]</title>
+    <title>MXS-004 Studio Mirror v13.8.107 [LOGIC OPTIMIZED]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css">
     <style>
-        /* [V13.8.106] Failsafe Overrides */
-        html, body { background: #1e90ff !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-        .app-loading { opacity: 1 !important; visibility: visible !important; } /* Failsafe: Don't hide the app if class persists */
+        /* [V13.8.107] Final Logical Hardeners */
+        html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        .app-loading { opacity: 1 !important; visibility: visible !important; }
         
         .container {
             position: absolute; top: 50%; left: 50%; 
@@ -20,9 +20,11 @@
             box-shadow: 0 0 0 2px #FAD78E, 0 0 0 4px #FF0000;
         }
         #cursor-mirror {
-            position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.8); 
+            position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.9); 
             border-radius: 50%; pointer-events: none; z-index: 10000; border: 2px solid white; 
-            display: none; transition: transform 0.1s linear;
+            display: none; box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            transition: transform 0.1s cubic-bezier(0.1, 0, 0.2, 1);
+            will-change: transform;
         }
         cast-media-player { display: none; }
     </style>
@@ -34,12 +36,8 @@
 
     <div class="container" id="studio-root">
         <div class="header">
-            <div class="header-left">
-                <h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E;">NOWMULTIMEDIA MXS-004</h1>
-            </div>
-            <div class="header-right">
-                <h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E; letter-spacing: 0.5px; line-height: 1;">Mix N Studio 004 :: MIRROR</h2>
-            </div>
+            <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E;">NOWMULTIMEDIA MXS-004</h1></div>
+            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E; letter-spacing: 0.5px; line-height: 1;">Mix N Studio 004 :: MIRROR</h2></div>
         </div>
 
         <div class="main-content">
@@ -54,10 +52,7 @@
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
-                        <div class="waveform-canvas-container" style="flex:1;">
-                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
-                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
-                        </div>
+                        <div class="waveform-canvas-container" style="flex:1;"><canvas id="master-waveform-L" class="waveform-canvas"></canvas><canvas id="master-waveform-R" class="waveform-canvas"></canvas></div>
                     </div>
                 </div>
                 <div class="master-item sample-center-container">
@@ -72,15 +67,14 @@
 
     <script>
         (function() {
-            var audioCtx = null; var scriptNode = null; var ws = null;
+            var audioCtx = null; var scriptNode = null; var ws = null; var lastUrl = null;
             var BUFFER_SIZE = 192000; var ringBuffer = new Float32Array(BUFFER_SIZE);
             var wPtr = 0; var rPtr = 0; var pk = 0;
             
             function buildGUI() {
                 var g = document.getElementById('sample-grid');
                 for (var p = 1; p <= 20; p++) {
-                    var b = document.createElement('button'); b.className = 'sample-btn';
-                    b.id = 'sample-' + p; b.textContent = p; g.appendChild(b);
+                    var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b);
                 }
                 var tc = document.getElementById('tracks-container');
                 for (var i = 0; i < 4; i++) {
@@ -93,8 +87,6 @@
                     tc.appendChild(t);
                 }
                 updateScale();
-                // Failsafe: Transition from DodgerBlue to Black background
-                setTimeout(() => { document.body.style.backgroundColor = "#000"; }, 1000);
             }
 
             function updateScale() {
@@ -114,7 +106,7 @@
                 scriptNode.onaudioprocess = (e) => {
                     const oL = e.outputBuffer.getChannelData(0); const oR = e.outputBuffer.getChannelData(1);
                     const av = (wPtr - rPtr + BUFFER_SIZE) % BUFFER_SIZE;
-                    if (av < 4096) { oL.fill(0); oR.fill(0); return; }
+                    if (av < 8192) { oL.fill(0); oR.fill(0); return; } // Increased Jitter Buffer
                     let mx = 0;
                     for (let i = 0; i < 2048; i++) {
                         const vL = ringBuffer[rPtr]; const vR = ringBuffer[(rPtr+1)%BUFFER_SIZE];
@@ -137,8 +129,7 @@
                     var cur = document.getElementById('cursor-mirror');
                     if (cur) {
                         cur.style.display = 'block';
-                        cur.style.left = (s.cursor.x * 100) + '%';
-                        cur.style.top = (s.cursor.y * 100) + '%';
+                        cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)';
                     }
                 }
                 if (s.samples) s.samples.forEach((p,i) => {
@@ -152,6 +143,8 @@
             }
 
             function connect(url) {
+                if (ws && ws.readyState === WebSocket.OPEN) return;
+                lastUrl = url;
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
@@ -161,6 +154,7 @@
                         try { var d = JSON.parse(e.data); if (d.type === 'STATE_UPDATE') renderState(d.state); } catch(x){}
                     }
                 };
+                ws.onclose = () => { setTimeout(() => { if(lastUrl) connect(lastUrl); }, 2000); };
             }
 
             window.onload = function() {
