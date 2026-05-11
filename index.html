@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.108 [DESIGN MIRROR]</title>
+    <title>MXS-004 Studio Mirror v13.8.110 [PRO MASTER MIRROR]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css?v=13.8.109">
     <style>
-        /* [V13.8.108] Design Logic Overrides */
+        /* [V13.8.110] Pro Master Overrides */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -26,9 +26,6 @@
             will-change: transform;
         }
         cast-media-player { display: none; }
-        
-        /* Ensure dynamic elements have correct styling */
-        .track-col-injected { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--green); border-radius: 8px; padding: 4px; background: var(--dark-gray); }
     </style>
 </head>
 <body class="app-loading">
@@ -43,9 +40,11 @@
         </div>
 
         <div class="main-content">
+            <!-- Master Column -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                
                 <div class="control-group">
                     <label style="color:var(--green); font-size:0.7em;">Vol</label>
                     <div style="display:flex; align-items:center; gap:5px;">
@@ -53,6 +52,14 @@
                         <span id="master-vol-val" class="pa-mic-value" style="font-size:0.7em; min-width:40px;">0.0 dB</span>
                     </div>
                 </div>
+
+                <!-- [NEW] Loop Length Element -->
+                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px; margin: 4px 0;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--gold);">Loop Length</label>
+                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em; min-width:35px; color:var(--gold);">4.0s</span>
+                </div>
+
                 <div class="waveform-box">
                     <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
                     <div class="waveform-canvas-container" style="flex:1;">
@@ -60,7 +67,63 @@
                         <canvas id="m-wf-r" class="waveform-canvas"></canvas>
                     </div>
                 </div>
-                <div class="track-header" style="text-align:center;">Sample Station</div>
+
+                <!-- [NEW] Master Record Controls -->
+                <div class="master-item master-bottom-item">
+                    <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:6px;">
+                        <button id="master-record-button" class="rec-btn" style="height:24px; font-size:0.7em; padding:2px 8px; border-radius:4px;">REC</button>
+                        <select id="record-as-select" style="height:24px; font-size:0.7em; background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; flex:1;">
+                            <option value="master">Stereo (WAV)</option>
+                            <option value="mp4">Stereo (MP4)</option>
+                            <option value="stems">Stems (WAV)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- [NEW] LFO Side-by-Side -->
+                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:12px; gap:8px;">
+                    <!-- Column Left: LFO 1 -->
+                    <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                        <div class="master-item lfo-button-item" style="padding:0;">
+                            <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em; background:#333; color:var(--gold); border:1px solid var(--mid-gray); border-radius:3px;">LFO 1</button>
+                        </div>
+                        <div class="master-item lfo-meter-item" style="padding:0;">
+                            <div class="meter-container lfo-meter" style="height:4px; background:#111; border-radius:2px; overflow:hidden;">
+                                <div id="lfo-meter-bar" class="meter-bar" style="width: 0%; height:100%; background:var(--gold);"></div>
+                            </div>
+                        </div>
+                        <div class="master-item lfo-sweep-control" style="display:flex; flex-direction:column;">
+                            <label class="master-label" style="font-size:0.65em; margin:0; color:var(--green);">Sweep 1</label>
+                            <div style="display:flex; align-items:center; gap:3px;">
+                                <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8" class="pa-mic-slider" style="flex:1; height:8px;">
+                                <span id="lfo-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lfo-separator" style="width:1px; background:var(--gold);"></div>
+
+                    <!-- Column Right: LFO 2 -->
+                    <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                        <div class="master-item lfo-button-item" style="padding:0;">
+                            <button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em; background:#333; color:var(--gold); border:1px solid var(--mid-gray); border-radius:3px;">LFO 2</button>
+                        </div>
+                        <div class="master-item lfo-meter-item" style="padding:0;">
+                            <div class="meter-container lfo-meter" style="height:4px; background:#111; border-radius:2px; overflow:hidden;">
+                                <div id="lfo2-meter-bar" class="meter-bar" style="width: 0%; height:100%; background:var(--gold);"></div>
+                            </div>
+                        </div>
+                        <div class="master-item lfo-sweep-control" style="display:flex; flex-direction:column;">
+                            <label class="master-label" style="font-size:0.65em; margin:0; color:var(--green);">Sweep 2</label>
+                            <div style="display:flex; align-items:center; gap:3px;">
+                                <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8" class="pa-mic-slider" style="flex:1; height:8px;">
+                                <span id="lfo2-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="track-header" style="text-align:center; margin-top:8px;">Sample Station</div>
                 <div class="sample-grid" id="sample-grid"></div>
                 <div class="meter-container" style="margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
@@ -89,7 +152,7 @@
                         '<div class="control-group"><label style="color:var(--gold); font-size:0.7em;">Gain</label>' +
                         '<div style="display:flex; align-items:center; gap:5px;"><input type="range" id="t-gain-sl-'+i+'" min="-48" max="48" value="0" class="pa-mic-slider" style="flex:1;"><span id="t-gain-val-'+i+'" class="pa-mic-value" style="font-size:0.7em; min-width:35px;">0.0dB</span></div></div>' +
                         '<div class="track-buttons"><button id="t-btn-rec-'+i+'">REC</button><button id="t-btn-stop-'+i+'">STOP</button><button id="t-btn-play-'+i+'">PLAY</button><button id="t-btn-rev-'+i+'">REV</button></div>' +
-                        '<div class="meter-container"><div id="t-mtr-'+i+'" class="meter-bar"></div></div>';
+                        '<div class="meter-container"><div id="t-meter-'+i+'" class="meter-bar"></div></div>';
                     tc.appendChild(t);
                 }
                 updateScale();
@@ -127,34 +190,51 @@
 
             function renderState(s) {
                 if (!s) return;
+                // Transport
                 if (s.transport) {
                     document.getElementById('recording-time-display').textContent = s.transport.position;
                     for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; }
                 }
+                // Cursor
                 if (s.cursor) {
                     var cur = document.getElementById('cursor-mirror');
-                    if (cur) {
-                        cur.style.display = 'block';
-                        cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)';
-                    }
+                    if (cur) { cur.style.display = 'block'; cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)'; }
                 }
+                // Master State Mapping
+                if (s.master) {
+                    var mVol = document.getElementById('master-vol-sl'); if (mVol) mVol.value = s.master.volume || 0;
+                    var mVal = document.getElementById('master-vol-val'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
+                    
+                    var loopSl = document.getElementById('loop-length'); if (loopSl) loopSl.value = s.master.loopLength || 4.0;
+                    var loopVal = document.getElementById('loop-length-value'); if (loopVal) loopVal.textContent = (s.master.loopLength || 4.0).toFixed(1) + 's';
+                    
+                    var mRec = document.getElementById('master-record-button'); if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                    
+                    // LFO Mapping
+                    var l1Btn = document.getElementById('lfo-toggle'); if (l1Btn) l1Btn.className = s.master.lfo1Active ? 'sweeping' : '';
+                    var l2Btn = document.getElementById('lfo2-toggle'); if (l2Btn) l2Btn.className = s.master.lfo2Active ? 'sweeping' : '';
+                    
+                    var l1Sl = document.getElementById('lfo-time'); if (l1Sl) l1Sl.value = 1.0 / (s.master.lfo1Freq || 0.5);
+                    var l1Val = document.getElementById('lfo-time-value'); if (l1Val) l1Val.textContent = (1.0 / (s.master.lfo1Freq || 0.5)).toFixed(1) + 's';
+                    
+                    var l2Sl = document.getElementById('lfo2-time'); if (l2Sl) l2Sl.value = 1.0 / (s.master.lfo2Freq || 0.5);
+                    var l2Val = document.getElementById('lfo2-time-value'); if (l2Val) l2Val.textContent = (1.0 / (s.master.lfo2Freq || 0.5)).toFixed(1) + 's';
+                }
+                // Sample Station
                 if (s.samples) s.samples.forEach((p,i) => {
                     var b = document.getElementById('sample-'+(i+1)); if (b) b.className = p.isPlaying ? 'sample-btn active' : 'sample-btn';
                 });
+                // Track Mapping
                 if (s.tracks) s.tracks.forEach((t,i) => {
-                    // Meter Update
                     var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
-                    // Gain Slider Update
                     var gs = document.getElementById('t-gain-sl-'+i); if (gs) gs.value = t.gain || 0;
                     var gv = document.getElementById('t-gain-val-'+i); if (gv) gv.textContent = (t.gain || 0).toFixed(1) + 'dB';
-                    // Status Update
                     var st = document.getElementById('t-st-'+i);
                     if (st) {
                         if (t.isRecording) { st.textContent = 'Recording'; st.className = 'status-indicator status-recording'; }
                         else if (t.isPlaying) { st.textContent = 'Playing'; st.className = 'status-indicator status-playing'; }
                         else { st.textContent = 'Ready'; st.className = 'status-indicator status-ready'; }
                     }
-                    // Button States
                     var bRec = document.getElementById('t-btn-rec-'+i); if (bRec) bRec.className = t.isRecording ? 'recording' : '';
                     var bPlay = document.getElementById('t-btn-play-'+i); if (bPlay) bPlay.className = t.isPlaying ? 'playing' : '';
                 });
@@ -168,12 +248,8 @@
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
-                        // [V13.8.108] PCM16 (Int16) -> Float32 Conversion
                         const i16 = new Int16Array(e.data);
-                        for (let i = 0; i < i16.length; i++) { 
-                            ringBuffer[wPtr] = i16[i] / 32768.0; 
-                            wPtr = (wPtr + 1) % BUFFER_SIZE; 
-                        }
+                        for (let i = 0; i < i16.length; i++) { ringBuffer[wPtr] = i16[i] / 32768.0; wPtr = (wPtr + 1) % BUFFER_SIZE; }
                     } else {
                         try { var d = JSON.parse(e.data); if (d.type === 'STATE_UPDATE') renderState(d.state); } catch(x){}
                     }
