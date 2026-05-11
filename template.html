@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>MXS-004 Studio [v13.4.0]</title>
+    <meta name="viewport" content="width=1440, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script type="module" src="/src/utils/Logger.js"></script>
+    <meta charset="UTF-8">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Cousine:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="build-id" content="13.4.0">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/styles_main.css">
+
+    <!-- External Dependencies -->
+    <script type="module" src="/src/boot.js"></script>
+    <script>window.AppConfig = { NUM_TRACKS: 4 };</script>
+</head>
+
+<body class="app-loading" style="background-color: #000000;">
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header -->
+        <div class="header" style="height:32px; min-height:32px; padding:2px 8px; margin-bottom:4px;">
+            <div class="header-left">
+                <h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1>
+            </div>
+            <div class="header-right" style="display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 0; padding: 0;">
+                <button id="cast-btn" data-action="open-cast" title="Cast to Device" style="background:none; border:none; color:var(--gold); cursor:pointer; padding:0; margin:0; line-height:0.8;"><i class="fa-brands fa-chromecast" style="font-size: 1.2em;"></i></button>
+                <h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold); letter-spacing: 0.5px; line-height: 1;">Mix N Studio 004 :: v13.4.0</h2>
+            </div>
+        </div>
+
+        <!-- 5-Column Grid (Master + 4 Tracks) -->
+        <div class="main-content">
+            <!-- Column 1: MASTER -->
+            <div class="master-column" id="master-column">
+                <!-- 1. Master Recording Header -->
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+
+                <!-- 2. Master Volume -->
+                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Vol</label>
+                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" title="Increment: 0.1">
+                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em;">0.0 dB</span>
+                </div>
+
+                <!-- 3. Master Waveform -->
+                <div class="master-item master-waveform-item">
+                    <div class="waveform-box master-waveform-box">
+                        <div class="waveform-labels">
+                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                            <div class="waveform-label-external">R</div>
+                        </div>
+                        <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;">
+                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
+                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Loop Length -->
+                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Loop Length</label>
+                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em;">4.0s</span>
+                </div>
+
+                <!-- 5. REC + Format Row -->
+                <div class="master-item master-bottom-item">
+                    <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:10px;">
+                        <button id="master-record-button" class="rec-btn" data-action="record">REC</button>
+                        <select id="record-as-select">
+                            <option value="master" data-format="wav">Stereo (WAV)</option>
+                            <option value="master" data-format="mp4">Stereo (MP4)</option>
+                            <option value="stems" data-format="wav">Stems (WAV)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- LFO Side-by-Side Container -->
+                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px;">
+                    <!-- Column Left: LFO 1 -->
+                    <div class="lfo-column" style="flex:1;">
+                        <div class="master-item lfo-button-item" style="padding:2px;">
+                            <button id="lfo-toggle" data-action="toggle-lfo-1">LFO 1</button>
+                        </div>
+                        <div class="master-item lfo-meter-item" style="padding:2px;">
+                            <div class="meter-container lfo-meter" style="height:4px;">
+                                <div id="lfo-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <div class="master-item lfo-sweep-control">
+                            <label for="lfo-time" class="master-label" style="font-size:0.65em; margin:0;">Sweep 1</label>
+                            <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8" title="Increment: 0.1">
+                            <span id="lfo-time-value" class="master-value" style="font-size:0.65em;">1.8s</span>
+                        </div>
+                    </div>
+
+                    <!-- Vertical Separator -->
+                    <div class="lfo-separator" style="width:1px; background:var(--gold); margin:0 4px;"></div>
+
+                    <!-- Column Right: LFO 2 -->
+                    <div class="lfo-column" style="flex:1;">
+                        <div class="master-item lfo-button-item" style="padding:2px;">
+                            <button id="lfo2-toggle" data-action="toggle-lfo-2">LFO 2</button>
+                        </div>
+                        <div class="master-item lfo-meter-item" style="padding:2px;">
+                            <div class="meter-container lfo-meter" style="height:4px;">
+                                <div id="lfo2-meter-bar" class="meter-bar"></div>
+                            </div>
+                        </div>
+                        <div class="master-item lfo-sweep-control">
+                            <label for="lfo2-time" class="master-label" style="font-size:0.65em; margin:0;">Sweep 2</label>
+                            <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8" title="Increment: 0.1">
+                            <span id="lfo2-time-value" class="master-value" style="font-size:0.65em;">1.8s</span>
+                        </div>
+                    </div>
+                </div>
+
+
+                <!-- Sample Station (20-Pad Grid) -->
+                <div class="master-item sample-center-container">
+                    <div class="track-header" style="text-align:center;">Sample Station</div>
+                    <div class="sample-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; margin-top:5px;">
+                        <button class="sample-btn" data-sample="1">1</button>
+                        <button class="sample-btn" data-sample="2">2</button>
+                        <button class="sample-btn" data-sample="3">3</button>
+                        <button class="sample-btn" data-sample="4">4</button>
+                        <button class="sample-btn" data-sample="5">5</button>
+                        <button class="sample-btn" data-sample="6">6</button>
+                        <button class="sample-btn" data-sample="7">7</button>
+                        <button class="sample-btn" data-sample="8">8</button>
+                        <button class="sample-btn" data-sample="9">9</button>
+                        <button class="sample-btn" data-sample="10">10</button>
+                        <button class="sample-btn" data-sample="11">11</button>
+                        <button class="sample-btn" data-sample="12">12</button>
+                        <button class="sample-btn" data-sample="13">13</button>
+                        <button class="sample-btn" data-sample="14">14</button>
+                        <button class="sample-btn" data-sample="15">15</button>
+                        <button class="sample-btn" data-sample="16">16</button>
+                        <button class="sample-btn" data-sample="17">17</button>
+                        <button class="sample-btn" data-sample="18">18</button>
+                        <button class="sample-btn" data-sample="19">19</button>
+                        <button class="sample-btn" data-sample="20">20</button>
+                    </div>
+                </div>
+
+                <!-- Bottom Buttons -->
+                <div class="master-bottom-buttons" style="margin-top: 8px; display: flex; flex-direction: row; gap: 4px;">
+                    <button id="import-files-button" data-action="import-files">IMPORT</button>
+                    <button id="show-docs-button" data-action="show-docs">DOCS</button>
+                    <button id="sample-station-button" data-action="open-media-library">MEDIA</button>
+                    <button id="settings-button" data-action="open-settings">SETTINGS</button>
+                </div>
+            </div>
+
+            <!-- Columns 2-5: TRACKS (Injected by Orchestrator.js) -->
+            <div class="tracks-container" id="tracks-container">
+                <!-- TrackView nodes will be injected here by Orchestrator -->
+            </div>
+        </div>
+
+        <!-- Secret Admin Controls (Hidden by default, triggered by Shift+1) -->
+        <div id="admin-controls" style="position: absolute; bottom: 8px; right: 12px; display: none; z-index: 9999;">
+            <button id="clear-logs-button" data-action="clear-logs" style="background: rgba(255,0,0,0.2); color: var(--red); border: 1px solid var(--red); font-size: 0.6em; padding: 2px 5px; border-radius: 4px; cursor: pointer;">CLEAR LOGS</button>
+        </div>
+    </div>
+
+    <!-- Media & Sessions Dialog (Encapsulated Style) -->
+    <dialog id="media-sessions-dialog" class="effect-params-dialog">
+        <div class="dialog-header">
+            <div class="dialog-header-top">
+                <span>MEDIA & SESSIONS</span>
+                <button class="close-dialog-btn" onclick="this.closest('dialog').close()">x</button>
+            </div>
+            <div class="dialog-header-status">Recorded Clips, Loops & Imports</div>
+        </div>
+        <div class="dialog-content" id="media-dialog-content">
+            <!-- Populated by RecordingUI.js -->
+        </div>
+    </dialog>
+
+    <!-- ==================== SCRIPTS ==================== -->
+
+    <!-- Utils & Core -->
+    <script type="module" src="/src/config/Config.js"></script>
+    <script type="module" src="/src/utils/TauriUtils.js"></script>
+    <script type="module" src="/src/utils/AudioUtils.js"></script>
+    <script type="module" src="/src/audio/ToneSimulcastRouter.js"></script>
+    <script type="module" src="/src/audio/DeviceManager.js"></script>
+    <script type="module" src="/src/audio/AudioContextManager.js"></script>
+    <script type="module" src="/src/audio/SamplerService.js"></script>
+    <script type="module" src="/src/audio/AudioRouter.js"></script>
+    <script type="module" src="/src/audio/AudioEngine.js"></script>
+    <script type="module" src="/src/audio/TrackAudio.js"></script>
+    <script type="module" src="/src/audio/EffectsService.js"></script>
+    <script type="module" src="/src/audio/SamplerVoice.js"></script>
+    <script type="module" src="/src/audio/ToneCastManager.js"></script>
+    <script type="module" src="/src/audio/SequencerService.js"></script>
+
+    <!-- Effect Modules -->
+    <script type="module" src="/src/effects/effect_base.js"></script>
+    <script type="module" src="/src/effects/effects_reverb.js"></script>
+    <script type="module" src="/src/effects/effects_delay.js"></script>
+    <script type="module" src="/src/effects/effects_distortion.js"></script>
+    <script type="module" src="/src/effects/effects_chorus.js"></script>
+    <script type="module" src="/src/effects/effects_flanger.js"></script>
+    <script type="module" src="/src/effects/effects_phaser.js"></script>
+    <script type="module" src="/src/effects/effects_compressor.js"></script>
+    <script type="module" src="/src/effects/effects_eq.js"></script>
+    <script type="module" src="/src/effects/effects_mod_pitch_filter.js"></script>
+    <script type="module" src="/src/effects/effects_experimental.js"></script>
+    <script type="module" src="/src/effects/effects_microphone.js"></script>
+    <script type="module" src="/src/effects/effects_moog.js"></script>
+
+    <!-- UI Modules -->
+    <script type="module" src="/src/ui/GlobalUIMethods.js"></script>
+    <script type="module" src="/src/ui/Modals.js"></script>
+    <script type="module" src="/src/ui/DeviceUI.js"></script>
+    <script type="module" src="/src/ui/DocsUI.js"></script>
+    <script type="module" src="/src/ui/MetersUI.js"></script>
+    <script type="module" src="/src/ui/EffectUI.js"></script>
+    <script type="module" src="/src/ui/SamplerUI.js"></script>
+    <script type="module" src="/src/ui/FileSelectionUI.js"></script>
+    <script type="module" src="/src/ui/TrackView.js"></script>
+    <script type="module" src="/src/ui/Interactions.js"></script>
+    <script type="module" src="/src/ui/RecordingUI.js"></script>
+    <script type="module" src="/src/ui/Orchestrator.js"></script>
+
+    <!-- Cast Core -->
+    <script type="module" src="/src/cast/CastManager.js"></script>
+    <script type="module" src="/src/cast/CastStateBroadcaster.js"></script>
+
+    <!-- App Entry Point -->
+    <script type="module" src="/scripts.js"></script>
+</body>
+
+</html>

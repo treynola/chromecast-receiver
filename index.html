@@ -2,562 +2,76 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Receiver v13.8.73</title>
-    <link rel="icon" href="data:,">
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Cousine:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
+    <title>MXS-004 Studio Mirror v13.8.76</title>
     <!-- Cast SDK -->
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-
-    <style id="studio-styles">
-        /* INLINED STUDIO CSS - Will be updated with absolute font paths via JS */
-        :root {
-            --red: #FF0000;
-            --gold: #FAD78E;
-            --dark-gold: #b38600;
-            --green: #008000;
-            --dark-green: #004d00;
-            --darker-green: #005200;
-            --off-black: #1a1a1a;
-            --dark-gray: #2c2c2c;
-            --mid-gray: #444;
-            --text-color: #f0f0f0;
-            --dark-green-transparent: rgba(0, 100, 0, 0.5);
-            --dark-red: #8B0000;
-        }
-
-        html, body {
-            background-color: #000 !important;
-            margin: 0; padding: 0;
-            width: 100%; height: 100%;
-            overflow: hidden;
-            font-family: 'Courier New', Courier, monospace;
-            color: var(--text-color);
-        }
-
-        /* --- STUDIO LAYOUT (MIMIC INDEX.HTML) --- */
-        .container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding: 10px;
-            box-sizing: border-box;
-            opacity: 0;
-            transition: opacity 1s ease-in;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 40px;
-            margin-bottom: 10px;
-            border-bottom: 1px solid var(--dark-gold);
-        }
-
-        .header h1 {
-            font-family: 'Mexcellent', sans-serif;
-            color: var(--gold);
-            margin: 0;
-            font-size: 2em;
-        }
-
-        .main-content {
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 10px;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        .tracks-container {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-        }
-
-        /* --- TRACK & MASTER STYLING --- */
-        .master-column, .track {
-            background: #111;
-            border: 1px solid #333;
-            border-radius: 4px;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            position: relative;
-        }
-
-        .track-header {
-            font-size: 0.9em;
-            color: var(--gold);
-            border-bottom: 1px solid #444;
-            padding-bottom: 4px;
-            text-transform: uppercase;
-        }
-
-        .track-time-display {
-            font-family: monospace;
-            font-size: 1.5em;
-            color: var(--green);
-            text-align: center;
-            background: #000;
-            padding: 5px;
-            border-radius: 4px;
-        }
-
-        .status-indicator {
-            font-size: 0.7em;
-            text-align: center;
-            padding: 2px;
-            border-radius: 2px;
-            background: #222;
-        }
-
-        .status-ready { color: #888; }
-        .status-recording { color: var(--red); font-weight: bold; }
-        .status-playing { color: var(--green); }
-
-        .waveform-box {
-            height: 60px;
-            background: #000;
-            border: 1px solid #222;
-            position: relative;
-            display: flex;
-        }
-
-        .waveform-canvas-container {
-            flex: 1;
-            position: relative;
-        }
-
-        .waveform-canvas {
-            width: 100%;
-            height: 25px;
-            display: block;
-        }
-
-        /* --- SLIDERS --- */
-        input[type="range"] {
-            -webkit-appearance: none;
-            width: 100%;
-            background: #333;
-            height: 4px;
-            border-radius: 2px;
-            outline: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 12px;
-            height: 12px;
-            background: var(--gold);
-            border-radius: 50%;
-            cursor: pointer;
-        }
-
-        .pa-mic-slider::-webkit-slider-thumb { background: var(--green); }
-
-        /* --- BUTTONS --- */
-        .track-buttons {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 4px;
-        }
-
-        .track-buttons button {
-            font-size: 0.6em;
-            padding: 4px 2px;
-            background: #222;
-            border: 1px solid #444;
-            color: #ccc;
-            border-radius: 2px;
-        }
-
-        .rec-btn.recording {
-            background: var(--red) !important;
-            color: #fff !important;
-        }
-
-        /* --- LFO METER --- */
-        .meter-container {
-            width: 100%;
-            height: 4px;
-            background: #222;
-            border-radius: 2px;
-            overflow: hidden;
-        }
-        .meter-bar {
-            height: 100%;
-            width: 0%;
-            background: var(--gold);
-            transition: width 0.1s linear;
-        }
-
-        /* --- ON-SCREEN DEBUG (SEMI-TRANSPARENT) --- */
-        #debug-log {
-            position: fixed;
-            bottom: 5px;
-            left: 5px;
-            right: 5px;
-            max-height: 80px;
-            overflow-y: auto;
-            background: rgba(0,0,0,0.6);
-            border: 1px solid rgba(0,255,0,0.2);
-            border-radius: 4px;
-            padding: 5px;
-            font-family: monospace;
-            font-size: 10px;
-            color: #0f0;
-            z-index: 10000;
-            pointer-events: none;
-        }
-
+    <!-- Studio Styles (Inlined for reliability on TV) -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Overlay and Cursor tweaks */
         #init-overlay {
-            position: fixed;
-            inset: 0;
-            background: #000;
-            z-index: 20000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
+            position: fixed; inset: 0; background: #000; z-index: 99999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
         }
-        
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(250, 215, 142, 0.1);
-            border-top: 3px solid var(--gold);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+        #debug-log {
+            position: fixed; bottom: 10px; left: 10px; right: 10px;
+            max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.8);
+            border: 1px solid #333; color: #0f0; font-family: monospace; font-size: 11px;
+            z-index: 100000; padding: 10px; border-radius: 8px; pointer-events: none;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
         #ghost-cursor {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background: rgba(250, 215, 142, 0.5);
-            border: 2px solid var(--gold);
-            border-radius: 50%;
-            pointer-events: none;
-            z-index: 30000;
-            display: none;
-            transform: translate(-50%, -50%);
+            position: absolute; width: 24px; height: 24px; background: rgba(250, 215, 142, 0.4);
+            border: 2px solid var(--gold); border-radius: 50%; pointer-events: none;
+            z-index: 90000; transform: translate(-50%, -50%); display: none;
         }
-        #ghost-cursor.clicking { transform: translate(-50%, -50%) scale(0.8); background: var(--red); }
+        #ghost-cursor.clicking { background: var(--red); transform: translate(-50%, -50%) scale(0.8); }
+        .track-time-display { font-family: monospace !important; }
+        .container { opacity: 0; transition: opacity 1s ease-in; }
     </style>
 </head>
-<body>
+<body class="app-loading" style="background-color: #000;">
     <div id="init-overlay">
-        <div class="spinner"></div>
-        <div style="color: var(--gold); font-family: 'Inter', sans-serif; text-align: center;">
-            <div style="font-size: 1.5em; letter-spacing: 2px;">MXS-004 STUDIO</div>
-            <div id="init-status" style="font-size: 0.8em; opacity: 0.6; margin-top: 10px;">INITIALIZING CAST RECEIVER...</div>
-        </div>
+        <div style="font-family: 'Mexcellent', sans-serif; color: var(--gold); font-size: 3em; margin-bottom: 20px;">MXS-004</div>
+        <div style="color: #666; font-family: monospace;" id="init-status">INITIALIZING HIGH-FIDELITY MIRROR...</div>
     </div>
 
-    <div id="debug-log">🚀 v13.8.73 Booting...</div>
+    <div id="debug-log">🚀 Receiver v13.8.76 Booting...</div>
     <div id="ghost-cursor"></div>
 
-    <div class="container" id="main-ui">
+    <!-- The actual Studio HTML structure -->
+    <div class="container" id="studio-root">
         <div class="header">
-            <h1 id="studio-title">NOWMULTIMEDIA MXS-004</h1>
-            <div style="color: var(--gold); font-size: 0.8em;">Studio Mirror :: v13.8.73</div>
+            <div class="header-left">
+                <h1 style="font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1>
+            </div>
+            <div class="header-right">
+                <h2 style="font-family: 'Mexcellent', sans-serif; color: var(--gold);">Studio Mirror :: v13.8.76</h2>
+            </div>
         </div>
-
         <div class="main-content">
-            <!-- Master Column -->
             <div class="master-column">
                 <div class="track-header">Master Recording</div>
                 <div id="master-time" class="track-time-display">00:00:00</div>
-                
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <label style="font-size:0.7em;">VOL</label>
-                    <input type="range" id="master-volume" min="-60" max="6" value="0">
-                </div>
-
+                <div class="master-item"><input type="range" id="master-volume" min="-60" max="6" value="0"></div>
                 <div class="waveform-box">
                     <div class="waveform-canvas-container">
-                        <canvas id="master-wf-L" class="waveform-canvas"></canvas>
-                        <canvas id="master-wf-R" class="waveform-canvas"></canvas>
+                        <canvas id="master-wf-L" class="waveform-canvas" width="242" height="26"></canvas>
+                        <canvas id="master-wf-R" class="waveform-canvas" width="242" height="26"></canvas>
                     </div>
                 </div>
-
-                <div style="display:flex; justify-content:space-between; margin-top:10px;">
-                    <div style="flex:1;">
-                        <div style="font-size:0.6em; color:var(--green);">LFO 1</div>
-                        <div class="meter-container"><div id="lfo1-bar" class="meter-bar"></div></div>
-                    </div>
-                    <div style="width:10px;"></div>
-                    <div style="flex:1;">
-                        <div style="font-size:0.6em; color:var(--green);">LFO 2</div>
-                        <div class="meter-container"><div id="lfo2-bar" class="meter-bar"></div></div>
-                    </div>
+                <div style="display:flex; gap:10px; margin-top:10px;">
+                    <div style="flex:1;"><div class="meter-container"><div id="lfo-meter-bar" class="meter-bar"></div></div></div>
+                    <div style="flex:1;"><div class="meter-container"><div id="lfo2-meter-bar" class="meter-bar"></div></div></div>
                 </div>
-
-                <button id="master-rec-btn" class="rec-btn" style="width:100%; margin-top:10px; height:30px; border:1px solid var(--red); color:var(--red); background:none; font-weight:bold;">REC</button>
+                <button id="master-record-button" class="rec-btn" style="width:100%; margin-top:10px;">REC</button>
             </div>
-
-            <!-- Tracks Container -->
-            <div class="tracks-container" id="tracks-root">
-                <!-- Track 1 -->
-                <div class="track" id="track-0">
-                    <div class="track-header">TRACK 1</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box">
-                        <div class="waveform-canvas-container">
-                            <canvas class="waveform-canvas"></canvas>
-                            <canvas class="waveform-canvas"></canvas>
-                        </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:4px;">
-                        <label style="font-size:0.6em;">GAIN</label>
-                        <input type="range" class="gain-slider" min="-48" max="48" value="0">
-                    </div>
-                    <div class="track-buttons">
-                        <button class="rec-btn">REC</button><button>STOP</button><button>PLAY</button><button>REV</button>
-                    </div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:0.6em; margin-top:auto;">
-                        <div>Pitch: <span class="val-pitch">0</span></div>
-                        <div>Pan: <span class="val-pan">0</span></div>
-                    </div>
-                </div>
-                <!-- Track 2 -->
-                <div class="track" id="track-1">
-                    <div class="track-header">TRACK 2</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons">
-                        <button class="rec-btn">REC</button><button>STOP</button><button>PLAY</button><button>REV</button>
-                    </div>
-                </div>
-                <!-- Track 3 -->
-                <div class="track" id="track-2">
-                    <div class="track-header">TRACK 3</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons">
-                        <button class="rec-btn">REC</button><button>STOP</button><button>PLAY</button><button>REV</button>
-                    </div>
-                </div>
-                <!-- Track 4 -->
-                <div class="track" id="track-3">
-                    <div class="track-header">TRACK 4</div>
-                    <div class="track-time-display">00:00:00</div>
-                    <div class="status-indicator status-ready">Ready</div>
-                    <div class="waveform-box"></div>
-                    <div class="track-buttons">
-                        <button class="rec-btn">REC</button><button>STOP</button><button>PLAY</button><button>REV</button>
-                    </div>
-                </div>
+            <div class="tracks-container" id="tracks-container">
+                <!-- Tracks 0-3 will be injected/mirrored here -->
             </div>
         </div>
     </div>
 
-    <script>
-        // ============================================================
-        // GLOBAL STATE & UTILS
-        // ============================================================
-        var ws = null;
-        var lastState = null;
-        var audioCtx = null;
-        var audioEl = new Audio();
-        var lfoPhase1 = 0;
-        var lfoPhase2 = 0;
-        var lastFrameTime = performance.now();
-        var wsUrl = null;
-        var audioUrl = null;
-
-        var debugEl = document.getElementById('debug-log');
-        var initOverlay = document.getElementById('init-overlay');
-        var initStatus = document.getElementById('init-status');
-        var mainUi = document.getElementById('main-ui');
-        var cursorEl = document.getElementById('ghost-cursor');
-
-        function remoteLog(msg) {
-            console.log(msg);
-            debugEl.innerHTML += '<br>' + msg;
-            debugEl.scrollTop = debugEl.scrollHeight;
-            if (ws && ws.readyState === 1) ws.send(JSON.stringify({type:'LOG', message:msg}));
-        }
-
-        // ============================================================
-        // AUDIO ENGINE
-        // ============================================================
-        function startAudio(url) {
-            remoteLog("🔊 Starting Audio Stream: " + url);
-            try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
-                audioEl.crossOrigin = "anonymous";
-                audioEl.src = url;
-                audioEl.play().then(function() {
-                    remoteLog("✅ Audio playing!");
-                    initStatus.textContent = "AUDIO CONNECTED";
-                }).catch(function(err) {
-                    remoteLog("⚠️ Audio blocked: " + err.message + " - TAP SCREEN");
-                    initStatus.textContent = "TAP SCREEN TO ENABLE AUDIO";
-                    document.addEventListener('click', function() {
-                        audioCtx.resume();
-                        audioEl.play();
-                    }, {once:true});
-                });
-            } catch(e) { remoteLog("❌ Audio init error: " + e.message); }
-        }
-
-        // ============================================================
-        // STATE RENDERING
-        // ============================================================
-        function renderState(state) {
-            if (!state) return;
-            lastState = state;
-
-            // 1. Reveal UI on first state
-            if (mainUi.style.opacity === '0' || mainUi.style.opacity === '') {
-                mainUi.style.opacity = '1';
-                initOverlay.style.display = 'none';
-                remoteLog("✨ First state received. UI revealed.");
-            }
-
-            // 2. Cursor
-            if (state.cursor && cursorEl) {
-                cursorEl.style.display = 'block';
-                cursorEl.style.left = (state.cursor.x * 100) + '%';
-                cursorEl.style.top = (state.cursor.y * 100) + '%';
-                cursorEl.className = state.cursor.isClicking ? 'clicking' : '';
-            }
-
-            // 3. Master
-            if (state.master) {
-                var m = state.master;
-                var mVol = document.getElementById('master-volume');
-                if (mVol) mVol.value = m.volume;
-                
-                var mRec = document.getElementById('master-rec-btn');
-                if (mRec) mRec.className = m.isRecording ? 'rec-btn recording' : 'rec-btn';
-            }
-
-            // 4. Tracks
-            if (state.tracks) {
-                state.tracks.forEach(function(t, i) {
-                    var trackEl = document.getElementById('track-' + i);
-                    if (!trackEl) return;
-
-                    var status = trackEl.querySelector('.status-indicator');
-                    if (status) {
-                        status.textContent = t.statusText || 'Ready';
-                        status.className = 'status-indicator status-' + (t.statusType || 'ready');
-                    }
-
-                    var recBtn = trackEl.querySelector('.rec-btn');
-                    if (recBtn) recBtn.className = t.isRecording ? 'rec-btn recording' : 'rec-btn';
-
-                    var pitchSpan = trackEl.querySelector('.val-pitch');
-                    if (pitchSpan && t.knobs) pitchSpan.textContent = t.knobs.pitch;
-                    
-                    var panSpan = trackEl.querySelector('.val-pan');
-                    if (panSpan && t.knobs) panSpan.textContent = t.knobs.pan;
-                });
-            }
-        }
-
-        function animate() {
-            var now = performance.now();
-            var dt = (now - lastFrameTime) / 1000;
-            lastFrameTime = now;
-
-            if (lastState && lastState.master) {
-                var m = lastState.master;
-                if (m.lfo1Active) {
-                    lfoPhase1 += 2 * Math.PI * (m.lfo1Freq || 0.5) * dt;
-                    var bar1 = document.getElementById('lfo1-bar');
-                    if (bar1) bar1.style.width = (Math.abs(Math.sin(lfoPhase1)) * 100) + '%';
-                }
-                if (m.lfo2Active) {
-                    lfoPhase2 += 2 * Math.PI * (m.lfo2Freq || 0.5) * dt;
-                    var bar2 = document.getElementById('lfo2-bar');
-                    if (bar2) bar2.style.width = (Math.abs(Math.sin(lfoPhase2)) * 100) + '%';
-                }
-            }
-            requestAnimationFrame(animate);
-        }
-        requestAnimationFrame(animate);
-
-        // ============================================================
-        // CAST INITIALIZATION
-        // ============================================================
-        function initCast() {
-            if (typeof cast === 'undefined' || !cast.framework) {
-                remoteLog("❌ Cast SDK missing");
-                return;
-            }
-            
-            var context = cast.framework.CastReceiverContext.getInstance();
-            var playerManager = context.getPlayerManager();
-
-            playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(request) {
-                remoteLog("📥 LOAD received");
-                if (request.media && request.media.contentId) {
-                    var cid = request.media.contentId;
-                    try {
-                        var url = new URL(cid);
-                        wsUrl = decodeURIComponent(url.searchParams.get('ws'));
-                        audioUrl = decodeURIComponent(url.searchParams.get('audioUrl'));
-                        
-                        if (wsUrl) {
-                            remoteLog("🔗 Connecting WS: " + wsUrl);
-                            connectWS(wsUrl);
-                        }
-                        if (audioUrl) startAudio(audioUrl);
-
-                        // Update font paths to point back to the Studio server
-                        var studioBase = audioUrl.replace('/stream.wav', '');
-                        var styleEl = document.getElementById('studio-styles');
-                        styleEl.innerHTML = "@font-face { font-family: 'Mexcellent'; src: url('" + studioBase + "/fonts/MexcellentRg.otf'); }" + styleEl.innerHTML;
-
-                    } catch(e) { remoteLog("❌ LOAD parse err: " + e.message); }
-                }
-                return null; // Suppress media player
-            });
-
-            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(event) {
-                var data = event.data;
-                if (data && typeof data.payload === 'string') {
-                    try { data = JSON.parse(data.payload); } catch(e){}
-                }
-                if (data.type === 'STATE_UPDATE') renderState(data.state);
-            });
-
-            context.start({disableIdleTimeout: true});
-            remoteLog("✅ SDK READY. Waiting for handshake...");
-            initStatus.textContent = "READY TO MIRROR";
-        }
-
-        function connectWS(url) {
-            if (ws) ws.close();
-            ws = new WebSocket(url);
-            ws.onopen = function() { remoteLog("✅ WebSocket connected"); };
-            ws.onmessage = function(e) {
-                try {
-                    var msg = JSON.parse(e.data);
-                    if (msg.type === 'STATE_UPDATE') renderState(msg.state);
-                } catch(err){}
-            };
-            ws.onerror = function() { remoteLog("⚠️ WS Error"); };
-            ws.onclose = function() { setTimeout(function(){ connectWS(url); }, 2000); };
-        }
-
-        window.onload = initCast;
-    </script>
+    <script src="receiver.js"></script>
 </body>
 </html>
