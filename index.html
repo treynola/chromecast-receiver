@@ -2,175 +2,165 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.101 [NUCLEAR PARITY]</title>
+    <title>MXS-004 Studio Mirror v13.8.102 [AUDIO HARDENED]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
-        /* [V13.8.101] EXACT CSS MIRROR FROM styles_main.css */
-        :root { --red: #FF0000; --gold: #FAD78E; --green: #008000; --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; --text-color: #f0f0f0; }
-        
-        @font-face { font-family: 'Mexcellent'; src: url('../fonts/MexcellentRg.otf') format('opentype'); }
-        @font-face { font-family: 'Mexcellent 3D'; src: url('../fonts/Mexcellent3d.otf') format('opentype'); }
-
+        :root { --red: #FF0000; --gold: #FAD78E; --green: #008000; --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; }
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: 'Courier New', monospace; }
-        
         .container {
             width: 1432px; height: 802px; position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
-            background-color: var(--dark-gray); border-radius: 12px; padding: 6px; box-sizing: border-box;
+            background-color: var(--dark-gray); border-radius: 12px; padding: 10px; box-sizing: border-box;
             border: 1px solid var(--green); box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
-            display: flex; flex-direction: column; opacity: 1;
+            display: flex; flex-direction: column;
         }
-
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background-color: var(--off-black); border-radius: 8px; margin-bottom: 6px; height: 36px; }
-        .header h1 { font-family: 'Mexcellent 3D', sans-serif; font-size: 1.1em; margin: 0; color: var(--gold); }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; background-color: #111; border-radius: 8px; margin-bottom: 8px; border: 1px solid #333; }
+        .header h1 { font-size: 1.2em; margin: 0; color: var(--gold); letter-spacing: 2px; }
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; flex: 1; min-height: 0; }
+        .column { border: 1px solid var(--green); border-radius: 8px; padding: 10px; background: #1a1a1a; display: flex; flex-direction: column; }
+        .time-display { font-size: 2.5em; color: var(--green); text-align: center; margin: auto 0; text-shadow: 0 0 10px var(--green); }
+        .track-header { color: var(--gold); font-size: 0.8em; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 10px; text-transform: uppercase; }
         
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1; overflow: hidden; }
-        .master-column, .track { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--green); border-radius: 8px; padding: 4px; background-color: var(--dark-gray); overflow: hidden; }
-        
-        .track-header { color: var(--gold); font-weight: bold; font-size: 0.75em; border-bottom: 1px solid var(--mid-gray); padding-bottom: 2px; text-transform: uppercase; }
-        .track-time-display { font-size: 1.5em; color: var(--green); text-align: center; font-family: 'Courier New', monospace; }
-        
-        .waveform-box { height: 60px; border: 1px solid var(--mid-gray); display: flex; align-items: center; background: #000; }
-        .waveform-canvas { flex: 1; height: 100%; border-left: 1px solid var(--gold); }
-        
-        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 5px; }
-        .sample-btn { background: #1a1a1a; color: var(--gold); border: 1px solid #444; font-size: 0.7em; height: 32px; border-radius: 4px; }
-        .sample-btn.active { background: var(--gold); color: #000; box-shadow: 0 0 8px var(--gold); }
-
-        .meter-container { height: 4px; background: #111; border-radius: 2px; overflow: hidden; margin-top: auto; }
-        .meter-bar { height: 100%; width: 0%; background: var(--green); transition: width 0.1s; }
-
-        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 9px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000; max-height: 100px; width: 300px; pointer-events: none; }
-        cast-media-player { display: none; }
+        #audio-debug { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); border: 1px solid #555; padding: 10px; color: #0f0; font-size: 11px; z-index: 2000; border-radius: 4px; }
+        .meter-mini { height: 10px; width: 100px; background: #222; border: 1px solid #444; position: relative; margin-top: 5px; }
+        .meter-mini-fill { height: 100%; width: 0%; background: #0f0; transition: width 0.05s; }
     </style>
 </head>
 <body>
-    <audio id="silent-loop" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
-    <cast-media-player></cast-media-player>
-    <div id="debug-log">🚀 Nuclear Parity v13.8.101</div>
+    <cast-media-player style="display:none"></cast-media-player>
+    
+    <div id="audio-debug">
+        <div>AUDIO STATUS: <span id="as-val">WAITING...</span></div>
+        <div class="meter-mini"><div id="as-meter" class="meter-mini-fill"></div></div>
+        <div id="as-msg" style="color:#aaa; font-size:9px; margin-top:5px;">v13.8.102 JITTER-SYNC</div>
+    </div>
 
     <div class="container" id="studio-root">
-        <!-- Exact HTML Structure Mirror -->
         <div class="header">
-            <div class="header-left"><h1>NOWMULTIMEDIA MXS-004</h1></div>
-            <div class="header-right"><h2 id="mirror-status" style="font-size:0.7em; color:var(--green); margin:0;">MIRROR ACTIVE :: v13.8.101</h2></div>
+            <h1>NOWMULTIMEDIA MXS-004</h1>
+            <div style="color:var(--green); font-weight:bold; font-size:0.8em;">LIVE STUDIO MIRROR</div>
         </div>
-
         <div class="main-content">
-            <!-- Column 1: MASTER -->
-            <div class="master-column">
-                <div class="track-header">Master Recording:</div>
-                <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                <div class="waveform-box"><div class="waveform-canvas"></div></div>
-                <div style="color:var(--gold); font-size:0.65em; text-align:center; margin-top:5px;">SAMPLE STATION</div>
-                <div id="sample-grid" class="sample-grid"></div>
-                <div id="audio-status" style="margin-top:auto; font-size:8px; color:#555;">Audio: Standby</div>
-            </div>
-            <!-- Columns 2-5: TRACKS (Injected) -->
-            <div id="tracks-container" style="display:contents;"></div>
+            <div class="column"><div class="track-header">MASTER</div><div id="m-time" class="time-display">00:00:00</div></div>
+            <div class="column"><div class="track-header">TRACK 1</div><div class="time-display">00:00:00</div></div>
+            <div class="column"><div class="track-header">TRACK 2</div><div class="time-display">00:00:00</div></div>
+            <div class="column"><div class="track-header">TRACK 3</div><div class="time-display">00:00:00</div></div>
+            <div class="column"><div class="track-header">TRACK 4</div><div class="time-display">00:00:00</div></div>
         </div>
     </div>
 
     <script>
         (function() {
-            var audioCtx = null; var scriptNode = null; var ws = null;
-            var ringBuffer = new Float32Array(48000 * 2); var writePtr = 0; var readPtr = 0;
-            var debugEl = document.getElementById('debug-log');
-            var statusEl = document.getElementById('audio-status');
+            const context = cast.framework.CastReceiverContext.getInstance();
+            const playerManager = context.getPlayerManager();
+            const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
+            
+            let audioCtx = null;
+            let scriptNode = null;
+            const BUFFER_SIZE = 192000; // 2 seconds of buffer @ 48kHz Stereo
+            const ringBuffer = new Float32Array(BUFFER_SIZE);
+            let writePtr = 0;
+            let readPtr = 0;
+            let lastLevel = 0;
 
-            function log(m) { if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; } }
-
-            function buildGUI() {
-                var grid = document.getElementById('sample-grid');
-                for (var p = 1; p <= 20; p++) {
-                    var btn = document.createElement('button'); btn.className = 'sample-btn';
-                    btn.id = 'sample-' + p; btn.textContent = p; grid.appendChild(btn);
-                }
-                var tc = document.getElementById('tracks-container');
-                for (var i = 0; i < 4; i++) {
-                    var t = document.createElement('div'); t.className = 'track';
-                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display">00:00:00</div><div class="waveform-box"><div class="waveform-canvas"></div></div><div class="meter-container"><div id="meter-'+i+'" class="meter-bar"></div></div>';
-                    tc.appendChild(t);
-                }
-                updateScale();
-            }
-
-            function updateScale() {
+            function updateUI() {
                 const winW = window.innerWidth; const winH = window.innerHeight;
-                const finalScale = Math.min(winW / 1440, winH / 810) * 0.98;
-                document.documentElement.style.setProperty('--scale', finalScale);
-            }
-
-            function tryUnlockAudio() {
-                if (audioCtx && audioCtx.state === 'running') return;
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                audioCtx.resume().then(() => { if (audioCtx.state === 'running' && !scriptNode) startAudio(); });
+                document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.96);
+                
+                document.getElementById('as-meter').style.width = (lastLevel * 100) + '%';
+                if (audioCtx) document.getElementById('as-val').textContent = audioCtx.state.toUpperCase();
             }
 
             function startAudio() {
-                scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
-                scriptNode.onaudioprocess = function(e) {
-                    var outL = e.outputBuffer.getChannelData(0); var outR = e.outputBuffer.getChannelData(1);
-                    var available = (writePtr - readPtr + ringBuffer.length) % ringBuffer.length;
-                    if (available < 8192) { outL.fill(0); outR.fill(0); return; }
-                    for (var i = 0; i < 4096; i++) {
-                        outL[i] = ringBuffer[readPtr]; outR[i] = ringBuffer[(readPtr + 1) % ringBuffer.length];
-                        readPtr = (readPtr + 2) % ringBuffer.length;
+                if (scriptNode) return;
+                log("🔊 ACTIVATING PCM ENGINE...");
+                scriptNode = audioCtx.createScriptProcessor(2048, 0, 2);
+                scriptNode.onaudioprocess = (e) => {
+                    const outL = e.outputBuffer.getChannelData(0);
+                    const outR = e.outputBuffer.getChannelData(1);
+                    
+                    const available = (writePtr - readPtr + BUFFER_SIZE) % BUFFER_SIZE;
+                    // Jitter Buffer: Wait for 4096 samples before starting playback
+                    if (available < 4096) {
+                        outL.fill(0); outR.fill(0);
+                        return;
                     }
+
+                    let maxVal = 0;
+                    for (let i = 0; i < 2048; i++) {
+                        const valL = ringBuffer[readPtr];
+                        const valR = ringBuffer[(readPtr + 1) % BUFFER_SIZE];
+                        outL[i] = valL;
+                        outR[i] = valR;
+                        maxVal = Math.max(maxVal, Math.abs(valL), Math.abs(valR));
+                        readPtr = (readPtr + 2) % BUFFER_SIZE;
+                    }
+                    lastLevel = maxVal;
                 };
                 scriptNode.connect(audioCtx.destination);
-                statusEl.textContent = "Audio: LIVE"; statusEl.style.color = "#0f0";
-                log("🔊 Audio Engine Active.");
             }
 
-            function renderState(state) {
-                if (!state) return;
-                if (state.transport) document.getElementById('recording-time-display').textContent = state.transport.position;
-                if (state.samples) state.samples.forEach((s,i) => {
-                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = s.isPlaying ? 'sample-btn active' : 'sample-btn';
-                });
-                if (state.tracks) state.tracks.forEach((t,i) => {
-                    var m = document.getElementById('meter-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
-                });
-                tryUnlockAudio();
+            function tryUnlock() {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume().then(() => {
+                        if (audioCtx.state === 'running') startAudio();
+                    });
+                } else if (audioCtx.state === 'running') {
+                    startAudio();
+                }
             }
 
-            function connect(url) {
-                log("🔌 WS: " + url);
-                ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
+            function log(m) { castDebugLogger.info('STUDIO', m); document.getElementById('as-msg').textContent = m; }
+
+            function connectWS(url) {
+                log("🔌 CONNECTING: " + url);
+                const ws = new WebSocket(url);
+                ws.binaryType = 'arraybuffer';
+                ws.onopen = () => log("✅ WS CONNECTED");
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
-                        var pcm = new Float32Array(e.data);
-                        for (var i = 0; i < pcm.length; i++) { ringBuffer[writePtr] = pcm[i]; writePtr = (writePtr + 1) % ringBuffer.length; }
+                        const pcm = new Float32Array(e.data);
+                        for (let i = 0; i < pcm.length; i++) {
+                            ringBuffer[writePtr] = pcm[i];
+                            writePtr = (writePtr + 1) % BUFFER_SIZE;
+                        }
+                        tryUnlock();
                     } else {
-                        try { var m = JSON.parse(e.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
+                        try {
+                            const m = JSON.parse(e.data);
+                            if (m.type === 'STATE_UPDATE' && m.state.transport) {
+                                document.getElementById('m-time').textContent = m.state.transport.position;
+                            }
+                        } catch(x){}
                     }
                 };
             }
 
-            window.onload = function() {
-                buildGUI();
-                const context = cast.framework.CastReceiverContext.getInstance();
-                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
-                    let d = e.data; if (typeof d === 'string') d = JSON.parse(d);
-                    if (d.payload) d = (typeof d.payload === 'string') ? JSON.parse(d.payload) : d.payload;
-                    if (d.type === 'STATE_UPDATE') renderState(d.state);
-                });
-                context.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
-                    if (req.media && req.media.contentId) {
+            castDebugLogger.setEnabled(true);
+            castDebugLogger.showDebugLogs(true);
+
+            playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
+                log("📥 LOAD INTERCEPTED");
+                if (req.media && req.media.contentId) {
+                    try {
                         const u = new URL(req.media.contentId);
                         const wsUrl = u.searchParams.get('ws');
-                        if (wsUrl) connect("ws://" + wsUrl);
-                    }
-                    return req;
-                });
-                context.start({ disableIdleTimeout: true });
-                window.addEventListener('resize', updateScale);
-                setInterval(tryUnlockAudio, 2000);
-            };
+                        if (wsUrl) connectWS("ws://" + wsUrl);
+                    } catch(x){}
+                }
+                return req;
+            });
+
+            context.addEventListener(cast.framework.system.EventType.READY, () => {
+                updateUI();
+                window.addEventListener('resize', updateUI);
+                setInterval(updateUI, 100);
+                setInterval(tryUnlock, 1000); // Aggressive unlock
+            });
+
+            context.start({ disableIdleTimeout: true });
         })();
     </script>
 </body>
