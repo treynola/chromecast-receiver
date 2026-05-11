@@ -2,60 +2,35 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.79</title>
+    <title>MXS-004 Studio Mirror v13.8.80</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root { --red: #FF0000; --gold: #FAD78E; --green: #008000; --bg: #000; }
         html, body { background: #000; margin:0; padding:0; width:100%; height:100%; overflow:hidden; color:#fff; font-family:sans-serif; }
-        
-        #init-overlay {
-            position:fixed; inset:0; background:#000; z-index:99999;
-            display:flex; flex-direction:column; justify-content:center; align-items:center;
-        }
-        
-        #studio-root {
-            width:100vw; height:100vh; display:flex; flex-direction:column;
-            padding:20px; box-sizing:border-box; background:#050505;
-            border: 4px solid #222; /* High-visibility border */
-            display: none; /* Hidden by default */
-        }
-
+        #init-overlay { position:fixed; inset:0; background:#000; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; }
+        #studio-root { width:100vw; height:100vh; display:flex; flex-direction:column; padding:20px; box-sizing:border-box; background:#050505; border: 2px solid #222; display: none; }
         .header { display:flex; justify-content:space-between; border-bottom:1px solid var(--gold); padding-bottom:10px; margin-bottom:10px; }
         .main-content { display:grid; grid-template-columns:300px 1fr; gap:20px; flex:1; }
         .tracks-container { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
         .master-column, .track { background:#111; border:1px solid #333; border-radius:8px; padding:15px; display:flex; flex-direction:column; gap:10px; }
-        
         .track-header { color:var(--gold); font-size:1.2em; font-weight:bold; }
         .time-display { font-family:monospace; font-size:2em; color:var(--green); text-align:center; background:#000; padding:10px; border-radius:4px; }
         .status { font-size:0.8em; text-align:center; color:#888; }
-        
         .meter-box { height:6px; background:#222; border-radius:3px; overflow:hidden; }
         .meter-fill { height:100%; width:0%; background:var(--gold); }
-        
         .btn { border:1px solid #444; background:none; color:#aaa; padding:8px; font-size:0.7em; }
-        .btn.active { background:var(--red); color:#fff; border-color:var(--red); }
-        
-        #debug-log {
-            position:fixed; bottom:20px; left:20px; right:20px; max-height:100px;
-            overflow-y:auto; background:rgba(0,0,0,0.9); color:#0f0; font-family:monospace;
-            font-size:11px; padding:10px; z-index:100000; border:1px solid #0f0;
-        }
-        
-        .spinner { width:50px; height:50px; border:4px solid rgba(250,215,142,0.1); border-top:4px solid var(--gold); border-radius:50%; animation:spin 1s linear infinite; margin-bottom:20px; }
-        @keyframes spin { 0% { transform:rotate(0deg); } 100% { transform:rotate(360deg); } }
+        .btn.active { background:var(--red) !important; color:#fff !important; border-color:var(--red) !important; }
+        #debug-log { position:fixed; bottom:20px; left:20px; right:20px; max-height:80px; overflow-y:auto; background:rgba(0,0,0,0.9); color:#0f0; font-family:monospace; font-size:10px; padding:10px; z-index:100000; border:1px solid rgba(0,255,0,0.2); }
     </style>
 </head>
 <body>
     <div id="init-overlay">
-        <div class="spinner"></div>
-        <div style="font-size:3em; color:var(--gold); font-weight:bold;">MXS-004</div>
-        <div id="init-status" style="color:#888; font-family:monospace; margin-top:10px;">CONNECTING TO STUDIO...</div>
-        <button onclick="reveal()" style="margin-top:20px; padding:10px; background:var(--gold); border:none; cursor:pointer;">FORCE REVEAL</button>
+        <div style="font-size:3em; color:var(--gold); font-weight:bold; margin-bottom:20px;">MXS-004</div>
+        <div id="init-status" style="color:#888; font-family:monospace;">TAP TV SCREEN TO ENABLE AUDIO</div>
+        <button onclick="reveal()" style="margin-top:20px; padding:15px 30px; background:var(--gold); border:none; cursor:pointer; font-weight:bold;">REVEAL GUI</button>
     </div>
-
-    <div id="debug-log">🚀 Studio Mirror v13.8.79</div>
-
+    <div id="debug-log">🚀 Studio Mirror v13.8.80 (Audio Buffer Fix)</div>
     <div id="studio-root">
         <div class="header">
             <div style="font-size:2em; color:var(--gold);">STUDIO MIRROR</div>
@@ -77,49 +52,52 @@
             </div>
         </div>
     </div>
-
     <script>
         (function() {
             var ws = null; var lastState = null; var audioCtx = null;
             var debug = document.getElementById('debug-log');
             var overlay = document.getElementById('init-overlay');
             var root = document.getElementById('studio-root');
-            var status = document.getElementById('init-status');
-
             function log(m) { console.log(m); debug.innerHTML += '<br>' + m; debug.scrollTop = debug.scrollHeight; }
 
-            window.reveal = function() {
-                log("🎬 REVEALING GUI...");
-                overlay.style.display = 'none';
-                root.style.display = 'flex';
-            };
-
-            // Failsafe reveal
+            window.reveal = function() { overlay.style.display = 'none'; root.style.display = 'flex'; if (audioCtx) audioCtx.resume(); };
             setTimeout(reveal, 3000);
+
+            // --- ROBUST PCM RING BUFFER ---
+            var MAX_BUFFER = 48000 * 2; // 1 second of stereo
+            var pcmBuffer = new Float32Array(MAX_BUFFER);
+            var writePtr = 0; var readPtr = 0;
+            function feedPCM(data) {
+                var int16 = new Int16Array(data);
+                for (var i = 0; i < int16.length; i++) {
+                    pcmBuffer[writePtr] = int16[i] / 32768;
+                    writePtr = (writePtr + 1) % MAX_BUFFER;
+                }
+            }
 
             function initAudio() {
                 if (audioCtx) return;
-                log("🔊 Starting PCM Audio...");
+                log("🔊 Starting PCM Ingester (Ring Buffer Mode)...");
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                var queue = [];
                 var node = audioCtx.createScriptProcessor(4096, 0, 2);
                 node.onaudioprocess = function(e) {
                     var oL = e.outputBuffer.getChannelData(0);
                     var oR = e.outputBuffer.getChannelData(1);
-                    if (queue.length > 0) {
-                        var c = queue.shift();
-                        for (var i=0; i<oL.length; i++) { if (i*2<c.length) { oL[i]=c[i*2]/32768; oR[i]=c[i*2+1]/32768; } }
-                    } else { oL.fill(0); oR.fill(0); }
+                    var avail = (writePtr - readPtr + MAX_BUFFER) % MAX_BUFFER;
+                    if (avail < 8192) { oL.fill(0); oR.fill(0); return; } // Buffer underrun protection
+                    for (var i = 0; i < 4096; i++) {
+                        oL[i] = pcmBuffer[readPtr]; readPtr = (readPtr + 1) % MAX_BUFFER;
+                        oR[i] = pcmBuffer[readPtr]; readPtr = (readPtr + 1) % MAX_BUFFER;
+                    }
                 };
                 node.connect(audioCtx.destination);
-                window._feed = function(d) { queue.push(new Int16Array(d)); if (queue.length > 20) queue.shift(); };
+                window._feed = feedPCM;
             }
 
             function update(s) {
                 if (!s) return;
                 lastState = s;
                 if (overlay.style.display !== 'none') reveal();
-                
                 if (s.master) {
                     document.getElementById('m-rec').className = s.master.isRecording ? 'btn active' : 'btn';
                     if (s.transport) document.getElementById('m-time').textContent = s.transport.position;
@@ -138,7 +116,7 @@
             function connect(url) {
                 log("🔌 Connecting: " + url);
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
-                ws.onopen = function() { log("✅ Handshake Success!"); status.textContent = "CONNECTED"; initAudio(); };
+                ws.onopen = function() { log("✅ Handshake Success!"); initAudio(); };
                 ws.onmessage = function(e) {
                     if (e.data instanceof ArrayBuffer) { if (window._feed) window._feed(e.data); }
                     else { try { var m = JSON.parse(e.data); if (m.type==='STATE_UPDATE') update(m.state); } catch(err){} }
@@ -149,12 +127,8 @@
             window.onload = function() {
                 var ctx = cast.framework.CastReceiverContext.getInstance();
                 ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
-                    log("📥 LOAD Command Received");
                     if (req.media && req.media.contentId) {
-                        try {
-                            var u = new URL(req.media.contentId);
-                            connect("ws://" + u.hostname + ":8080");
-                        } catch(e) { log("❌ Parse Err: " + e.message); }
+                        try { var u = new URL(req.media.contentId); connect("ws://" + u.hostname + ":8080"); } catch(e) {}
                     }
                     return null;
                 });
@@ -163,9 +137,8 @@
                     if (d.type === 'STATE_UPDATE') update(d.state);
                 });
                 ctx.start({ disableIdleTimeout: true });
-                log("📡 SDK Active.");
+                log("📡 Cast SDK Ready.");
             };
-
             document.addEventListener('click', function() { if (audioCtx) audioCtx.resume(); }, { once: false });
         })();
     </script>
