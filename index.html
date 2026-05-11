@@ -2,31 +2,58 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.91 [AUTO-AUDIO]</title>
+    <title>MXS-004 Studio Mirror v13.8.92 [PARITY]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="receiver.css">
     <style>
+        /* [V13.8.92] Receiver Logic Overrides */
         :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; }
         body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; }
-        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-height: 120px; overflow-y: auto; pointer-events: none; }
-        .container { width: 1432px; height: 802px; position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); opacity: 0; transition: opacity 0.5s; }
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 10px; }
-        .track, .master-column { border: 1px solid var(--green); border-radius: 8px; padding: 8px; background: var(--dark-gray); }
-        .track-header { color: var(--gold); border-bottom: 1px solid #444; margin-bottom: 5px; }
+        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 9px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-height: 100px; overflow-y: auto; pointer-events: none; width: 300px; }
+        .container { 
+            width: 1432px; height: 802px; 
+            position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); 
+            background: var(--dark-gray); border: 1px solid var(--green); border-radius: 12px;
+            box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
+            padding: 6px; box-sizing: border-box; display: flex; flex-direction: column;
+        }
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1; min-height: 0; }
+        .track, .master-column { border: 1px solid var(--green); border-radius: 8px; padding: 6px; background: var(--dark-gray); display: flex; flex-direction: column; gap: 4px; }
+        .track-header { color: var(--gold); font-weight: bold; font-size: 0.8em; border-bottom: 1px solid #444; padding-bottom: 2px; }
+        .track-time-display { font-size: 1.5em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; }
+        .waveform-box { height: 60px; border: 1px solid #444; display: flex; align-items: center; }
+        .waveform-canvas { flex: 1; height: 100%; background: #000; border-left: 1px solid var(--gold); }
+        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+        .sample-btn { background: #1a1a1a; color: var(--gold); border: 1px solid #444; font-size: 0.7em; height: 32px; border-radius: 4px; }
+        .sample-btn.active { background: var(--gold); color: #000; box-shadow: 0 0 8px var(--gold); }
+        #ghost-cursor { position: absolute; width: 24px; height: 24px; border: 2px solid gold; border-radius: 50%; display: none; z-index: 99999; transform: translate(-50%, -50%); }
     </style>
 </head>
-<body>
-    <div id="debug-log">🚀 Auto-Audio v13.8.91 Booting...</div>
+<body class="app-loading">
+    <!-- [V13.8.92] Silent Audio Unlocker -->
+    <audio id="audio-unlocker" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
 
-    <div class="container" id="studio-root" style="opacity: 1;">
-        <div class="header" style="padding: 10px; background: #111; border-bottom: 1px solid gold;">
-            <h1 style="margin:0; color: gold;">MXS-004 STUDIO :: LIVE MIRROR</h1>
+    <div id="debug-log">🚀 Studio Mirror v13.8.92 Initializing...</div>
+    <div id="ghost-cursor"></div>
+
+    <div class="container" id="studio-root">
+        <div class="header" style="height:32px; display:flex; justify-content:space-between; align-items:center; background:#111; padding:0 10px; border-radius:8px; margin-bottom:6px;">
+            <h1 style="font-size:1.2em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1>
+            <h2 style="font-size:0.7em; margin:0; color: var(--gold);">Studio Mirror :: Pixel-Perfect</h2>
         </div>
+
         <div class="main-content">
+            <!-- Column 1: MASTER -->
             <div class="master-column">
-                <div class="track-header">MASTER</div>
-                <div id="recording-time" style="font-size: 2.5em; color: var(--green);">00:00:00</div>
-                <div id="audio-status" style="color: #666; font-size: 0.8em; margin-top: 10px;">Audio: Initializing...</div>
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                <div class="waveform-box"><div class="waveform-canvas"></div></div>
+                <div style="color: var(--gold); font-size: 0.7em; text-align:center; margin-top:5px;">SAMPLE STATION</div>
+                <div id="sample-grid" class="sample-grid"></div>
+                <div id="audio-status" style="margin-top:auto; font-size:9px; color:#666;">Audio: Off</div>
             </div>
+            <!-- Columns 2-5: TRACKS (Injected) -->
             <div id="tracks-container" style="display:contents;"></div>
         </div>
     </div>
@@ -34,91 +61,100 @@
     <script>
         (function() {
             var audioCtx = null; var ws = null; var scriptNode = null;
-            var ringBuffer = new Float32Array(48000 * 2); 
-            var writePtr = 0; var readPtr = 0;
+            var ringBuffer = new Float32Array(48000 * 2); var writePtr = 0; var readPtr = 0;
             var debugEl = document.getElementById('debug-log');
             var statusEl = document.getElementById('audio-status');
+            var cursorEl = document.getElementById('ghost-cursor');
 
             function log(m) {
                 console.log(m); if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; }
             }
 
+            function buildGUI() {
+                var grid = document.getElementById('sample-grid');
+                grid.innerHTML = '';
+                for (var p = 1; p <= 20; p++) {
+                    var btn = document.createElement('button'); btn.className = 'sample-btn';
+                    btn.id = 'sample-' + p; btn.textContent = p; grid.appendChild(btn);
+                }
+                var tc = document.getElementById('tracks-container');
+                tc.innerHTML = '';
+                for (var i = 0; i < 4; i++) {
+                    var t = document.createElement('div'); t.className = 'track';
+                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div id="track-time-'+i+'" class="track-time-display">00:00:00</div><div class="waveform-box"><div class="waveform-canvas"></div></div><div style="margin-top:auto; display:flex; gap:4px;"><div style="flex:1; height:4px; background:#333;"><div id="track-meter-'+i+'" style="width:0; height:100%; background:var(--green);"></div></div></div>';
+                    tc.appendChild(t);
+                }
+            }
+
             function tryUnlockAudio() {
                 if (audioCtx && audioCtx.state === 'running') return;
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-                    log("🔊 Context Created.");
-                }
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                 audioCtx.resume().then(() => {
-                    if (audioCtx.state === 'running') {
-                        if (!scriptNode) startPipeline();
-                        statusEl.textContent = "Audio: LIVE"; statusEl.style.color = "#0f0";
-                    }
-                }).catch(e => {
-                    statusEl.textContent = "Audio: Blocked by TV (Waiting for Signal)";
+                    if (audioCtx.state === 'running' && !scriptNode) startAudio();
                 });
             }
 
-            function startPipeline() {
+            function startAudio() {
                 scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
                 scriptNode.onaudioprocess = function(e) {
-                    var outL = e.outputBuffer.getChannelData(0);
-                    var outR = e.outputBuffer.getChannelData(1);
+                    var outL = e.outputBuffer.getChannelData(0); var outR = e.outputBuffer.getChannelData(1);
                     var available = (writePtr - readPtr + ringBuffer.length) % ringBuffer.length;
-                    
                     if (available < 8192) { outL.fill(0); outR.fill(0); return; }
-
                     for (var i = 0; i < 4096; i++) {
-                        outL[i] = ringBuffer[readPtr];
-                        outR[i] = ringBuffer[(readPtr + 1) % ringBuffer.length];
+                        outL[i] = ringBuffer[readPtr]; outR[i] = ringBuffer[(readPtr + 1) % ringBuffer.length];
                         readPtr = (readPtr + 2) % ringBuffer.length;
                     }
                 };
                 scriptNode.connect(audioCtx.destination);
-                log("🎬 Pipeline Connected.");
+                statusEl.textContent = "Audio: LIVE"; statusEl.style.color = "#0f0";
+                log("🔊 AUDIO PIPELINE ACTIVE.");
+            }
+
+            function renderState(state) {
+                if (!state) return;
+                if (state.master) document.getElementById('recording-time-display').textContent = state.transport ? state.transport.position : '00:00:00';
+                if (state.samples) state.samples.forEach((s,i) => {
+                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = s.isPlaying ? 'sample-btn active' : 'sample-btn';
+                });
+                if (state.tracks) state.tracks.forEach((t,i) => {
+                    var mt = document.getElementById('track-meter-'+i); if (mt) mt.style.width = (t.meterL * 100) + '%';
+                });
+                if (state.cursor && cursorEl) {
+                    cursorEl.style.display = 'block'; cursorEl.style.left = (state.cursor.x * 100) + '%'; cursorEl.style.top = (state.cursor.y * 100) + '%';
+                }
+                tryUnlockAudio();
             }
 
             function connect(url) {
                 log("🔌 Connecting: " + url);
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = function(e) {
-                    tryUnlockAudio(); // Attempt unlock on every message
                     if (e.data instanceof ArrayBuffer) {
                         var pcm = new Float32Array(e.data);
-                        for (var i = 0; i < pcm.length; i++) {
-                            ringBuffer[writePtr] = pcm[i];
-                            writePtr = (writePtr + 1) % ringBuffer.length;
-                        }
+                        for (var i = 0; i < pcm.length; i++) { ringBuffer[writePtr] = pcm[i]; writePtr = (writePtr + 1) % ringBuffer.length; }
                     } else {
-                        try {
-                            var m = JSON.parse(e.data);
-                            if (m.type === 'STATE_UPDATE') {
-                                document.getElementById('recording-time').textContent = m.state.transport ? m.state.transport.position : '00:00:00';
-                            }
-                        } catch(x){}
+                        try { var m = JSON.parse(e.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
                     }
                 };
-                ws.onopen = function() { log("✅ Handshake Success"); };
-                ws.onclose = function() { setTimeout(function(){ connect(url); }, 2000); };
+                ws.onclose = function() { setTimeout(() => connect(url), 2000); };
             }
 
             window.onload = function() {
+                buildGUI();
                 var ctx = cast.framework.CastReceiverContext.getInstance();
                 ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
-                    if (req.media && req.media.contentId) {
-                        var u = new URL(req.media.contentId);
-                        connect("ws://" + u.hostname + ":8080");
-                    }
+                    if (req.media && req.media.contentId) connect("ws://" + new URL(req.media.contentId).hostname + ":8080");
                     return null;
                 });
+                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
+                    var d = e.data; if (typeof d.payload === 'string') d = JSON.parse(d.payload);
+                    if (d.type === 'STATE_UPDATE') renderState(d.state);
+                });
                 ctx.start({ disableIdleTimeout: true });
-                log("📡 Auto-Audio Suite v13.8.91 Active.");
-                
+                log("📡 Signal Suite v13.8.92 Active.");
                 var params = new URLSearchParams(window.location.search);
                 if (params.has('ws')) connect(params.get('ws'));
-                
-                // Nuclear Unlock Interval
-                setInterval(tryUnlockAudio, 1000);
+                setInterval(tryUnlockAudio, 2000);
             };
         })();
     </script>
