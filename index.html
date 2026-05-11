@@ -2,76 +2,276 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.76</title>
+    <title>MXS-004 Studio Mirror v13.8.77</title>
     <!-- Cast SDK -->
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <!-- Studio Styles (Inlined for reliability on TV) -->
-    <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Overlay and Cursor tweaks */
+    
+    <style id="studio-styles">
+        /* --- CORE MIRROR STYLES (BULLETPROOF) --- */
+        :root {
+            --red: #FF0000; --gold: #FAD78E; --dark-gold: #b38600; --green: #008000;
+            --off-black: #1a1a1a; --dark-gray: #2c2c2c; --text-color: #f0f0f0;
+        }
+        html, body {
+            background-color: #000 !important; margin: 0; padding: 0;
+            width: 100%; height: 100%; overflow: hidden;
+            font-family: 'Inter', 'Helvetica', sans-serif; color: var(--text-color);
+        }
         #init-overlay {
             position: fixed; inset: 0; background: #000; z-index: 99999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
         }
+        .container {
+            width: 100vw; height: 100vh; display: flex; flex-direction: column;
+            padding: 10px; box-sizing: border-box; opacity: 0; transition: opacity 1s ease-in;
+        }
+        .main-content { display: grid; grid-template-columns: 280px 1fr; gap: 10px; flex: 1; overflow: hidden; }
+        .tracks-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .master-column, .track {
+            background: #111; border: 1px solid #333; border-radius: 4px;
+            padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative;
+        }
+        .track-header { font-size: 0.9em; color: var(--gold); border-bottom: 1px solid #444; padding-bottom: 4px; text-transform: uppercase; font-family: 'Mexcellent', sans-serif; }
+        .track-time-display { font-family: monospace; font-size: 1.5em; color: var(--green); text-align: center; background: #000; padding: 5px; border-radius: 4px; }
+        .status-indicator { font-size: 0.7em; text-align: center; padding: 2px; border-radius: 2px; background: #222; }
+        .waveform-box { height: 60px; background: #000; border: 1px solid #222; position: relative; }
+        .meter-container { width: 100%; height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+        .meter-bar { height: 100%; width: 0%; background: var(--gold); }
+        .rec-btn { background: none; border: 1px solid #444; color: #888; padding: 4px; font-size: 0.7em; cursor: pointer; }
+        .rec-btn.recording { background: var(--red) !important; color: #fff !important; border-color: var(--red) !important; }
         #debug-log {
-            position: fixed; bottom: 10px; left: 10px; right: 10px;
-            max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.8);
-            border: 1px solid #333; color: #0f0; font-family: monospace; font-size: 11px;
-            z-index: 100000; padding: 10px; border-radius: 8px; pointer-events: none;
+            position: fixed; bottom: 10px; left: 10px; right: 10px; max-height: 100px;
+            overflow-y: auto; background: rgba(0,0,0,0.7); color: #0f0; font-family: monospace;
+            font-size: 10px; padding: 5px; z-index: 100000; pointer-events: none; border: 1px solid #333;
         }
         #ghost-cursor {
-            position: absolute; width: 24px; height: 24px; background: rgba(250, 215, 142, 0.4);
+            position: absolute; width: 24px; height: 24px; background: rgba(250, 215, 142, 0.3);
             border: 2px solid var(--gold); border-radius: 50%; pointer-events: none;
             z-index: 90000; transform: translate(-50%, -50%); display: none;
         }
-        #ghost-cursor.clicking { background: var(--red); transform: translate(-50%, -50%) scale(0.8); }
-        .track-time-display { font-family: monospace !important; }
-        .container { opacity: 0; transition: opacity 1s ease-in; }
     </style>
 </head>
-<body class="app-loading" style="background-color: #000;">
+<body>
     <div id="init-overlay">
-        <div style="font-family: 'Mexcellent', sans-serif; color: var(--gold); font-size: 3em; margin-bottom: 20px;">MXS-004</div>
-        <div style="color: #666; font-family: monospace;" id="init-status">INITIALIZING HIGH-FIDELITY MIRROR...</div>
+        <div style="font-size: 2.5em; color: var(--gold); margin-bottom: 10px; font-weight: bold;">MXS-004</div>
+        <div id="init-status" style="color: #666; font-family: monospace;">WAITING FOR HANDSHAKE...</div>
     </div>
 
-    <div id="debug-log">🚀 Receiver v13.8.76 Booting...</div>
+    <div id="debug-log">🚀 Studio Mirror v13.8.77</div>
     <div id="ghost-cursor"></div>
 
-    <!-- The actual Studio HTML structure -->
     <div class="container" id="studio-root">
-        <div class="header">
-            <div class="header-left">
-                <h1 style="font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1>
-            </div>
-            <div class="header-right">
-                <h2 style="font-family: 'Mexcellent', sans-serif; color: var(--gold);">Studio Mirror :: v13.8.76</h2>
-            </div>
+        <div class="header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--gold); margin-bottom: 10px; height: 40px;">
+            <h1 style="color:var(--gold); margin:0; font-size: 1.5em;">NOWMULTIMEDIA MXS-004</h1>
+            <div style="color:var(--gold); font-size: 0.8em;">Studio Mirror :: v13.8.77</div>
         </div>
+
         <div class="main-content">
+            <!-- Master Column -->
             <div class="master-column">
                 <div class="track-header">Master Recording</div>
                 <div id="master-time" class="track-time-display">00:00:00</div>
-                <div class="master-item"><input type="range" id="master-volume" min="-60" max="6" value="0"></div>
-                <div class="waveform-box">
-                    <div class="waveform-canvas-container">
-                        <canvas id="master-wf-L" class="waveform-canvas" width="242" height="26"></canvas>
-                        <canvas id="master-wf-R" class="waveform-canvas" width="242" height="26"></canvas>
-                    </div>
-                </div>
-                <div style="display:flex; gap:10px; margin-top:10px;">
-                    <div style="flex:1;"><div class="meter-container"><div id="lfo-meter-bar" class="meter-bar"></div></div></div>
-                    <div style="flex:1;"><div class="meter-container"><div id="lfo2-meter-bar" class="meter-bar"></div></div></div>
+                <input type="range" id="master-volume" min="-60" max="6" value="0">
+                <div class="waveform-box"></div>
+                <div style="display:flex; gap:10px;">
+                    <div class="meter-container"><div id="lfo-meter-bar" class="meter-bar"></div></div>
+                    <div class="meter-container"><div id="lfo2-meter-bar" class="meter-bar"></div></div>
                 </div>
                 <button id="master-record-button" class="rec-btn" style="width:100%; margin-top:10px;">REC</button>
             </div>
-            <div class="tracks-container" id="tracks-container">
-                <!-- Tracks 0-3 will be injected/mirrored here -->
+
+            <!-- Tracks Container -->
+            <div class="tracks-container" id="tracks-root">
+                <!-- Track 1 -->
+                <div class="track" id="track-0">
+                    <div class="track-header">TRACK 1</div>
+                    <div class="track-time-display">00:00:00</div>
+                    <div class="status-indicator status-ready">Ready</div>
+                    <div class="waveform-box"></div>
+                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                        <button class="rec-btn">REC</button><button>PLAY</button>
+                    </div>
+                </div>
+                <!-- Track 2 -->
+                <div class="track" id="track-1">
+                    <div class="track-header">TRACK 2</div>
+                    <div class="track-time-display">00:00:00</div>
+                    <div class="status-indicator status-ready">Ready</div>
+                    <div class="waveform-box"></div>
+                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                        <button class="rec-btn">REC</button><button>PLAY</button>
+                    </div>
+                </div>
+                <!-- Track 3 -->
+                <div class="track" id="track-2">
+                    <div class="track-header">TRACK 3</div>
+                    <div class="track-time-display">00:00:00</div>
+                    <div class="status-indicator status-ready">Ready</div>
+                    <div class="waveform-box"></div>
+                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                        <button class="rec-btn">REC</button><button>PLAY</button>
+                    </div>
+                </div>
+                <!-- Track 4 -->
+                <div class="track" id="track-3">
+                    <div class="track-header">TRACK 4</div>
+                    <div class="track-time-display">00:00:00</div>
+                    <div class="status-indicator status-ready">Ready</div>
+                    <div class="waveform-box"></div>
+                    <div class="track-buttons" style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
+                        <button class="rec-btn">REC</button><button>PLAY</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="receiver.js"></script>
+    <script>
+        (function() {
+            var ws = null; var lastState = null; var audioCtx = null;
+            var lfoPhase1 = 0; var lfoPhase2 = 0; var lastFrameTime = performance.now();
+            var debugEl = document.getElementById('debug-log');
+            var overlay = document.getElementById('init-overlay');
+            var root = document.getElementById('studio-root');
+            var status = document.getElementById('init-status');
+            var cursor = document.getElementById('ghost-cursor');
+
+            function log(msg) {
+                console.log(msg);
+                debugEl.innerHTML += '<br>' + msg;
+                debugEl.scrollTop = debugEl.scrollHeight;
+            }
+
+            // Failsafe: Reveal GUI after 10 seconds even if no state received
+            setTimeout(function() {
+                if (overlay.style.display !== 'none') {
+                    log("⚠️ Failsafe Reveal Triggered (No state received)");
+                    reveal();
+                }
+            }, 10000);
+
+            function reveal() {
+                overlay.style.display = 'none';
+                root.style.opacity = '1';
+                document.body.classList.remove('app-loading');
+            }
+
+            function initAudio() {
+                if (audioCtx) return;
+                log("🔊 Initializing PCM Audio Engine...");
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                var bufferQueue = [];
+                var scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
+                scriptNode.onaudioprocess = function(e) {
+                    var outL = e.outputBuffer.getChannelData(0);
+                    var outR = e.outputBuffer.getChannelData(1);
+                    if (bufferQueue.length > 0) {
+                        var chunk = bufferQueue.shift();
+                        for (var i = 0; i < outL.length; i++) {
+                            if (i*2 < chunk.length) {
+                                outL[i] = chunk[i*2] / 32768;
+                                outR[i] = chunk[i*2+1] / 32768;
+                            }
+                        }
+                    } else { outL.fill(0); outR.fill(0); }
+                };
+                scriptNode.connect(audioCtx.destination);
+                window._pcmFeed = function(data) {
+                    bufferQueue.push(new Int16Array(data));
+                    if (bufferQueue.length > 20) bufferQueue.shift();
+                };
+            }
+
+            function renderState(state) {
+                if (!state) return;
+                lastState = state;
+                if (overlay.style.display !== 'none') reveal();
+
+                if (state.cursor && cursor) {
+                    cursor.style.display = 'block';
+                    cursor.style.left = (state.cursor.x * 100) + '%';
+                    cursor.style.top = (state.cursor.y * 100) + '%';
+                }
+
+                if (state.master) {
+                    var mv = document.getElementById('master-volume');
+                    if (mv) mv.value = state.master.volume;
+                    var rb = document.getElementById('master-record-button');
+                    if (rb) rb.className = state.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                }
+
+                if (state.tracks) {
+                    state.tracks.forEach(function(t, i) {
+                        var el = document.getElementById('track-' + i);
+                        if (!el) return;
+                        var si = el.querySelector('.status-indicator');
+                        if (si) {
+                            si.textContent = t.statusText || 'Ready';
+                            si.className = 'status-indicator status-' + (t.statusType || 'ready');
+                        }
+                        var rb = el.querySelector('.rec-btn');
+                        if (rb) rb.className = t.isRecording ? 'rec-btn recording' : 'rec-btn';
+                    });
+                }
+            }
+
+            function connectWS(url) {
+                log("🔌 Connecting: " + url);
+                ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
+                ws.onopen = function() { log("✅ Connected!"); status.textContent = "CONNECTED • STREAMING"; initAudio(); };
+                ws.onmessage = function(e) {
+                    if (e.data instanceof ArrayBuffer) { if (window._pcmFeed) window._pcmFeed(e.data); }
+                    else { try { var msg = JSON.parse(e.data); if (msg.type === 'STATE_UPDATE') renderState(msg.state); } catch(err){} }
+                };
+                ws.onclose = function() { log("🛑 Lost. Retrying..."); setTimeout(function(){ connectWS(url); }, 2000); };
+            }
+
+            window.onload = function() {
+                var ctx = cast.framework.CastReceiverContext.getInstance();
+                ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
+                    log("📥 LOAD Intercepted");
+                    if (req.media && req.media.contentId) {
+                        try {
+                            var u = new URL(req.media.contentId);
+                            var ip = u.hostname;
+                            connectWS("ws://" + ip + ":8080");
+                            var style = document.createElement('style');
+                            style.innerHTML = "@font-face { font-family: 'Mexcellent'; src: url('http://" + ip + ":8080/fonts/MexcellentRg.otf'); }";
+                            document.head.appendChild(style);
+                        } catch(e) { log("❌ Parse Err: " + e.message); }
+                    }
+                    return null;
+                });
+                ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
+                    var d = e.data; if (typeof d.payload === 'string') try { d = JSON.parse(d.payload); } catch(err){}
+                    if (d.type === 'STATE_UPDATE') renderState(d.state);
+                });
+                ctx.start({ disableIdleTimeout: true });
+                log("📡 SDK Active.");
+            };
+
+            function animate() {
+                var now = performance.now(); var dt = (now - lastFrameTime) / 1000; lastFrameTime = now;
+                if (lastState && lastState.master) {
+                    var m = lastState.master;
+                    if (m.lfo1Active) {
+                        lfoPhase1 += 2 * Math.PI * (m.lfo1Freq || 0.5) * dt;
+                        var b1 = document.getElementById('lfo-meter-bar');
+                        if (b1) b1.style.width = (Math.abs(Math.sin(lfoPhase1)) * 100) + '%';
+                    }
+                    if (m.lfo2Active) {
+                        lfoPhase2 += 2 * Math.PI * (m.lfo2Freq || 0.5) * dt;
+                        var b2 = document.getElementById('lfo2-meter-bar');
+                        if (b2) b2.style.width = (Math.abs(Math.sin(lfoPhase2)) * 100) + '%';
+                    }
+                }
+                requestAnimationFrame(animate);
+            }
+            requestAnimationFrame(animate);
+
+            document.addEventListener('click', function() { if (audioCtx) audioCtx.resume(); }, { once: false });
+        })();
+    </script>
 </body>
 </html>
