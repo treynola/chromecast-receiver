@@ -2,16 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.107 [LOGIC OPTIMIZED]</title>
+    <title>MXS-004 Studio Mirror v13.8.108 [DESIGN MIRROR]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css">
     <style>
-        /* [V13.8.107] Final Logical Hardeners */
+        /* [V13.8.108] Design Logic Overrides */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
-        
         .container {
             position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
@@ -27,6 +26,9 @@
             will-change: transform;
         }
         cast-media-player { display: none; }
+        
+        /* Ensure dynamic elements have correct styling */
+        .track-col-injected { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--green); border-radius: 8px; padding: 4px; background: var(--dark-gray); }
     </style>
 </head>
 <body class="app-loading">
@@ -44,24 +46,25 @@
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
-                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Vol</label>
-                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" value="0">
-                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em;">0.0 dB</span>
-                </div>
-                <div class="master-item master-waveform-item">
-                    <div class="waveform-box master-waveform-box">
-                        <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
-                        <div class="waveform-canvas-container" style="flex:1;"><canvas id="master-waveform-L" class="waveform-canvas"></canvas><canvas id="master-waveform-R" class="waveform-canvas"></canvas></div>
+                <div class="control-group">
+                    <label style="color:var(--green); font-size:0.7em;">Vol</label>
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <input type="range" id="master-vol-sl" min="-60" max="6" value="0" class="pa-mic-slider" style="flex:1;">
+                        <span id="master-vol-val" class="pa-mic-value" style="font-size:0.7em; min-width:40px;">0.0 dB</span>
                     </div>
                 </div>
-                <div class="master-item sample-center-container">
-                    <div class="track-header" style="text-align:center;">Sample Station</div>
-                    <div class="sample-grid" id="sample-grid"></div>
+                <div class="waveform-box">
+                    <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
+                    <div class="waveform-canvas-container" style="flex:1;">
+                        <canvas id="m-wf-l" class="waveform-canvas"></canvas>
+                        <canvas id="m-wf-r" class="waveform-canvas"></canvas>
+                    </div>
                 </div>
+                <div class="track-header" style="text-align:center;">Sample Station</div>
+                <div class="sample-grid" id="sample-grid"></div>
                 <div class="meter-container" style="margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
-            <div class="tracks-container" id="tracks-container"></div>
+            <div class="tracks-container" id="tracks-container" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;"></div>
         </div>
     </div>
 
@@ -78,12 +81,15 @@
                 }
                 var tc = document.getElementById('tracks-container');
                 for (var i = 0; i < 4; i++) {
-                    var t = document.createElement('div'); t.className = 'track';
+                    var t = document.createElement('div'); t.className = 'track'; t.id = 't-col-'+i;
                     t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display" id="t-time-'+i+'">00:00:00</div>' +
-                        '<div class="status-indicator status-ready">Ready</div>' +
+                        '<div class="status-indicator" id="t-st-'+i+'">Ready</div>' +
                         '<div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>' +
                         '<div class="waveform-canvas-container"><canvas class="waveform-canvas"></canvas><canvas class="waveform-canvas"></canvas></div></div>' +
-                        '<div class="meter-container"><div id="t-meter-'+i+'" class="meter-bar"></div></div>';
+                        '<div class="control-group"><label style="color:var(--gold); font-size:0.7em;">Gain</label>' +
+                        '<div style="display:flex; align-items:center; gap:5px;"><input type="range" id="t-gain-sl-'+i+'" min="-48" max="48" value="0" class="pa-mic-slider" style="flex:1;"><span id="t-gain-val-'+i+'" class="pa-mic-value" style="font-size:0.7em; min-width:35px;">0.0dB</span></div></div>' +
+                        '<div class="track-buttons"><button id="t-btn-rec-'+i+'">REC</button><button id="t-btn-stop-'+i+'">STOP</button><button id="t-btn-play-'+i+'">PLAY</button><button id="t-btn-rev-'+i+'">REV</button></div>' +
+                        '<div class="meter-container"><div id="t-mtr-'+i+'" class="meter-bar"></div></div>';
                     tc.appendChild(t);
                 }
                 updateScale();
@@ -106,7 +112,7 @@
                 scriptNode.onaudioprocess = (e) => {
                     const oL = e.outputBuffer.getChannelData(0); const oR = e.outputBuffer.getChannelData(1);
                     const av = (wPtr - rPtr + BUFFER_SIZE) % BUFFER_SIZE;
-                    if (av < 8192) { oL.fill(0); oR.fill(0); return; } // Increased Jitter Buffer
+                    if (av < 8192) { oL.fill(0); oR.fill(0); return; }
                     let mx = 0;
                     for (let i = 0; i < 2048; i++) {
                         const vL = ringBuffer[rPtr]; const vR = ringBuffer[(rPtr+1)%BUFFER_SIZE];
@@ -136,7 +142,21 @@
                     var b = document.getElementById('sample-'+(i+1)); if (b) b.className = p.isPlaying ? 'sample-btn active' : 'sample-btn';
                 });
                 if (s.tracks) s.tracks.forEach((t,i) => {
-                    var m = document.getElementById('t-meter-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
+                    // Meter Update
+                    var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
+                    // Gain Slider Update
+                    var gs = document.getElementById('t-gain-sl-'+i); if (gs) gs.value = t.gain || 0;
+                    var gv = document.getElementById('t-gain-val-'+i); if (gv) gv.textContent = (t.gain || 0).toFixed(1) + 'dB';
+                    // Status Update
+                    var st = document.getElementById('t-st-'+i);
+                    if (st) {
+                        if (t.isRecording) { st.textContent = 'Recording'; st.className = 'status-indicator status-recording'; }
+                        else if (t.isPlaying) { st.textContent = 'Playing'; st.className = 'status-indicator status-playing'; }
+                        else { st.textContent = 'Ready'; st.className = 'status-indicator status-ready'; }
+                    }
+                    // Button States
+                    var bRec = document.getElementById('t-btn-rec-'+i); if (bRec) bRec.className = t.isRecording ? 'recording' : '';
+                    var bPlay = document.getElementById('t-btn-play-'+i); if (bPlay) bPlay.className = t.isPlaying ? 'playing' : '';
                 });
                 var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (pk * 100) + '%';
                 tryUnlock();
@@ -148,8 +168,12 @@
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
-                        const p = new Float32Array(e.data);
-                        for (let i = 0; i < p.length; i++) { ringBuffer[wPtr] = p[i]; wPtr = (wPtr + 1) % BUFFER_SIZE; }
+                        // [V13.8.108] PCM16 (Int16) -> Float32 Conversion
+                        const i16 = new Int16Array(e.data);
+                        for (let i = 0; i < i16.length; i++) { 
+                            ringBuffer[wPtr] = i16[i] / 32768.0; 
+                            wPtr = (wPtr + 1) % BUFFER_SIZE; 
+                        }
                     } else {
                         try { var d = JSON.parse(e.data); if (d.type === 'STATE_UPDATE') renderState(d.state); } catch(x){}
                     }
