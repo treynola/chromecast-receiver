@@ -2,125 +2,175 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.100 [COLOR FAILSAFE]</title>
+    <title>MXS-004 Studio Mirror v13.8.101 [NUCLEAR PARITY]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; --scale: 1; }
+        /* [V13.8.101] EXACT CSS MIRROR FROM styles_main.css */
+        :root { --red: #FF0000; --gold: #FAD78E; --green: #008000; --off-black: #1a1a1a; --dark-gray: #2c2c2c; --mid-gray: #444; --text-color: #f0f0f0; }
         
-        /* [V13.8.100] COLOR FAILSAFES: DodgerBlue = Loaded/Waiting | Black = Signal Active */
-        body { background: #1e90ff; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; width: 100vw; height: 100vh; transition: background 0.5s; }
-        
-        cast-media-player { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; visibility: hidden; }
+        @font-face { font-family: 'Mexcellent'; src: url('../fonts/MexcellentRg.otf') format('opentype'); }
+        @font-face { font-family: 'Mexcellent 3D'; src: url('../fonts/Mexcellent3d.otf') format('opentype'); }
 
-        #studio-root { 
-            width: 1440px; height: 810px; 
-            position: absolute; top: 50%; left: 50%; 
-            transform: translate(-50%, -50%) scale(var(--scale));
-            transform-origin: center;
-            background: var(--dark-gray); border: 2px solid var(--green); border-radius: 12px;
-            padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; 
-            z-index: 100; opacity: 0; transition: opacity 0.5s;
+        html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: 'Courier New', monospace; }
+        
+        .container {
+            width: 1432px; height: 802px; position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
+            background-color: var(--dark-gray); border-radius: 12px; padding: 6px; box-sizing: border-box;
+            border: 1px solid var(--green); box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
+            display: flex; flex-direction: column; opacity: 1;
         }
 
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; flex: 1; min-height: 0; }
-        .column { border: 2px solid #444; border-radius: 10px; padding: 15px; background: #1a1a1a; display: flex; flex-direction: column; box-shadow: inset 0 0 15px #000; }
-        .header-text { color: var(--gold); font-weight: bold; font-size: 1.1em; border-bottom: 2px solid #333; padding-bottom: 8px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
-        .time-display { font-size: 3em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; margin: auto 0; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; background-color: var(--off-black); border-radius: 8px; margin-bottom: 6px; height: 36px; }
+        .header h1 { font-family: 'Mexcellent 3D', sans-serif; font-size: 1.1em; margin: 0; color: var(--gold); }
         
-        #overlay-status { position: fixed; top: 10px; right: 10px; font-size: 12px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; border: 1px solid #555; z-index: 2000; }
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1; overflow: hidden; }
+        .master-column, .track { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--green); border-radius: 8px; padding: 4px; background-color: var(--dark-gray); overflow: hidden; }
+        
+        .track-header { color: var(--gold); font-weight: bold; font-size: 0.75em; border-bottom: 1px solid var(--mid-gray); padding-bottom: 2px; text-transform: uppercase; }
+        .track-time-display { font-size: 1.5em; color: var(--green); text-align: center; font-family: 'Courier New', monospace; }
+        
+        .waveform-box { height: 60px; border: 1px solid var(--mid-gray); display: flex; align-items: center; background: #000; }
+        .waveform-canvas { flex: 1; height: 100%; border-left: 1px solid var(--gold); }
+        
+        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 5px; }
+        .sample-btn { background: #1a1a1a; color: var(--gold); border: 1px solid #444; font-size: 0.7em; height: 32px; border-radius: 4px; }
+        .sample-btn.active { background: var(--gold); color: #000; box-shadow: 0 0 8px var(--gold); }
+
+        .meter-container { height: 4px; background: #111; border-radius: 2px; overflow: hidden; margin-top: auto; }
+        .meter-bar { height: 100%; width: 0%; background: var(--green); transition: width 0.1s; }
+
+        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 9px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000; max-height: 100px; width: 300px; pointer-events: none; }
+        cast-media-player { display: none; }
     </style>
 </head>
 <body>
+    <audio id="silent-loop" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
     <cast-media-player></cast-media-player>
-    <div id="overlay-status">v13.8.100 | Standby...</div>
+    <div id="debug-log">🚀 Nuclear Parity v13.8.101</div>
 
     <div class="container" id="studio-root">
-        <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:25px; border-bottom: 2px solid var(--gold); padding-bottom: 10px;">
-            <div style="display:flex; align-items:center; gap: 20px;">
-                <h1 style="color: var(--gold); margin:0; font-size: 2em; font-family: 'Mexcellent', sans-serif;">NOWMULTIMEDIA MXS-004</h1>
-                <div id="status-tag" style="background: #444; color: #888; padding: 4px 15px; border-radius: 6px; font-size: 0.9em; font-weight: bold;">DISCONNECTED</div>
-            </div>
-            <div style="color: var(--gold); font-size: 1.1em; font-weight: bold;">1440x810 MIRROR ENGINE</div>
+        <!-- Exact HTML Structure Mirror -->
+        <div class="header">
+            <div class="header-left"><h1>NOWMULTIMEDIA MXS-004</h1></div>
+            <div class="header-right"><h2 id="mirror-status" style="font-size:0.7em; color:var(--green); margin:0;">MIRROR ACTIVE :: v13.8.101</h2></div>
         </div>
+
         <div class="main-content">
-            <div class="column"><div class="header-text">MASTER</div><div id="recording-time" class="time-display">00:00:00</div></div>
-            <div class="column"><div class="header-text">TRACK 1</div><div class="time-display">00:00:00</div></div>
-            <div class="column"><div class="header-text">TRACK 2</div><div class="time-display">00:00:00</div></div>
-            <div class="column"><div class="header-text">TRACK 3</div><div class="time-display">00:00:00</div></div>
-            <div class="column"><div class="header-text">TRACK 4</div><div class="time-display">00:00:00</div></div>
+            <!-- Column 1: MASTER -->
+            <div class="master-column">
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                <div class="waveform-box"><div class="waveform-canvas"></div></div>
+                <div style="color:var(--gold); font-size:0.65em; text-align:center; margin-top:5px;">SAMPLE STATION</div>
+                <div id="sample-grid" class="sample-grid"></div>
+                <div id="audio-status" style="margin-top:auto; font-size:8px; color:#555;">Audio: Standby</div>
+            </div>
+            <!-- Columns 2-5: TRACKS (Injected) -->
+            <div id="tracks-container" style="display:contents;"></div>
         </div>
     </div>
 
     <script>
         (function() {
-            const context = cast.framework.CastReceiverContext.getInstance();
-            const playerManager = context.getPlayerManager();
-            const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
-            const studioRoot = document.getElementById('studio-root');
-            const statusTag = document.getElementById('status-tag');
-            const overlayStatus = document.getElementById('overlay-status');
+            var audioCtx = null; var scriptNode = null; var ws = null;
+            var ringBuffer = new Float32Array(48000 * 2); var writePtr = 0; var readPtr = 0;
+            var debugEl = document.getElementById('debug-log');
+            var statusEl = document.getElementById('audio-status');
+
+            function log(m) { if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; } }
+
+            function buildGUI() {
+                var grid = document.getElementById('sample-grid');
+                for (var p = 1; p <= 20; p++) {
+                    var btn = document.createElement('button'); btn.className = 'sample-btn';
+                    btn.id = 'sample-' + p; btn.textContent = p; grid.appendChild(btn);
+                }
+                var tc = document.getElementById('tracks-container');
+                for (var i = 0; i < 4; i++) {
+                    var t = document.createElement('div'); t.className = 'track';
+                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display">00:00:00</div><div class="waveform-box"><div class="waveform-canvas"></div></div><div class="meter-container"><div id="meter-'+i+'" class="meter-bar"></div></div>';
+                    tc.appendChild(t);
+                }
+                updateScale();
+            }
 
             function updateScale() {
-                const targetW = 1440; const targetH = 810;
-                const winW = window.innerWidth || 1920; const winH = window.innerHeight || 1080;
-                const scaleW = winW / targetW; const scaleH = winH / targetH;
-                const finalScale = Math.min(scaleW, scaleH) * 0.95; // 5% Margin for overscan
+                const winW = window.innerWidth; const winH = window.innerHeight;
+                const finalScale = Math.min(winW / 1440, winH / 810) * 0.98;
                 document.documentElement.style.setProperty('--scale', finalScale);
-                castDebugLogger.info('UI', `Scale Fixed: ${finalScale.toFixed(3)}`);
+            }
+
+            function tryUnlockAudio() {
+                if (audioCtx && audioCtx.state === 'running') return;
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                audioCtx.resume().then(() => { if (audioCtx.state === 'running' && !scriptNode) startAudio(); });
+            }
+
+            function startAudio() {
+                scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
+                scriptNode.onaudioprocess = function(e) {
+                    var outL = e.outputBuffer.getChannelData(0); var outR = e.outputBuffer.getChannelData(1);
+                    var available = (writePtr - readPtr + ringBuffer.length) % ringBuffer.length;
+                    if (available < 8192) { outL.fill(0); outR.fill(0); return; }
+                    for (var i = 0; i < 4096; i++) {
+                        outL[i] = ringBuffer[readPtr]; outR[i] = ringBuffer[(readPtr + 1) % ringBuffer.length];
+                        readPtr = (readPtr + 2) % ringBuffer.length;
+                    }
+                };
+                scriptNode.connect(audioCtx.destination);
+                statusEl.textContent = "Audio: LIVE"; statusEl.style.color = "#0f0";
+                log("🔊 Audio Engine Active.");
             }
 
             function renderState(state) {
                 if (!state) return;
-                if (studioRoot.style.opacity !== '1') {
-                    studioRoot.style.opacity = '1';
-                    document.body.style.background = '#000'; // Signal lock = Black background
-                    overlayStatus.style.display = 'none';
-                    statusTag.textContent = "CONNECTED"; statusTag.style.color = "#0f0"; statusTag.style.background = "#004400";
-                    castDebugLogger.warn('UI', '🎬 STUDIO SIGNAL ACQUIRED');
-                }
-                if (state.transport) document.getElementById('recording-time').textContent = state.transport.position;
+                if (state.transport) document.getElementById('recording-time-display').textContent = state.transport.position;
+                if (state.samples) state.samples.forEach((s,i) => {
+                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = s.isPlaying ? 'sample-btn active' : 'sample-btn';
+                });
+                if (state.tracks) state.tracks.forEach((t,i) => {
+                    var m = document.getElementById('meter-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
+                });
+                tryUnlockAudio();
             }
 
-            castDebugLogger.setEnabled(true);
-            castDebugLogger.showDebugLogs(true);
+            function connect(url) {
+                log("🔌 WS: " + url);
+                ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
+                ws.onmessage = (e) => {
+                    if (e.data instanceof ArrayBuffer) {
+                        var pcm = new Float32Array(e.data);
+                        for (var i = 0; i < pcm.length; i++) { ringBuffer[writePtr] = pcm[i]; writePtr = (writePtr + 1) % ringBuffer.length; }
+                    } else {
+                        try { var m = JSON.parse(e.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
+                    }
+                };
+            }
 
-            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
-                castDebugLogger.debug('SIGNAL', 'Msg Received: ' + JSON.stringify(e.data).substring(0, 50));
-                try {
-                    let d = e.data;
-                    if (typeof d === 'string') d = JSON.parse(d);
+            window.onload = function() {
+                buildGUI();
+                const context = cast.framework.CastReceiverContext.getInstance();
+                context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
+                    let d = e.data; if (typeof d === 'string') d = JSON.parse(d);
                     if (d.payload) d = (typeof d.payload === 'string') ? JSON.parse(d.payload) : d.payload;
                     if (d.type === 'STATE_UPDATE') renderState(d.state);
-                } catch(x) { castDebugLogger.error('PARSE', x.message); }
-            });
-
-            playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
-                castDebugLogger.warn('CORE', 'LOAD Request Received');
-                if (req.media && req.media.contentId) {
-                    try {
+                });
+                context.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
+                    if (req.media && req.media.contentId) {
                         const u = new URL(req.media.contentId);
                         const wsUrl = u.searchParams.get('ws');
-                        if (wsUrl) {
-                            castDebugLogger.info('WS', 'Handshaking: ' + wsUrl);
-                            const ws = new WebSocket("ws://" + wsUrl);
-                            ws.onmessage = (ev) => {
-                                try { const m = JSON.parse(ev.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
-                            };
-                        }
-                    } catch(x) {}
-                }
-                return req;
-            });
-
-            context.addEventListener(cast.framework.system.EventType.READY, () => {
-                updateScale();
+                        if (wsUrl) connect("ws://" + wsUrl);
+                    }
+                    return req;
+                });
+                context.start({ disableIdleTimeout: true });
                 window.addEventListener('resize', updateScale);
-                castDebugLogger.info('BOOT', 'System Ready (v13.8.100)');
-                overlayStatus.textContent = "READY - Waiting for Studio...";
-            });
-
-            context.start({ disableIdleTimeout: true });
+                setInterval(tryUnlockAudio, 2000);
+            };
         })();
     </script>
 </body>
