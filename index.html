@@ -2,52 +2,48 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.98 [STANDARD COMPLIANT]</title>
-    <!-- Google Cast SDK -->
+    <title>MXS-004 Studio Mirror v13.8.99 [AUTO-SCALE 16:9]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <!-- Cast Debug Logger -->
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     
     <style>
-        :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; }
-        body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; }
+        :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; --scale: 1; }
+        body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; width: 100vw; height: 100vh; }
         
-        /* [V13.8.98] Standard Media Player (Hidden but Present for SDK compliance) */
-        cast-media-player {
-            display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1; visibility: hidden; pointer-events: none;
+        cast-media-player { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; visibility: hidden; }
+
+        #studio-root { 
+            width: 1440px; height: 810px; 
+            position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%) scale(var(--scale));
+            transform-origin: center;
+            background: var(--dark-gray); border: 1px solid var(--green); border-radius: 12px;
+            padding: 15px; box-sizing: border-box; display: flex; flex-direction: column; 
+            z-index: 100; opacity: 0; transition: opacity 0.5s;
         }
 
-        .container { 
-            width: 1432px; height: 802px; position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); 
-            background: var(--dark-gray); border: 1px solid var(--green); border-radius: 12px;
-            padding: 12px; box-sizing: border-box; display: flex; flex-direction: column; 
-            z-index: 100; opacity: 1; 
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; flex: 1; }
-        .column { border: 1px solid #444; border-radius: 8px; padding: 12px; background: #1a1a1a; display: flex; flex-direction: column; box-shadow: inset 0 0 10px #000; }
-        .header-text { color: var(--gold); font-weight: bold; font-size: 0.9em; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
-        .time-display { font-size: 2.2em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; text-shadow: 0 0 5px var(--green); }
-        #debug-log { position: fixed; bottom: 5px; right: 5px; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 8px; z-index: 1000; pointer-events: none; max-width: 400px; text-align: right; }
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; flex: 1; min-height: 0; }
+        .column { border: 2px solid #444; border-radius: 10px; padding: 15px; background: #1a1a1a; display: flex; flex-direction: column; box-shadow: inset 0 0 15px #000; }
+        .header-text { color: var(--gold); font-weight: bold; font-size: 1.1em; border-bottom: 2px solid #333; padding-bottom: 6px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
+        .time-display { font-size: 2.8em; color: var(--green); text-align: center; font-family: 'Courier Prime', monospace; text-shadow: 0 0 10px var(--green); margin: auto 0; }
+        
+        /* Debug Console Overlay Adjustment */
+        #cast-debug-overlay { z-index: 1000 !important; transform: scale(0.8); transform-origin: top left; }
     </style>
 </head>
 <body>
-    <!-- [V13.8.98] Required Media Player Tag -->
     <cast-media-player></cast-media-player>
 
-    <div id="debug-log">🚀 Studio Sync v13.8.98</div>
-
     <div class="container" id="studio-root">
-        <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:15px; border-bottom: 1px solid var(--gold); padding-bottom: 5px;">
-            <div style="display:flex; align-items:center; gap: 15px;">
-                <h1 style="color: var(--gold); margin:0; font-size: 1.5em; font-family: 'Mexcellent', sans-serif;">NOWMULTIMEDIA MXS-004</h1>
-                <div id="status-tag" style="background: #333; color: #666; padding: 2px 8px; border-radius: 4px; font-size: 0.7em; font-weight: bold;">OFFLINE</div>
+        <div style="display:flex; justify-content:space-between; align-items: center; margin-bottom:20px; border-bottom: 2px solid var(--gold); padding-bottom: 10px;">
+            <div style="display:flex; align-items:center; gap: 20px;">
+                <h1 style="color: var(--gold); margin:0; font-size: 1.8em; font-family: 'Mexcellent', sans-serif;">NOWMULTIMEDIA MXS-004</h1>
+                <div id="status-tag" style="background: #333; color: #666; padding: 4px 12px; border-radius: 6px; font-size: 0.8em; font-weight: bold; letter-spacing: 1px;">STANDBY</div>
             </div>
-            <div style="color: var(--gold); font-size: 0.8em; font-weight: bold;">STUDIO MIRROR PRO</div>
+            <div style="color: var(--gold); font-size: 1em; font-weight: bold; letter-spacing: 2px;">V13.8.99 :: 1440x810 NATIVE</div>
         </div>
         <div class="main-content">
-            <div class="column"><div class="header-text">MASTER CONSOLE</div><div id="recording-time" class="time-display">00:00:00</div></div>
+            <div class="column"><div class="header-text">MASTER</div><div id="recording-time" class="time-display">00:00:00</div></div>
             <div class="column"><div class="header-text">TRACK 1</div><div class="time-display">00:00:00</div></div>
             <div class="column"><div class="header-text">TRACK 2</div><div class="time-display">00:00:00</div></div>
             <div class="column"><div class="header-text">TRACK 3</div><div class="time-display">00:00:00</div></div>
@@ -62,75 +58,48 @@
             const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
             const studioRoot = document.getElementById('studio-root');
             const statusTag = document.getElementById('status-tag');
-            const debugLog = document.getElementById('debug-log');
 
-            function log(m) {
-                debugLog.innerHTML = m;
-                castDebugLogger.info('STUDIO', m);
+            // [V13.8.99] Auto-Scaling Logic for Perfect 16:9 Fit
+            function updateScale() {
+                const targetW = 1440; const targetH = 810;
+                const winW = window.innerWidth; const winH = window.innerHeight;
+                const scaleW = winW / targetW; const scaleH = winH / targetH;
+                const finalScale = Math.min(scaleW, scaleH);
+                document.documentElement.style.setProperty('--scale', finalScale);
+                castDebugLogger.info('SCALE', `Viewport: ${winW}x${winH} | Scale: ${finalScale.toFixed(3)}`);
             }
 
-            // Initialize Debug Logger (v13.8.98)
             castDebugLogger.setEnabled(true);
             castDebugLogger.showDebugLogs(true);
-            castDebugLogger.loggerLevelByEvents = {
-                'cast.framework.events.category.CORE': cast.framework.LoggerLevel.INFO,
-                'cast.framework.events.EventType.MEDIA_STATUS': cast.framework.LoggerLevel.DEBUG
-            };
-
+            
             function renderState(state) {
                 if (!state) return;
-                statusTag.textContent = "LIVE SIGNAL"; 
-                statusTag.style.color = "#0f0"; statusTag.style.background = "#004400";
+                studioRoot.style.opacity = '1';
+                statusTag.textContent = "STUDIO LIVE"; statusTag.style.color = "#0f0"; statusTag.style.background = "#004400";
                 if (state.transport) document.getElementById('recording-time').textContent = state.transport.position;
             }
 
-            // Custom Namespace Listener
             context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
-                log("📩 SIGNAL: " + JSON.stringify(e.data).substring(0, 30) + "...");
                 try {
                     let d = e.data;
                     if (typeof d === 'string') d = JSON.parse(d);
                     if (d.payload) d = (typeof d.payload === 'string') ? JSON.parse(d.payload) : d.payload;
                     if (d.type === 'STATE_UPDATE') renderState(d.state);
-                } catch(x) { log("❌ PARSE ERR: " + x.message); }
+                } catch(x) {}
             });
 
-            // WebSocket Bridge (v13.8.98)
-            function connectWS(url) {
-                log("🔌 WS SYNC: " + url);
-                const ws = new WebSocket(url);
-                ws.onopen = () => log("✅ WS HANDSHAKE OK");
-                ws.onmessage = (e) => {
-                    try {
-                        const m = JSON.parse(e.data);
-                        if (m.type === 'STATE_UPDATE') renderState(m.state);
-                    } catch(x){}
-                };
-            }
-
-            // LOAD Interceptor (v13.8.98)
             playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
-                log("📥 LOAD EVENT RECEIVED");
-                if (req.media && req.media.contentId) {
-                    try {
-                        const u = new URL(req.media.contentId);
-                        const wsUrl = u.searchParams.get('ws');
-                        if (wsUrl) connectWS("ws://" + wsUrl);
-                    } catch(x) { log("⚠️ LOAD URL PARSE ERR"); }
-                }
-                return req; // Return request to satisfy SDK
+                castDebugLogger.info('LOAD', 'Handshake Received');
+                return req;
             });
 
-            // System Events
             context.addEventListener(cast.framework.system.EventType.READY, () => {
-                log("📡 SYSTEM READY - STANDBY");
+                updateScale();
+                window.addEventListener('resize', updateScale);
+                castDebugLogger.info('SYSTEM', 'Ready for 16:9 Broadcast');
             });
 
-            const options = new cast.framework.CastReceiverOptions();
-            options.disableIdleTimeout = true;
-            context.start(options);
-            
-            log("📡 v13.8.98 BOOTED");
+            context.start({ disableIdleTimeout: true });
         })();
     </script>
 </body>
