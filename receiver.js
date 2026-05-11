@@ -1,13 +1,12 @@
 /**
- * MXS-004 Studio Receiver Logic
- * v13.8.76 - High-Fidelity Mirroring + PCM Streaming
+ * MXS-004 Studio Receiver Logic [High-Fidelity Mirror]
+ * v13.8.83 - Exact GUI Mapping + Ring Buffer Audio
  */
 
 (function() {
     var ws = null;
     var lastState = null;
     var audioCtx = null;
-    var pcmPlayer = null;
     var lastFrameTime = performance.now();
     var lfoPhase1 = 0;
     var lfoPhase2 = 0;
@@ -18,18 +17,16 @@
     var studioRoot = document.getElementById('studio-root');
     var cursorEl = document.getElementById('ghost-cursor');
 
-    function remoteLog(msg) {
-        console.log(msg);
+    function log(m) {
+        console.log(m);
         if (debugEl) {
-            debugEl.innerHTML += '<br>' + msg;
+            debugEl.innerHTML += '<br>' + m;
             debugEl.scrollTop = debugEl.scrollHeight;
         }
     }
 
-    // ============================================================
-    // UI CONSTRUCTION (MIRRORING APP STRUCTURE)
-    // ============================================================
-    function initUI() {
+    // --- EXACT TRACK UI FACTORY ---
+    function buildTracks() {
         var container = document.getElementById('tracks-container');
         container.innerHTML = '';
         for (var i = 0; i < 4; i++) {
@@ -41,26 +38,18 @@
                 <div class="track-time-display">00:00:00</div>
                 <div class="status-indicator status-ready">Ready</div>
                 <div class="waveform-box">
-                    <div class="waveform-labels">
-                        <div class="waveform-label-external">L</div>
-                        <div class="waveform-label-external">R</div>
-                    </div>
-                    <div class="waveform-canvas-container">
-                        <canvas class="waveform-canvas" width="242" height="26"></canvas>
-                        <canvas class="waveform-canvas" width="242" height="26"></canvas>
-                        <div class="loop-marker loop-start-marker"></div>
-                        <div class="loop-marker loop-end-marker"></div>
-                    </div>
+                    <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
+                    <div class="waveform-canvas-container"><canvas class="waveform-canvas"></canvas><canvas class="waveform-canvas"></canvas></div>
                 </div>
-                <div class="control-group pa-mic-adjustment" style="display:flex;">
+                <div class="control-group pa-mic-adjustment">
                     <label style="font-size:0.72em;">Input Gain</label>
                     <input type="range" class="pa-mic-slider" min="-48" max="48" step="0.1" value="0">
-                    <span class="pa-mic-value" style="font-size:0.72em;">0.0 dB</span>
+                    <span class="pa-mic-value">0.0 dB</span>
                 </div>
                 <div class="track-buttons">
                     <button class="rec-btn">REC</button>
                     <button>STOP</button>
-                    <button>PLAY</button>
+                    <button class="play-btn">PLAY</button>
                     <button>REV</button>
                 </div>
                 <div class="main-controls">
@@ -71,59 +60,60 @@
             `;
             container.appendChild(track);
         }
+        
+        // Sample Pads
+        var grid = document.getElementById('sample-grid');
+        grid.innerHTML = '';
+        for (var p = 1; p <= 20; p++) {
+            var btn = document.createElement('button');
+            btn.className = 'sample-btn';
+            btn.id = 'sample-' + p;
+            btn.textContent = p;
+            grid.appendChild(btn);
+        }
     }
 
-    // ============================================================
-    // PCM AUDIO STREAMING (BINARY OVER WS)
-    // ============================================================
+    // --- ROBUST PCM RING BUFFER ---
+    var MAX_BUFFER = 48000 * 4; // 2 seconds of stereo
+    var pcmBuffer = new Float32Array(MAX_BUFFER);
+    var writePtr = 0; var readPtr = 0;
+    var rxCount = 0;
+
+    function feedPCM(data) {
+        var int16 = new Int16Array(data);
+        for (var i = 0; i < int16.length; i++) {
+            pcmBuffer[writePtr] = int16[i] / 32768;
+            writePtr = (writePtr + 1) % MAX_BUFFER;
+        }
+        rxCount++;
+        if (rxCount % 500 === 0) log("🔊 Audio Stream: Active (" + rxCount + " chunks)");
+    }
+
     function initAudio() {
         if (audioCtx) return;
+        log("🔊 Initializing High-Fidelity PCM Engine...");
         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-        
-        // Simple Buffer Queue Player
-        var bufferQueue = [];
-        var scriptNode = audioCtx.createScriptProcessor(4096, 0, 2);
-        
-        scriptNode.onaudioprocess = function(e) {
+        var node = audioCtx.createScriptProcessor(4096, 0, 2);
+        node.onaudioprocess = function(e) {
             var outL = e.outputBuffer.getChannelData(0);
             var outR = e.outputBuffer.getChannelData(1);
-            
-            if (bufferQueue.length > 0) {
-                var chunk = bufferQueue.shift();
-                // chunk is Int16Array (L, R, L, R...)
-                for (var i = 0; i < outL.length; i++) {
-                    if (i * 2 < chunk.length) {
-                        outL[i] = chunk[i * 2] / 32768;
-                        outR[i] = chunk[i * 2 + 1] / 32768;
-                    }
-                }
-            } else {
-                outL.fill(0);
-                outR.fill(0);
+            var avail = (writePtr - readPtr + MAX_BUFFER) % MAX_BUFFER;
+            if (avail < 8192) { outL.fill(0); outR.fill(0); return; }
+            for (var i = 0; i < 4096; i++) {
+                outL[i] = pcmBuffer[readPtr]; readPtr = (readPtr + 1) % MAX_BUFFER;
+                outR[i] = pcmBuffer[readPtr]; readPtr = (readPtr + 1) % MAX_BUFFER;
             }
         };
-        
-        scriptNode.connect(audioCtx.destination);
-        pcmPlayer = {
-            feed: function(data) {
-                var int16 = new Int16Array(data);
-                bufferQueue.push(int16);
-                if (bufferQueue.length > 20) bufferQueue.shift(); // Keep latency low
-            }
-        };
-        remoteLog("🔊 PCM Audio Engine Initialized.");
+        node.connect(audioCtx.destination);
     }
 
-    // ============================================================
-    // STATE RENDERING
-    // ============================================================
+    // --- STATE RENDERING ---
     function renderState(state) {
         if (!state) return;
         lastState = state;
-
-        if (studioRoot.style.opacity === '0' || studioRoot.style.opacity === '') {
-            studioRoot.style.opacity = '1';
+        if (overlay.style.display !== 'none') {
             overlay.style.display = 'none';
+            studioRoot.style.opacity = '1';
         }
 
         // Cursor
@@ -131,14 +121,18 @@
             cursorEl.style.display = 'block';
             cursorEl.style.left = (state.cursor.x * 100) + '%';
             cursorEl.style.top = (state.cursor.y * 100) + '%';
-            cursorEl.className = state.cursor.isClicking ? 'clicking' : '';
+            cursorEl.style.background = state.cursor.isClicking ? 'rgba(255,0,0,0.6)' : 'rgba(250,215,142,0.4)';
         }
 
         // Master
         if (state.master) {
             var m = state.master;
+            var mt = document.getElementById('recording-time-display');
+            if (mt && state.transport) mt.textContent = state.transport.position;
             var mv = document.getElementById('master-volume');
             if (mv) mv.value = m.volume;
+            var mvv = document.getElementById('master-volume-value');
+            if (mvv) mvv.textContent = m.volume.toFixed(1) + ' dB';
             var rb = document.getElementById('master-record-button');
             if (rb) rb.className = m.isRecording ? 'rec-btn recording' : 'rec-btn';
         }
@@ -148,108 +142,66 @@
             state.tracks.forEach(function(t, i) {
                 var el = document.getElementById('track-' + i);
                 if (!el) return;
-                
                 var si = el.querySelector('.status-indicator');
                 if (si) {
                     si.textContent = t.statusText || 'Ready';
                     si.className = 'status-indicator status-' + (t.statusType || 'ready');
                 }
-
+                var tt = el.querySelector('.track-time-display');
+                if (tt) tt.textContent = t.time || '00:00:00';
                 var rb = el.querySelector('.rec-btn');
                 if (rb) rb.className = t.isRecording ? 'rec-btn recording' : 'rec-btn';
-
-                // Update knobs if changed
-                if (t.knobs) {
-                    var sliders = el.querySelectorAll('input[type="range"]');
-                    var values = el.querySelectorAll('.param-value');
-                    // This is a bit brittle, better to target by index or data-param
-                    // For now, just update the main ones
-                    if (values[0]) values[0].textContent = t.knobs.pitch + '%';
-                    if (values[1]) values[1].textContent = t.knobs.vol + 'dB';
-                    if (values[2]) values[2].textContent = t.knobs.pan;
-                }
+            });
+        }
+        
+        // Samples
+        if (state.samples) {
+            state.samples.forEach(function(s, i) {
+                var btn = document.getElementById('sample-' + (i+1));
+                if (btn) btn.className = s.isPlaying ? 'sample-btn active' : 'sample-btn';
             });
         }
     }
 
-    // ============================================================
-    // NETWORKING
-    // ============================================================
-    function connectWS(url) {
-        remoteLog("🔌 Connecting to Studio: " + url);
-        ws = new WebSocket(url);
-        ws.binaryType = 'arraybuffer';
-
-        ws.onopen = function() {
-            remoteLog("✅ Connected to Studio Stream.");
-            statusEl.textContent = "CONNECTED • STREAMING AUDIO";
-            initAudio();
-        };
-
+    function connect(url) {
+        log("🔌 Connecting to Studio: " + url);
+        ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
+        ws.onopen = function() { log("✅ Handshake Success!"); initAudio(); };
         ws.onmessage = function(e) {
-            if (e.data instanceof ArrayBuffer) {
-                if (pcmPlayer) pcmPlayer.feed(e.data);
-            } else {
-                try {
-                    var msg = JSON.parse(e.data);
-                    if (msg.type === 'STATE_UPDATE') renderState(msg.state);
-                } catch(err) {}
-            }
+            if (e.data instanceof ArrayBuffer) { feedPCM(e.data); }
+            else { try { var m = JSON.parse(e.data); if (m.type==='STATE_UPDATE') renderState(m.state); } catch(err){} }
         };
-
-        ws.onclose = function() {
-            remoteLog("🛑 Connection Lost. Retrying...");
-            setTimeout(function() { connectWS(url); }, 2000);
-        };
+        ws.onclose = function() { log("🛑 Connection Lost. Retrying..."); setTimeout(function(){ connect(url); }, 2000); };
     }
 
-    // ============================================================
-    // CAST SDK INTEGRATION
-    // ============================================================
     window.onload = function() {
-        initUI();
-        
-        var context = cast.framework.CastReceiverContext.getInstance();
-        var playerManager = context.getPlayerManager();
-
-        playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(request) {
-            remoteLog("📥 LOAD Intercepted");
-            if (request.media && request.media.contentId) {
+        buildTracks();
+        var ctx = cast.framework.CastReceiverContext.getInstance();
+        ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
+            if (req.media && req.media.contentId) {
                 try {
-                    var url = new URL(request.media.contentId);
-                    var machineIp = url.hostname;
-                    var wsUrl = "ws://" + machineIp + ":8080";
-                    connectWS(wsUrl);
-
-                    // Map fonts
+                    var u = new URL(req.media.contentId);
+                    connect("ws://" + u.hostname + ":8080");
                     var style = document.createElement('style');
                     style.innerHTML = `
-                        @font-face { font-family: 'Mexcellent'; src: url('http://${machineIp}:8080/fonts/MexcellentRg.otf'); }
-                        @font-face { font-family: 'Mexcellent 3D'; src: url('http://${machineIp}:8080/fonts/Mexcellent3d.otf'); }
+                        @font-face { font-family: 'Mexcellent'; src: url('http://${u.hostname}:8080/fonts/MexcellentRg.otf'); }
+                        @font-face { font-family: 'Mexcellent 3D'; src: url('http://${u.hostname}:8080/fonts/Mexcellent3d.otf'); }
                     `;
                     document.head.appendChild(style);
-                } catch(e) { remoteLog("❌ LOAD parse err: " + e.message); }
+                } catch(e) {}
             }
             return null;
         });
-
-        context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(event) {
-            var data = event.data;
-            if (data && typeof data.payload === 'string') {
-                try { data = JSON.parse(data.payload); } catch(e){}
-            }
-            if (data.type === 'STATE_UPDATE') renderState(data.state);
+        ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
+            var d = e.data; if (typeof d.payload === 'string') try { d = JSON.parse(d.payload); } catch(err){}
+            if (d.type === 'STATE_UPDATE') renderState(d.state);
         });
-
-        context.start({ disableIdleTimeout: true });
-        remoteLog("📡 Cast SDK Ready.");
+        ctx.start({ disableIdleTimeout: true });
+        log("📡 Receiver Suite Active.");
     };
 
-    // Animation Loop
     function animate() {
-        var now = performance.now();
-        var dt = (now - lastFrameTime) / 1000;
-        lastFrameTime = now;
+        var now = performance.now(); var dt = (now - lastFrameTime) / 1000; lastFrameTime = now;
         if (lastState && lastState.master) {
             var m = lastState.master;
             if (m.lfo1Active) {
@@ -266,13 +218,5 @@
         requestAnimationFrame(animate);
     }
     requestAnimationFrame(animate);
-
-    // Tap to enable audio context
-    document.addEventListener('click', function() {
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume();
-            remoteLog("🔊 AudioContext Resumed.");
-        }
-    }, { once: false });
-
+    document.addEventListener('click', function() { if (audioCtx) audioCtx.resume(); }, { once: false });
 })();
