@@ -2,94 +2,112 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.96 [DIAGNOSTIC MASTER]</title>
+    <title>MXS-004 Studio Mirror v13.8.97 [DEBUG ENABLED]</title>
+    <!-- Google Cast SDK -->
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <!-- Cast Debug Logger (As per Section 11/12 of Codelab) -->
+    <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
+    
     <style>
         :root { --gold: #FAD78E; --green: #008000; --red: #FF0000; --dark-gray: #2c2c2c; }
-        body { background: #ff4500 !important; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; }
-        #debug-log { position: fixed; bottom: 5px; left: 5px; font-size: 9px; color: #0f0; background: rgba(0,0,0,0.8); padding: 5px; z-index: 1000001; max-height: 150px; overflow-y: auto; pointer-events: none; width: 350px; }
-        .container { width: 1432px; height: 802px; position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); background: var(--dark-gray); border: 1px solid var(--green); border-radius: 12px; padding: 6px; box-sizing: border-box; display: flex; flex-direction: column; opacity: 0; transition: opacity 0.5s; }
-        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; flex: 1; }
-        .track, .master-column { border: 1px solid var(--green); border-radius: 8px; padding: 6px; background: var(--dark-gray); display: flex; flex-direction: column; }
-        .track-header { color: var(--gold); font-weight: bold; font-size: 0.8em; border-bottom: 1px solid #444; }
-        .track-time-display { font-size: 1.5em; color: var(--green); text-align: center; }
+        body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin:0; overflow:hidden; }
+        .container { 
+            width: 1432px; height: 802px; position: absolute; top:50%; left:50%; transform:translate(-50%, -50%); 
+            background: var(--dark-gray); border: 1px solid var(--green); border-radius: 12px;
+            padding: 10px; box-sizing: border-box; display: flex; flex-direction: column; opacity: 0; transition: opacity 0.5s;
+        }
+        .main-content { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; flex: 1; }
+        .column { border: 1px solid #444; border-radius: 8px; padding: 10px; background: #1a1a1a; display: flex; flex-direction: column; }
+        .header-text { color: var(--gold); font-weight: bold; border-bottom: 1px solid #333; margin-bottom: 10px; }
+        .time-display { font-size: 2em; color: var(--green); text-align: center; }
+        /* Debug Console Overlay is managed by CAF */
     </style>
 </head>
 <body>
-    <div id="debug-log">🚀 Diagnostic v13.8.96 Starting...</div>
     <div class="container" id="studio-root">
-        <div class="header" style="height:32px; display:flex; justify-content:space-between; align-items:center; background:#111; padding:0 10px; border-radius:8px; margin-bottom:6px;">
-            <h1 style="font-size:1.2em; margin:0; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1>
-            <div id="connection-status" style="font-size: 0.7em;">ORANGE = WAITING</div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+            <h1 style="color: var(--gold); margin:0;">MXS-004 STUDIO MASTER</h1>
+            <div id="status-tag" style="color: #666; font-size: 0.8em;">WAITING FOR SIGNAL...</div>
         </div>
-        <div class="main-content" id="main-grid"></div>
+        <div class="main-content">
+            <div class="column"><div class="header-text">MASTER</div><div id="recording-time" class="time-display">00:00:00</div></div>
+            <div class="column"><div class="header-text">TRACK 1</div><div class="time-display">00:00:00</div></div>
+            <div class="column"><div class="header-text">TRACK 2</div><div class="time-display">00:00:00</div></div>
+            <div class="column"><div class="header-text">TRACK 3</div><div class="time-display">00:00:00</div></div>
+            <div class="column"><div class="header-text">TRACK 4</div><div class="time-display">00:00:00</div></div>
+        </div>
     </div>
+
     <script>
         (function() {
-            var audioCtx = null; var ws = null;
-            var debugEl = document.getElementById('debug-log');
-            var studioRoot = document.getElementById('studio-root');
-            function log(m) { console.log(m); if (debugEl) { debugEl.innerHTML += '<br>' + m; debugEl.scrollTop = debugEl.scrollHeight; } }
+            const context = cast.framework.CastReceiverContext.getInstance();
+            const playerManager = context.getPlayerManager();
+            const castDebugLogger = cast.debug.CastDebugLogger.getInstance();
+            const studioRoot = document.getElementById('studio-root');
+            const statusTag = document.getElementById('status-tag');
             
-            function buildGUI() {
-                var grid = document.getElementById('main-grid'); grid.innerHTML = '';
-                var master = document.createElement('div'); master.className = 'master-column';
-                master.innerHTML = '<div class="track-header">MASTER</div><div id="recording-time" class="track-time-display">00:00:00</div>';
-                grid.appendChild(master);
-                for (var i = 0; i < 4; i++) {
-                    var t = document.createElement('div'); t.className = 'track';
-                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display">00:00:00</div>';
-                    grid.appendChild(t);
-                }
-            }
+            // Enable Debug Logger
+            castDebugLogger.setEnabled(true);
+            castDebugLogger.showDebugLogs(true); // Show overlay
+            
+            // Set verbosity
+            castDebugLogger.loggerLevelByEvents = {
+                'cast.framework.events.category.CORE': cast.framework.LoggerLevel.INFO,
+                'cast.framework.events.EventType.MEDIA_STATUS': cast.framework.LoggerLevel.DEBUG
+            };
 
             function renderState(state) {
                 if (!state) return;
                 if (studioRoot.style.opacity !== '1') {
-                    studioRoot.style.opacity = '1'; document.body.style.background = '#000';
-                    log("🎬 SIGNAL ACQUIRED! Studio Unlocked.");
+                    studioRoot.style.opacity = '1';
+                    statusTag.textContent = "SIGNAL ACQUIRED"; statusTag.style.color = "#0f0";
+                    castDebugLogger.info('STUDIO', '🎬 Signal Acquired. Displaying GUI.');
                 }
                 if (state.transport) document.getElementById('recording-time').textContent = state.transport.position;
             }
 
-            function connect(url) {
-                log("🔌 WS Attempt: " + url);
-                ws = new WebSocket(url);
-                ws.onopen = function() { log("✅ WS Handshake Success"); };
-                ws.onmessage = function(e) {
-                    try { var m = JSON.parse(e.data); if (m.type === 'STATE_UPDATE') renderState(m.state); } catch(x){}
+            // Custom Message Listener
+            context.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', (e) => {
+                castDebugLogger.debug('STUDIO', '📩 Signal Received: ' + JSON.stringify(e.data).substring(0, 100));
+                try {
+                    let d = e.data;
+                    if (typeof d === 'string') d = JSON.parse(d);
+                    if (d.payload) d = (typeof d.payload === 'string') ? JSON.parse(d.payload) : d.payload;
+                    if (d.type === 'STATE_UPDATE') renderState(d.state);
+                } catch(x) {
+                    castDebugLogger.error('STUDIO', '❌ Signal Parse Error: ' + x.message);
+                }
+            });
+
+            // WebSocket Bridge
+            function connectWS(url) {
+                castDebugLogger.info('STUDIO', '🔌 Connecting to WebSocket: ' + url);
+                const ws = new WebSocket(url);
+                ws.onopen = () => castDebugLogger.info('STUDIO', '✅ WS Connected.');
+                ws.onmessage = (e) => {
+                    try {
+                        const m = JSON.parse(e.data);
+                        if (m.type === 'STATE_UPDATE') renderState(m.state);
+                    } catch(x){}
                 };
+                ws.onerror = () => castDebugLogger.error('STUDIO', '❌ WS Connection Failed.');
             }
 
-            window.onload = function() {
-                buildGUI();
-                try {
-                    var ctx = cast.framework.CastReceiverContext.getInstance();
-                    ctx.addCustomMessageListener('urn:x-cast:com.nowmultimedia.webrtc', function(e) {
-                        log("📩 Cast Msg: " + JSON.stringify(e.data).substring(0, 50));
-                        var d = e.data;
-                        if (typeof d === 'string') d = JSON.parse(d);
-                        if (d.payload) {
-                            if (typeof d.payload === 'string') d = JSON.parse(d.payload);
-                            else d = d.payload;
-                        }
-                        if (d.type === 'STATE_UPDATE') renderState(d.state);
-                    });
-                    
-                    ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, function(req) {
-                        log("📥 LOAD intercepted");
-                        if (req.media && req.media.contentId) {
-                            var u = new URL(req.media.contentId);
-                            var wsUrl = u.searchParams.get('ws');
-                            if (wsUrl) connect("ws://" + wsUrl);
-                        }
-                        return null;
-                    });
-                    
-                    ctx.start({ disableIdleTimeout: true });
-                    log("📡 Diagnostic Suite v13.8.96 Active.");
-                } catch(x) { log("❌ SDK Error: " + x.message); }
-            };
+            // LOAD Interceptor
+            playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (req) => {
+                castDebugLogger.info('STUDIO', '📥 LOAD Intercepted.');
+                if (req.media && req.media.contentId) {
+                    try {
+                        const u = new URL(req.media.contentId);
+                        const wsUrl = u.searchParams.get('ws');
+                        if (wsUrl) connectWS("ws://" + wsUrl);
+                    } catch(x) {}
+                }
+                return null;
+            });
+
+            context.start({ disableIdleTimeout: true });
+            castDebugLogger.info('STUDIO', '📡 Receiver v13.8.97 [Debug Mode] Started.');
         })();
     </script>
 </body>
