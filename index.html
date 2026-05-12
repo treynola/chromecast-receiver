@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.130 [STYLING & AUDIO FIX]</title>
+    <title>MXS-004 Studio Mirror v13.8.132 [STYLING & AUDIO FIX]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.130">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.132">
     <style>
-        /* [V13.8.130] Studio Perfection - Hardened UI & Audio */
+        /* [V13.8.132] Studio Perfection - Hardened UI & Audio */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -20,7 +20,7 @@
             position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.9); 
             border-radius: 50%; pointer-events: none; z-index: 10000; border: 2px solid white; 
             display: none; box-shadow: 0 0 8px rgba(0,0,0,0.5);
-            transition: transform 0.1s cubic-bezier(0.1, 0, 0.2, 1);
+            left: 0; top: 0; transform-origin: center;
         }
         cast-media-player { display: none; }
         .main-content {
@@ -66,8 +66,8 @@
     </style>
 </head>
 <body class="app-loading">
-    <div id="cursor-mirror"></div>
     <div class="container" id="studio-root">
+        <div id="cursor-mirror"></div>
         <div class="header">
             <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
             <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: v13.8.127</h2></div>
@@ -140,14 +140,14 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.130');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.132');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
-                        console.log('✅ Native Audio Sink Active (v13.8.130)');
+                        console.log('✅ Native Audio Sink Active (v13.8.132)');
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') {
-                    // [V13.8.130] Aggressive resume
+                    // [V13.8.132] Aggressive resume
                     audioCtx.resume().then(() => {
                         console.log('🔊 AudioContext resumed successfully');
                     }).catch(e => console.warn('AudioContext resume blocked by policy:', e));
@@ -160,14 +160,14 @@
                 if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
                 if (s.cursor) { 
                     var cur = document.getElementById('cursor-mirror'); 
-                    var container = document.getElementById('studio-root');
-                    if (cur && container) { 
-                        var rect = container.getBoundingClientRect();
+                    if (cur) { 
                         cur.style.display = 'block'; 
-                        // [V13.8.130] App-relative positioning math + Centering Offset
-                        var x = rect.left + (s.cursor.x * rect.width) - 7;
-                        var y = rect.top + (s.cursor.y * rect.height) - 7;
-                        cur.style.transform = 'translate3d('+x+'px, '+y+'px, 0)'; 
+                        // [V13.8.132] Parent-relative coordinates (100% immune to scaling)
+                        var px = s.cursor.x * 100;
+                        var py = s.cursor.y * 100;
+                        cur.style.left = px + '%';
+                        cur.style.top = py + '%';
+                        cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
                         cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
                     } 
                 }
