@@ -169,11 +169,13 @@
                         console.log(`📡 [v13.8.150] Sample Rate Change: ${audioCtx.sampleRate} -> ${targetRate}`);
                         await audioCtx.close();
                     }
+                    relayLogToStudio(`📡 TV: initAudio() Started (SampleRate: ${targetRate})...`);
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     try {
-                        // [v13.8.150] Removed query string for TV compatibility
+                        // [V13.8.150] Removed query string for TV compatibility
                         await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet');
+                        relayLogToStudio(`✅ TV: Worklet Module Loaded & Node Created.`);
                         
                         workletNode.port.onmessage = (e) => {
                             if (e.data.type === 'DIAG') {
@@ -191,10 +193,12 @@
                                 }
                             }
                         };
-
                         workletNode.connect(audioCtx.destination);
                         relayLogToStudio(`✅ Audio Sink Active @ ${targetRate}Hz`);
-                    } catch (e) { console.error('❌ Worklet Error:', e); }
+                    } catch (e) {
+                        console.error('❌ TV ERROR: Worklet init failed', e);
+                        relayLogToStudio(`❌ TV ERROR: Worklet init failed - ${e.message}`);
+                    }
                 }
                 if (audioCtx.state === 'suspended') {
                     document.getElementById('audio-unlock-overlay').style.display = 'flex';
