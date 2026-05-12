@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.117 [NATIVE AUDIO]</title>
+    <title>MXS-004 Studio Mirror v13.8.118 [PRO AUDIO WORKLET]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.117">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.118">
     <style>
-        /* [V13.8.117] Native App Logic (No Overlays) */
+        /* [V13.8.118] High-Performance Mirror Styles */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -33,27 +33,8 @@
             width: 100% !important;
             height: calc(100% - 60px) !important;
         }
-        
-        /* Definitive Pad Symmetry (Studio-Perfect) */
-        .sample-grid {
-            display: grid !important;
-            grid-template-columns: repeat(4, 1fr) !important;
-            gap: 5px !important;
-            margin-top: 5px !important;
-        }
-        .sample-btn {
-            aspect-ratio: 1.0 !important;
-            font-family: 'Cousine', monospace !important;
-            font-size: 1.1em !important; /* Increased for Studio Parity */
-            font-weight: 720 !important;
-            border-radius: 8px !important;
-            border-width: 3px !important; /* Thicker border */
-            padding: 1px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            text-transform: uppercase;
-        }
+        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 5px !important; }
+        .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; padding: 1px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
     </style>
 </head>
 <body class="app-loading">
@@ -65,6 +46,7 @@
         </div>
 
         <div class="main-content" id="main-grid">
+            <!-- Column 1: MASTER -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
@@ -116,14 +98,13 @@
                 </div>
                 <div class="meter-container" style="height:6px;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
+            <!-- Dynamic Tracks will be injected here -->
         </div>
     </div>
 
     <script>
         (function() {
-            var audioCtx = null; var scriptNode = null; var ws = null; var lastUrl = null;
-            var BUFFER_SIZE = 192000; var ringBuffer = new Float32Array(BUFFER_SIZE);
-            var wPtr = 0; var rPtr = 0; var pk = 0;
+            var audioCtx = null; var workletNode = null; var ws = null; var lastUrl = null;
             
             function buildGUI() {
                 var g = document.getElementById('sample-grid');
@@ -187,36 +168,22 @@
                 document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98);
             }
 
-            function initAudio() {
+            async function initAudio() {
                 if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
-                    startAudio();
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+                    try {
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.118');
+                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
+                        workletNode.connect(audioCtx.destination);
+                        console.log('PCM Player Worklet Initialized.');
+                    } catch (e) { console.error('Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') audioCtx.resume();
             }
 
-            function startAudio() {
-                if (scriptNode) return;
-                scriptNode = audioCtx.createScriptProcessor(1024, 0, 2); 
-                scriptNode.onaudioprocess = (e) => {
-                    const oL = e.outputBuffer.getChannelData(0); const oR = e.outputBuffer.getChannelData(1);
-                    const av = (wPtr - rPtr + BUFFER_SIZE) % BUFFER_SIZE;
-                    if (av < 2048) { oL.fill(0); oR.fill(0); return; }
-                    let mx = 0;
-                    for (let i = 0; i < 1024; i++) {
-                        const vL = ringBuffer[rPtr]; const vR = ringBuffer[(rPtr+1)%BUFFER_SIZE];
-                        oL[i] = vL; oR[i] = vR;
-                        mx = Math.max(mx, Math.abs(vL), Math.abs(vR));
-                        rPtr = (rPtr+2)%BUFFER_SIZE;
-                    }
-                    pk = mx;
-                };
-                scriptNode.connect(audioCtx.destination);
-            }
-
             function renderState(s) {
                 if (!s) return;
-                initAudio(); // Auto-init on every state update
+                initAudio();
                 if (s.transport) {
                     document.getElementById('recording-time-display').textContent = s.transport.position;
                     for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; }
@@ -251,8 +218,10 @@
                         var sl = document.getElementById('t-'+p+'-sl-'+i); if (sl) sl.value = t[p] || 0;
                         var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(p.includes('freq')?0:1);
                     });
+                    var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
+                    var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
                 });
-                var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (pk * 100) + '%';
+                var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (s.master?.meters?.l * 100 || 0) + '%';
             }
 
             function connect(url) {
@@ -261,9 +230,7 @@
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
-                        initAudio(); // Auto-init on audio data arrival
-                        const i16 = new Int16Array(e.data);
-                        for (let i = 0; i < i16.length; i++) { ringBuffer[wPtr] = i16[i] / 32768.0; wPtr = (wPtr + 1) % BUFFER_SIZE; }
+                        if (workletNode) workletNode.port.postMessage(e.data, [e.data]);
                     } else {
                         try { var d = JSON.parse(e.data); if (d.type === 'STATE_UPDATE') renderState(d.state); } catch(x){}
                     }
@@ -283,7 +250,7 @@
                 });
                 ctx.start({ disableIdleTimeout: true });
                 window.addEventListener('resize', updateScale);
-                setInterval(initAudio, 500); // Silent heartbeat to keep audio context alive
+                setInterval(initAudio, 1000);
             };
         })();
     </script>
