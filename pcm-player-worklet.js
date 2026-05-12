@@ -17,15 +17,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._stallCount = 0;
 
     this.port.onmessage = (e) => {
-      const arrayBuffer = e.data;
-      const int16 = new Int16Array(arrayBuffer);
-      const float32 = new Float32Array(int16.length);
-      
-      for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 32768;
+      try {
+        if (e.data.type === 'TEST_BEEP') {
+          this._testBeepSamples = 44100; // 1 second of beep
+          return;
+        }
+        const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
+        if (!arrayBuffer) return;
+        
+        const int16 = new Int16Array(arrayBuffer);
+        const float32 = new Float32Array(int16.length);
+        
+        for (let i = 0; i < int16.length; i++) {
+          float32[i] = int16[i] / 32768;
+        }
+        
+        this._writeToBuffer(float32);
+      } catch (err) {
+        this.port.postMessage({ type: 'LOG', msg: `❌ Worklet Error: ${err.message}` });
       }
-      
-      this._writeToBuffer(float32);
     };
   }
 
@@ -60,21 +70,29 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     }
 
     for (let i = 0; i < channel0.length; i++) {
+      let valL = 0;
+      let valR = 0;
+
       if (this._bufferSize >= 2) {
-        const valL = this._ringBuffer[this._readPtr];
+        valL = this._ringBuffer[this._readPtr];
         this._readPtr = (this._readPtr + 1) % this._ringBuffer.length;
         this._bufferSize--;
         
-        const valR = this._ringBuffer[this._readPtr];
+        valR = this._ringBuffer[this._readPtr];
         this._readPtr = (this._readPtr + 1) % this._ringBuffer.length;
         this._bufferSize--;
-
-        channel0[i] = valL;
-        channel1[i] = valR;
-      } else {
-        channel0[i] = 0;
-        channel1[i] = 0;
       }
+
+      // Add test beep if active
+      if (this._testBeepSamples > 0) {
+        const beep = Math.sin(6.28 * 440 * (this._testBeepSamples / 44100)) * 0.1;
+        valL += beep;
+        valR += beep;
+        this._testBeepSamples--;
+      }
+
+      channel0[i] = valL;
+      channel1[i] = valR;
     }
 
     this._sampleCount = (this._sampleCount || 0) + 128;

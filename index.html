@@ -119,6 +119,10 @@
                 <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
                 <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
+                <div class="buffer-status" style="font-size:0.6em; color:var(--gold); margin-top:2px; display:flex; align-items:center; gap:5px;">
+                    <div id="bridge-status-dot" style="width:8px; height:8px; border-radius:50%; background:var(--red);"></div>
+                    BRIDGE: <div class="meter-container" style="flex:1; height:4px; background:#222;"><div id="buffer-health-bar" style="width:0; height:100%; background:var(--green); transition: width 0.1s;"></div></div>
+                </div>
             </div>
         </div>
     </div>
@@ -172,6 +176,13 @@
                                 relayLogToStudio(`[STALL] Count: ${e.data.count} | Buffer: ${e.data.size}`);
                             } else if (e.data.type === 'DIAG') {
                                 relayLogToStudio(`[TELEMETRY] Available: ${e.data.available} | StallCount: ${e.data.stalled} | Rate: ${e.data.rate}`);
+                                // Update Buffer Visual
+                                const bufEl = document.getElementById('buffer-health-bar');
+                                if (bufEl) {
+                                    const percent = Math.min(100, (e.data.available / 44100) * 100);
+                                    bufEl.style.width = percent + '%';
+                                    bufEl.style.backgroundColor = e.data.available < 8192 ? 'var(--red)' : 'var(--green)';
+                                }
                             }
                         };
 
@@ -269,7 +280,6 @@
                         document.getElementById(`t-gain-val-${i}`).textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
                     }
                     if (t.fxSlots) t.fxSlots.forEach((active, idx) => { document.getElementById(`t-fx-chk-${i}-${idx}`).checked = active; document.getElementById(`t-fx-lbl-${i}-${idx}`).style.backgroundColor = active ? 'var(--gold)' : 'transparent'; });
-                    // Animation states
                     document.getElementById(`t-rec-${i}`).className = t.isRecording ? 'recording' : '';
                 });
             }
@@ -290,6 +300,8 @@
                     console.log('✅ Binary Bridge Connected');
                     const m = document.getElementById('master-meter-bar');
                     if (m) { m.style.boxShadow = '0 0 15px var(--green)'; setTimeout(() => m.style.boxShadow = '', 1000); }
+                    const conn = document.getElementById('bridge-status-dot');
+                    if (conn) conn.style.backgroundColor = 'var(--green)';
                 };
                 
                 binaryWS.onmessage = async (event) => {
@@ -304,6 +316,8 @@
                 
                 binaryWS.onclose = () => {
                     console.log('🛑 Binary Bridge Closed. Retrying in 5s...');
+                    const conn = document.getElementById('bridge-status-dot');
+                    if (conn) conn.style.backgroundColor = 'var(--red)';
                     wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
                 };
                 
@@ -365,15 +379,22 @@
 
                 function playSineTest() {
                     if (!audioCtx) initAudio();
-                    const osc = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    osc.connect(g);
-                    g.connect(audioCtx.destination);
-                    g.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
-                    osc.start();
-                    osc.stop(audioCtx.currentTime + 1);
-                    relayLogToStudio("🔊 Sine Test Played on Receiver");
+                    resumeAudio();
+                    if (workletNode) {
+                        workletNode.port.postMessage({ type: 'TEST_BEEP' });
+                        relayLogToStudio("🔊 Sine Test Sent to Worklet");
+                    } else {
+                        // Fallback to native if worklet not loaded
+                        const osc = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        osc.connect(g);
+                        g.connect(audioCtx.destination);
+                        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 1);
+                        relayLogToStudio("🔊 Sine Test Played on Native Context (Worklet Null)");
+                    }
                 }
 
                 context.start({ disableIdleTimeout: true }); 
