@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.119 [NATIVE CAST BRIDGE]</title>
+    <title>MXS-004 Studio Mirror v13.8.120 [NATIVE BRIDGE V2]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.119">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.120">
     <style>
-        /* [V13.8.119] Native Bridge Styles */
+        /* [V13.8.120] Native Bridge V2 Styles */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -44,7 +44,6 @@
             <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: MIRROR</h2></div>
         </div>
         <div class="main-content" id="main-grid">
-            <!-- Master Column -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
@@ -52,15 +51,6 @@
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--green);">Vol</label>
                     <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" style="flex:1;">
                     <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em; min-width:45px;">0.0 dB</span>
-                </div>
-                <div class="master-item master-waveform-item">
-                    <div class="waveform-box master-waveform-box">
-                        <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
-                        <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;">
-                            <canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas>
-                            <canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas>
-                        </div>
-                    </div>
                 </div>
                 <div class="sample-center-container" style="margin-top:8px;">
                     <div class="track-header">Sample Station</div>
@@ -98,14 +88,6 @@
                             </div>
                         </div>
                         <div class="control-group"><span class="file-name-display" id="t-file-${i}" style="height:14px; overflow:hidden;">(Empty)</span></div>
-                        <div class="main-controls">
-                            ${[{l:'Pitch',p:'pitch'},{l:'Vol',p:'vol'},{l:'Pan',p:'pan'},{l:'Bass',p:'bass'}].map(cfg => `
-                                <div class="knob-container">
-                                    <div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span></div>
-                                    <div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;"></div>
-                                </div>
-                            `).join('')}
-                        </div>
                         <div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>
                     `;
                     grid.appendChild(t);
@@ -122,10 +104,10 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.119');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.120');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
-                        console.log('✅ Native Bridge Audio Initialized');
+                        console.log('✅ Native Bridge V2 Audio Initialized');
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -144,7 +126,6 @@
                 }
                 if (s.master) {
                     var mVol = document.getElementById('master-volume'); if (mVol) mVol.value = s.master.volume || 0;
-                    var mVal = document.getElementById('master-volume-value'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
                     var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (s.master.meters?.l * 100 || 0) + '%';
                 }
                 if (s.sampler) s.sampler.forEach((p,i) => {
@@ -157,28 +138,37 @@
                 if (s.tracks) s.tracks.forEach((t,i) => {
                     var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
                     var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meters?.l * 100 || 0) + '%';
-                    var st = document.getElementById('t-st-'+i);
-                    if (st) {
-                        st.textContent = t.isRecording ? 'Recording' : (t.isPlaying ? 'Playing' : 'Ready');
-                        st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
-                    }
                 });
+            }
+
+            function handleInboundData(data) {
+                if (data instanceof ArrayBuffer || (data && data.buffer instanceof ArrayBuffer)) {
+                    initAudio();
+                    if (workletNode) workletNode.port.postMessage(data, data.buffer ? [data.buffer] : [data]);
+                } else if (typeof data === 'string') {
+                    try {
+                        const d = JSON.parse(data);
+                        if (d.type === 'STATE_UPDATE') renderState(d.state);
+                    } catch(e) {}
+                } else if (typeof data === 'object' && data.type === 'STATE_UPDATE') {
+                    renderState(data.state);
+                }
             }
 
             window.onload = function() {
                 buildGUI();
                 const context = cast.framework.CastReceiverContext.getInstance();
                 
-                // [V13.8.119] Native Cast Bridge Listener
-                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-                    if (event.data instanceof ArrayBuffer) {
-                        // Binary PCM Audio Chunk
-                        initAudio();
-                        if (workletNode) workletNode.port.postMessage(event.data, [event.data]);
-                    } else if (typeof event.data === 'object' && event.data.type === 'STATE_UPDATE') {
-                        // JSON State Mirroring
-                        renderState(event.data.state);
-                    }
+                // [V13.8.120] Universal Native Listener
+                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => handleInboundData(event.data));
+                
+                // Listen for WebRTC signals (often used by Rust SDKs for custom messages)
+                context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, () => console.log('📡 Sender Connected'));
+                
+                // Intercept all messages to find our signals
+                context.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (r) => {
+                    console.log('📡 Intercepted LOAD');
+                    return r;
                 });
 
                 context.start({ disableIdleTimeout: true });
