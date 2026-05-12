@@ -70,7 +70,7 @@
         <div id="cursor-mirror"></div>
         <div class="header">
             <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
-            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: v13.8.127</h2></div>
+            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: v13.8.133</h2></div>
         </div>
         <div class="main-content" id="main-grid">
             <!-- Column 1: MASTER -->
@@ -215,12 +215,15 @@
                     const d = typeof data === 'string' ? JSON.parse(data) : data;
                     if (d.type === 'PCM_CHUNK') {
                         initAudio();
+                        // [V13.8.133] Optimized decoding
                         const binary = window.atob(d.payload);
-                        const bytes = new Uint8Array(binary.length);
-                        for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
+                        const len = binary.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) { bytes[i] = binary.charCodeAt(i); }
+                        
                         if (workletNode) {
                             workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
-                            // [V13.8.130] Heartbeat Visual - pulse the master meter green on reception
+                            // Heartbeat Visual
                             const m = document.getElementById('master-meter-bar');
                             if (m) { m.style.boxShadow = '0 0 10px #0f0'; setTimeout(() => m.style.boxShadow = '', 50); }
                         }
@@ -230,7 +233,21 @@
                 } catch(e) {}
             }
 
-            window.onload = function() { buildGUI(); const context = cast.framework.CastReceiverContext.getInstance(); context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => handleInboundData(event.data)); context.start({ disableIdleTimeout: true }); window.addEventListener('resize', updateScale); };
+            window.onload = function() { 
+                buildGUI(); 
+                const context = cast.framework.CastReceiverContext.getInstance();
+                
+                // [V13.8.133] CAF Proactive Context Resumption
+                // Explicitly resume audio context when a sender connects to satisfy auto-play requirements.
+                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
+                    console.log("📡 Sender connected - Resuming AudioContext...");
+                    initAudio();
+                });
+
+                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => handleInboundData(event.data)); 
+                context.start({ disableIdleTimeout: true }); 
+                window.addEventListener('resize', updateScale); 
+            };
         })();
     </script>
 </body>
