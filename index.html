@@ -2,13 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.118 [PRO AUDIO WORKLET]</title>
+    <title>MXS-004 Studio Mirror v13.8.119 [NATIVE CAST BRIDGE]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.118">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.119">
     <style>
-        /* [V13.8.118] High-Performance Mirror Styles */
+        /* [V13.8.119] Native Bridge Styles */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -44,9 +43,8 @@
             <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
             <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: MIRROR</h2></div>
         </div>
-
         <div class="main-content" id="main-grid">
-            <!-- Column 1: MASTER -->
+            <!-- Master Column -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
@@ -64,47 +62,19 @@
                         </div>
                     </div>
                 </div>
-                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
-                    <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--gold);">Loop Length</label>
-                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4" style="flex:1;">
-                    <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em; min-width:35px; color:var(--gold);">4.0s</span>
-                </div>
-                <div class="master-item master-bottom-item">
-                    <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:8px;">
-                        <button id="master-record-button" class="rec-btn">REC</button>
-                        <select id="record-as-select" style="background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; font-size:0.75em; flex:1;"><option value="master">Stereo (WAV)</option></select>
-                    </div>
-                </div>
-                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px; gap:8px;">
-                    <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                        <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 1</button>
-                        <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar"></div></div>
-                    </div>
-                    <div class="lfo-separator" style="width:1px; background:var(--gold);"></div>
-                    <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                        <button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 2</button>
-                        <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar"></div></div>
-                    </div>
-                </div>
                 <div class="sample-center-container" style="margin-top:8px;">
                     <div class="track-header">Sample Station</div>
                     <div class="sample-grid" id="sample-grid"></div>
                 </div>
-                <div class="master-bottom-buttons" style="margin-top:auto; display:flex; flex-direction:row; gap:4px; padding-bottom:5px;">
-                    <button style="flex:1; height:24px; font-size:0.6em;">IMPORT</button>
-                    <button style="flex:1; height:24px; font-size:0.6em;">DOCS</button>
-                    <button style="flex:1; height:24px; font-size:0.6em;">MEDIA</button>
-                    <button style="flex:1; height:24px; font-size:0.6em;">SETTINGS</button>
-                </div>
-                <div class="meter-container" style="height:6px;"><div id="master-meter-bar" class="meter-bar"></div></div>
+                <div class="meter-container" style="height:6px; margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
-            <!-- Dynamic Tracks will be injected here -->
         </div>
     </div>
 
     <script>
         (function() {
-            var audioCtx = null; var workletNode = null; var ws = null; var lastUrl = null;
+            var audioCtx = null; var workletNode = null;
+            const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
             
             function buildGUI() {
                 var g = document.getElementById('sample-grid');
@@ -127,29 +97,9 @@
                                 <div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div>
                             </div>
                         </div>
-                        <div class="control-group" style="display:flex; flex-direction:column; gap:1px;">
-                            <label style="font-size: 0.6em; color:var(--green);">Input</label>
-                            <span class="file-name-display" id="t-file-${i}" style="height:14px; overflow:hidden;">(Empty)</span>
-                        </div>
-                        <div class="control-group" style="display: flex; align-items:center; gap:2px;">
-                            <label style="font-size: 0.62em; color:var(--green);">Gain</label>
-                            <input type="range" class="pa-mic-slider" id="t-ig-sl-${i}" min="-48" max="48" step="0.1" value="0" style="flex:1;">
-                            <span class="pa-mic-value" id="t-ig-val-${i}" style="font-size: 0.62em; min-width:35px;">0.0 dB</span>
-                        </div>
-                        <div class="track-buttons">
-                            <button id="t-btn-rec-${i}">REC</button><button id="t-btn-stop-${i}">STOP</button>
-                            <button id="t-btn-play-${i}">PLAY</button><button id="t-btn-rev-${i}">REV</button>
-                        </div>
-                        <div class="fx-chain-container">
-                            <div class="fx-chain-title">Effects Chain:</div>
-                            <div class="fx-chain-controls">
-                                <button class="fx-chain-arrow">&lt;</button>
-                                ${[0,1,2,3,4,5,6].map(slot => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-${i}-${slot}"><label>${slot+1}</label></div>`).join('')}
-                                <button class="fx-chain-arrow">&gt;</button>
-                            </div>
-                        </div>
+                        <div class="control-group"><span class="file-name-display" id="t-file-${i}" style="height:14px; overflow:hidden;">(Empty)</span></div>
                         <div class="main-controls">
-                            ${[{l:'Pitch',p:'pitch'},{l:'Vol',p:'vol'},{l:'Pan',p:'pan'},{l:'Treb',p:'treble'},{l:'M-Fr',p:'mid_freq'},{l:'M-Gn',p:'mid_gain'},{l:'Bass',p:'bass'}].map(cfg => `
+                            ${[{l:'Pitch',p:'pitch'},{l:'Vol',p:'vol'},{l:'Pan',p:'pan'},{l:'Bass',p:'bass'}].map(cfg => `
                                 <div class="knob-container">
                                     <div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span></div>
                                     <div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;"></div>
@@ -172,11 +122,11 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.118');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.119');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
-                        console.log('PCM Player Worklet Initialized.');
-                    } catch (e) { console.error('Worklet Error:', e); }
+                        console.log('✅ Native Bridge Audio Initialized');
+                    } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') audioCtx.resume();
             }
@@ -195,62 +145,44 @@
                 if (s.master) {
                     var mVol = document.getElementById('master-volume'); if (mVol) mVol.value = s.master.volume || 0;
                     var mVal = document.getElementById('master-volume-value'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
-                    var mRec = document.getElementById('master-record-button'); if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                    var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (s.master.meters?.l * 100 || 0) + '%';
                 }
                 if (s.sampler) s.sampler.forEach((p,i) => {
                     var b = document.getElementById('sample-'+(i+1));
                     if (b) {
                         b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn');
                         if (p.loaded && p.name) b.textContent = p.name.substring(0,6);
-                        else b.textContent = (i+1);
                     }
                 });
                 if (s.tracks) s.tracks.forEach((t,i) => {
                     var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
                     var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meters?.l * 100 || 0) + '%';
-                    var bRec = document.getElementById('t-btn-rec-'+i); if (bRec) bRec.className = t.isRecording ? 'recording' : '';
                     var st = document.getElementById('t-st-'+i);
                     if (st) {
                         st.textContent = t.isRecording ? 'Recording' : (t.isPlaying ? 'Playing' : 'Ready');
                         st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
                     }
-                    ['pitch','vol','pan','treble','mid_freq','mid_gain','bass'].forEach(p => {
-                        var sl = document.getElementById('t-'+p+'-sl-'+i); if (sl) sl.value = t[p] || 0;
-                        var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(p.includes('freq')?0:1);
-                    });
-                    var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
-                    var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
                 });
-                var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (s.master?.meters?.l * 100 || 0) + '%';
-            }
-
-            function connect(url) {
-                if (ws && ws.readyState === WebSocket.OPEN) return;
-                lastUrl = url;
-                ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
-                ws.onmessage = (e) => {
-                    if (e.data instanceof ArrayBuffer) {
-                        if (workletNode) workletNode.port.postMessage(e.data, [e.data]);
-                    } else {
-                        try { var d = JSON.parse(e.data); if (d.type === 'STATE_UPDATE') renderState(d.state); } catch(x){}
-                    }
-                };
-                ws.onclose = () => { setTimeout(() => { if(lastUrl) connect(lastUrl); }, 2000); };
             }
 
             window.onload = function() {
                 buildGUI();
-                const ctx = cast.framework.CastReceiverContext.getInstance();
-                ctx.getPlayerManager().setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (r) => {
-                    if (r.media && r.media.contentId) {
-                        const u = new URL(r.media.contentId); const w = u.searchParams.get('ws');
-                        if (w) connect("ws://" + w);
+                const context = cast.framework.CastReceiverContext.getInstance();
+                
+                // [V13.8.119] Native Cast Bridge Listener
+                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+                    if (event.data instanceof ArrayBuffer) {
+                        // Binary PCM Audio Chunk
+                        initAudio();
+                        if (workletNode) workletNode.port.postMessage(event.data, [event.data]);
+                    } else if (typeof event.data === 'object' && event.data.type === 'STATE_UPDATE') {
+                        // JSON State Mirroring
+                        renderState(event.data.state);
                     }
-                    return r;
                 });
-                ctx.start({ disableIdleTimeout: true });
+
+                context.start({ disableIdleTimeout: true });
                 window.addEventListener('resize', updateScale);
-                setInterval(initAudio, 1000);
             };
         })();
     </script>
