@@ -116,6 +116,8 @@
                 <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
                 <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
+                <!-- [V13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
+                <div id="invisible-shield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:999999; cursor:pointer;" onclick="initAudio(); resumeAudio(); this.remove();"></div>
                 <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 1.2em; z-index: 1000000; border: 1px solid #0f0; border-radius: 4px;">
                     BUF: -- | STALLS: -- | WS: DISCONNECTED
                 </div>
@@ -169,7 +171,8 @@
                     }
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.136');
+                        // [V13.8.150] Removed query string for TV compatibility
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet');
                         
                         workletNode.port.onmessage = (e) => {
@@ -313,15 +316,21 @@
                 binaryWS.onmessage = async (event) => {
                     if (event.data instanceof ArrayBuffer) {
                         if (!audioCtx) await initAudio();
+                        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
                         if (workletNode) {
-                            workletNode.port.postMessage(event.data, [event.data]);
-                            
-                            // Visual Activity Indicator
-                            const conn = document.getElementById('bridge-status-dot');
-                            if (conn) {
-                                conn.style.backgroundColor = 'var(--green)';
-                                conn.style.boxShadow = '0 0 10px var(--green)';
+                            try {
+                                workletNode.port.postMessage(event.data, [event.data]);
+                            } catch (e) {
+                                // Fallback for non-transferable support
+                                workletNode.port.postMessage(event.data);
                             }
+                        }
+                        
+                        // Visual Activity Indicator
+                        const conn = document.getElementById('bridge-status-dot');
+                        if (conn) {
+                            conn.style.backgroundColor = 'var(--green)';
+                            conn.style.boxShadow = '0 0 10px var(--green)';
                         }
                     }
                 };
