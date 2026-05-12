@@ -79,11 +79,7 @@
     </style>
 </head>
 <body class="app-loading">
-    <div id="audio-unlock-overlay" style="display:flex;">
-        <h1>AUDIO SUSPENDED</h1>
-        <p>TAP OR CLICK ANYWHERE TO ACTIVATE SOUND</p>
-        <p style="font-size: 0.8em; margin-top: 20px; opacity: 0.7;">(Required by TV Browser Security)</p>
-    </div>
+    <div id="audio-unlock-overlay" style="display:none !important;"></div>
     <div class="container" id="studio-root">
     <div id="cursor-mirror"></div>
         <div class="header">
@@ -392,12 +388,27 @@
                     if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
                 });
 
+                // [V13.8.150] Auto-Discovery Fallback
+                // If we don't get a BRIDGE_CONFIG within 3 seconds, try the last known Studio IP.
+                setTimeout(() => {
+                    if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
+                        console.log("📡 TV: Auto-Discovery Fallback triggered...");
+                        connectBinaryBridge('192.168.1.11');
+                    }
+                }, 3000);
+
                 context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
                     if (event.data && event.data.type === 'SINE_TEST') {
                         playSineTest();
                     }
                     handleInboundData(event.data);
                 }); 
+                
+                // [V13.8.150] Attempt silent resume on connect
+                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
+                    initAudio();
+                    resumeAudio();
+                });
 
                 function playSineTest() {
                     if (!audioCtx) initAudio();
