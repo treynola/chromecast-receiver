@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.112 [FLATTENED GRID RECOVERY]</title>
+    <title>MXS-004 Studio Mirror v13.8.113 [MASTER COLUMN POLISH]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.112">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.113">
     <style>
-        /* [V13.8.112] Grid Recovery Overrides */
+        /* [V13.8.113] Master UI Polish Overrides */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -26,11 +26,7 @@
             will-change: transform;
         }
         cast-media-player { display: none; }
-        
-        /* Ensure columns take full height */
-        .master-column, .track { height: 100%; box-sizing: border-box; }
-        
-        /* Force grid alignment */
+        .master-column, .track { height: 100%; box-sizing: border-box; overflow: hidden; }
         .main-content {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
@@ -38,6 +34,11 @@
             width: 100% !important;
             height: calc(100% - 60px) !important;
         }
+        /* Fix for bottom buttons styling */
+        .master-bottom-buttons button {
+            flex: 1; height: 24px; font-size: 0.6em; background: #333; color: var(--gold); border: 1px solid var(--mid-gray); border-radius: 3px;
+        }
+        .sample-btn { font-size: 0.7em !important; height: 24px !important; }
     </style>
 </head>
 <body class="app-loading">
@@ -52,59 +53,83 @@
         </div>
 
         <div class="main-content" id="main-grid">
-            <!-- Column 1: Master -->
+            <!-- Column 1: Master (Guide-based Layout) -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                <div class="control-group">
-                    <label style="color:var(--green); font-size:0.7em;">Vol</label>
-                    <div style="display:flex; align-items:center; gap:5px;">
-                        <input type="range" id="master-vol-sl" min="-60" max="6" value="0" class="pa-mic-slider" style="flex:1;">
-                        <span id="master-vol-val" class="pa-mic-value" style="font-size:0.7em; min-width:40px;">0.0 dB</span>
+
+                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--green);">Vol</label>
+                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" style="flex:1;">
+                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em; min-width:45px;">0.0 dB</span>
+                </div>
+
+                <div class="master-item master-waveform-item" style="margin-top: 4px;">
+                    <div class="waveform-box master-waveform-box">
+                        <div class="waveform-labels">
+                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                            <div class="waveform-label-external">R</div>
+                        </div>
+                        <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;">
+                            <canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas>
+                            <canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas>
+                        </div>
                     </div>
                 </div>
-                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px; margin: 4px 0;">
+
+                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--gold);">Loop Length</label>
-                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
+                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4" style="flex:1;">
                     <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em; min-width:35px; color:var(--gold);">4.0s</span>
                 </div>
-                <div class="waveform-box">
-                    <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
-                    <div class="waveform-canvas-container" style="flex:1;">
-                        <canvas id="m-wf-l" class="waveform-canvas"></canvas>
-                        <canvas id="m-wf-r" class="waveform-canvas"></canvas>
-                    </div>
-                </div>
+
                 <div class="master-item master-bottom-item">
                     <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:6px;">
-                        <button id="master-record-button" class="rec-btn" style="height:24px; font-size:0.7em;">REC</button>
+                        <button id="master-record-button" class="rec-btn" style="height:24px; font-size:0.7em; padding:2px 8px;">REC</button>
+                        <select id="record-as-select" style="height:24px; font-size:0.7em; background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; flex:1;">
+                            <option value="master">Stereo (WAV)</option>
+                            <option value="mp4">Stereo (MP4)</option>
+                            <option value="stems">Stems (WAV)</option>
+                        </select>
                     </div>
                 </div>
+
                 <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:12px; gap:8px;">
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 1</button>
                         <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar"></div></div>
-                        <div class="master-item lfo-sweep-control" style="display:flex; flex-direction:column;">
-                            <label class="master-label" style="font-size:0.65em; margin:0;">Sweep 1</label>
-                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo-time-value" class="master-value" style="font-size:0.65em;">1.8s</span></div>
+                        <div class="master-item lfo-sweep-control">
+                            <label style="font-size:0.65em; margin:0; color:var(--green);">Sweep 1</label>
+                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div>
                         </div>
                     </div>
                     <div class="lfo-separator" style="width:1px; background:var(--gold);"></div>
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 2</button>
                         <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar"></div></div>
-                        <div class="master-item lfo-sweep-control" style="display:flex; flex-direction:column;">
-                            <label class="master-label" style="font-size:0.65em; margin:0;">Sweep 2</label>
-                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo2-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em;">1.8s</span></div>
+                        <div class="master-item lfo-sweep-control">
+                            <label style="font-size:0.65em; margin:0; color:var(--green);">Sweep 2</label>
+                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo2-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div>
                         </div>
                     </div>
                 </div>
-                <div class="track-header" style="text-align:center; margin-top:8px;">Sample Station</div>
-                <div class="sample-grid" id="sample-grid"></div>
-                <div class="meter-container" style="margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
-            </div>
 
-            <!-- Columns 2-5: Dynamic Tracks (Flushed directly into grid) -->
+                <div class="master-item sample-center-container" style="margin-top:8px;">
+                    <div class="track-header" style="text-align:center;">Sample Station</div>
+                    <div class="sample-grid" id="sample-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; margin-top:5px;">
+                        <!-- Pads injected by script or static -->
+                    </div>
+                </div>
+
+                <div class="master-bottom-buttons" style="margin-top:auto; display:flex; flex-direction:row; gap:4px; padding-bottom:5px;">
+                    <button id="import-files-button">IMPORT</button>
+                    <button id="show-docs-button">DOCS</button>
+                    <button id="sample-station-button">MEDIA</button>
+                    <button id="settings-button">SETTINGS</button>
+                </div>
+                <div class="meter-container"><div id="master-meter-bar" class="meter-bar"></div></div>
+            </div>
+            <!-- Dynamic Tracks Column 2-5 will be injected here -->
         </div>
     </div>
 
@@ -119,7 +144,6 @@
                 for (var p = 1; p <= 20; p++) {
                     var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b);
                 }
-                
                 var grid = document.getElementById('main-grid');
                 for (var i = 0; i < 4; i++) {
                     var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
@@ -209,9 +233,20 @@
                     if (cur) { cur.style.display = 'block'; cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)'; }
                 }
                 if (s.master) {
+                    var mVol = document.getElementById('master-volume'); if (mVol) mVol.value = s.master.volume || 0;
+                    var mVal = document.getElementById('master-volume-value'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
                     var loopSl = document.getElementById('loop-length'); if (loopSl) loopSl.value = s.master.loopLength || 4.0;
+                    var loopVal = document.getElementById('loop-length-value'); if (loopVal) loopVal.textContent = (s.master.loopLength || 4.0).toFixed(1) + 's';
                     var mRec = document.getElementById('master-record-button'); if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                    
+                    var l1Btn = document.getElementById('lfo-toggle'); if (l1Btn) l1Btn.className = s.master.lfo1Active ? 'sweeping' : '';
+                    var l2Btn = document.getElementById('lfo2-toggle'); if (l2Btn) l2Btn.className = s.master.lfo2Active ? 'sweeping' : '';
+                    var l1Sl = document.getElementById('lfo-time'); if (l1Sl) l1Sl.value = 1.0 / (s.master.lfo1Freq || 0.5);
+                    var l1Val = document.getElementById('lfo-time-value'); if (l1Val) l1Val.textContent = (1.0 / (s.master.lfo1Freq || 0.5)).toFixed(1) + 's';
                 }
+                if (s.sampler) s.sampler.forEach((p,i) => {
+                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn');
+                });
                 if (s.tracks) s.tracks.forEach((t,i) => {
                     var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
                     var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meters?.l * 100 || 0) + '%';
