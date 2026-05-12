@@ -148,16 +148,14 @@
                         await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.134');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         
-                        // [V13.8.134] Diagnostic Relay to Studio
+                        // [V13.8.135] Detailed Diagnostic Relay to Studio
                         workletNode.port.onmessage = (e) => {
                             if (e.data.type === 'LOG') {
-                                console.log(`[WORKLET] ${e.data.msg}`);
                                 relayLogToStudio(e.data.msg);
                             } else if (e.data.type === 'DIAG') {
-                                // Periodic buffer health relay
-                                if (Math.random() < 0.1) { // Throttled relay
-                                    relayLogToStudio(`Buffer: ${e.data.available} / 128000 (Stalled: ${e.data.stalled}, Rate: ${e.data.rate})`);
-                                }
+                                // Detailed telemetry relay (Throttled by worklet internally, but we add more context here)
+                                const stats = `[TELEMETRY] Buf: ${e.data.available} | Stall: ${e.data.stalled} | Rate: ${e.data.rate} | Msgs: ${e.data.msgCount} | Samples: ${e.data.totalSamples} | LastSize: ${e.data.lastMsgSize}`;
+                                relayLogToStudio(stats);
                             }
                         };
 
