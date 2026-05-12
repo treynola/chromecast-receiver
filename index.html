@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.115 [THE PERFECTIONIST]</title>
+    <title>MXS-004 Studio Mirror v13.8.116 [ULTRA-LOW LATENCY]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.115">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.116">
     <style>
-        /* [V13.8.115] Final GUI Perfectionist Overrides */
+        /* [V13.8.116] Audio & Pad Perfectionist Overrides */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -34,18 +34,45 @@
             width: 100% !important;
             height: calc(100% - 60px) !important;
         }
-        /* Perfectionist Tweaks for 16:9 Mirroring */
-        .knob-container { gap: 1px !important; }
-        .slider-wrapper { height: 18px !important; }
-        .fx-chain-slot label { font-size: 0.65em !important; }
-        .status-indicator { font-size: 0.72em !important; }
-        .sample-btn { font-size: 0.7em !important; height: 24px !important; }
+        
+        /* Definitive Pad Symmetry */
+        .sample-grid {
+            display: grid !important;
+            grid-template-columns: repeat(4, 1fr) !important;
+            gap: 5px !important;
+            margin-top: 5px !important;
+        }
+        .sample-btn {
+            aspect-ratio: 1.0 !important;
+            font-family: 'Cousine', monospace !important;
+            font-size: 0.8em !important;
+            font-weight: 720 !important;
+            border-radius: 8px !important;
+            border-width: 2px !important;
+            padding: 1px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-transform: uppercase;
+        }
+        
+        /* Audio Unlock Prompt (if needed) */
+        #audio-unlock-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: var(--gold); font-family: 'Mexcellent', sans-serif; visibility: hidden;
+        }
     </style>
 </head>
 <body class="app-loading">
     <audio id="silent-loop" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
     <cast-media-player></cast-media-player>
     <div id="cursor-mirror"></div>
+    <div id="audio-unlock-overlay">
+        <i class="fa-solid fa-volume-high" style="font-size: 3em; margin-bottom: 20px;"></i>
+        <h1>TAP SCREEN OR REMOTE TO START LIVE AUDIO</h1>
+    </div>
 
     <div class="container" id="studio-root">
         <div class="header">
@@ -54,17 +81,15 @@
         </div>
 
         <div class="main-content" id="main-grid">
-            <!-- Column 1: MASTER (DEFINITIVE) -->
+            <!-- Column 1: MASTER -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
-
                 <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--green);">Vol</label>
                     <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" style="flex:1;">
                     <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em; min-width:45px;">0.0 dB</span>
                 </div>
-
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels">
@@ -77,13 +102,11 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--gold);">Loop Length</label>
                     <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4" style="flex:1;">
                     <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em; min-width:35px; color:var(--gold);">4.0s</span>
                 </div>
-
                 <div class="master-item master-bottom-item">
                     <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:8px;">
                         <button id="master-record-button" class="rec-btn">REC</button>
@@ -94,7 +117,6 @@
                         </select>
                     </div>
                 </div>
-
                 <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px; gap:8px;">
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 1</button>
@@ -114,22 +136,19 @@
                         </div>
                     </div>
                 </div>
-
-                <div class="master-item sample-center-container" style="margin-top:8px;">
-                    <div class="track-header" style="text-align:center;">Sample Station</div>
-                    <div class="sample-grid" id="sample-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; margin-top:5px;"></div>
+                <div class="sample-center-container" style="margin-top:8px;">
+                    <div class="track-header">Sample Station</div>
+                    <div class="sample-grid" id="sample-grid"></div>
                 </div>
-
                 <div class="master-bottom-buttons" style="margin-top:auto; display:flex; flex-direction:row; gap:4px; padding-bottom:5px;">
-                    <button id="import-files-button" style="flex:1; height:24px; font-size:0.6em;">IMPORT</button>
-                    <button id="show-docs-button" style="flex:1; height:24px; font-size:0.6em;">DOCS</button>
-                    <button id="sample-station-button" style="flex:1; height:24px; font-size:0.6em;">MEDIA</button>
-                    <button id="settings-button" style="flex:1; height:24px; font-size:0.6em;">SETTINGS</button>
+                    <button style="flex:1; height:24px; font-size:0.6em;">IMPORT</button>
+                    <button style="flex:1; height:24px; font-size:0.6em;">DOCS</button>
+                    <button style="flex:1; height:24px; font-size:0.6em;">MEDIA</button>
+                    <button style="flex:1; height:24px; font-size:0.6em;">SETTINGS</button>
                 </div>
                 <div class="meter-container" style="height:6px;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
-
-            <!-- Column 2-5: TRACKS (DEFINITIVE MIRROR) -->
+            <!-- Dynamic Tracks will be injected here -->
         </div>
     </div>
 
@@ -147,7 +166,6 @@
                 var grid = document.getElementById('main-grid');
                 for (var i = 0; i < 4; i++) {
                     var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
-                    t.dataset.trackIndex = i;
                     t.innerHTML = `
                         <div class="track-header">TRACK ${i+1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
@@ -161,17 +179,14 @@
                                 <div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div>
                             </div>
                         </div>
-                        <div class="control-group">
-                            <div class="track-input-layout" style="display:flex; flex-direction:column;">
-                                <label style="font-size: 0.72em; color:var(--green);">Input</label>
-                                <select class="input-source"><option value="mic">Microphone</option><option value="file">File</option></select>
-                                <span class="file-name-display" id="t-file-${i}">(Empty)</span>
-                            </div>
+                        <div class="control-group" style="display:flex; flex-direction:column; gap:1px;">
+                            <label style="font-size: 0.6em; color:var(--green);">Input</label>
+                            <span class="file-name-display" id="t-file-${i}" style="height:14px; overflow:hidden;">(Empty)</span>
                         </div>
-                        <div class="control-group pa-mic-adjustment" id="input-gain-group-${i}" style="display: flex; align-items:center; gap:4px;">
-                            <label style="font-size: 0.72em; color:var(--green);">Input Gain</label>
+                        <div class="control-group" style="display: flex; align-items:center; gap:2px;">
+                            <label style="font-size: 0.62em; color:var(--green);">Gain</label>
                             <input type="range" class="pa-mic-slider" id="t-ig-sl-${i}" min="-48" max="48" step="0.1" value="0" style="flex:1;">
-                            <span class="pa-mic-value" id="t-ig-val-${i}" style="font-size: 0.72em;">0.0 dB</span>
+                            <span class="pa-mic-value" id="t-ig-val-${i}" style="font-size: 0.62em; min-width:35px;">0.0 dB</span>
                         </div>
                         <div class="track-buttons">
                             <button id="t-btn-rec-${i}">REC</button><button id="t-btn-stop-${i}">STOP</button>
@@ -185,17 +200,10 @@
                                 <button class="fx-chain-arrow">&gt;</button>
                             </div>
                         </div>
-                        <div class="control-group track-bottom-layout">
-                            <label class="margin-0" style="font-size:0.65em;">Effects:</label>
-                            <select class="effect-type-select flex-1-no-margin"><option value="none">None</option></select>
-                        </div>
                         <div class="main-controls">
-                            ${[
-                                {l:'Pitch',p:'pitch'},{l:'Volume',p:'vol'},{l:'Pan',p:'pan'},{l:'Treble',p:'treble'},
-                                {l:'Mid Freq',p:'mid_freq'},{l:'Mid Gain',p:'mid_gain'},{l:'Bass',p:'bass'}
-                            ].map(cfg => `
+                            ${[{l:'Pitch',p:'pitch'},{l:'Vol',p:'vol'},{l:'Pan',p:'pan'},{l:'Treb',p:'treble'},{l:'M-Fr',p:'mid_freq'},{l:'M-Gn',p:'mid_gain'},{l:'Bass',p:'bass'}].map(cfg => `
                                 <div class="knob-container">
-                                    <div class="knob-label-group" data-param-label="${cfg.p}">
+                                    <div class="knob-label-group">
                                         <label>${cfg.l}</label>
                                         <span class="param-value" id="t-${cfg.p}-val-${i}">0</span>
                                         <input type="checkbox" class="lfo-assign" id="t-lfo1-${cfg.p}-${i}">
@@ -203,8 +211,6 @@
                                     </div>
                                     <div class="slider-wrapper">
                                         <input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;">
-                                        <span class="preset-marker min-preset-marker"></span>
-                                        <span class="preset-marker max-preset-marker"></span>
                                     </div>
                                 </div>
                             `).join('')}
@@ -219,6 +225,47 @@
             function updateScale() {
                 const winW = window.innerWidth; const winH = window.innerHeight;
                 document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98);
+            }
+
+            function tryUnlock() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'interactive' });
+                }
+                if (audioCtx.state === 'suspended') {
+                    document.getElementById('audio-unlock-overlay').style.visibility = 'visible';
+                    audioCtx.resume().then(() => {
+                        if (audioCtx.state === 'running') {
+                            document.getElementById('audio-unlock-overlay').style.visibility = 'hidden';
+                            startAudio();
+                        }
+                    });
+                } else if (audioCtx.state === 'running') {
+                    document.getElementById('audio-unlock-overlay').style.visibility = 'hidden';
+                    startAudio();
+                }
+            }
+
+            function startAudio() {
+                if (scriptNode) return;
+                // [V13.8.116] Jitter-Optimized Buffer Handler
+                scriptNode = audioCtx.createScriptProcessor(1024, 0, 2); 
+                scriptNode.onaudioprocess = (e) => {
+                    const oL = e.outputBuffer.getChannelData(0); const oR = e.outputBuffer.getChannelData(1);
+                    const av = (wPtr - rPtr + BUFFER_SIZE) % BUFFER_SIZE;
+                    
+                    // High-Performance Jitter Buffer (Target 2048 samples = ~42ms)
+                    if (av < 2048) { oL.fill(0); oR.fill(0); return; }
+                    
+                    let mx = 0;
+                    for (let i = 0; i < 1024; i++) {
+                        const vL = ringBuffer[rPtr]; const vR = ringBuffer[(rPtr+1)%BUFFER_SIZE];
+                        oL[i] = vL; oR[i] = vR;
+                        mx = Math.max(mx, Math.abs(vL), Math.abs(vR));
+                        rPtr = (rPtr+2)%BUFFER_SIZE;
+                    }
+                    pk = mx;
+                };
+                scriptNode.connect(audioCtx.destination);
             }
 
             function renderState(s) {
@@ -239,7 +286,12 @@
                     var mRec = document.getElementById('master-record-button'); if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
                 }
                 if (s.sampler) s.sampler.forEach((p,i) => {
-                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn');
+                    var b = document.getElementById('sample-'+(i+1));
+                    if (b) {
+                        b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn');
+                        if (p.loaded && p.name) b.textContent = p.name.substring(0,6);
+                        else b.textContent = (i+1);
+                    }
                 });
                 if (s.tracks) s.tracks.forEach((t,i) => {
                     var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
@@ -256,18 +308,15 @@
 
                     ['pitch','vol','pan','treble','mid_freq','mid_gain','bass'].forEach(p => {
                         var sl = document.getElementById('t-'+p+'-sl-'+i); if (sl) sl.value = t[p] || 0;
-                        var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(p.includes('freq')?0:1) + (p.includes('freq')?'Hz':'');
+                        var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(p.includes('freq')?0:1);
                         var l1 = document.getElementById('t-lfo1-'+p+'-'+i); if (l1) l1.checked = t.lfo1Targets?.includes(p);
                         var l2 = document.getElementById('t-lfo2-'+p+'-'+i); if (l2) l2.checked = t.lfo2Targets?.includes(p);
                     });
                     var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
                     var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
-                    if (t.effects) t.effects.forEach(fx => {
-                        var fxc = document.getElementById('t-fx-'+i+'-'+fx.slot);
-                        if (fxc) fxc.checked = fx.enabled;
-                    });
                 });
                 var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (pk * 100) + '%';
+                tryUnlock();
             }
 
             function connect(url) {
@@ -297,6 +346,8 @@
                 });
                 ctx.start({ disableIdleTimeout: true });
                 window.addEventListener('resize', updateScale);
+                document.body.onclick = tryUnlock;
+                setInterval(tryUnlock, 1000);
             };
         })();
     </script>
