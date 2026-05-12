@@ -2,21 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.110 [PRO MASTER MIRROR]</title>
+    <title>MXS-004 Studio Mirror v13.8.111 [FULL TRACK MIRROR]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.109">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.111">
     <style>
-        /* [V13.8.110] Pro Master Overrides */
+        /* [V13.8.111] Full Track Mirror Overrides */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
             position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
             opacity: 1 !important; visibility: visible !important; display: flex !important;
-            background-color: #2c2c2c !important;
-            box-shadow: 0 0 0 2px #FAD78E, 0 0 0 4px #FF0000;
+            background-color: #000 !important;
         }
         #cursor-mirror {
             position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.9); 
@@ -26,6 +25,10 @@
             will-change: transform;
         }
         cast-media-player { display: none; }
+        
+        /* Mirroring fix for hidden elements that should be visible on TV */
+        .loop-controls.hidden { display: none !important; }
+        .loop-controls.active { display: flex !important; opacity: 1 !important; }
     </style>
 </head>
 <body class="app-loading">
@@ -53,7 +56,6 @@
                     </div>
                 </div>
 
-                <!-- [NEW] Loop Length Element -->
                 <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px; margin: 4px 0;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--gold);">Loop Length</label>
                     <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
@@ -68,57 +70,31 @@
                     </div>
                 </div>
 
-                <!-- [NEW] Master Record Controls -->
                 <div class="master-item master-bottom-item">
                     <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:6px;">
                         <button id="master-record-button" class="rec-btn" style="height:24px; font-size:0.7em; padding:2px 8px; border-radius:4px;">REC</button>
                         <select id="record-as-select" style="height:24px; font-size:0.7em; background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; flex:1;">
                             <option value="master">Stereo (WAV)</option>
-                            <option value="mp4">Stereo (MP4)</option>
-                            <option value="stems">Stems (WAV)</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- [NEW] LFO Side-by-Side -->
                 <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:12px; gap:8px;">
-                    <!-- Column Left: LFO 1 -->
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                        <div class="master-item lfo-button-item" style="padding:0;">
-                            <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em; background:#333; color:var(--gold); border:1px solid var(--mid-gray); border-radius:3px;">LFO 1</button>
-                        </div>
-                        <div class="master-item lfo-meter-item" style="padding:0;">
-                            <div class="meter-container lfo-meter" style="height:4px; background:#111; border-radius:2px; overflow:hidden;">
-                                <div id="lfo-meter-bar" class="meter-bar" style="width: 0%; height:100%; background:var(--gold);"></div>
-                            </div>
-                        </div>
+                        <div class="master-item lfo-button-item" style="padding:0;"><button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 1</button></div>
+                        <div class="master-item lfo-meter-item" style="padding:0;"><div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div>
                         <div class="master-item lfo-sweep-control" style="display:flex; flex-direction:column;">
-                            <label class="master-label" style="font-size:0.65em; margin:0; color:var(--green);">Sweep 1</label>
-                            <div style="display:flex; align-items:center; gap:3px;">
-                                <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8" class="pa-mic-slider" style="flex:1; height:8px;">
-                                <span id="lfo-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span>
-                            </div>
+                            <label class="master-label" style="font-size:0.65em; margin:0;">Sweep 1</label>
+                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo-time-value" class="master-value" style="font-size:0.65em;">1.8s</span></div>
                         </div>
                     </div>
-
                     <div class="lfo-separator" style="width:1px; background:var(--gold);"></div>
-
-                    <!-- Column Right: LFO 2 -->
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
-                        <div class="master-item lfo-button-item" style="padding:0;">
-                            <button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em; background:#333; color:var(--gold); border:1px solid var(--mid-gray); border-radius:3px;">LFO 2</button>
-                        </div>
-                        <div class="master-item lfo-meter-item" style="padding:0;">
-                            <div class="meter-container lfo-meter" style="height:4px; background:#111; border-radius:2px; overflow:hidden;">
-                                <div id="lfo2-meter-bar" class="meter-bar" style="width: 0%; height:100%; background:var(--gold);"></div>
-                            </div>
-                        </div>
+                        <div class="master-item lfo-button-item" style="padding:0;"><button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 2</button></div>
+                        <div class="master-item lfo-meter-item" style="padding:0;"><div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div>
                         <div class="master-item lfo-sweep-control" style="display:flex; flex-direction:column;">
-                            <label class="master-label" style="font-size:0.65em; margin:0; color:var(--green);">Sweep 2</label>
-                            <div style="display:flex; align-items:center; gap:3px;">
-                                <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8" class="pa-mic-slider" style="flex:1; height:8px;">
-                                <span id="lfo2-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span>
-                            </div>
+                            <label class="master-label" style="font-size:0.65em; margin:0;">Sweep 2</label>
+                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo2-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em;">1.8s</span></div>
                         </div>
                     </div>
                 </div>
@@ -127,6 +103,8 @@
                 <div class="sample-grid" id="sample-grid"></div>
                 <div class="meter-container" style="margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
+            
+            <!-- Tracks Container -->
             <div class="tracks-container" id="tracks-container" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px;"></div>
         </div>
     </div>
@@ -144,15 +122,64 @@
                 }
                 var tc = document.getElementById('tracks-container');
                 for (var i = 0; i < 4; i++) {
-                    var t = document.createElement('div'); t.className = 'track'; t.id = 't-col-'+i;
-                    t.innerHTML = '<div class="track-header">TRACK '+(i+1)+'</div><div class="track-time-display" id="t-time-'+i+'">00:00:00</div>' +
-                        '<div class="status-indicator" id="t-st-'+i+'">Ready</div>' +
-                        '<div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>' +
-                        '<div class="waveform-canvas-container"><canvas class="waveform-canvas"></canvas><canvas class="waveform-canvas"></canvas></div></div>' +
-                        '<div class="control-group"><label style="color:var(--gold); font-size:0.7em;">Gain</label>' +
-                        '<div style="display:flex; align-items:center; gap:5px;"><input type="range" id="t-gain-sl-'+i+'" min="-48" max="48" value="0" class="pa-mic-slider" style="flex:1;"><span id="t-gain-val-'+i+'" class="pa-mic-value" style="font-size:0.7em; min-width:35px;">0.0dB</span></div></div>' +
-                        '<div class="track-buttons"><button id="t-btn-rec-'+i+'">REC</button><button id="t-btn-stop-'+i+'">STOP</button><button id="t-btn-play-'+i+'">PLAY</button><button id="t-btn-rev-'+i+'">REV</button></div>' +
-                        '<div class="meter-container"><div id="t-meter-'+i+'" class="meter-bar"></div></div>';
+                    var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
+                    t.innerHTML = `
+                        <div class="track-header">TRACK ${i+1}</div>
+                        <div class="track-time-display" id="t-time-${i}">00:00:00</div>
+                        <div class="status-indicator status-ready" id="t-st-${i}">Ready</div>
+                        <div class="waveform-box">
+                            <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
+                            <div class="waveform-canvas-container">
+                                <canvas class="waveform-canvas" id="t-wf-l-${i}"></canvas>
+                                <canvas class="waveform-canvas" id="t-wf-r-${i}"></canvas>
+                                <div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div>
+                                <div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <div class="track-input-layout"><label style="font-size:0.72em;">Input</label>
+                            <span id="t-file-${i}" style="font-size:0.65em; color:var(--gold); margin-left:5px;">(Empty)</span></div>
+                        </div>
+                        <div class="control-group pa-mic-adjustment" style="display:flex;">
+                            <label style="font-size:0.72em;">In Gain</label>
+                            <input type="range" class="pa-mic-slider" id="t-ig-sl-${i}" min="-48" max="48" step="0.1" value="0">
+                            <span class="pa-mic-value" id="t-ig-val-${i}" style="font-size:0.72em;">0.0 dB</span>
+                        </div>
+                        <div class="track-buttons">
+                            <button id="t-btn-rec-${i}">REC</button><button id="t-btn-stop-${i}">STOP</button>
+                            <button id="t-btn-play-${i}">PLAY</button><button id="t-btn-rev-${i}">REV</button>
+                        </div>
+                        <div class="loop-controls active" id="t-lp-ctrl-${i}">
+                            <div class="loop-grid-layout" style="width:100%;">
+                                <div class="loop-line-1" style="display:flex; justify-content:space-between; width:100%;">
+                                    <label style="font-size:0.65em;">Start</label><label style="font-size:0.65em;">End</label>
+                                </div>
+                                <div class="loop-line-2 slider-wrapper" style="position:relative; height:12px;">
+                                    <input type="range" id="t-lp-s-sl-${i}" class="loop-start-slider" min="0" max="100" value="0" style="width:100%; position:absolute;">
+                                    <input type="range" id="t-lp-e-sl-${i}" class="loop-end-slider" min="0" max="100" value="100" style="width:100%; position:absolute;">
+                                </div>
+                                <div class="loop-line-3" style="display:flex; justify-content:space-between;">
+                                    <span class="param-value" id="t-lp-s-val-${i}" style="font-size:0.65em;">0.00s</span>
+                                    <span class="param-value" id="t-lp-e-val-${i}" style="font-size:0.65em;">4.00s</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="fx-chain-container">
+                            <div class="fx-chain-title">FX Chain:</div>
+                            <div class="fx-chain-controls" id="t-fx-chain-${i}">
+                                ${[0,1,2,3,4,5,6].map(slot => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-${i}-${slot}"><label>${slot+1}</label></div>`).join('')}
+                            </div>
+                        </div>
+                        <div class="main-controls" style="margin-top:5px; gap:2px;">
+                            ${['Pitch','Vol','Pan','Treble','Mid','Bass'].map(p => `
+                                <div class="knob-container">
+                                    <div class="knob-label-group"><label style="font-size:0.6em;">${p}</label><span class="param-value" id="t-${p.toLowerCase()}-val-${i}" style="font-size:0.6em;">0</span></div>
+                                    <div class="slider-wrapper"><input type="range" id="t-${p.toLowerCase()}-sl-${i}" class="pa-mic-slider" style="height:8px;"></div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="meter-container"><div id="t-mtr-${i}" class="meter-bar"></div></div>
+                    `;
                     tc.appendChild(t);
                 }
                 updateScale();
@@ -190,53 +217,51 @@
 
             function renderState(s) {
                 if (!s) return;
-                // Transport
                 if (s.transport) {
                     document.getElementById('recording-time-display').textContent = s.transport.position;
                     for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; }
                 }
-                // Cursor
                 if (s.cursor) {
                     var cur = document.getElementById('cursor-mirror');
                     if (cur) { cur.style.display = 'block'; cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)'; }
                 }
-                // Master State Mapping
                 if (s.master) {
-                    var mVol = document.getElementById('master-vol-sl'); if (mVol) mVol.value = s.master.volume || 0;
-                    var mVal = document.getElementById('master-vol-val'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
-                    
                     var loopSl = document.getElementById('loop-length'); if (loopSl) loopSl.value = s.master.loopLength || 4.0;
-                    var loopVal = document.getElementById('loop-length-value'); if (loopVal) loopVal.textContent = (s.master.loopLength || 4.0).toFixed(1) + 's';
-                    
                     var mRec = document.getElementById('master-record-button'); if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
-                    
-                    // LFO Mapping
                     var l1Btn = document.getElementById('lfo-toggle'); if (l1Btn) l1Btn.className = s.master.lfo1Active ? 'sweeping' : '';
                     var l2Btn = document.getElementById('lfo2-toggle'); if (l2Btn) l2Btn.className = s.master.lfo2Active ? 'sweeping' : '';
-                    
-                    var l1Sl = document.getElementById('lfo-time'); if (l1Sl) l1Sl.value = 1.0 / (s.master.lfo1Freq || 0.5);
-                    var l1Val = document.getElementById('lfo-time-value'); if (l1Val) l1Val.textContent = (1.0 / (s.master.lfo1Freq || 0.5)).toFixed(1) + 's';
-                    
-                    var l2Sl = document.getElementById('lfo2-time'); if (l2Sl) l2Sl.value = 1.0 / (s.master.lfo2Freq || 0.5);
-                    var l2Val = document.getElementById('lfo2-time-value'); if (l2Val) l2Val.textContent = (1.0 / (s.master.lfo2Freq || 0.5)).toFixed(1) + 's';
                 }
-                // Sample Station
-                if (s.samples) s.samples.forEach((p,i) => {
-                    var b = document.getElementById('sample-'+(i+1)); if (b) b.className = p.isPlaying ? 'sample-btn active' : 'sample-btn';
-                });
-                // Track Mapping
                 if (s.tracks) s.tracks.forEach((t,i) => {
-                    var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meterL * 100) + '%';
-                    var gs = document.getElementById('t-gain-sl-'+i); if (gs) gs.value = t.gain || 0;
-                    var gv = document.getElementById('t-gain-val-'+i); if (gv) gv.textContent = (t.gain || 0).toFixed(1) + 'dB';
-                    var st = document.getElementById('t-st-'+i);
-                    if (st) {
-                        if (t.isRecording) { st.textContent = 'Recording'; st.className = 'status-indicator status-recording'; }
-                        else if (t.isPlaying) { st.textContent = 'Playing'; st.className = 'status-indicator status-playing'; }
-                        else { st.textContent = 'Ready'; st.className = 'status-indicator status-ready'; }
-                    }
+                    // Core Properties
+                    var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
+                    var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meters?.l * 100 || 0) + '%';
+                    
+                    // Buttons & Status
                     var bRec = document.getElementById('t-btn-rec-'+i); if (bRec) bRec.className = t.isRecording ? 'recording' : '';
                     var bPlay = document.getElementById('t-btn-play-'+i); if (bPlay) bPlay.className = t.isPlaying ? 'playing' : '';
+                    var st = document.getElementById('t-st-'+i);
+                    if (st) {
+                        st.textContent = t.isRecording ? 'Recording' : (t.isPlaying ? 'Playing' : 'Ready');
+                        st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
+                    }
+
+                    // Knobs
+                    ['pitch','vol','pan','treble','mid','bass'].forEach(p => {
+                        var sl = document.getElementById('t-'+p+'-sl-'+i); if (sl) sl.value = t[p] || 0;
+                        var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(1);
+                    });
+
+                    // Loop Markers
+                    var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
+                    var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
+                    var lss = document.getElementById('t-lp-s-sl-'+i); if (lss) lss.value = t.loopStart * 100;
+                    var les = document.getElementById('t-lp-e-sl-'+i); if (les) les.value = t.loopEnd * 100;
+
+                    // FX Chain
+                    if (t.effects) t.effects.forEach(fx => {
+                        var fxc = document.getElementById('t-fx-'+i+'-'+fx.slot);
+                        if (fxc) fxc.checked = fx.enabled;
+                    });
                 });
                 var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (pk * 100) + '%';
                 tryUnlock();
