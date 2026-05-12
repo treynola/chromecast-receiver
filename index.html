@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.128 [STYLING & AUDIO FIX]</title>
+    <title>MXS-004 Studio Mirror v13.8.129 [STYLING & AUDIO FIX]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.128">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.129">
     <style>
-        /* [V13.8.128] Studio Perfection - Hardened UI & Audio */
+        /* [V13.8.129] Studio Perfection - Hardened UI & Audio */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -140,14 +140,17 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.128');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.129');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
-                        console.log('✅ Native Audio Sink Active (v13.8.128)');
+                        console.log('✅ Native Audio Sink Active (v13.8.129)');
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') {
-                    audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
+                    // [V13.8.129] Aggressive resume
+                    audioCtx.resume().then(() => {
+                        console.log('🔊 AudioContext resumed successfully');
+                    }).catch(e => console.warn('AudioContext resume blocked by policy:', e));
                 }
             }
 
@@ -155,7 +158,18 @@
                 if (!s) return;
                 initAudio();
                 if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
-                if (s.cursor) { var cur = document.getElementById('cursor-mirror'); if (cur) { cur.style.display = 'block'; cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)'; } }
+                if (s.cursor) { 
+                    var cur = document.getElementById('cursor-mirror'); 
+                    var container = document.getElementById('studio-root');
+                    if (cur && container) { 
+                        var rect = container.getBoundingClientRect();
+                        cur.style.display = 'block'; 
+                        // [V13.8.129] App-relative positioning math
+                        var x = rect.left + (s.cursor.x * rect.width);
+                        var y = rect.top + (s.cursor.y * rect.height);
+                        cur.style.transform = 'translate3d('+x+'px, '+y+'px, 0)'; 
+                    } 
+                }
                 if (s.master) {
                     document.getElementById('master-volume').value = s.master.volume || 0;
                     document.getElementById('master-volume-value').textContent = (s.master.volume || 0).toFixed(1) + ' dB';
