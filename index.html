@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.123 [SECURE AUDIO V1]</title>
+    <title>MXS-004 Studio Mirror v13.8.124 [STUDIO PERFECTION]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.123">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.124">
     <style>
-        /* [V13.8.123] Pro Mirroring - High Density */
+        /* [V13.8.124] Studio Perfection - High-Fidelity Mirroring */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -31,9 +31,17 @@
             height: calc(100% - 40px) !important;
         }
         .track { background: rgba(20, 20, 20, 0.8) !important; border: 1px solid #333 !important; }
-        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 4px !important; margin-top: 5px !important; }
+        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 5px !important; }
         .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
         .hidden { display: none !important; }
+        
+        /* [V13.8.124] Scrolling Text Support */
+        .scrolling-text-wrapper { overflow: hidden; white-space: nowrap; width: 100%; position: relative; }
+        .scrolling-text { display: inline-block; padding-left: 100%; animation: scroll-text 10s linear infinite; font-size: 0.7em; }
+        @keyframes scroll-text {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
     </style>
 </head>
 <body class="app-loading">
@@ -44,29 +52,81 @@
             <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: MIRROR</h2></div>
         </div>
         <div class="main-content" id="main-grid">
+            <!-- Column 1: MASTER (As requested by USER) -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
+
                 <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
-                    <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--green);">Vol</label>
-                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" style="flex:1;">
-                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em; min-width:45px;">0.0 dB</span>
+                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Vol</label>
+                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0">
+                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em;">0.0 dB</span>
                 </div>
+
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
-                        <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
-                        <div class="waveform-canvas-container" style="flex:1;">
+                        <div class="waveform-labels">
+                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
+                            <div class="waveform-label-external">R</div>
+                        </div>
+                        <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;">
                             <canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas>
                             <canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas>
                         </div>
                     </div>
                 </div>
-                <div class="sample-center-container" style="margin-top:8px;">
-                    <div class="track-header">Sample Station</div>
+
+                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Loop Length</label>
+                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em;">4.0s</span>
+                </div>
+
+                <div class="master-item master-bottom-item">
+                    <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:10px;">
+                        <button id="master-record-button" class="rec-btn">REC</button>
+                        <select id="record-as-select">
+                            <option value="master">Stereo (WAV)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px;">
+                    <div class="lfo-column" style="flex:1;">
+                        <div class="master-item lfo-button-item" style="padding:2px;"><button id="lfo-toggle">LFO 1</button></div>
+                        <div class="master-item lfo-meter-item" style="padding:2px;"><div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div>
+                        <div class="master-item lfo-sweep-control">
+                            <label class="master-label" style="font-size:0.65em; margin:0;">Sweep 1</label>
+                            <input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo-time-value" class="master-value" style="font-size:0.65em;">1.8s</span>
+                        </div>
+                    </div>
+                    <div class="lfo-separator" style="width:1px; background:var(--gold); margin:0 4px;"></div>
+                    <div class="lfo-column" style="flex:1;">
+                        <div class="master-item lfo-button-item" style="padding:2px;"><button id="lfo2-toggle">LFO 2</button></div>
+                        <div class="master-item lfo-meter-item" style="padding:2px;"><div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div>
+                        <div class="master-item lfo-sweep-control">
+                            <label class="master-label" style="font-size:0.65em; margin:0;">Sweep 2</label>
+                            <input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8">
+                            <span id="lfo2-time-value" class="master-value" style="font-size:0.65em;">1.8s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="master-item sample-center-container">
+                    <div class="track-header" style="text-align:center;">Sample Station</div>
                     <div class="sample-grid" id="sample-grid"></div>
                 </div>
-                <div class="meter-container" style="height:6px; margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
+
+                <div class="master-bottom-buttons" style="margin-top: 8px; display: flex; flex-direction: row; gap: 4px;">
+                    <button id="import-files-button">IMPORT</button>
+                    <button id="show-docs-button">DOCS</button>
+                    <button id="sample-station-button">MEDIA</button>
+                    <button id="settings-button">SETTINGS</button>
+                </div>
             </div>
+            
+            <!-- Tracks 2-5 Injected below -->
         </div>
     </div>
 
@@ -74,10 +134,20 @@
         (function() {
             var audioCtx = null; var workletNode = null;
             const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-            const KNOB_CONFIGS = [{l:'Pitch',p:'pitch'},{l:'Volume',p:'vol'},{l:'Pan',p:'pan'},{l:'Treble',p:'treble'},{l:'Mid Freq',p:'mid_freq'},{l:'Mid Gain',p:'mid_gain'},{l:'Bass',p:'bass'}];
+            const KNOB_CONFIGS = [
+                { l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' },
+                { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' },
+                { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }
+            ];
 
             function buildGUI() {
-                var g = document.getElementById('sample-grid'); if (g) { g.innerHTML = ''; for (var p = 1; p <= 20; p++) { var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b); } }
+                var g = document.getElementById('sample-grid');
+                if (g) {
+                    g.innerHTML = '';
+                    for (var p = 1; p <= 20; p++) {
+                        var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b);
+                    }
+                }
                 var grid = document.getElementById('main-grid');
                 for (var i = 0; i < 4; i++) {
                     if (document.getElementById('track-'+i)) continue;
@@ -85,26 +155,78 @@
                     t.innerHTML = `
                         <div class="track-header">TRACK ${i+1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
-                        <div class="status-indicator status-ready" id="t-st-${i}">Ready</div>
-                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
+                        <div class="status-indicator status-ready" id="t-st-${i}">
+                            <div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div>
+                        </div>
+                        <div class="waveform-box">
+                            <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
                             <div class="waveform-canvas-container">
-                                <canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="242" height="26"></canvas>
-                                <canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="242" height="26"></canvas>
+                                <canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas>
+                                <canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas>
                                 <div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div>
                                 <div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div>
                             </div>
                         </div>
-                        <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select class="input-source"><option>Microphone</option></select></div><span class="file-name-display" id="t-file-${i}">(Empty)</span></div>
-                        <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1" value="0"><span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span></div>
-                        <div class="track-buttons"><button>REC</button><button>STOP</button><button disabled>PLAY</button><button>REV</button></div>
-                        <div class="loop-controls hidden" id="t-loop-ctrl-${i}"><div class="loop-grid-layout"><div class="loop-line-1"><div style="flex:1;"><label style="font-size:0.72em;">Loop Start</label></div><div style="flex:1; display:flex; justify-content:space-between;"><label style="font-size:0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div>
-                            <div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div>
-                            <div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow"><</button>
-                            ${[0,1,2,3,4,5,6].map(idx => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx+1}</label></div>`).join('')}
-                        <button class="fx-chain-arrow">></button></div></div>
-                        <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map(cfg => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join('')}</div>
+                        <div class="control-group">
+                            <div class="track-input-layout">
+                                <label style="font-size: 0.72em;">Input</label>
+                                <select class="input-source"><option>Microphone</option></select>
+                            </div>
+                            <span class="file-name-display" id="t-file-${i}"></span>
+                        </div>
+                        <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;">
+                            <label style="font-size: 0.72em;">Input Gain</label>
+                            <input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1">
+                            <span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span>
+                        </div>
+                        <div class="track-buttons">
+                            <button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button>
+                            <button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button>
+                        </div>
+                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;">
+                            <div class="loop-grid-layout">
+                                <div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;">
+                                    <div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div>
+                                    <div style="flex: 1; display: flex; align-items: center; justify-content: space-between;">
+                                        <label style="font-size: 0.72em;">Loop End</label>
+                                        <button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button>
+                                    </div>
+                                </div>
+                                <div class="loop-line-2 slider-wrapper">
+                                    <input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01">
+                                    <input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01">
+                                </div>
+                                <div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div>
+                            </div>
+                        </div>
+                        <div class="fx-chain-container">
+                            <div class="fx-chain-title">Effects Chain:</div>
+                            <div class="fx-chain-controls">
+                                <button class="fx-chain-arrow">&lt;</button>
+                                ${[0,1,2,3,4,5,6].map(idx => `
+                                    <div class="fx-chain-slot">
+                                        <input type="checkbox" id="t-fx-chk-${i}-${idx}">
+                                        <label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx+1}</label>
+                                    </div>
+                                `).join('')}
+                                <button class="fx-chain-arrow">&gt;</button>
+                            </div>
+                        </div>
+                        <div class="control-group track-bottom-layout">
+                            <label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select>
+                        </div>
+                        <div class="main-controls">
+                            ${KNOB_CONFIGS.map(cfg => `
+                                <div class="knob-container">
+                                    <div class="knob-label-group">
+                                        <label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span>
+                                        <input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}">
+                                        <input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}">
+                                    </div>
+                                    <div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div>
+                                </div>
+                            `).join('')}
+                        </div>
                         <div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>
                     `;
                     grid.appendChild(t);
@@ -118,10 +240,10 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.123');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.124');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
-                        console.log('✅ Native Audio Sink Active (v13.8.123)');
+                        console.log('✅ Native Audio Sink Active (v13.8.124)');
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -132,17 +254,50 @@
                 initAudio();
                 if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
                 if (s.cursor) { var cur = document.getElementById('cursor-mirror'); if (cur) { cur.style.display = 'block'; cur.style.transform = 'translate3d('+(s.cursor.x * window.innerWidth)+'px, '+(s.cursor.y * window.innerHeight)+'px, 0)'; } }
-                if (s.master) { var mVol = document.getElementById('master-volume'); if (mVol) mVol.value = s.master.volume || 0; var mVal = document.getElementById('master-volume-value'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB'; var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (s.master.meters?.l * 100 || 0) + '%'; }
+                if (s.master) {
+                    document.getElementById('master-volume').value = s.master.volume || 0;
+                    document.getElementById('master-volume-value').textContent = (s.master.volume || 0).toFixed(1) + ' dB';
+                    document.getElementById('master-meter-bar')?.style.setProperty('width', (s.master.meters?.l * 100 || 0) + '%');
+                    document.getElementById('loop-length').value = s.master.loopLength || 4;
+                    document.getElementById('loop-length-value').textContent = (s.master.loopLength || 4).toFixed(1) + 's';
+                    document.getElementById('master-record-button').className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                    
+                    // LFOs
+                    document.getElementById('lfo-toggle').className = s.master.lfo1?.active ? 'active' : '';
+                    document.getElementById('lfo-meter-bar').style.width = (s.master.lfo1?.value * 100 || 0) + '%';
+                    document.getElementById('lfo-time').value = s.master.lfo1?.time || 1.8;
+                    document.getElementById('lfo-time-value').textContent = (s.master.lfo1?.time || 1.8).toFixed(1) + 's';
+                    
+                    document.getElementById('lfo2-toggle').className = s.master.lfo2?.active ? 'active' : '';
+                    document.getElementById('lfo2-meter-bar').style.width = (s.master.lfo2?.value * 100 || 0) + '%';
+                    document.getElementById('lfo2-time').value = s.master.lfo2?.time || 1.8;
+                    document.getElementById('lfo2-time-value').textContent = (s.master.lfo2?.time || 1.8).toFixed(1) + 's';
+                }
                 if (s.sampler) s.sampler.forEach((p,i) => { var b = document.getElementById('sample-'+(i+1)); if (b) { b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); if (p.loaded && p.name) b.textContent = p.name.substring(0,6); } });
                 if (s.tracks) s.tracks.forEach((t,i) => {
-                    var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
-                    var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meters?.l * 100 || 0) + '%';
-                    var st = document.getElementById('t-st-'+i); if (st) { st.textContent = t.isRecording ? 'Recording' : (t.isPlaying ? 'Playing' : 'Ready'); st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready')); }
-                    var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
-                    var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
-                    var lc = document.getElementById('t-loop-ctrl-'+i); if (lc) lc.className = t.fileName && t.fileName !== '(Empty)' ? 'loop-controls' : 'loop-controls hidden';
-                    if (t.params) { KNOB_CONFIGS.forEach(cfg => { var sl = document.getElementById(`t-${cfg.p}-sl-${i}`); if(sl) sl.value = t.params[cfg.p] || 0; var vl = document.getElementById(`t-${cfg.p}-val-${i}`); if(vl) vl.textContent = t.params[cfg.p] || 0; }); var gsl = document.getElementById(`t-gain-sl-${i}`); if(gsl) gsl.value = t.params.inputGain || 0; var gvl = document.getElementById(`t-gain-val-${i}`); if(gvl) gvl.textContent = (t.params.inputGain || 0).toFixed(1) + ' dB'; }
-                    if (t.fxSlots) t.fxSlots.forEach((active, idx) => { var chk = document.getElementById(`t-fx-chk-${i}-${idx}`); if(chk) chk.checked = active; var lbl = document.getElementById(`t-fx-lbl-${i}-${idx}`); if(lbl) lbl.style.backgroundColor = active ? 'var(--gold)' : 'transparent'; });
+                    document.getElementById('t-scroll-'+i).textContent = t.fileName || 'Ready';
+                    document.getElementById('t-mtr-'+i).style.width = (t.meters?.l * 100 || 0) + '%';
+                    var st = document.getElementById('t-st-'+i);
+                    st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
+                    
+                    document.getElementById('t-ls-m-'+i).style.left = (t.loopStart * 100) + '%';
+                    document.getElementById('t-le-m-'+i).style.left = (t.loopEnd * 100) + '%';
+                    
+                    if (t.params) {
+                        KNOB_CONFIGS.forEach(cfg => {
+                            document.getElementById(`t-${cfg.p}-sl-${i}`).value = t.params[cfg.p] || 0;
+                            document.getElementById(`t-${cfg.p}-val-${i}`).textContent = t.params[cfg.p] || 0;
+                            // LFO Assignments
+                            document.getElementById(`t-lfo1-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[1]?.includes(cfg.p);
+                            document.getElementById(`t-lfo2-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[2]?.includes(cfg.p);
+                        });
+                        document.getElementById(`t-gain-sl-${i}`).value = t.params.inputGain || 0;
+                        document.getElementById(`t-gain-val-${i}`).textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                    }
+                    if (t.fxSlots) t.fxSlots.forEach((active, idx) => {
+                        document.getElementById(`t-fx-chk-${i}-${idx}`).checked = active;
+                        document.getElementById(`t-fx-lbl-${i}-${idx}`).style.backgroundColor = active ? 'var(--gold)' : 'transparent';
+                    });
                 });
             }
 
@@ -151,12 +306,9 @@
                     const d = typeof data === 'string' ? JSON.parse(data) : data;
                     if (d.type === 'PCM_CHUNK') {
                         initAudio();
-                        // Decode Base64 to ArrayBuffer
                         const binary = window.atob(d.payload);
                         const bytes = new Uint8Array(binary.length);
-                        for (let i = 0; i < binary.length; i++) {
-                            bytes[i] = binary.charCodeAt(i);
-                        }
+                        for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt(i); }
                         if (workletNode) workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
                     } else if (d.type === 'STATE_UPDATE') {
                         renderState(d.state);
