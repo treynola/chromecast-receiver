@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.114 [PRO TRACK MIRROR]</title>
+    <title>MXS-004 Studio Mirror v13.8.115 [THE PERFECTIONIST]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.114">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.115">
     <style>
-        /* [V13.8.114] Pro Track UI Overrides */
+        /* [V13.8.115] Final GUI Perfectionist Overrides */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -34,43 +34,12 @@
             width: 100% !important;
             height: calc(100% - 60px) !important;
         }
+        /* Perfectionist Tweaks for 16:9 Mirroring */
+        .knob-container { gap: 1px !important; }
+        .slider-wrapper { height: 18px !important; }
+        .fx-chain-slot label { font-size: 0.65em !important; }
+        .status-indicator { font-size: 0.72em !important; }
         .sample-btn { font-size: 0.7em !important; height: 24px !important; }
-        
-        /* Specific Track Overrides for Mirroring */
-        .track { background: var(--dark-gray); border: 1px solid var(--green); border-radius: 10px; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
-        .track-header { text-align: center; color: var(--gold); font-weight: bold; font-size: 0.85em; cursor: default; }
-        .track-time-display { background: #000; border: 1px solid #444; border-radius: 4px; text-align: center; font-family: monospace; font-size: 0.85em; color: #0f0; margin: 2px 0; }
-        .status-indicator { text-align: center; font-size: 0.7em; font-weight: bold; padding: 2px; border-radius: 3px; margin-bottom: 2px; }
-        .status-ready { background: #333; color: #888; }
-        .status-recording { background: var(--red); color: #fff; animation: blink 1s infinite; }
-        .status-playing { background: var(--green); color: #fff; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        
-        .waveform-box { display: flex; align-items: center; width: 100%; background: #000; border-radius: 4px; padding: 2px; }
-        .waveform-canvas-container { position: relative; flex: 1; height: 52px; background: #111; overflow: hidden; }
-        .waveform-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 50%; }
-        .track-waveform-canvas-R { top: 50%; }
-        
-        .track-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-top: 2px; }
-        .track-buttons button { height: 20px; font-size: 0.6em; background: #333; color: var(--gold); border: 1px solid #555; border-radius: 2px; }
-        .track-buttons button.recording { background: var(--red); color: white; }
-        .track-buttons button.playing { background: var(--green); color: white; }
-        
-        .fx-chain-container { background: #222; border: 1px solid #444; border-radius: 4px; padding: 2px; margin-top: 2px; }
-        .fx-chain-title { font-size: 0.6em; color: var(--gold); text-align: center; margin-bottom: 1px; }
-        .fx-chain-controls { display: flex; align-items: center; justify-content: space-between; gap: 1px; }
-        .fx-chain-slot { display: flex; flex-direction: column; align-items: center; gap: 0; }
-        .fx-chain-slot label { font-size: 0.55em; color: #888; }
-        .fx-chain-slot input[type="checkbox"] { width: 10px; height: 10px; margin: 0; }
-        
-        .main-controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; padding: 2px; background: #222; border-radius: 4px; }
-        .knob-container { display: flex; flex-direction: column; gap: 1px; background: #1a1a1a; padding: 2px; border-radius: 3px; }
-        .knob-label-group { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
-        .knob-label-group label { font-size: 0.55em; color: #ccc; }
-        .param-value { font-size: 0.55em; color: var(--gold); font-family: monospace; }
-        .lfo-assign { width: 8px; height: 8px; margin: 0; }
-        
-        select.effect-type-select, select.input-source { width: 100%; height: 18px; font-size: 0.55em; background: #000; color: var(--gold); border: 1px solid #555; border-radius: 2px; }
     </style>
 </head>
 <body class="app-loading">
@@ -80,73 +49,87 @@
 
     <div class="container" id="studio-root">
         <div class="header">
-            <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E;">NOWMULTIMEDIA MXS-004</h1></div>
-            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: #FAD78E;">Mix N Studio 004 :: MIRROR</h2></div>
+            <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
+            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: MIRROR</h2></div>
         </div>
 
         <div class="main-content" id="main-grid">
-            <!-- Column 1: Master -->
+            <!-- Column 1: MASTER (DEFINITIVE) -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+
+                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--green);">Vol</label>
                     <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" style="flex:1;">
                     <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em; min-width:45px;">0.0 dB</span>
                 </div>
-                <div class="master-item master-waveform-item" style="margin-top: 4px;">
+
+                <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels">
                             <div class="waveform-label-external" style="margin-top: 2px;">L</div>
                             <div class="waveform-label-external">R</div>
                         </div>
                         <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;">
-                            <canvas id="master-waveform-L" class="waveform-canvas"></canvas>
-                            <canvas id="master-waveform-R" class="waveform-canvas"></canvas>
+                            <canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas>
+                            <canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas>
                         </div>
                     </div>
                 </div>
-                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+
+                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--gold);">Loop Length</label>
                     <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4" style="flex:1;">
                     <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em; min-width:35px; color:var(--gold);">4.0s</span>
                 </div>
+
                 <div class="master-item master-bottom-item">
-                    <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:6px;">
-                        <button id="master-record-button" class="rec-btn" style="height:24px; font-size:0.7em; padding:2px 8px;">REC</button>
-                        <select id="record-as-select" style="height:24px; font-size:0.7em; background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; flex:1;">
+                    <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:8px;">
+                        <button id="master-record-button" class="rec-btn">REC</button>
+                        <select id="record-as-select" style="background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; font-size:0.75em; flex:1;">
                             <option value="master">Stereo (WAV)</option>
                             <option value="mp4">Stereo (MP4)</option>
                             <option value="stems">Stems (WAV)</option>
                         </select>
                     </div>
                 </div>
-                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:12px; gap:8px;">
+
+                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px; gap:8px;">
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 1</button>
                         <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar"></div></div>
-                        <div class="master-item lfo-sweep-control"><div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div></div>
+                        <div class="master-item lfo-sweep-control">
+                            <label style="font-size:0.65em; margin:0; color:var(--green);">Sweep 1</label>
+                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div>
+                        </div>
                     </div>
                     <div class="lfo-separator" style="width:1px; background:var(--gold);"></div>
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 2</button>
                         <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar"></div></div>
-                        <div class="master-item lfo-sweep-control"><div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo2-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div></div>
+                        <div class="master-item lfo-sweep-control">
+                            <label style="font-size:0.65em; margin:0; color:var(--green);">Sweep 2</label>
+                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo2-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div>
+                        </div>
                     </div>
                 </div>
-                <div class="sample-center-container" style="margin-top:8px;">
-                    <div class="track-header">Sample Station</div>
+
+                <div class="master-item sample-center-container" style="margin-top:8px;">
+                    <div class="track-header" style="text-align:center;">Sample Station</div>
                     <div class="sample-grid" id="sample-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:5px; margin-top:5px;"></div>
                 </div>
+
                 <div class="master-bottom-buttons" style="margin-top:auto; display:flex; flex-direction:row; gap:4px; padding-bottom:5px;">
-                    <button id="import-files-button" style="flex:1;">IMPORT</button>
-                    <button id="show-docs-button" style="flex:1;">DOCS</button>
-                    <button id="sample-station-button" style="flex:1;">MEDIA</button>
-                    <button id="settings-button" style="flex:1;">SETTINGS</button>
+                    <button id="import-files-button" style="flex:1; height:24px; font-size:0.6em;">IMPORT</button>
+                    <button id="show-docs-button" style="flex:1; height:24px; font-size:0.6em;">DOCS</button>
+                    <button id="sample-station-button" style="flex:1; height:24px; font-size:0.6em;">MEDIA</button>
+                    <button id="settings-button" style="flex:1; height:24px; font-size:0.6em;">SETTINGS</button>
                 </div>
-                <div class="meter-container"><div id="master-meter-bar" class="meter-bar"></div></div>
+                <div class="meter-container" style="height:6px;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
-            <!-- Dynamic Tracks (PRO Layout) will be injected here -->
+
+            <!-- Column 2-5: TRACKS (DEFINITIVE MIRROR) -->
         </div>
     </div>
 
@@ -164,6 +147,7 @@
                 var grid = document.getElementById('main-grid');
                 for (var i = 0; i < 4; i++) {
                     var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
+                    t.dataset.trackIndex = i;
                     t.innerHTML = `
                         <div class="track-header">TRACK ${i+1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
@@ -171,25 +155,23 @@
                         <div class="waveform-box">
                             <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
                             <div class="waveform-canvas-container">
-                                <canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}"></canvas>
-                                <canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}"></canvas>
+                                <canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="242" height="26"></canvas>
+                                <canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="242" height="26"></canvas>
                                 <div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div>
                                 <div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div>
                             </div>
                         </div>
                         <div class="control-group">
                             <div class="track-input-layout" style="display:flex; flex-direction:column;">
-                                <label style="font-size: 0.6em; color:var(--green);">Input</label>
-                                <select class="input-source" id="t-in-${i}">
-                                    <option value="mic">Microphone</option><option value="file">Import File</option><option value="system">System Loopback</option>
-                                </select>
-                                <span id="t-file-${i}" style="font-size:0.55em; color:var(--gold); white-space:nowrap; overflow:hidden; margin-top:1px;">(Empty)</span>
+                                <label style="font-size: 0.72em; color:var(--green);">Input</label>
+                                <select class="input-source"><option value="mic">Microphone</option><option value="file">File</option></select>
+                                <span class="file-name-display" id="t-file-${i}">(Empty)</span>
                             </div>
                         </div>
-                        <div class="control-group" style="display: flex; align-items:center; gap:2px;">
-                            <label style="font-size: 0.6em; color:var(--green);">Gain</label>
+                        <div class="control-group pa-mic-adjustment" id="input-gain-group-${i}" style="display: flex; align-items:center; gap:4px;">
+                            <label style="font-size: 0.72em; color:var(--green);">Input Gain</label>
                             <input type="range" class="pa-mic-slider" id="t-ig-sl-${i}" min="-48" max="48" step="0.1" value="0" style="flex:1;">
-                            <span class="pa-mic-value" id="t-ig-val-${i}" style="font-size: 0.55em;">0.0 dB</span>
+                            <span class="pa-mic-value" id="t-ig-val-${i}" style="font-size: 0.72em;">0.0 dB</span>
                         </div>
                         <div class="track-buttons">
                             <button id="t-btn-rec-${i}">REC</button><button id="t-btn-stop-${i}">STOP</button>
@@ -203,21 +185,31 @@
                                 <button class="fx-chain-arrow">&gt;</button>
                             </div>
                         </div>
-                        <select class="effect-type-select" id="t-fx-sel-${i}"><option value="none">None</option></select>
+                        <div class="control-group track-bottom-layout">
+                            <label class="margin-0" style="font-size:0.65em;">Effects:</label>
+                            <select class="effect-type-select flex-1-no-margin"><option value="none">None</option></select>
+                        </div>
                         <div class="main-controls">
-                            ${['pitch','vol','pan','treble','mid_freq','mid_gain','bass'].map(p => `
+                            ${[
+                                {l:'Pitch',p:'pitch'},{l:'Volume',p:'vol'},{l:'Pan',p:'pan'},{l:'Treble',p:'treble'},
+                                {l:'Mid Freq',p:'mid_freq'},{l:'Mid Gain',p:'mid_gain'},{l:'Bass',p:'bass'}
+                            ].map(cfg => `
                                 <div class="knob-container">
-                                    <div class="knob-label-group">
-                                        <label>${p.replace('_',' ')}</label>
-                                        <input type="checkbox" class="lfo-assign" id="t-lfo1-${p}-${i}">
-                                        <input type="checkbox" class="lfo-assign" id="t-lfo2-${p}-${i}">
-                                        <span class="param-value" id="t-${p}-val-${i}">0</span>
+                                    <div class="knob-label-group" data-param-label="${cfg.p}">
+                                        <label>${cfg.l}</label>
+                                        <span class="param-value" id="t-${cfg.p}-val-${i}">0</span>
+                                        <input type="checkbox" class="lfo-assign" id="t-lfo1-${cfg.p}-${i}">
+                                        <input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-${cfg.p}-${i}">
                                     </div>
-                                    <input type="range" id="t-${p}-sl-${i}" class="pa-mic-slider" style="height:6px;">
+                                    <div class="slider-wrapper">
+                                        <input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;">
+                                        <span class="preset-marker min-preset-marker"></span>
+                                        <span class="preset-marker max-preset-marker"></span>
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="meter-container" style="margin-top:auto;"><div id="t-mtr-${i}" class="meter-bar"></div></div>
+                        <div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>
                     `;
                     grid.appendChild(t);
                 }
@@ -265,8 +257,8 @@
                     ['pitch','vol','pan','treble','mid_freq','mid_gain','bass'].forEach(p => {
                         var sl = document.getElementById('t-'+p+'-sl-'+i); if (sl) sl.value = t[p] || 0;
                         var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(p.includes('freq')?0:1) + (p.includes('freq')?'Hz':'');
-                        var l1 = document.getElementById('t-lfo1-'+p+'-i'); if (l1) l1.checked = t.lfo1Targets?.includes(p);
-                        var l2 = document.getElementById('t-lfo2-'+p+'-i'); if (l2) l2.checked = t.lfo2Targets?.includes(p);
+                        var l1 = document.getElementById('t-lfo1-'+p+'-'+i); if (l1) l1.checked = t.lfo1Targets?.includes(p);
+                        var l2 = document.getElementById('t-lfo2-'+p+'-'+i); if (l2) l2.checked = t.lfo2Targets?.includes(p);
                     });
                     var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
                     var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
