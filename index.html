@@ -117,8 +117,7 @@
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
                 <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
                 <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
-                <div id="invisible-shield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:999999; cursor:pointer;" onclick="initAudio(); resumeAudio(); this.remove();"></div>
-                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 1.2em; z-index: 1000000; border: 1px solid #0f0; border-radius: 4px;">
+                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 0.8em; z-index: 1000000; opacity: 0.5; pointer-events: none;">
                     BUF: -- | STALLS: -- | WS: DISCONNECTED
                 </div>
                 <div class="buffer-status" style="font-size:0.6em; color:var(--gold); margin-top:2px; display:flex; flex-direction:column; gap:2px;">
@@ -200,23 +199,18 @@
                         relayLogToStudio(`❌ TV ERROR: Worklet init failed - ${e.message}`);
                     }
                 }
-                if (audioCtx.state === 'suspended') {
-                    document.getElementById('audio-unlock-overlay').style.display = 'flex';
+                    }
                 }
-            }
 
             async function resumeAudio() {
-                if (audioCtx) {
-                    if (audioCtx.state === 'suspended') {
-                        document.getElementById('audio-unlock-overlay').style.display = 'flex';
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    try {
                         await audioCtx.resume();
                         if (audioCtx.state === 'running') {
-                            document.getElementById('audio-unlock-overlay').style.display = 'none';
                             console.log("🔊 Receiver: AudioContext Resumed.");
+                            relayLogToStudio("✅ TV: AudioContext Resumed.");
                         }
-                    } else {
-                        document.getElementById('audio-unlock-overlay').style.display = 'none';
-                    }
+                    } catch (e) { console.warn("⚠️ TV: Resume failed", e); }
                 }
             }
 
@@ -451,8 +445,27 @@
                 }
 
                 context.start({ disableIdleTimeout: true }); 
+
+                // [V13.8.150] RECURSIVE AUTO-RESUME
+                const autoUnlock = setInterval(() => {
+                    if (audioCtx) {
+                        if (audioCtx.state === 'suspended') {
+                            audioCtx.resume().then(() => {
+                                if (audioCtx.state === 'running') {
+                                    relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
+                                    clearInterval(autoUnlock);
+                                }
+                            });
+                        } else if (audioCtx.state === 'running') {
+                            clearInterval(autoUnlock);
+                        }
+                    } else {
+                        initAudio(); 
+                    }
+                }, 500);
+
                 window.addEventListener('resize', updateScale); 
-            };
+                relayLogToStudio("🎬 TV: Startup Complete.");            };
         })();
     </script>
 </body>
