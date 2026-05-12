@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.121 [PRO 1:1 MIRROR]</title>
+    <title>MXS-004 Studio Mirror v13.8.122 [ULTIMATE 1:1 PARITY]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.121">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.122">
     <style>
-        /* [V13.8.121] Studio-Perfect Layout */
+        /* [V13.8.122] Ultimate 1:1 Mirroring Architecture */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -30,9 +30,15 @@
             width: 100% !important;
             height: calc(100% - 40px) !important;
         }
-        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 5px !important; }
-        .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
         .track { background: rgba(20, 20, 20, 0.8) !important; border: 1px solid #333 !important; }
+        
+        /* Studio Specific Tweaks */
+        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 4px !important; margin-top: 5px !important; }
+        .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
+        
+        /* Force display of hidden elements if state says so */
+        .hidden { display: none !important; }
+        .visible { display: block !important; }
     </style>
 </head>
 <body class="app-loading">
@@ -47,11 +53,13 @@
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                
                 <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
                     <label class="master-label" style="font-size: 0.72em; margin: 0; color:var(--green);">Vol</label>
                     <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0" style="flex:1;">
                     <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em; min-width:45px;">0.0 dB</span>
                 </div>
+
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
                         <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
@@ -61,12 +69,16 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="sample-center-container" style="margin-top:8px;">
                     <div class="track-header">Sample Station</div>
                     <div class="sample-grid" id="sample-grid"></div>
                 </div>
+
                 <div class="meter-container" style="height:6px; margin-top:auto;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
+            
+            <!-- Columns 2-5 will be injected below -->
         </div>
     </div>
 
@@ -75,7 +87,18 @@
             var audioCtx = null; var workletNode = null;
             const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
             
+            const KNOB_CONFIGS = [
+                { l: 'Pitch', p: 'pitch' },
+                { l: 'Volume', p: 'vol' },
+                { l: 'Pan', p: 'pan' },
+                { l: 'Treble', p: 'treble' },
+                { l: 'Mid Freq', p: 'mid_freq' },
+                { l: 'Mid Gain', p: 'mid_gain' },
+                { l: 'Bass', p: 'bass' }
+            ];
+
             function buildGUI() {
+                // 1. Build Sampler Grid
                 var g = document.getElementById('sample-grid');
                 if (g) {
                     g.innerHTML = '';
@@ -83,14 +106,18 @@
                         var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b);
                     }
                 }
+
+                // 2. Build Track Columns (2-5)
                 var grid = document.getElementById('main-grid');
                 for (var i = 0; i < 4; i++) {
                     if (document.getElementById('track-'+i)) continue;
                     var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
+                    
                     t.innerHTML = `
                         <div class="track-header">TRACK ${i+1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}">Ready</div>
+                        
                         <div class="waveform-box">
                             <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
                             <div class="waveform-canvas-container">
@@ -100,15 +127,76 @@
                                 <div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div>
                             </div>
                         </div>
-                        <div class="control-group"><span class="file-name-display" id="t-file-${i}" style="height:14px; overflow:hidden;">(Empty)</span></div>
+
+                        <div class="control-group">
+                            <div class="track-input-layout">
+                                <label style="font-size: 0.72em;">Input</label>
+                                <select class="input-source" id="t-in-${i}"><option>Microphone</option></select>
+                            </div>
+                            <span class="file-name-display" id="t-file-${i}">(Empty)</span>
+                        </div>
+
+                        <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}">
+                            <label style="font-size: 0.72em;">Input Gain</label>
+                            <input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1" value="0">
+                            <span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span>
+                        </div>
+
+                        <div class="track-buttons">
+                            <button id="t-rec-${i}">REC</button>
+                            <button id="t-stop-${i}">STOP</button>
+                            <button id="t-play-${i}" disabled>PLAY</button>
+                            <button id="t-rev-${i}">REV</button>
+                        </div>
+
+                        <div class="loop-controls hidden" id="t-loop-ctrl-${i}">
+                            <div class="loop-grid-layout">
+                                <div class="loop-line-1">
+                                    <div style="flex:1;"><label style="font-size:0.72em;">Loop Start</label></div>
+                                    <div style="flex:1; display:flex; justify-content:space-between;">
+                                        <label style="font-size:0.72em;">Loop End</label>
+                                        <button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button>
+                                    </div>
+                                </div>
+                                <div class="loop-line-2 slider-wrapper">
+                                    <input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01">
+                                    <input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01">
+                                </div>
+                                <div class="loop-line-3">
+                                    <span class="param-value" id="t-ls-val-${i}">0.00s</span>
+                                    <span class="param-value" id="t-le-val-${i}">1.00s</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="fx-chain-container">
+                            <div class="fx-chain-title">Effects Chain:</div>
+                            <div class="fx-chain-controls">
+                                <button class="fx-chain-arrow"><</button>
+                                ${[0,1,2,3,4,5,6].map(idx => `
+                                    <div class="fx-chain-slot">
+                                        <input type="checkbox" id="t-fx-chk-${i}-${idx}">
+                                        <label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx+1}</label>
+                                    </div>
+                                `).join('')}
+                                <button class="fx-chain-arrow">></button>
+                            </div>
+                        </div>
+
+                        <div class="control-group track-bottom-layout">
+                            <label class="margin-0">Effects:</label>
+                            <select class="effect-type-select flex-1-no-margin" id="t-fx-sel-${i}"></select>
+                        </div>
+
                         <div class="main-controls">
-                            ${[{l:'Pitch',p:'pitch'},{l:'Vol',p:'vol'},{l:'Pan',p:'pan'},{l:'Bass',p:'bass'}].map(cfg => `
+                            ${KNOB_CONFIGS.map(cfg => `
                                 <div class="knob-container">
                                     <div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span></div>
-                                    <div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;"></div>
+                                    <div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div>
                                 </div>
                             `).join('')}
                         </div>
+
                         <div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>
                     `;
                     grid.appendChild(t);
@@ -125,7 +213,7 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.121');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.122');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
                         console.log('✅ Native Bridge Audio Initialized');
@@ -167,6 +255,26 @@
                     }
                     var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
                     var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
+                    
+                    // Show/Hide Loop Controls
+                    var lc = document.getElementById('t-loop-ctrl-'+i);
+                    if (lc) lc.className = t.fileName && t.fileName !== '(Empty)' ? 'loop-controls' : 'loop-controls hidden';
+
+                    // Update Knobs/Values
+                    if (t.params) {
+                        KNOB_CONFIGS.forEach(cfg => {
+                            var sl = document.getElementById(`t-${cfg.p}-sl-${i}`); if(sl) sl.value = t.params[cfg.p] || 0;
+                            var vl = document.getElementById(`t-${cfg.p}-val-${i}`); if(vl) vl.textContent = t.params[cfg.p] || 0;
+                        });
+                        var gsl = document.getElementById(`t-gain-sl-${i}`); if(gsl) gsl.value = t.params.inputGain || 0;
+                        var gvl = document.getElementById(`t-gain-val-${i}`); if(gvl) gvl.textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                    }
+
+                    // Update FX Slots
+                    if (t.fxSlots) t.fxSlots.forEach((active, idx) => {
+                        var chk = document.getElementById(`t-fx-chk-${i}-${idx}`); if(chk) chk.checked = active;
+                        var lbl = document.getElementById(`t-fx-lbl-${i}-${idx}`); if(lbl) lbl.style.backgroundColor = active ? 'var(--gold)' : 'transparent';
+                    });
                 });
             }
 
