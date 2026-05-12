@@ -13,7 +13,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._rPtr = 0;
         this._playbackRate = 1.0;
         this._phase = 0;
-        this._isStalled = true; // [V13.8.130] Start stalled to pre-buffer
+        this._isStalled = true; 
+        this._diagCounter = 0; // [V13.8.134] Diagnostic rate limiter
+        this._stalledLogTrigger = false;
 
         this.port.onmessage = (e) => {
             if (e.data instanceof ArrayBuffer) {
@@ -34,17 +36,27 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
         const available = (this._wPtr - this._rPtr + this._BUFFER_SIZE) % this._BUFFER_SIZE;
 
+        // [V13.8.134] Periodic Diagnostics (Relayed to Studio)
+        this._diagCounter++;
+        if (this._diagCounter % 128 === 0) {
+            this.port.postMessage({
+                type: 'DIAG',
+                available: available,
+                stalled: this._isStalled,
+                rate: this._playbackRate.toFixed(3)
+            });
+        }
+
         // [V13.8.130] Dynamic Jitter Buffer Management
-        // Target: 4096 samples (~85ms) for stability over Wi-Fi
-        if (available > 12000) this._playbackRate = 1.02;      // Drain faster
-        else if (available < 2048) this._playbackRate = 0.98;  // Slow down
+        if (available > 16000) this._playbackRate = 1.02;      
+        else if (available < 4096) this._playbackRate = 0.98;  
         else this._playbackRate = 1.0;
 
-        // [V13.8.130] Underflow / Pre-buffering Logic
+        // [V13.8.134] Robust Underflow / Pre-buffering Logic
         if (this._isStalled) {
-            if (available > 2048) {
+            if (available > 4096) { // Increased threshold for stability
                 this._isStalled = false;
-                console.log('🔊 Jitter Buffer Primed - Starting Playback');
+                this.port.postMessage({ type: 'LOG', msg: '🔊 Jitter Buffer Primed - Playback Resumed' });
             } else {
                 outL.fill(0);
                 outR.fill(0);
@@ -52,22 +64,24 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             }
         }
 
-        if (available < 256) {
+        if (available < 512) {
             this._isStalled = true;
-            console.warn('⚠️ Audio Underflow - Re-buffering...');
+            this.port.postMessage({ type: 'LOG', msg: '⚠️ Audio Underflow - Re-buffering...' });
             outL.fill(0);
             outR.fill(0);
             return true;
         }
 
         for (let i = 0; i < outL.length; i++) {
-            // Linear Interpolation Resampling
-            const idx1 = (this._rPtr) % this._BUFFER_SIZE;
-            const idx2 = (this._rPtr + 2) % this._BUFFER_SIZE;
+            // [V13.8.134] SAFE INDEXING FOR STEREO INTERLEAVING
+            const idx1L = this._rPtr;
+            const idx1R = (this._rPtr + 1) % this._BUFFER_SIZE;
+            const idx2L = (this._rPtr + 2) % this._BUFFER_SIZE;
+            const idx2R = (this._rPtr + 3) % this._BUFFER_SIZE;
             const frac = this._phase;
 
-            const sampleL = this._ringBuffer[idx1] * (1 - frac) + this._ringBuffer[idx2] * frac;
-            const sampleR = this._ringBuffer[idx1 + 1] * (1 - frac) + this._ringBuffer[idx2 + 1] * frac;
+            const sampleL = this._ringBuffer[idx1L] * (1 - frac) + this._ringBuffer[idx2L] * frac;
+            const sampleR = this._ringBuffer[idx1R] * (1 - frac) + this._ringBuffer[idx2R] * frac;
 
             outL[i] = sampleL;
             outR[i] = sampleR;

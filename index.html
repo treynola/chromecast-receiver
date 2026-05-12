@@ -136,21 +136,47 @@
 
             function updateScale() { const winW = window.innerWidth; const winH = window.innerHeight; document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); }
 
-            async function initAudio() {
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+            async function initAudio(rate) {
+                const targetRate = rate || 44100;
+                if (!audioCtx || audioCtx.sampleRate !== targetRate) {
+                    if (audioCtx) {
+                        console.log(`📡 [V13.8.134] Re-initializing AudioContext: ${audioCtx.sampleRate} -> ${targetRate}`);
+                        await audioCtx.close();
+                    }
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.132');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.134');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
+                        
+                        // [V13.8.134] Diagnostic Relay to Studio
+                        workletNode.port.onmessage = (e) => {
+                            if (e.data.type === 'LOG') {
+                                console.log(`[WORKLET] ${e.data.msg}`);
+                                relayLogToStudio(e.data.msg);
+                            } else if (e.data.type === 'DIAG') {
+                                // Periodic buffer health relay
+                                if (Math.random() < 0.1) { // Throttled relay
+                                    relayLogToStudio(`Buffer: ${e.data.available} / 128000 (Stalled: ${e.data.stalled}, Rate: ${e.data.rate})`);
+                                }
+                            }
+                        };
+
                         workletNode.connect(audioCtx.destination);
-                        console.log('✅ Native Audio Sink Active (v13.8.132)');
+                        console.log(`✅ Native Audio Sink Active at ${targetRate}Hz (v13.8.134)`);
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') {
-                    // [V13.8.132] Aggressive resume
-                    audioCtx.resume().then(() => {
-                        console.log('🔊 AudioContext resumed successfully');
-                    }).catch(e => console.warn('AudioContext resume blocked by policy:', e));
+                    audioCtx.resume();
+                }
+            }
+
+            function relayLogToStudio(msg) {
+                const context = cast.framework.CastReceiverContext.getInstance();
+                const senders = context.getSenders();
+                if (senders.length > 0) {
+                    try {
+                        context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV LOG] ${msg}` });
+                    } catch(e) {}
                 }
             }
 
@@ -251,9 +277,12 @@
                 try {
                     const d = typeof data === 'string' ? JSON.parse(data) : data;
                     
-                    // [V13.8.134] Discovery of Sender IP for Binary Bridge
-                    if (d.type === 'BRIDGE_CONFIG' && d.ip) {
-                        connectBinaryBridge(d.ip);
+                    // [V13.8.134] Discovery of Sender IP and Config for Binary Bridge
+                    if (d.type === 'BRIDGE_CONFIG') {
+                        if (d.config && d.config.sampleRate) {
+                            initAudio(d.config.sampleRate);
+                        }
+                        if (d.ip) connectBinaryBridge(d.ip);
                         return;
                     }
 
