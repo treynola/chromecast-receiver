@@ -79,11 +79,12 @@
     </style>
 </head>
 <body class="app-loading">
-    <div class="container" id="studio-root">
-    <div id="audio-unlock-overlay" style="display:none;">
+    <div id="audio-unlock-overlay" style="display:flex;">
         <h1>AUDIO SUSPENDED</h1>
         <p>TAP OR CLICK ANYWHERE TO ACTIVATE SOUND</p>
+        <p style="font-size: 0.8em; margin-top: 20px; opacity: 0.7;">(Required by TV Browser Security)</p>
     </div>
+    <div class="container" id="studio-root">
     <div id="cursor-mirror"></div>
         <div class="header">
             <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
@@ -162,36 +163,31 @@
                 const targetRate = rate || 44100;
                 if (!audioCtx || audioCtx.sampleRate !== targetRate) {
                     if (audioCtx) {
-                        console.log(`📡 [V13.8.134] Re-initializing AudioContext: ${audioCtx.sampleRate} -> ${targetRate}`);
+                        console.log(`📡 [V13.8.136] Sample Rate Change: ${audioCtx.sampleRate} -> ${targetRate}`);
                         await audioCtx.close();
                     }
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.134');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.136');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet');
                         
-                        // [V13.8.135] Detailed Diagnostic Relay to Studio
                         workletNode.port.onmessage = (e) => {
-                            if (e.data.type === 'stall') {
-                                relayLogToStudio(`[STALL] Count: ${e.data.count} | Buffer: ${e.data.size}`);
-                            } else if (e.data.type === 'DIAG') {
-                                relayLogToStudio(`[TELEMETRY] Available: ${e.data.available} | StallCount: ${e.data.stalled} | Rate: ${e.data.rate}`);
-                                // Update Buffer Visual
+                            if (e.data.type === 'DIAG') {
                                 const bufEl = document.getElementById('buffer-health-bar');
                                 if (bufEl) {
                                     const percent = Math.min(100, (e.data.available / 44100) * 100);
                                     bufEl.style.width = percent + '%';
-                                    bufEl.style.backgroundColor = e.data.available < 8192 ? 'var(--red)' : 'var(--green)';
+                                    bufEl.style.backgroundColor = e.data.available < 2048 ? 'var(--red)' : 'var(--green)';
                                 }
                             }
                         };
 
                         workletNode.connect(audioCtx.destination);
-                        console.log(`✅ Native Audio Sink Active at ${targetRate}Hz (v13.8.134)`);
+                        relayLogToStudio(`✅ Audio Sink Active @ ${targetRate}Hz`);
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
                 if (audioCtx.state === 'suspended') {
-                    audioCtx.resume();
+                    document.getElementById('audio-unlock-overlay').style.display = 'flex';
                 }
             }
 
@@ -307,9 +303,15 @@
                 binaryWS.onmessage = async (event) => {
                     if (event.data instanceof ArrayBuffer) {
                         if (!audioCtx) await initAudio();
-                        await resumeAudio();
                         if (workletNode) {
                             workletNode.port.postMessage(event.data, [event.data]);
+                            
+                            // Visual Activity Indicator
+                            const conn = document.getElementById('bridge-status-dot');
+                            if (conn) {
+                                conn.style.backgroundColor = 'var(--green)';
+                                conn.style.boxShadow = '0 0 10px var(--green)';
+                            }
                         }
                     }
                 };
