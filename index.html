@@ -421,10 +421,33 @@
                 }, 3000);
 
                 context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-                    if (event.data && event.data.type === 'SINE_TEST') {
-                        playSineTest();
+                    if (event.data) {
+                        if (event.data.type === 'SINE_TEST') {
+                            playSineTest();
+                        } else if (event.data.type === 'PCM_RELAY') {
+                            // [V13.8.150] Handle Signal Relay (WebSocket Fallback)
+                            try {
+                                const binary = window.atob(event.data.data);
+                                const len = binary.length;
+                                const bytes = new Uint8Array(len);
+                                for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+                                
+                                if (!audioCtx) initAudio();
+                                if (workletNode) {
+                                    workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
+                                    // Visual Relay Indicator
+                                    const diagEl = document.getElementById('bridge-diag-text');
+                                    if (diagEl && !diagEl.textContent.includes('RELAY')) {
+                                        diagEl.textContent = diagEl.textContent.replace('WS:', 'WS: RELAY');
+                                        diagEl.style.color = 'var(--gold)';
+                                    }
+                                }
+                            } catch (e) {
+                                relayLogToStudio(`❌ TV Relay Error: ${e.message}`);
+                            }
+                        }
+                        handleInboundData(event.data);
                     }
-                    handleInboundData(event.data);
                 }); 
                 
                 // [v13.8.150] Attempt silent resume on connect
