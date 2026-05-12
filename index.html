@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.125 [STYLING & AUDIO FIX]</title>
+    <title>MXS-004 Studio Mirror v13.8.128 [STYLING & AUDIO FIX]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.125">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.128">
     <style>
-        /* [V13.8.125] Studio Perfection - Hardened UI & Audio */
+        /* [V13.8.128] Studio Perfection - Hardened UI & Audio */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -140,13 +140,15 @@
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
                     try {
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.125');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.128');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
                         workletNode.connect(audioCtx.destination);
-                        console.log('✅ Native Audio Sink Active (v13.8.125)');
+                        console.log('✅ Native Audio Sink Active (v13.8.128)');
                     } catch (e) { console.error('❌ Worklet Error:', e); }
                 }
-                if (audioCtx.state === 'suspended') audioCtx.resume();
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
+                }
             }
 
             function renderState(s) {

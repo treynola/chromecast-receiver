@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
  * PCMPlayerProcessor
- * [V13.8.118] High-Performance Jitter-Buffer & Resampler
+ * [V13.8.128] High-Performance Jitter-Buffer & Resampler
  * Handles real-time PCM playback with clock drift correction.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
