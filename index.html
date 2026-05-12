@@ -210,23 +210,60 @@
                 });
             }
 
+            let binaryWS = null;
+            let wsConnectTimeout = null;
+
+            function connectBinaryBridge(ip) {
+                if (binaryWS) binaryWS.close();
+                
+                const url = `ws://${ip}:8080`;
+                console.log(`📡 Connecting to Binary Bridge: ${url}`);
+                
+                binaryWS = new WebSocket(url);
+                binaryWS.binaryType = 'arraybuffer';
+                
+                binaryWS.onopen = () => {
+                    console.log('✅ Binary Bridge Connected');
+                    const m = document.getElementById('master-meter-bar');
+                    if (m) { m.style.boxShadow = '0 0 15px var(--green)'; setTimeout(() => m.style.boxShadow = '', 1000); }
+                };
+                
+                binaryWS.onmessage = (event) => {
+                    if (event.data instanceof ArrayBuffer) {
+                        if (!audioCtx) initAudio();
+                        if (workletNode) {
+                            workletNode.port.postMessage(event.data, [event.data]);
+                        }
+                    }
+                };
+                
+                binaryWS.onclose = () => {
+                    console.log('🛑 Binary Bridge Closed. Retrying in 5s...');
+                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+                };
+                
+                binaryWS.onerror = (e) => {
+                    console.error('❌ Binary Bridge Error:', e);
+                };
+            }
+
             function handleInboundData(data) {
                 try {
                     const d = typeof data === 'string' ? JSON.parse(data) : data;
+                    
+                    // [V13.8.134] Discovery of Sender IP for Binary Bridge
+                    if (d.type === 'BRIDGE_CONFIG' && d.ip) {
+                        connectBinaryBridge(d.ip);
+                        return;
+                    }
+
                     if (d.type === 'PCM_CHUNK') {
-                        initAudio();
-                        // [V13.8.133] Optimized decoding
+                        // [DEPRECATED] Keep as fallback for slow networks if binary bridge fails
                         const binary = window.atob(d.payload);
                         const len = binary.length;
                         const bytes = new Uint8Array(len);
                         for (let i = 0; i < len; i++) { bytes[i] = binary.charCodeAt(i); }
-                        
-                        if (workletNode) {
-                            workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
-                            // Heartbeat Visual
-                            const m = document.getElementById('master-meter-bar');
-                            if (m) { m.style.boxShadow = '0 0 10px #0f0'; setTimeout(() => m.style.boxShadow = '', 50); }
-                        }
+                        if (workletNode) workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
                     } else if (d.type === 'STATE_UPDATE') {
                         renderState(d.state);
                     }
@@ -237,11 +274,17 @@
                 buildGUI(); 
                 const context = cast.framework.CastReceiverContext.getInstance();
                 
-                // [V13.8.133] CAF Proactive Context Resumption
-                // Explicitly resume audio context when a sender connects to satisfy auto-play requirements.
-                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
+                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
                     console.log("📡 Sender connected - Resuming AudioContext...");
                     initAudio();
+                });
+
+                context.addEventListener(cast.framework.events.EventType.SENDER_DISCONNECTED, () => {
+                    if (binaryWS) {
+                        binaryWS.close();
+                        binaryWS = null;
+                    }
+                    if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
                 });
 
                 context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => handleInboundData(event.data)); 
