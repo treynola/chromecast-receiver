@@ -77,6 +77,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
     }
 
+    this._sampleCount = (this._sampleCount || 0) + 128;
+    if (this._sampleCount >= 44100) {
+      this.port.postMessage({ 
+        type: 'DIAG', 
+        available: this._bufferSize, 
+        stalled: this._stallCount,
+        rate: sampleRate 
+      });
+      this._sampleCount = 0;
+    }
+
     return true;
   }
 }

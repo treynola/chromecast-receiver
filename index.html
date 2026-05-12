@@ -101,6 +101,7 @@
                 </div>
                 <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
+                <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
             </div>
         </div>
     </div>
@@ -150,12 +151,10 @@
                         
                         // [V13.8.135] Detailed Diagnostic Relay to Studio
                         workletNode.port.onmessage = (e) => {
-                            if (e.data.type === 'LOG') {
-                                relayLogToStudio(e.data.msg);
+                            if (e.data.type === 'stall') {
+                                relayLogToStudio(`[STALL] Count: ${e.data.count} | Buffer: ${e.data.size}`);
                             } else if (e.data.type === 'DIAG') {
-                                // Detailed telemetry relay (Throttled by worklet internally, but we add more context here)
-                                const stats = `[TELEMETRY] Buf: ${e.data.available} | Stall: ${e.data.stalled} | Rate: ${e.data.rate} | Msgs: ${e.data.msgCount} | Samples: ${e.data.totalSamples} | LastSize: ${e.data.lastMsgSize}`;
-                                relayLogToStudio(stats);
+                                relayLogToStudio(`[TELEMETRY] Available: ${e.data.available} | StallCount: ${e.data.stalled} | Rate: ${e.data.rate}`);
                             }
                         };
 
@@ -165,6 +164,13 @@
                 }
                 if (audioCtx.state === 'suspended') {
                     audioCtx.resume();
+                }
+            }
+
+            async function resumeAudio() {
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                    console.log("🔊 Receiver: AudioContext Resumed.");
                 }
             }
 
@@ -186,9 +192,10 @@
                     var cur = document.getElementById('cursor-mirror'); 
                     if (cur) { 
                         cur.style.display = 'block'; 
-                        // [V13.8.132] Parent-relative coordinates (100% immune to scaling)
+                        // [V13.8.134] Parent-relative coordinates (100% immune to scaling)
+                        // Added +0.8% Y-Calibration to resolve "too high" report
                         var px = s.cursor.x * 100;
-                        var py = s.cursor.y * 100;
+                        var py = (s.cursor.y * 100) + 0.8; 
                         cur.style.left = px + '%';
                         cur.style.top = py + '%';
                         cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
@@ -252,9 +259,10 @@
                     if (m) { m.style.boxShadow = '0 0 15px var(--green)'; setTimeout(() => m.style.boxShadow = '', 1000); }
                 };
                 
-                binaryWS.onmessage = (event) => {
+                binaryWS.onmessage = async (event) => {
                     if (event.data instanceof ArrayBuffer) {
-                        if (!audioCtx) initAudio();
+                        if (!audioCtx) await initAudio();
+                        await resumeAudio();
                         if (workletNode) {
                             workletNode.port.postMessage(event.data, [event.data]);
                         }
@@ -299,7 +307,8 @@
 
             window.onload = function() { 
                 buildGUI(); 
-                const context = cast.framework.CastReceiverContext.getInstance();
+                window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
+                const context = window.castReceiverContext;
                 
                 context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
                     console.log("📡 Sender connected - Resuming AudioContext...");
