@@ -117,8 +117,11 @@
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
                 <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
                 <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
-                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 0.8em; z-index: 1000000; opacity: 0.5; pointer-events: none;">
+                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); color: #0f0; padding: 15px; font-family: 'Cousine', monospace; font-size: 1.4em; z-index: 1000000; border: 2px solid #0f0; border-radius: 8px; box-shadow: 0 0 20px rgba(0,255,0,0.5); min-width: 400px;">
                     BUF: -- | STALLS: -- | WS: DISCONNECTED
+                </div>
+                <div id="tv-console" style="position: fixed; top: 120px; left: 10px; width: 400px; height: 200px; background: rgba(0,0,0,0.7); color: #aaa; font-family: monospace; font-size: 0.7em; padding: 10px; overflow: hidden; z-index: 999999; border-radius: 4px; border: 1px solid #333; pointer-events: none;">
+                    <div id="tv-console-inner"></div>
                 </div>
                 <div class="buffer-status" style="font-size:0.6em; color:var(--gold); margin-top:2px; display:flex; flex-direction:column; gap:2px;">
                     <div style="display:flex; align-items:center; gap:5px;">
@@ -222,6 +225,13 @@
             });
 
             function relayLogToStudio(msg) {
+                const inner = document.getElementById('tv-console-inner');
+                if (inner) {
+                    const line = document.createElement('div');
+                    line.textContent = `> ${msg}`;
+                    inner.appendChild(line);
+                    if (inner.childNodes.length > 15) inner.removeChild(inner.firstChild);
+                }
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const senders = context.getSenders();
                 if (senders.length > 0) {
