@@ -99,12 +99,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._testBeepSamples--;
       }
 
-      channel0[i] = valL;
-      channel1[i] = valR;
+      channel0[i] = valL + (Math.random() - 0.5) * 1e-6;
+      channel1[i] = valR + (Math.random() - 0.5) * 1e-6;
     }
 
     this._sampleCount = (this._sampleCount || 0) + 128;
-    if (this._sampleCount >= 44100) {
+    if (this._sampleCount >= 11025) { 
       this.port.postMessage({ 
         type: 'DIAG', 
         available: this._bufferSize, 
