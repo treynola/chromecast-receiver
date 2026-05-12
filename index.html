@@ -301,21 +301,30 @@
             let wsConnectTimeout = null;
 
             function connectBinaryBridge(ip) {
-                if (binaryWS) binaryWS.close();
+                if (binaryWS) {
+                    try { binaryWS.close(); } catch(e) {}
+                }
                 
                 const url = `ws://${ip}:8080`;
-                relayLogToStudio(`📡 TV: Attempting WS Connect to ${url}`);
-                console.log(`📡 Connecting to Binary Bridge: ${url}`);
-                
-                binaryWS = new WebSocket(url);
-                binaryWS.binaryType = 'arraybuffer';
+                try {
+                    relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
+                    binaryWS = new WebSocket(url);
+                    binaryWS.binaryType = 'arraybuffer';
+                } catch (err) {
+                    relayLogToStudio(`❌ TV: WebSocket Constructor Failed: ${err.message}`);
+                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+                    return;
+                }
                 
                 binaryWS.onopen = () => {
                     console.log('✅ Binary Bridge Connected');
+                    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
                     const diagEl = document.getElementById('bridge-diag-text');
-                    if (diagEl) diagEl.textContent = diagEl.textContent.replace('DISCONNECTED', 'CONNECTED');
-                    const m = document.getElementById('master-meter-bar');
-                    if (m) { m.style.boxShadow = '0 0 15px var(--green)'; setTimeout(() => m.style.boxShadow = '', 1000); }
+                    if (diagEl) {
+                        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED|ERROR.*)/, 'WS: CONNECTED');
+                        diagEl.style.color = '#0f0';
+                        diagEl.style.borderColor = '#0f0';
+                    }
                     const conn = document.getElementById('bridge-status-dot');
                     if (conn) conn.style.backgroundColor = 'var(--green)';
                 };
