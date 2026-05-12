@@ -93,14 +93,14 @@
                     <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
                     <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em;">4.0s</span>
                 </div>
-                <div class="master-item master-bottom-item"><div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:10px;"><button id="master-record-button" class="rec-btn">REC</button><select id="record-as-select"><option value="master">Stereo (WAV)</option></select></div></div>
-                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px;">
-                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:2px;"><button id="lfo-toggle">LFO 1</button></div><div class="master-item lfo-meter-item" style="padding:2px;"><div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control"><label class="master-label" style="font-size:0.65em; margin:0;">Sweep 1</label><input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo-time-value" class="master-value" style="font-size:0.65em;">1.8s</span></div></div>
+                <div class="master-item master-bottom-item"><div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:2px;"><button id="master-record-button" class="rec-btn">REC</button><select id="record-as-select"><option value="master">Stereo (WAV)</option></select></div></div>
+                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:2px; margin-bottom:2px;">
+                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:1px;"><button id="lfo-toggle" style="height:22px; font-size:0.65em;">LFO 1</button></div><div class="master-item lfo-meter-item" style="padding:1px;"><div class="meter-container lfo-meter" style="height:3px;"><div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control" style="margin-top:0;"><label class="master-label" style="font-size:0.6em; margin:0;">Sweep 1</label><input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo-time-value" class="master-value" style="font-size:0.6em;">1.8s</span></div></div>
                     <div class="lfo-separator" style="width:1px; background:var(--gold); margin:0 4px;"></div>
-                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:2px;"><button id="lfo2-toggle">LFO 2</button></div><div class="master-item lfo-meter-item" style="padding:2px;"><div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control"><label class="master-label" style="font-size:0.65em; margin:0;">Sweep 2</label><input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em;">1.8s</span></div></div>
+                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:1px;"><button id="lfo2-toggle" style="height:22px; font-size:0.65em;">LFO 2</button></div><div class="master-item lfo-meter-item" style="padding:1px;"><div class="meter-container lfo-meter" style="height:3px;"><div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control" style="margin-top:0;"><label class="master-label" style="font-size:0.6em; margin:0;">Sweep 2</label><input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo2-time-value" class="master-value" style="font-size:0.6em;">1.8s</span></div></div>
                 </div>
-                <div class="master-item sample-center-container"><div class="track-header" style="text-align:center;">Sample Station</div><div class="sample-grid" id="sample-grid"></div></div>
-                <div class="master-bottom-buttons" style="margin-top: 8px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
+                <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
+                <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
             </div>
         </div>
     </div>
@@ -146,7 +146,7 @@
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     try {
                         await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.8.134');
-                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-processor');
+                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet');
                         
                         // [V13.8.135] Detailed Diagnostic Relay to Studio
                         workletNode.port.onmessage = (e) => {

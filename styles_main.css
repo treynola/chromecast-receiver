@@ -791,8 +791,8 @@ img {
     width: 100%;
     align-items: flex-start;
     border-bottom: 1px solid var(--mid-gray);
-    padding: 4px 0;
-    margin: 7px 0 5px 0;
+    padding: 2px 0;
+    margin: 5px 0 2px 0;
     background-color: rgba(0, 0, 0, 0.2);
 }
 
@@ -3734,8 +3734,8 @@ select option {
     /* Reduced from 95% to prevent side clipping */
     box-sizing: border-box;
     /* Ensure padding/border doesn't add to width */
-    margin: 15px auto 10px auto;
-    /* Reverted to 15px (stable) from 5px (broken) */
+    margin: 4px auto 4px auto;
+    /* Reduced from 15px/10px for tighter GUI density */
     display: flex;
     flex-direction: column;
     align-items: center;
