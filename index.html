@@ -36,10 +36,23 @@
         }
         .master-column {
             border: 1px solid var(--green) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2px !important;
         }
-        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 5px !important; }
+        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 2px !important; }
         .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
         .hidden { display: none !important; }
+        
+        #audio-unlock-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); color: var(--gold);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100000; cursor: pointer; text-align: center;
+            font-family: 'Mexcellent', sans-serif;
+        }
+        #audio-unlock-overlay h1 { font-size: 3em; margin-bottom: 20px; }
+        #audio-unlock-overlay p { font-size: 1.5em; font-family: 'Cousine', monospace; }
         
         .scrolling-text-wrapper { overflow: hidden; white-space: nowrap; width: 100%; position: relative; }
         .scrolling-text { display: inline-block; padding-left: 100%; animation: scroll-text 10s linear infinite; font-size: 0.7em; }
@@ -67,7 +80,11 @@
 </head>
 <body class="app-loading">
     <div class="container" id="studio-root">
-        <div id="cursor-mirror"></div>
+    <div id="audio-unlock-overlay" style="display:none;">
+        <h1>AUDIO SUSPENDED</h1>
+        <p>TAP OR CLICK ANYWHERE TO ACTIVATE SOUND</p>
+    </div>
+    <div id="cursor-mirror"></div>
         <div class="header">
             <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
             <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: v13.8.133</h2></div>
@@ -168,11 +185,27 @@
             }
 
             async function resumeAudio() {
-                if (audioCtx && audioCtx.state === 'suspended') {
-                    await audioCtx.resume();
-                    console.log("🔊 Receiver: AudioContext Resumed.");
+                if (audioCtx) {
+                    if (audioCtx.state === 'suspended') {
+                        document.getElementById('audio-unlock-overlay').style.display = 'flex';
+                        await audioCtx.resume();
+                        if (audioCtx.state === 'running') {
+                            document.getElementById('audio-unlock-overlay').style.display = 'none';
+                            console.log("🔊 Receiver: AudioContext Resumed.");
+                        }
+                    } else {
+                        document.getElementById('audio-unlock-overlay').style.display = 'none';
+                    }
                 }
             }
+
+            // Global interaction listener to unlock audio
+            window.addEventListener('click', () => {
+                resumeAudio();
+            });
+            window.addEventListener('touchstart', () => {
+                resumeAudio();
+            });
 
             function relayLogToStudio(msg) {
                 const context = cast.framework.CastReceiverContext.getInstance();
@@ -193,9 +226,9 @@
                     if (cur) { 
                         cur.style.display = 'block'; 
                         // [V13.8.134] Parent-relative coordinates (100% immune to scaling)
-                        // Added +0.8% Y-Calibration to resolve "too high" report
+                        // Added +1.6% Y-Calibration to resolve "too high" report (approx 13px)
                         var px = s.cursor.x * 100;
-                        var py = (s.cursor.y * 100) + 0.8; 
+                        var py = (s.cursor.y * 100) + 1.6; 
                         cur.style.left = px + '%';
                         cur.style.top = py + '%';
                         cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
@@ -323,7 +356,26 @@
                     if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
                 });
 
-                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => handleInboundData(event.data)); 
+                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+                    if (event.data && event.data.type === 'SINE_TEST') {
+                        playSineTest();
+                    }
+                    handleInboundData(event.data);
+                }); 
+
+                function playSineTest() {
+                    if (!audioCtx) initAudio();
+                    const osc = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    osc.connect(g);
+                    g.connect(audioCtx.destination);
+                    g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 1);
+                    relayLogToStudio("🔊 Sine Test Played on Receiver");
+                }
+
                 context.start({ disableIdleTimeout: true }); 
                 window.addEventListener('resize', updateScale); 
             };
