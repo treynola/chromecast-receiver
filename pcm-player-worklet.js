@@ -12,7 +12,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._bufferSize = 0;
     
     this._MIN_BUFFER = 2048; 
-    this._PREBUFFER = 4096;  
+    this._PREBUFFER = 12288; // 250ms buffer to survive TV WiFi jitter
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
