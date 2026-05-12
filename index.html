@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css?v=13.8.132">
     <style>
-        /* [V13.8.132] Studio Perfection - Hardened UI & Audio */
+        /* [v13.8.150] Studio Perfection - Hardened UI & Audio */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -61,7 +61,7 @@
             100% { transform: translateX(-100%); }
         }
 
-        /* [V13.8.125] ORIGINAL .APP BUTTON STYLING */
+        /* [v13.8.150] ORIGINAL .APP BUTTON STYLING */
         .track-buttons { display: flex; justify-content: space-between; gap: 2px; margin: 5px 0; }
         .track-buttons button { flex: 1; height: 24px; font-size: 0.75em; font-family: 'Cousine', monospace; font-weight: 720; cursor: pointer; text-transform: uppercase; border-radius: 4px; }
         
@@ -116,7 +116,7 @@
                 <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
                 <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
-                <!-- [V13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
+                <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
                 <div id="invisible-shield" style="position:fixed; top:0; left:0; width:100%; height:100%; z-index:999999; cursor:pointer;" onclick="initAudio(); resumeAudio(); this.remove();"></div>
                 <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 1.2em; z-index: 1000000; border: 1px solid #0f0; border-radius: 4px;">
                     BUF: -- | STALLS: -- | WS: DISCONNECTED
@@ -166,12 +166,12 @@
                 const targetRate = rate || 44100;
                 if (!audioCtx || audioCtx.sampleRate !== targetRate) {
                     if (audioCtx) {
-                        console.log(`📡 [V13.8.136] Sample Rate Change: ${audioCtx.sampleRate} -> ${targetRate}`);
+                        console.log(`📡 [v13.8.150] Sample Rate Change: ${audioCtx.sampleRate} -> ${targetRate}`);
                         await audioCtx.close();
                     }
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     try {
-                        // [V13.8.150] Removed query string for TV compatibility
+                        // [v13.8.150] Removed query string for TV compatibility
                         await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet');
                         
@@ -242,7 +242,7 @@
                     var cur = document.getElementById('cursor-mirror'); 
                     if (cur) { 
                         cur.style.display = 'block'; 
-                        // [V13.8.134] Parent-relative coordinates (100% immune to scaling)
+                        // [v13.8.150] Parent-relative coordinates (100% immune to scaling)
                         // Added +1.6% Y-Calibration to resolve "too high" report (approx 13px)
                         var px = s.cursor.x * 100;
                         var py = (s.cursor.y * 100) + 1.6; 
@@ -344,12 +344,19 @@
                 
                 binaryWS.onerror = (e) => {
                     console.error('❌ Binary Bridge Error:', e);
-                    relayLogToStudio(`❌ TV: WebSocket Error (Check Firewall/IP)`);
+                    relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
                     const diagEl = document.getElementById('bridge-diag-text');
                     if (diagEl) {
-                        const wsStatus = 'ERROR';
-                        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED)/, `WS: ${wsStatus}`);
+                        diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
+                        diagEl.style.color = 'var(--red)';
+                        diagEl.style.borderColor = 'var(--red)';
                     }
+                    // [V13.8.150] Retry loop
+                    if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
+                    wsConnectTimeout = setTimeout(() => {
+                        console.log("📡 TV: Retrying Binary Bridge...");
+                        connectBinaryBridge(ip);
+                    }, 5000);
                 };
             }
 
@@ -357,7 +364,7 @@
                 try {
                     const d = typeof data === 'string' ? JSON.parse(data) : data;
                     
-                    // [V13.8.134] Discovery of Sender IP and Config for Binary Bridge
+                    // [v13.8.150] Discovery of Sender IP and Config for Binary Bridge
                     if (d.type === 'BRIDGE_CONFIG') {
                         if (d.config && d.config.sampleRate) {
                             initAudio(d.config.sampleRate);
@@ -397,7 +404,7 @@
                     if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
                 });
 
-                // [V13.8.150] Auto-Discovery Fallback
+                // [v13.8.150] Auto-Discovery Fallback
                 // If we don't get a BRIDGE_CONFIG within 3 seconds, try the last known Studio IP.
                 setTimeout(() => {
                     if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
@@ -413,7 +420,7 @@
                     handleInboundData(event.data);
                 }); 
                 
-                // [V13.8.150] Attempt silent resume on connect
+                // [v13.8.150] Attempt silent resume on connect
                 context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
                     initAudio();
                     resumeAudio();
