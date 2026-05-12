@@ -30,7 +30,13 @@
             width: 100% !important;
             height: calc(100% - 40px) !important;
         }
-        .track { background: rgba(20, 20, 20, 0.8) !important; border: 1px solid #333 !important; }
+        .track { 
+            background: rgba(20, 20, 20, 0.8) !important; 
+            border: 1px solid var(--green) !important; 
+        }
+        .master-column {
+            border: 1px solid var(--green) !important;
+        }
         .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 5px !important; }
         .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
         .hidden { display: none !important; }
