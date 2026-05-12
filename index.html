@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.116 [ULTRA-LOW LATENCY]</title>
+    <title>MXS-004 Studio Mirror v13.8.117 [NATIVE AUDIO]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="//www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.8.116">
+    <link rel="stylesheet" href="styles_main.css?v=13.8.117">
     <style>
-        /* [V13.8.116] Audio & Pad Perfectionist Overrides */
+        /* [V13.8.117] Native App Logic (No Overlays) */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -16,7 +16,6 @@
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
             opacity: 1 !important; visibility: visible !important; display: flex !important;
             background-color: #000 !important;
-            box-shadow: 0 0 0 2px #FAD78E, 0 0 0 4px #FF0000;
         }
         #cursor-mirror {
             position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.9); 
@@ -35,7 +34,7 @@
             height: calc(100% - 60px) !important;
         }
         
-        /* Definitive Pad Symmetry */
+        /* Definitive Pad Symmetry (Studio-Perfect) */
         .sample-grid {
             display: grid !important;
             grid-template-columns: repeat(4, 1fr) !important;
@@ -45,35 +44,20 @@
         .sample-btn {
             aspect-ratio: 1.0 !important;
             font-family: 'Cousine', monospace !important;
-            font-size: 0.8em !important;
+            font-size: 1.1em !important; /* Increased for Studio Parity */
             font-weight: 720 !important;
             border-radius: 8px !important;
-            border-width: 2px !important;
+            border-width: 3px !important; /* Thicker border */
             padding: 1px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             text-transform: uppercase;
         }
-        
-        /* Audio Unlock Prompt (if needed) */
-        #audio-unlock-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 100000;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            color: var(--gold); font-family: 'Mexcellent', sans-serif; visibility: hidden;
-        }
     </style>
 </head>
 <body class="app-loading">
-    <audio id="silent-loop" loop muted autoplay src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
-    <cast-media-player></cast-media-player>
     <div id="cursor-mirror"></div>
-    <div id="audio-unlock-overlay">
-        <i class="fa-solid fa-volume-high" style="font-size: 3em; margin-bottom: 20px;"></i>
-        <h1>TAP SCREEN OR REMOTE TO START LIVE AUDIO</h1>
-    </div>
-
     <div class="container" id="studio-root">
         <div class="header">
             <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
@@ -81,7 +65,6 @@
         </div>
 
         <div class="main-content" id="main-grid">
-            <!-- Column 1: MASTER -->
             <div class="master-column" id="master-column">
                 <div class="track-header">Master Recording:</div>
                 <div id="recording-time-display" class="track-time-display">00:00:00</div>
@@ -92,10 +75,7 @@
                 </div>
                 <div class="master-item master-waveform-item">
                     <div class="waveform-box master-waveform-box">
-                        <div class="waveform-labels">
-                            <div class="waveform-label-external" style="margin-top: 2px;">L</div>
-                            <div class="waveform-label-external">R</div>
-                        </div>
+                        <div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div>
                         <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;">
                             <canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas>
                             <canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas>
@@ -110,30 +90,18 @@
                 <div class="master-item master-bottom-item">
                     <div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:8px;">
                         <button id="master-record-button" class="rec-btn">REC</button>
-                        <select id="record-as-select" style="background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; font-size:0.75em; flex:1;">
-                            <option value="master">Stereo (WAV)</option>
-                            <option value="mp4">Stereo (MP4)</option>
-                            <option value="stems">Stems (WAV)</option>
-                        </select>
+                        <select id="record-as-select" style="background:#333; color:var(--gold); border:1px solid var(--gold); border-radius:4px; font-size:0.75em; flex:1;"><option value="master">Stereo (WAV)</option></select>
                     </div>
                 </div>
                 <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:17px; gap:8px;">
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 1</button>
                         <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo-meter-bar" class="meter-bar"></div></div>
-                        <div class="master-item lfo-sweep-control">
-                            <label style="font-size:0.65em; margin:0; color:var(--green);">Sweep 1</label>
-                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div>
-                        </div>
                     </div>
                     <div class="lfo-separator" style="width:1px; background:var(--gold);"></div>
                     <div class="lfo-column" style="flex:1; display:flex; flex-direction:column; gap:4px;">
                         <button id="lfo2-toggle" style="width:100%; height:20px; font-size:0.65em;">LFO 2</button>
                         <div class="meter-container lfo-meter" style="height:4px;"><div id="lfo2-meter-bar" class="meter-bar"></div></div>
-                        <div class="master-item lfo-sweep-control">
-                            <label style="font-size:0.65em; margin:0; color:var(--green);">Sweep 2</label>
-                            <div style="display:flex; align-items:center; gap:3px;"><input type="range" id="lfo2-time" min="0.1" max="20" class="pa-mic-slider" style="flex:1; height:8px;"><span id="lfo2-time-value" class="master-value" style="font-size:0.65em; color:var(--gold);">1.8s</span></div>
-                        </div>
                     </div>
                 </div>
                 <div class="sample-center-container" style="margin-top:8px;">
@@ -148,7 +116,6 @@
                 </div>
                 <div class="meter-container" style="height:6px;"><div id="master-meter-bar" class="meter-bar"></div></div>
             </div>
-            <!-- Dynamic Tracks will be injected here -->
         </div>
     </div>
 
@@ -203,15 +170,8 @@
                         <div class="main-controls">
                             ${[{l:'Pitch',p:'pitch'},{l:'Vol',p:'vol'},{l:'Pan',p:'pan'},{l:'Treb',p:'treble'},{l:'M-Fr',p:'mid_freq'},{l:'M-Gn',p:'mid_gain'},{l:'Bass',p:'bass'}].map(cfg => `
                                 <div class="knob-container">
-                                    <div class="knob-label-group">
-                                        <label>${cfg.l}</label>
-                                        <span class="param-value" id="t-${cfg.p}-val-${i}">0</span>
-                                        <input type="checkbox" class="lfo-assign" id="t-lfo1-${cfg.p}-${i}">
-                                        <input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-${cfg.p}-${i}">
-                                    </div>
-                                    <div class="slider-wrapper">
-                                        <input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;">
-                                    </div>
+                                    <div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span></div>
+                                    <div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider" style="height:6px;"></div>
                                 </div>
                             `).join('')}
                         </div>
@@ -227,35 +187,21 @@
                 document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98);
             }
 
-            function tryUnlock() {
+            function initAudio() {
                 if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'interactive' });
-                }
-                if (audioCtx.state === 'suspended') {
-                    document.getElementById('audio-unlock-overlay').style.visibility = 'visible';
-                    audioCtx.resume().then(() => {
-                        if (audioCtx.state === 'running') {
-                            document.getElementById('audio-unlock-overlay').style.visibility = 'hidden';
-                            startAudio();
-                        }
-                    });
-                } else if (audioCtx.state === 'running') {
-                    document.getElementById('audio-unlock-overlay').style.visibility = 'hidden';
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
                     startAudio();
                 }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
             }
 
             function startAudio() {
                 if (scriptNode) return;
-                // [V13.8.116] Jitter-Optimized Buffer Handler
                 scriptNode = audioCtx.createScriptProcessor(1024, 0, 2); 
                 scriptNode.onaudioprocess = (e) => {
                     const oL = e.outputBuffer.getChannelData(0); const oR = e.outputBuffer.getChannelData(1);
                     const av = (wPtr - rPtr + BUFFER_SIZE) % BUFFER_SIZE;
-                    
-                    // High-Performance Jitter Buffer (Target 2048 samples = ~42ms)
                     if (av < 2048) { oL.fill(0); oR.fill(0); return; }
-                    
                     let mx = 0;
                     for (let i = 0; i < 1024; i++) {
                         const vL = ringBuffer[rPtr]; const vR = ringBuffer[(rPtr+1)%BUFFER_SIZE];
@@ -270,6 +216,7 @@
 
             function renderState(s) {
                 if (!s) return;
+                initAudio(); // Auto-init on every state update
                 if (s.transport) {
                     document.getElementById('recording-time-display').textContent = s.transport.position;
                     for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; }
@@ -281,8 +228,6 @@
                 if (s.master) {
                     var mVol = document.getElementById('master-volume'); if (mVol) mVol.value = s.master.volume || 0;
                     var mVal = document.getElementById('master-volume-value'); if (mVal) mVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
-                    var loopSl = document.getElementById('loop-length'); if (loopSl) loopSl.value = s.master.loopLength || 4.0;
-                    var loopVal = document.getElementById('loop-length-value'); if (loopVal) loopVal.textContent = (s.master.loopLength || 4.0).toFixed(1) + 's';
                     var mRec = document.getElementById('master-record-button'); if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
                 }
                 if (s.sampler) s.sampler.forEach((p,i) => {
@@ -297,26 +242,17 @@
                     var fn = document.getElementById('t-file-'+i); if (fn) fn.textContent = t.fileName || '(Empty)';
                     var m = document.getElementById('t-mtr-'+i); if (m) m.style.width = (t.meters?.l * 100 || 0) + '%';
                     var bRec = document.getElementById('t-btn-rec-'+i); if (bRec) bRec.className = t.isRecording ? 'recording' : '';
-                    var bPlay = document.getElementById('t-btn-play-'+i); if (bPlay) bPlay.className = t.isPlaying ? 'playing' : '';
                     var st = document.getElementById('t-st-'+i);
                     if (st) {
                         st.textContent = t.isRecording ? 'Recording' : (t.isPlaying ? 'Playing' : 'Ready');
                         st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
                     }
-                    var ig = document.getElementById('t-ig-sl-'+i); if (ig) ig.value = t.inputGain || 0;
-                    var igv = document.getElementById('t-ig-val-'+i); if (igv) igv.textContent = (t.inputGain || 0).toFixed(1) + ' dB';
-
                     ['pitch','vol','pan','treble','mid_freq','mid_gain','bass'].forEach(p => {
                         var sl = document.getElementById('t-'+p+'-sl-'+i); if (sl) sl.value = t[p] || 0;
                         var val = document.getElementById('t-'+p+'-val-'+i); if (val) val.textContent = (t[p] || 0).toFixed(p.includes('freq')?0:1);
-                        var l1 = document.getElementById('t-lfo1-'+p+'-'+i); if (l1) l1.checked = t.lfo1Targets?.includes(p);
-                        var l2 = document.getElementById('t-lfo2-'+p+'-'+i); if (l2) l2.checked = t.lfo2Targets?.includes(p);
                     });
-                    var ls = document.getElementById('t-ls-m-'+i); if (ls) ls.style.left = (t.loopStart * 100) + '%';
-                    var le = document.getElementById('t-le-m-'+i); if (le) le.style.left = (t.loopEnd * 100) + '%';
                 });
                 var mm = document.getElementById('master-meter-bar'); if (mm) mm.style.width = (pk * 100) + '%';
-                tryUnlock();
             }
 
             function connect(url) {
@@ -325,6 +261,7 @@
                 ws = new WebSocket(url); ws.binaryType = 'arraybuffer';
                 ws.onmessage = (e) => {
                     if (e.data instanceof ArrayBuffer) {
+                        initAudio(); // Auto-init on audio data arrival
                         const i16 = new Int16Array(e.data);
                         for (let i = 0; i < i16.length; i++) { ringBuffer[wPtr] = i16[i] / 32768.0; wPtr = (wPtr + 1) % BUFFER_SIZE; }
                     } else {
@@ -346,8 +283,7 @@
                 });
                 ctx.start({ disableIdleTimeout: true });
                 window.addEventListener('resize', updateScale);
-                document.body.onclick = tryUnlock;
-                setInterval(tryUnlock, 1000);
+                setInterval(initAudio, 500); // Silent heartbeat to keep audio context alive
             };
         })();
     </script>
