@@ -199,8 +199,7 @@
                         relayLogToStudio(`❌ TV ERROR: Worklet init failed - ${e.message}`);
                     }
                 }
-                    }
-                }
+            }
 
             async function resumeAudio() {
                 if (audioCtx && audioCtx.state === 'suspended') {
@@ -465,7 +464,8 @@
                 }, 500);
 
                 window.addEventListener('resize', updateScale); 
-                relayLogToStudio("🎬 TV: Startup Complete.");            };
+                relayLogToStudio("🎬 TV: Startup Complete.");
+            };
         })();
     </script>
 </body>
