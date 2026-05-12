@@ -11,15 +11,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    this._MIN_BUFFER = 2048; // Increased for stability
-    this._PREBUFFER = 8192;  // Increased to prevent early stalling
+    this._MIN_BUFFER = 2048; 
+    this._PREBUFFER = 4096;  
     this._isBuffering = true;
     this._stallCount = 0;
+    this._sampleCount = 0;
 
     this.port.onmessage = (e) => {
       try {
         if (e.data.type === 'TEST_BEEP') {
           this._testBeepSamples = 44100; // 1 second of beep
+          console.log('🔈 Receiver: Worklet Beep Triggered');
           return;
         }
         const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
@@ -49,6 +51,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
   process(inputs, outputs) {
     const output = outputs[0];
+    const blockSize = output[0].length;
+    
+    // Heartbeat for diagnostic verification
+    if (Math.random() < 0.002) {
+      this.port.postMessage({ type: 'DIAG', available: this._bufferSize, stalled: this._stalledCount, rate: sampleRate });
+    }
     const channel0 = output[0];
     const channel1 = output[1];
 

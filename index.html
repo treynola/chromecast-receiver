@@ -230,7 +230,7 @@
 
             function renderState(s) {
                 if (!s) return;
-                initAudio();
+                // initAudio(); // Removed to prevent race conditions during high-frequency updates
                 if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
                 if (s.cursor) { 
                     var cur = document.getElementById('cursor-mirror'); 
