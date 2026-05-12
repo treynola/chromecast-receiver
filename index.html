@@ -188,7 +188,7 @@
                                 const diagEl = document.getElementById('bridge-diag-text');
                                 if (diagEl) {
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
-                                    diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled} | WS: ${wsStatus}`;
+                                    diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled || 0} | WS: ${wsStatus}`;
                                 }
                             }
                         };
@@ -298,6 +298,7 @@
                 if (binaryWS) binaryWS.close();
                 
                 const url = `ws://${ip}:8080`;
+                relayLogToStudio(`📡 TV: Attempting WS Connect to ${url}`);
                 console.log(`📡 Connecting to Binary Bridge: ${url}`);
                 
                 binaryWS = new WebSocket(url);
@@ -338,6 +339,12 @@
                 
                 binaryWS.onerror = (e) => {
                     console.error('❌ Binary Bridge Error:', e);
+                    relayLogToStudio(`❌ TV: WebSocket Error (Check Firewall/IP)`);
+                    const diagEl = document.getElementById('bridge-diag-text');
+                    if (diagEl) {
+                        const wsStatus = 'ERROR';
+                        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED)/, `WS: ${wsStatus}`);
+                    }
                 };
             }
 
