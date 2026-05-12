@@ -120,12 +120,14 @@
                 <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
                 <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
                 <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
+                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 1.2em; z-index: 1000000; border: 1px solid #0f0; border-radius: 4px;">
+                    BUF: -- | STALLS: -- | WS: DISCONNECTED
+                </div>
                 <div class="buffer-status" style="font-size:0.6em; color:var(--gold); margin-top:2px; display:flex; flex-direction:column; gap:2px;">
                     <div style="display:flex; align-items:center; gap:5px;">
                         <div id="bridge-status-dot" style="width:8px; height:8px; border-radius:50%; background:var(--red);"></div>
                         BRIDGE: <div class="meter-container" style="flex:1; height:4px; background:#222;"><div id="buffer-health-bar" style="width:0; height:100%; background:var(--green); transition: width 0.1s;"></div></div>
                     </div>
-                    <div id="bridge-diag-text" style="font-family:monospace; opacity:0.8; text-align:right;">BUF: 0 | STALLS: 0</div>
                 </div>
             </div>
         </div>
@@ -184,7 +186,10 @@
                                 }
                                 // Update Diagnostic Text
                                 const diagEl = document.getElementById('bridge-diag-text');
-                                if (diagEl) diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled}`;
+                                if (diagEl) {
+                                    const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
+                                    diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled} | WS: ${wsStatus}`;
+                                }
                             }
                         };
 
@@ -300,6 +305,8 @@
                 
                 binaryWS.onopen = () => {
                     console.log('✅ Binary Bridge Connected');
+                    const diagEl = document.getElementById('bridge-diag-text');
+                    if (diagEl) diagEl.textContent = diagEl.textContent.replace('DISCONNECTED', 'CONNECTED');
                     const m = document.getElementById('master-meter-bar');
                     if (m) { m.style.boxShadow = '0 0 15px var(--green)'; setTimeout(() => m.style.boxShadow = '', 1000); }
                     const conn = document.getElementById('bridge-status-dot');
