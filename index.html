@@ -120,6 +120,10 @@
                 <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); color: #0f0; padding: 15px; font-family: 'Cousine', monospace; font-size: 1.4em; z-index: 1000000; border: 2px solid #0f0; border-radius: 8px; box-shadow: 0 0 20px rgba(0,255,0,0.5); min-width: 400px;">
                     BUF: -- | STALLS: -- | WS: DISCONNECTED
                 </div>
+                <!-- [v13.8.150] Silent Video Hot-Wire (Unlocks Auto-Play) -->
+                <video id="audio-unlocker" playsinline muted autoplay loop style="position:fixed; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none;">
+                    <source src="https://raw.githubusercontent.com/anars/blank-audio/master/silent-1sec.mp4" type="video/mp4">
+                </video>
                 <div id="tv-console" style="position: fixed; top: 120px; left: 10px; width: 400px; height: 200px; background: rgba(0,0,0,0.7); color: #aaa; font-family: monospace; font-size: 0.7em; padding: 10px; overflow: hidden; z-index: 999999; border-radius: 4px; border: 1px solid #333; pointer-events: none;">
                     <div id="tv-console-inner"></div>
                 </div>
@@ -197,6 +201,13 @@
                         });
                         workletNode.connect(masterGain);
                         
+                        // Force System Volume (TV Level)
+                        try {
+                            const context = cast.framework.CastReceiverContext.getInstance();
+                            context.setSystemVolume(1.0);
+                            relayLogToStudio("✅ TV: System Volume Forced to 100%");
+                        } catch(e) {}
+
                         relayLogToStudio(`✅ TV: Audio Sink Active @ ${targetRate}Hz`);
 
                         workletNode.port.onmessage = (e) => {
