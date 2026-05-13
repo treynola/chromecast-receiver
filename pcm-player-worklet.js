@@ -1,27 +1,34 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Ultra-Smooth High-Fidelity [v13.8.150]
- * Uses Linear Resampling Interpolation (ASRC) for click-free playback.
+ * PCM Player AudioWorkletProcessor - Studio Pulse [v13.8.160]
+ * Uses PID-controlled Adaptive Sync and Linear Interpolation.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this._ringBuffer = new Float32Array(48000 * 4); // 4 seconds at 48kHz
-    this._readPtr = 0.0;  // FRACTIONAL read pointer
+    this._readPtr = 0.0;
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // Safety Thresholds (Deeper for Super-Packet stability)
-    this._MIN_BUFFER = 12288; // 256ms @ 48kHz (Survival against jitter)
-    this._PREBUFFER = 28800;  // 600ms (Rock-solid start)
-    this._TARGET_BUFFER = 19200; // 400ms target
+    // [v13.8.160] Studio Pulse Config
+    this._TARGET_BUFFER = 7200; // 150ms @ 48kHz (Low Latency Target)
+    this._MIN_BUFFER = 2400;    // 50ms (Lower limit)
+    this._PREBUFFER = 9600;     // 200ms (Start threshold)
     
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0; 
-    this._playbackRate = 1.0; 
+    
+    // PID Sync Controller Variables
+    this._playbackRate = 1.0;
+    this._errorSum = 0;
+    this._lastError = 0;
+    this._kp = 0.0000001; // Proportional gain
+    this._ki = 0.000000001; // Integral gain
+    this._kd = 0.000001; // Derivative gain
 
     this.port.onmessage = (e) => {
       try {
@@ -69,18 +76,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.150] Ultra-Soft ASRC (0.02% drift max)
-    const drift = this._bufferSize - this._TARGET_BUFFER;
-    if (Math.abs(drift) > 4800) { // If drift > 100ms
-        this._playbackRate = (drift > 0) ? 1.0002 : 0.9998;
-    } else {
-        this._playbackRate = 1.0;
-    }
+    // [v13.8.160] PID Adaptive Sync
+    const error = this._bufferSize - this._TARGET_BUFFER;
+    this._errorSum += error;
+    const errorDiff = error - this._lastError;
+    this._lastError = error;
+
+    // Calculate adjustment (clamped for transparency)
+    const adj = (error * this._kp) + (this._errorSum * this._ki) + (errorDiff * this._kd);
+    this._playbackRate = Math.max(0.995, Math.min(1.005, 1.0 + adj));
 
     const ringLen = this._ringBuffer.length;
 
     for (let i = 0; i < channel0.length; i++) {
       if (this._bufferSize >= 4) {
+        // Linear Interpolation
         const iL = Math.floor(this._readPtr);
         const nextIL = (iL + 2) % ringLen;
         const fract = (this._readPtr - iL) / 2;
@@ -119,7 +129,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         available: Math.floor(this._bufferSize), 
         stalled: this._stallCount,
         peak: this._currentPeak,
-        rate: this._playbackRate
+        rate: this._playbackRate,
+        locked: (Math.abs(error) < 500)
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
@@ -130,4 +141,3 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('pcm-player-worklet', PCMPlayerProcessor);
-

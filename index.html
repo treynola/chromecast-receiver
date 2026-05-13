@@ -217,8 +217,9 @@
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
                                     const peakPercent = Math.round((e.data.peak || 0) * 100);
                                     const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
+                                    const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | VU: ${peakPercent}% | WS: ${wsStatus} [ULTRA-HIFI]`;
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [STUDIO PULSE]`;
                                 }
                             }
                         };
@@ -472,33 +473,16 @@
                         if (event.data.type === 'SINE_TEST') {
                             playSineTest();
                         } else if (event.data.type === 'PCM_RELAY') {
-                            // [V13.8.150] High-Fi Super Packet Unbundler
-                            let buffer = event.data.binary;
-                            
-                            // Fallback for Base64 (Legacy/Diagnostic)
-                            if (!buffer && event.data.data) {
-                                try {
-                                    const bString = window.atob(event.data.data);
-                                    const bytes = new Uint8Array(bString.length);
-                                    for(let i=0; i<bString.length; i++) bytes[i] = bString.charCodeAt(i);
-                                    buffer = bytes.buffer;
-                                } catch(e) { buffer = null; }
-                            }
-
+                            // [V13.8.160] Studio Pulse: Direct Feed
+                            let buffer = event.data.binary || event.data.data;
                             if (buffer && workletNode) {
-                                // 16KB Super Packet contains multiple chunks
-                                const totalLen = buffer.byteLength;
-                                const chunkSize = 2048; // 1024 samples * 2 bytes
-                                
-                                for (let offset = 0; offset < totalLen; offset += chunkSize) {
-                                    const chunk = buffer.slice(offset, offset + chunkSize);
-                                    try {
-                                        workletNode.port.postMessage(chunk, [chunk]);
-                                    } catch(e) {
-                                        workletNode.port.postMessage(chunk);
-                                    }
+                                // Direct post to worklet (No slicing = No Jitter)
+                                try {
+                                    workletNode.port.postMessage(buffer, [buffer]);
+                                } catch(e) {
+                                    workletNode.port.postMessage(buffer);
                                 }
-                                window._relayPkts = (window._relayPkts || 0) + (totalLen / chunkSize);
+                                window._relayPkts = (window._relayPkts || 0) + 1;
                             }
                         }
                         handleInboundData(event.data);
