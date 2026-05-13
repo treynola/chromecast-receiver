@@ -464,39 +464,30 @@
                         if (event.data.type === 'SINE_TEST') {
                             playSineTest();
                         } else if (event.data.type === 'PCM_RELAY') {
-                            // [V13.8.150] Optimized Unbundler
-                            try {
-                                const binary = window.atob(event.data.data);
-                                const totalLen = binary.length;
-                                const bytes = new Uint8Array(totalLen);
-                                for (let i = 0; i < totalLen; i++) bytes[i] = binary.charCodeAt(i);
-                                
-                                if (!audioCtx) initAudio();
-                                if (workletNode) {
-                                    // [V13.8.150] Correct Slicing: Extract individual 4KB chunks
-                                    const chunkSize = 4096;
-                                    let packets = 0;
-                                    let relayPeak = 0;
-                                    
-                                    // Quick VU check on the bundled data
-                                    const int16 = new Int16Array(bytes.buffer);
-                                    for(let i=0; i<int16.length; i+=100) { 
-                                        const v = Math.abs(int16[i]); 
-                                        if(v > relayPeak) relayPeak = v; 
-                                    }
-                                    const peakPercent = Math.round((relayPeak / 32768) * 100);
+                            // [V13.8.150] Binary Relay Handler
+                            let buffer;
+                            if (event.data.binary) {
+                                // Raw Binary Path (High Performance)
+                                buffer = event.data.binary;
+                            } else if (event.data.data) {
+                                // Base64 Fallback
+                                try {
+                                    const b = window.atob(event.data.data);
+                                    const uint8 = new Uint8Array(b.length);
+                                    for(let i=0; i<b.length; i++) uint8[i] = b.charCodeAt(i);
+                                    buffer = uint8.buffer;
+                                } catch(e) {}
+                            }
 
-                                    for (let offset = 0; offset < totalLen; offset += chunkSize) {
-                                        const chunk = bytes.buffer.slice(offset, offset + chunkSize);
-                                        workletNode.port.postMessage(chunk, [chunk]);
-                                        packets++;
-                                    }
-                                    
-                                    window._relayPkts = (window._relayPkts || 0) + packets;
-                                    // The diagnostic text is now updated by the worklet port.onmessage
+                            if (buffer && workletNode) {
+                                if (!audioCtx) initAudio();
+                                // Direct postMessage to worklet
+                                try {
+                                    workletNode.port.postMessage(buffer, [buffer]);
+                                } catch(e) {
+                                    workletNode.port.postMessage(buffer);
                                 }
-                            } catch (e) {
-                                relayLogToStudio(`❌ TV Relay Error: ${e.message}`);
+                                window._relayPkts = (window._relayPkts || 0) + 1;
                             }
                         }
                         handleInboundData(event.data);
