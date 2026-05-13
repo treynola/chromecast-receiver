@@ -11,12 +11,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    this._MIN_BUFFER = 512; 
-    this._PREBUFFER = 2048; // [V13.8.150] Reduced for near-instant response
+    this._MIN_BUFFER = 4096; 
+    this._PREBUFFER = 8192; // [V13.8.150] Increased for high-fidelity stability
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
     this._currentPeak = 0;
+    this._fade = 1.0; // Smoothing gain
 
     this.port.onmessage = (e) => {
       try {
@@ -92,6 +93,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         valR = this._ringBuffer[this._readPtr];
         this._readPtr = (this._readPtr + 1) % this._ringBuffer.length;
         this._bufferSize--;
+        
+        // Smoothly fade back in
+        if (this._fade < 1.0) this._fade += 0.02;
+      } else {
+        // Smoothly fade out to prevent pop
+        if (this._fade > 0) this._fade -= 0.05;
+        if (this._fade < 0) this._fade = 0;
       }
 
       // Add test beep if active
@@ -102,8 +110,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._testBeepSamples--;
       }
 
-      channel0[i] = valL + (Math.random() - 0.5) * 1e-6;
-      channel1[i] = valR + (Math.random() - 0.5) * 1e-6;
+      channel0[i] = (valL * this._fade) + (Math.random() - 0.5) * 1e-6;
+      channel1[i] = (valR * this._fade) + (Math.random() - 0.5) * 1e-6;
 
       // Update Peak
       const pL = Math.abs(valL);
