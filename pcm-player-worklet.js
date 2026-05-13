@@ -18,34 +18,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._sampleCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0; 
-    this._targetBuffer = 8192; // 22050Hz * 0.4s
+    this._targetBuffer = 16384; // ~340ms at 48kHz
     this._driftCounter = 0;
-
-    // [v13.8.150] Mu-Law Decode Table
-    this._decodeTable = new Float32Array(256);
-    const BIAS = 0x84;
-    for (let i = 0; i < 256; i++) {
-        let mu = ~i & 0xFF;
-        let sign = (mu & 0x80);
-        let exponent = (mu & 0x70) >> 4;
-        let mantissa = (mu & 0x0F);
-        let sample = (mantissa << (exponent + 3)) + BIAS;
-        sample <<= 2;
-        if (sign !== 0) sample = -sample;
-        this._decodeTable[i] = sample / 32768;
-    }
 
     this.port.onmessage = (e) => {
       try {
         const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
         
-        // APOR V2: Input is now 8-bit Mu-Law
-        const muLaw = new Uint8Array(arrayBuffer);
-        const float32 = new Float32Array(muLaw.length);
+        // High-Fi: 16-bit Int16 PCM
+        const pcm16 = new Int16Array(arrayBuffer);
+        const float32 = new Float32Array(pcm16.length);
         
-        for (let i = 0; i < muLaw.length; i++) {
-          float32[i] = this._decodeTable[muLaw[i]];
+        for (let i = 0; i < pcm16.length; i++) {
+          float32[i] = pcm16[i] / 32768;
         }
         
         this._writeToBuffer(float32);
@@ -82,16 +68,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.150] Adaptive Drift Control
-    // Every 10th sample, we decide to skip or repeat based on buffer health
+    // [v13.8.150] Adaptive Drift Control (High-Fi Tuning)
     this._driftCounter++;
     let skipSample = false;
     let repeatSample = false;
     
     if (this._driftCounter >= 10) {
         this._driftCounter = 0;
-        if (this._bufferSize > this._targetBuffer * 2) skipSample = true; // Buffer too big, speed up
-        if (this._bufferSize < this._targetBuffer / 2) repeatSample = true; // Buffer too small, slow down
+        if (this._bufferSize > this._targetBuffer * 1.5) skipSample = true; 
+        if (this._bufferSize < this._targetBuffer / 1.5) repeatSample = true; 
     }
 
     for (let i = 0; i < channel0.length; i++) {
@@ -106,7 +91,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             this._readPtr = (this._readPtr + (skipSample ? 4 : 2)) % this._ringBuffer.length;
             this._bufferSize -= (skipSample ? 4 : 2);
         }
-        // if repeatSample, we don't advance the read pointer, effectively playing the same sample again
         
         if (this._fade < 1.0) this._fade += 0.02;
       } else {

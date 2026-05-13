@@ -461,33 +461,33 @@
 
                 context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
                     if (event.data) {
+                        if (event.data.type === 'BRIDGE_CONFIG') {
+                            const newRate = event.data.config.sampleRate;
+                            if (newRate && newRate !== targetRate) {
+                                targetRate = newRate;
+                                relayLogToStudio(`🔄 TV: Re-aligning Sink to ${targetRate}Hz`);
+                                initAudio();
+                            }
+                        }
                         if (event.data.type === 'SINE_TEST') {
                             playSineTest();
                         } else if (event.data.type === 'PCM_RELAY') {
-                            // [V13.8.150] Binary Relay Handler
-                            let buffer;
-                            if (event.data.binary) {
-                                // Raw Binary Path (High Performance)
-                                buffer = event.data.binary;
-                            } else if (event.data.data) {
-                                // Base64 Fallback
-                                try {
-                                    const b = window.atob(event.data.data);
-                                    const uint8 = new Uint8Array(b.length);
-                                    for(let i=0; i<b.length; i++) uint8[i] = b.charCodeAt(i);
-                                    buffer = uint8.buffer;
-                                } catch(e) {}
-                            }
-
+                            // [V13.8.150] High-Fi Super Packet Unbundler
+                            const buffer = event.data.binary || event.data.data;
                             if (buffer && workletNode) {
-                                if (!audioCtx) initAudio();
-                                // Direct postMessage to worklet
-                                try {
-                                    workletNode.port.postMessage(buffer, [buffer]);
-                                } catch(e) {
-                                    workletNode.port.postMessage(buffer);
+                                // 16KB Super Packet contains multiple chunks
+                                const totalLen = buffer.byteLength;
+                                const chunkSize = 2048; // 1024 samples * 2 bytes
+                                
+                                for (let offset = 0; offset < totalLen; offset += chunkSize) {
+                                    const chunk = buffer.slice(offset, offset + chunkSize);
+                                    try {
+                                        workletNode.port.postMessage(chunk, [chunk]);
+                                    } catch(e) {
+                                        workletNode.port.postMessage(chunk);
+                                    }
                                 }
-                                window._relayPkts = (window._relayPkts || 0) + 1;
+                                window._relayPkts = (window._relayPkts || 0) + (totalLen / chunkSize);
                             }
                         }
                         handleInboundData(event.data);
