@@ -12,10 +12,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._bufferSize = 0;
     
     // [v13.8.200] Direct Handshake Config
-    this._TARGET_BUFFER = 9600;  // 200ms @ 48kHz (Low-Latency Direct Target)
-    this._MIN_BUFFER = 4800;     // 100ms (Direct Safety Limit)
-    this._PREBUFFER = 14400;     // 300ms (Fast Warm-up threshold)
-    this._DEAD_ZONE = 480;       // 10ms (Direct-Handshake Dead-Zone)
+    this._TARGET_BUFFER = 48000; // 500ms @ 48kHz stereo (Low-Latency Direct Target)
+    this._MIN_BUFFER = 24000;    // 250ms (Direct Safety Limit)
+    this._PREBUFFER = 72000;     // 750ms (Fast Warm-up threshold)
+    this._DEAD_ZONE = 4800;      // 50ms (Direct-Handshake Dead-Zone)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -96,10 +96,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     for (let i = 0; i < channel0.length; i++) {
       if (this._bufferSize >= 4) {
         // Linear Interpolation
-        const iL = Math.floor(this._readPtr);
+        // iL MUST be an even number because the buffer is interleaved stereo
+        let frameIndex = Math.floor(this._readPtr / 2);
+        const iL = (frameIndex * 2) % ringLen;
         const nextIL = (iL + 2) % ringLen;
-        const fract = (this._readPtr - iL) / 2;
-        
+        const fract = (this._readPtr / 2) - frameIndex;
+
         const vL1 = this._ringBuffer[iL];
         const vL2 = this._ringBuffer[nextIL];
         const valL = vL1 + fract * (vL2 - vL1);
