@@ -450,20 +450,30 @@
                                 
                                 if (!audioCtx) initAudio();
                                 if (workletNode) {
-                                    // The relay is bundled (4 chunks of 4096 bytes each = 16384 bytes)
-                                    // We split it back into 4096-byte chunks for the worklet
+                                    // [V13.8.150] Correct Slicing: Extract individual 4KB chunks
                                     const chunkSize = 4096;
+                                    let packets = 0;
+                                    let relayPeak = 0;
+                                    
+                                    // Quick VU check on the bundled data
+                                    const int16 = new Int16Array(bytes.buffer);
+                                    for(let i=0; i<int16.length; i+=100) { 
+                                        const v = Math.abs(int16[i]); 
+                                        if(v > relayPeak) relayPeak = v; 
+                                    }
+                                    const peakPercent = Math.round((relayPeak / 32768) * 100);
+
                                     for (let offset = 0; offset < totalLen; offset += chunkSize) {
-                                        const chunk = bytes.slice(offset, offset + chunkSize).buffer;
+                                        const chunk = bytes.buffer.slice(offset, offset + chunkSize);
                                         workletNode.port.postMessage(chunk, [chunk]);
+                                        packets++;
                                     }
                                     
                                     const diagEl = document.getElementById('bridge-diag-text');
                                     if (diagEl) {
-                                        if (!diagEl.textContent.includes('RELAY')) {
-                                            diagEl.textContent = diagEl.textContent.replace('WS:', 'WS: RELAY');
-                                            diagEl.style.color = 'var(--gold)';
-                                        }
+                                        this._relayCount = (this._relayCount || 0) + packets;
+                                        diagEl.textContent = `RELAY: ${this._relayCount} PKTS | VU: ${peakPercent}% | WS: CONNECTED`;
+                                        diagEl.style.color = 'var(--gold)';
                                     }
                                 }
                             } catch (e) {
