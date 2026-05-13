@@ -168,39 +168,51 @@
                 const targetRate = rate || 44100;
                 if (!audioCtx || audioCtx.sampleRate !== targetRate) {
                     if (audioCtx) {
-                        console.log(`📡 [v13.8.150] Sample Rate Change: ${audioCtx.sampleRate} -> ${targetRate}`);
-                        await audioCtx.close();
+                        relayLogToStudio(`📡 TV: Reseting AudioContext for Sample Rate: ${targetRate}`);
+                        try { await audioCtx.close(); } catch(e) {}
                     }
-                    relayLogToStudio(`📡 TV: initAudio() Started (SampleRate: ${targetRate})...`);
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
+                    
                     try {
-                        // [V13.8.150] Removed query string for TV compatibility
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
-                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet');
-                        relayLogToStudio(`✅ TV: Worklet Module Loaded & Node Created.`);
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
+                            sampleRate: targetRate,
+                            latencyHint: 'interactive'
+                        });
+
+                        // Master Gain (Final Stage)
+                        const masterGain = audioCtx.createGain();
+                        masterGain.gain.value = 1.0;
+                        masterGain.connect(audioCtx.destination);
                         
+                        // Keep-Alive Dither (Prevents hardware suspension)
+                        const keepAlive = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        g.gain.value = 0.000001; 
+                        keepAlive.connect(g);
+                        g.connect(audioCtx.destination);
+                        keepAlive.start();
+
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
+                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
+                            outputChannelCount: [2]
+                        });
+                        workletNode.connect(masterGain);
+                        
+                        relayLogToStudio(`✅ TV: Audio Sink Active @ ${targetRate}Hz`);
+
                         workletNode.port.onmessage = (e) => {
                             if (e.data.type === 'DIAG') {
-                                const bufEl = document.getElementById('buffer-health-bar');
-                                if (bufEl) {
-                                    const percent = Math.min(100, (e.data.available / 22050) * 100);
-                                    bufEl.style.width = percent + '%';
-                                    bufEl.style.backgroundColor = e.data.available < 2048 ? 'var(--red)' : 'var(--green)';
-                                }
-                                // Update Diagnostic Text
                                 const diagEl = document.getElementById('bridge-diag-text');
                                 if (diagEl) {
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
                                     const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled || 0} | PEAK: ${peakPercent}% | WS: ${wsStatus}`;
+                                    // Combine Relay and Worklet diagnostics
+                                    const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | VU: ${peakPercent}% | WS: ${wsStatus}`;
                                 }
                             }
                         };
-                        workletNode.connect(audioCtx.destination);
-                        relayLogToStudio(`✅ Audio Sink Active @ ${targetRate}Hz`);
                     } catch (e) {
-                        console.error('❌ TV ERROR: Worklet init failed', e);
-                        relayLogToStudio(`❌ TV ERROR: Worklet init failed - ${e.message}`);
+                        relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
                     }
                 }
             }
@@ -469,12 +481,8 @@
                                         packets++;
                                     }
                                     
-                                    const diagEl = document.getElementById('bridge-diag-text');
-                                    if (diagEl) {
-                                        this._relayCount = (this._relayCount || 0) + packets;
-                                        diagEl.textContent = `RELAY: ${this._relayCount} PKTS | VU: ${peakPercent}% | WS: CONNECTED`;
-                                        diagEl.style.color = 'var(--gold)';
-                                    }
+                                    window._relayPkts = (window._relayPkts || 0) + packets;
+                                    // The diagnostic text is now updated by the worklet port.onmessage
                                 }
                             } catch (e) {
                                 relayLogToStudio(`❌ TV Relay Error: ${e.message}`);
@@ -519,16 +527,14 @@
                             audioCtx.resume().then(() => {
                                 if (audioCtx.state === 'running') {
                                     relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
-                                    clearInterval(autoUnlock);
                                 }
                             });
-                        } else if (audioCtx.state === 'running') {
-                            clearInterval(autoUnlock);
                         }
                     } else {
+                        // initAudio is now a singleton, safe to call
                         initAudio(); 
                     }
-                }, 500);
+                }, 1000); // 1s interval to be less aggressive
 
                 window.addEventListener('resize', updateScale); 
                 relayLogToStudio("🎬 TV: Startup Complete.");
