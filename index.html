@@ -216,9 +216,9 @@
                                 if (diagEl) {
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
                                     const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    // APOR V2 telemetry
+                                    const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | VU: ${peakPercent}% | WS: ${wsStatus} [APOR V2]`;
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | VU: ${peakPercent}% | WS: ${wsStatus} [ULTRA-HIFI]`;
                                 }
                             }
                         };

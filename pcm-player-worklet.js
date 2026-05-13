@@ -1,32 +1,33 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor
- * Decodes and plays raw PCM float32 data from the ring buffer.
+ * PCM Player AudioWorkletProcessor - Ultra-Smooth High-Fidelity [v13.8.150]
+ * Uses Linear Resampling Interpolation (ASRC) for click-free playback.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._ringBuffer = new Float32Array(44100 * 2); // 2 seconds at 44.1kHz
-    this._readPtr = 0;
+    this._ringBuffer = new Float32Array(48000 * 4); // 4 seconds at 48kHz
+    this._readPtr = 0.0;  // FRACTIONAL read pointer
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    this._MIN_BUFFER = 4096; 
-    this._PREBUFFER = 8192; // [V13.8.150] Increased for high-fidelity stability
+    // Safety Thresholds (Deep Buffer for 48kHz stability)
+    this._MIN_BUFFER = 4800;  // 100ms
+    this._PREBUFFER = 24000;  // 500ms
+    this._TARGET_BUFFER = 19200; // 400ms target
+    
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0; 
-    this._targetBuffer = 16384; // ~340ms at 48kHz
-    this._driftCounter = 0;
+    this._playbackRate = 1.0; // Dynamic speed
 
     this.port.onmessage = (e) => {
       try {
         const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
         
-        // High-Fi: 16-bit Int16 PCM
         const pcm16 = new Int16Array(arrayBuffer);
         const float32 = new Float32Array(pcm16.length);
         
@@ -68,50 +69,63 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.150] Adaptive Drift Control (High-Fi Tuning)
-    this._driftCounter++;
-    let skipSample = false;
-    let repeatSample = false;
-    
-    if (this._driftCounter >= 10) {
-        this._driftCounter = 0;
-        if (this._bufferSize > this._targetBuffer * 1.5) skipSample = true; 
-        if (this._bufferSize < this._targetBuffer / 1.5) repeatSample = true; 
+    // [v13.8.150] ASYNC SAMPLE RATE CONVERTER (ASRC)
+    // Adjust playback rate subtly to maintain target buffer level
+    if (this._bufferSize > this._TARGET_BUFFER * 1.5) {
+        this._playbackRate = 1.001; // Speed up
+    } else if (this._bufferSize < this._TARGET_BUFFER * 0.5) {
+        this._playbackRate = 0.999; // Slow down
+    } else {
+        this._playbackRate = 1.0;   // Perfect match
     }
+
+    const ringLen = this._ringBuffer.length;
 
     for (let i = 0; i < channel0.length; i++) {
-      let valL = 0;
-      let valR = 0;
+      if (this._bufferSize >= 4) {
+        // LINEAR INTERPOLATION (L + R interleaved)
+        // L Channel
+        const iL = Math.floor(this._readPtr);
+        const nextIL = (iL + 2) % ringLen;
+        const fract = (this._readPtr - iL) / 2;
+        
+        const vL1 = this._ringBuffer[iL];
+        const vL2 = this._ringBuffer[nextIL];
+        const valL = vL1 + fract * (vL2 - vL1);
 
-      if (this._bufferSize >= 2) {
-        valL = this._ringBuffer[this._readPtr];
-        valR = this._ringBuffer[(this._readPtr + 1) % this._ringBuffer.length];
-        
-        if (!repeatSample) {
-            this._readPtr = (this._readPtr + (skipSample ? 4 : 2)) % this._ringBuffer.length;
-            this._bufferSize -= (skipSample ? 4 : 2);
-        }
-        
+        // R Channel
+        const iR = (iL + 1) % ringLen;
+        const nextIR = (iR + 2) % ringLen;
+        const vR1 = this._ringBuffer[iR];
+        const vR2 = this._ringBuffer[nextIR];
+        const valR = vR1 + fract * (vR2 - vR1);
+
+        // Advance fractional pointer
+        this._readPtr = (this._readPtr + (2 * this._playbackRate)) % ringLen;
+        this._bufferSize -= (2 * this._playbackRate);
+
         if (this._fade < 1.0) this._fade += 0.02;
+        
+        channel0[i] = valL * this._fade;
+        channel1[i] = valR * this._fade;
+
+        const p = Math.max(Math.abs(valL), Math.abs(valR));
+        if (p > this._currentPeak) this._currentPeak = p;
       } else {
         if (this._fade > 0) this._fade -= 0.05;
-        if (this._fade < 0) this._fade = 0;
+        channel0[i] = 0;
+        channel1[i] = 0;
       }
-
-      channel0[i] = (valL * this._fade) + (Math.random() - 0.5) * 1e-6;
-      channel1[i] = (valR * this._fade) + (Math.random() - 0.5) * 1e-6;
-
-      const p = Math.max(Math.abs(valL), Math.abs(valR));
-      if (p > this._currentPeak) this._currentPeak = p;
     }
 
-    this._sampleCount = (this._sampleCount || 0) + 128;
+    this._sampleCount += 128;
     if (this._sampleCount >= 10000) { 
       this.port.postMessage({ 
         type: 'DIAG', 
-        available: this._bufferSize, 
+        available: Math.floor(this._bufferSize), 
         stalled: this._stallCount,
-        peak: this._currentPeak
+        peak: this._currentPeak,
+        rate: this._playbackRate
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
