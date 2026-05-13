@@ -355,6 +355,17 @@
                 };
                 
                 binaryWS.onmessage = async (event) => {
+                    if (typeof event.data === 'string') {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            if (msg.type === 'BRIDGE_CONFIG' && msg.config && msg.config.sampleRate) {
+                                relayLogToStudio(`🔄 TV: WebSocket BRIDGE_CONFIG -> ${msg.config.sampleRate}Hz`);
+                                initAudio(msg.config.sampleRate);
+                            }
+                        } catch (e) {}
+                        return;
+                    }
+
                     let buffer;
                     if (event.data instanceof ArrayBuffer) {
                         buffer = event.data;

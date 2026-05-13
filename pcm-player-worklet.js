@@ -12,10 +12,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._bufferSize = 0;
     
     // [v13.8.200] Direct Handshake Config
-    this._TARGET_BUFFER = 48000; // 500ms @ 48kHz stereo (Low-Latency Direct Target)
-    this._MIN_BUFFER = 24000;    // 250ms (Direct Safety Limit)
-    this._PREBUFFER = 72000;     // 750ms (Fast Warm-up threshold)
-    this._DEAD_ZONE = 4800;      // 50ms (Direct-Handshake Dead-Zone)
+    this._TARGET_BUFFER = 96000; // 1000ms @ 48kHz stereo (Direct Handshake Stability Target)
+    this._MIN_BUFFER = 48000;    // 500ms (Direct Safety Limit)
+    this._PREBUFFER = 120000;    // 1250ms (Warm-up threshold)
+    this._DEAD_ZONE = 9600;      // 100ms (Dead-Zone for PI controller)
     
     this._isBuffering = true;
     this._stallCount = 0;
