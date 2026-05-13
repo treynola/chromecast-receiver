@@ -191,7 +191,8 @@
                                 const diagEl = document.getElementById('bridge-diag-text');
                                 if (diagEl) {
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
-                                    diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled || 0} | WS: ${wsStatus}`;
+                                    const peakPercent = Math.round((e.data.peak || 0) * 100);
+                                    diagEl.textContent = `BUF: ${e.data.available} | STALLS: ${e.data.stalled || 0} | PEAK: ${peakPercent}% | WS: ${wsStatus}`;
                                 }
                             }
                         };

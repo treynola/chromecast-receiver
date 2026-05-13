@@ -16,6 +16,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
+    this._currentPeak = 0;
 
     this.port.onmessage = (e) => {
       try {
@@ -54,8 +55,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const blockSize = output[0].length;
     
     // Heartbeat for diagnostic verification
-    if (Math.random() < 0.002) {
-      this.port.postMessage({ type: 'DIAG', available: this._bufferSize, stalled: this._stalledCount, rate: sampleRate });
+    if (Math.random() < 0.02) {
+      this.port.postMessage({ type: 'DIAG', available: this._bufferSize, stalled: this._stallCount, peak: this._currentPeak, rate: sampleRate });
+      this._currentPeak = 0; // Reset peak after sending
     }
     const channel0 = output[0];
     const channel1 = output[1];
@@ -101,6 +103,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       channel0[i] = valL + (Math.random() - 0.5) * 1e-6;
       channel1[i] = valR + (Math.random() - 0.5) * 1e-6;
+
+      // Update Peak
+      const pL = Math.abs(valL);
+      const pR = Math.abs(valR);
+      if (pL > this._currentPeak) this._currentPeak = pL;
+      if (pR > this._currentPeak) this._currentPeak = pR;
     }
 
     this._sampleCount = (this._sampleCount || 0) + 128;
