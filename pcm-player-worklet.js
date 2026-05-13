@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - High-Volume Studio Engine [v13.8.180]
- * Optimized for low-frequency (6Hz) 16KB packet delivery.
+ * PCM Player AudioWorkletProcessor - Clean Handshake Engine [v13.8.190]
+ * Optimized for low-congestion 16KB packet delivery.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -11,11 +11,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // [v13.8.180] High-Volume Config
+    // [v13.8.190] Clean Handshake Config
     this._TARGET_BUFFER = 19200; // 400ms @ 48kHz (Safety Zone for 16KB bursts)
     this._MIN_BUFFER = 8192;     // 170ms (Emergency Limit)
     this._PREBUFFER = 24000;     // 500ms (Warm-up threshold)
-    this._DEAD_ZONE = 960;       // 20ms (Tone Purity Dead-Zone)
+    this._DEAD_ZONE = 720;       // 15ms (Clean-Handshake Dead-Zone)
     
     this._isBuffering = true;
     this._stallCount = 0;
