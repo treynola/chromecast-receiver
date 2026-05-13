@@ -11,9 +11,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // Safety Thresholds (Deep Buffer for 48kHz stability)
-    this._MIN_BUFFER = 4800;  // 100ms
-    this._PREBUFFER = 24000;  // 500ms
+    // Safety Thresholds (Deeper for Super-Packet stability)
+    this._MIN_BUFFER = 12288; // 256ms @ 48kHz (Survival against jitter)
+    this._PREBUFFER = 28800;  // 600ms (Rock-solid start)
     this._TARGET_BUFFER = 19200; // 400ms target
     
     this._isBuffering = true;
@@ -21,7 +21,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._sampleCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0; 
-    this._playbackRate = 1.0; // Dynamic speed
+    this._playbackRate = 1.0; 
 
     this.port.onmessage = (e) => {
       try {
@@ -69,22 +69,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.150] ASYNC SAMPLE RATE CONVERTER (ASRC)
-    // Adjust playback rate subtly to maintain target buffer level
-    if (this._bufferSize > this._TARGET_BUFFER * 1.5) {
-        this._playbackRate = 1.001; // Speed up
-    } else if (this._bufferSize < this._TARGET_BUFFER * 0.5) {
-        this._playbackRate = 0.999; // Slow down
+    // [v13.8.150] Ultra-Soft ASRC (0.02% drift max)
+    const drift = this._bufferSize - this._TARGET_BUFFER;
+    if (Math.abs(drift) > 4800) { // If drift > 100ms
+        this._playbackRate = (drift > 0) ? 1.0002 : 0.9998;
     } else {
-        this._playbackRate = 1.0;   // Perfect match
+        this._playbackRate = 1.0;
     }
 
     const ringLen = this._ringBuffer.length;
 
     for (let i = 0; i < channel0.length; i++) {
       if (this._bufferSize >= 4) {
-        // LINEAR INTERPOLATION (L + R interleaved)
-        // L Channel
         const iL = Math.floor(this._readPtr);
         const nextIL = (iL + 2) % ringLen;
         const fract = (this._readPtr - iL) / 2;
@@ -93,14 +89,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const vL2 = this._ringBuffer[nextIL];
         const valL = vL1 + fract * (vL2 - vL1);
 
-        // R Channel
         const iR = (iL + 1) % ringLen;
         const nextIR = (iR + 2) % ringLen;
         const vR1 = this._ringBuffer[iR];
         const vR2 = this._ringBuffer[nextIR];
         const valR = vR1 + fract * (vR2 - vR1);
 
-        // Advance fractional pointer
         this._readPtr = (this._readPtr + (2 * this._playbackRate)) % ringLen;
         this._bufferSize -= (2 * this._playbackRate);
 
@@ -136,3 +130,4 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('pcm-player-worklet', PCMPlayerProcessor);
+
