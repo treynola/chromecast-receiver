@@ -219,7 +219,7 @@
                                     const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
                                     const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [STUDIO PULSE]`;
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DAMPENED]`;
                                 }
                             }
                         };

@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Studio Pulse [v13.8.160]
- * Uses PID-controlled Adaptive Sync and Linear Interpolation.
+ * PCM Player AudioWorkletProcessor - Dampened Studio Engine [v13.8.170]
+ * Uses PI-controlled Adaptive Sync with Moving Average Smoothing & Dead-Zone.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -11,10 +11,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // [v13.8.160] Studio Pulse Config
-    this._TARGET_BUFFER = 7200; // 150ms @ 48kHz (Low Latency Target)
-    this._MIN_BUFFER = 2400;    // 50ms (Lower limit)
-    this._PREBUFFER = 9600;     // 200ms (Start threshold)
+    // [v13.8.170] Dampened Studio Config
+    this._TARGET_BUFFER = 14400; // 300ms @ 48kHz (High-Fi Stability Target)
+    this._MIN_BUFFER = 4800;     // 100ms (Emergency Limit)
+    this._PREBUFFER = 19200;     // 400ms (Warm-up threshold)
+    this._DEAD_ZONE = 480;       // 10ms (Silence speed corrections if inside)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -22,13 +23,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._currentPeak = 0;
     this._fade = 1.0; 
     
-    // PID Sync Controller Variables
+    // PI Sync Controller Variables
     this._playbackRate = 1.0;
     this._errorSum = 0;
-    this._lastError = 0;
-    this._kp = 0.0000001; // Proportional gain
-    this._ki = 0.000000001; // Integral gain
-    this._kd = 0.000001; // Derivative gain
+    this._smoothedError = 0;
+    
+    // PI Gains (Tuned for 48kHz transparency)
+    this._kp = 0.00000005; // Half the previous P gain
+    this._ki = 0.0000000005; // Subtle integral gain
 
     this.port.onmessage = (e) => {
       try {
@@ -76,15 +78,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.160] PID Adaptive Sync
-    const error = this._bufferSize - this._TARGET_BUFFER;
-    this._errorSum += error;
-    const errorDiff = error - this._lastError;
-    this._lastError = error;
+    // [v13.8.170] DAMPENED PI SYNC
+    // 1. Moving Average Smoothing (Low-pass filter for jitter)
+    const rawError = this._bufferSize - this._TARGET_BUFFER;
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
 
-    // Calculate adjustment (clamped for transparency)
-    const adj = (error * this._kp) + (this._errorSum * this._ki) + (errorDiff * this._kd);
-    this._playbackRate = Math.max(0.995, Math.min(1.005, 1.0 + adj));
+    // 2. Dead-Zone Logic (Prioritize tone purity)
+    if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
+        this._playbackRate = 1.0;
+        this._errorSum *= 0.99; // Slowly bleed off integral error when in dead zone
+    } else {
+        // 3. PI Calculation (Subtle and transparent)
+        this._errorSum += this._smoothedError;
+        const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
+        this._playbackRate = Math.max(0.999, Math.min(1.001, 1.0 + adj));
+    }
 
     const ringLen = this._ringBuffer.length;
 
@@ -130,7 +138,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         stalled: this._stallCount,
         peak: this._currentPeak,
         rate: this._playbackRate,
-        locked: (Math.abs(error) < 500)
+        locked: (Math.abs(this._smoothedError) < this._DEAD_ZONE)
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
