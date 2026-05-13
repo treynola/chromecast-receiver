@@ -208,7 +208,7 @@
                             relayLogToStudio("✅ TV: System Volume Forced to 100%");
                         } catch(e) {}
 
-                        relayLogToStudio(`✅ TV: Audio Sink Active @ ${targetRate}Hz`);
+                        relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${targetRate}Hz`);
 
                         workletNode.port.onmessage = (e) => {
                             if (e.data.type === 'DIAG') {
@@ -216,9 +216,9 @@
                                 if (diagEl) {
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
                                     const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    // Combine Relay and Worklet diagnostics
+                                    // APOR V2 telemetry
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | VU: ${peakPercent}% | WS: ${wsStatus}`;
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | VU: ${peakPercent}% | WS: ${wsStatus} [APOR V2]`;
                                 }
                             }
                         };
