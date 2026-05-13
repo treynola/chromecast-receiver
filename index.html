@@ -473,7 +473,18 @@
                             playSineTest();
                         } else if (event.data.type === 'PCM_RELAY') {
                             // [V13.8.150] High-Fi Super Packet Unbundler
-                            const buffer = event.data.binary || event.data.data;
+                            let buffer = event.data.binary;
+                            
+                            // Fallback for Base64 (Legacy/Diagnostic)
+                            if (!buffer && event.data.data) {
+                                try {
+                                    const bString = window.atob(event.data.data);
+                                    const bytes = new Uint8Array(bString.length);
+                                    for(let i=0; i<bString.length; i++) bytes[i] = bString.charCodeAt(i);
+                                    buffer = bytes.buffer;
+                                } catch(e) { buffer = null; }
+                            }
+
                             if (buffer && workletNode) {
                                 // 16KB Super Packet contains multiple chunks
                                 const totalLen = buffer.byteLength;
