@@ -11,8 +11,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    this._MIN_BUFFER = 2048; 
-    this._PREBUFFER = 12288; // 250ms buffer to survive TV WiFi jitter
+    this._MIN_BUFFER = 512; 
+    this._PREBUFFER = 2048; // [V13.8.150] Reduced for near-instant response
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
@@ -21,7 +21,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (e) => {
       try {
         if (e.data.type === 'TEST_BEEP') {
-          this._testBeepSamples = 44100; // 1 second of beep
+          this._testBeepSamples = sampleRate; // 1 second of beep
+          this._isBuffering = false; // Force playback start
           console.log('🔈 Receiver: Worklet Beep Triggered');
           return;
         }
