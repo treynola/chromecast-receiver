@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Clean Handshake Engine [v13.8.190]
- * Optimized for low-congestion 16KB packet delivery.
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.8.200]
+ * Optimized for zero-jitter Direct Binary Bridge (WebSocket).
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -11,11 +11,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // [v13.8.190] Clean Handshake Config
-    this._TARGET_BUFFER = 19200; // 400ms @ 48kHz (Safety Zone for 16KB bursts)
-    this._MIN_BUFFER = 8192;     // 170ms (Emergency Limit)
-    this._PREBUFFER = 24000;     // 500ms (Warm-up threshold)
-    this._DEAD_ZONE = 720;       // 15ms (Clean-Handshake Dead-Zone)
+    // [v13.8.200] Direct Handshake Config
+    this._TARGET_BUFFER = 9600;  // 200ms @ 48kHz (Low-Latency Direct Target)
+    this._MIN_BUFFER = 4800;     // 100ms (Direct Safety Limit)
+    this._PREBUFFER = 14400;     // 300ms (Fast Warm-up threshold)
+    this._DEAD_ZONE = 480;       // 10ms (Direct-Handshake Dead-Zone)
     
     this._isBuffering = true;
     this._stallCount = 0;

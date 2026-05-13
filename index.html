@@ -219,7 +219,7 @@
                                     const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
                                     const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [CLEAN-HANDSHAKE]`;
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
                                 }
                             }
                         };
@@ -473,10 +473,14 @@
                         if (event.data.type === 'SINE_TEST') {
                             playSineTest();
                         } else if (event.data.type === 'PCM_RELAY') {
-                            // [V13.8.160] Studio Pulse: Direct Feed
+                            // [v13.8.200] Direct Handshake Logic
+                            // If Binary WS is active, IGNORE Cast Channel audio to prevent collisions
+                            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                                return;
+                            }
+
                             let buffer = event.data.binary || event.data.data;
                             if (buffer && workletNode) {
-                                // Direct post to worklet (No slicing = No Jitter)
                                 try {
                                     workletNode.port.postMessage(buffer, [buffer]);
                                 } catch(e) {
