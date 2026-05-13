@@ -440,6 +440,35 @@
                     if (event.data) {
                         if (event.data.type === 'SINE_TEST') {
                             playSineTest();
+                        } else if (event.data.type === 'PCM_RELAY') {
+                            // [V13.8.150] Optimized Unbundler
+                            try {
+                                const binary = window.atob(event.data.data);
+                                const totalLen = binary.length;
+                                const bytes = new Uint8Array(totalLen);
+                                for (let i = 0; i < totalLen; i++) bytes[i] = binary.charCodeAt(i);
+                                
+                                if (!audioCtx) initAudio();
+                                if (workletNode) {
+                                    // The relay is bundled (4 chunks of 4096 bytes each = 16384 bytes)
+                                    // We split it back into 4096-byte chunks for the worklet
+                                    const chunkSize = 4096;
+                                    for (let offset = 0; offset < totalLen; offset += chunkSize) {
+                                        const chunk = bytes.slice(offset, offset + chunkSize).buffer;
+                                        workletNode.port.postMessage(chunk, [chunk]);
+                                    }
+                                    
+                                    const diagEl = document.getElementById('bridge-diag-text');
+                                    if (diagEl) {
+                                        if (!diagEl.textContent.includes('RELAY')) {
+                                            diagEl.textContent = diagEl.textContent.replace('WS:', 'WS: RELAY');
+                                            diagEl.style.color = 'var(--gold)';
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                relayLogToStudio(`❌ TV Relay Error: ${e.message}`);
+                            }
                         }
                         handleInboundData(event.data);
                     }
