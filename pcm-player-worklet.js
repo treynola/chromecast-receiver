@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Dampened Studio Engine [v13.8.170]
- * Uses PI-controlled Adaptive Sync with Moving Average Smoothing & Dead-Zone.
+ * PCM Player AudioWorkletProcessor - High-Volume Studio Engine [v13.8.180]
+ * Optimized for low-frequency (6Hz) 16KB packet delivery.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -11,11 +11,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // [v13.8.170] Dampened Studio Config
-    this._TARGET_BUFFER = 14400; // 300ms @ 48kHz (High-Fi Stability Target)
-    this._MIN_BUFFER = 4800;     // 100ms (Emergency Limit)
-    this._PREBUFFER = 19200;     // 400ms (Warm-up threshold)
-    this._DEAD_ZONE = 480;       // 10ms (Silence speed corrections if inside)
+    // [v13.8.180] High-Volume Config
+    this._TARGET_BUFFER = 19200; // 400ms @ 48kHz (Safety Zone for 16KB bursts)
+    this._MIN_BUFFER = 8192;     // 170ms (Emergency Limit)
+    this._PREBUFFER = 24000;     // 500ms (Warm-up threshold)
+    this._DEAD_ZONE = 960;       // 20ms (Tone Purity Dead-Zone)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -28,9 +28,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._errorSum = 0;
     this._smoothedError = 0;
     
-    // PI Gains (Tuned for 48kHz transparency)
-    this._kp = 0.00000005; // Half the previous P gain
-    this._ki = 0.0000000005; // Subtle integral gain
+    // PI Gains (Dampened for high-volume bursts)
+    this._kp = 0.00000002; 
+    this._ki = 0.0000000002;
 
     this.port.onmessage = (e) => {
       try {
@@ -78,17 +78,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.170] DAMPENED PI SYNC
-    // 1. Moving Average Smoothing (Low-pass filter for jitter)
+    // [v13.8.180] HIGH-VOLUME DAMPENED SYNC
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
 
-    // 2. Dead-Zone Logic (Prioritize tone purity)
     if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
         this._playbackRate = 1.0;
-        this._errorSum *= 0.99; // Slowly bleed off integral error when in dead zone
+        this._errorSum *= 0.999; 
     } else {
-        // 3. PI Calculation (Subtle and transparent)
         this._errorSum += this._smoothedError;
         const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
         this._playbackRate = Math.max(0.999, Math.min(1.001, 1.0 + adj));
