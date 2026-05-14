@@ -259,6 +259,7 @@
                 }
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const senders = context.getSenders();
+                if (senders.length > 0) {
                     try {
                         context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV LOG] ${msg}` });
                     } catch(e) {}
