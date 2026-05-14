@@ -143,8 +143,8 @@
             var audioCtx = null; 
             var workletNode = null; 
             var targetRate = 48000;
-            const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-            const KNOB_CONFIGS = [{ l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' }, { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' }, { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }];
+            var CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
+            var KNOB_CONFIGS = [{ l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' }, { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' }, { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }];
 
             function buildGUI() {
                 var g = document.getElementById('sample-grid'); if (g) { g.innerHTML = ''; for (var p = 1; p <= 20; p++) { var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b); } }
@@ -211,18 +211,18 @@
                             relayLogToStudio("✅ TV: System Volume Forced to 100%");
                         } catch(e) {}
 
-                        relayLogToStudio(`✅ TV: Sink Active @ ${audioCtx.sampleRate}Hz (Requested: ${targetRate}Hz)`);
+                        relayLogToStudio('✅ TV: Sink Active @ ' + audioCtx.sampleRate + 'Hz (Requested: ' + targetRate + 'Hz)');
 
-                        workletNode.port.onmessage = (e) => {
+                        workletNode.port.onmessage = function(e) {
                             if (e.data.type === 'DIAG') {
-                                const diagEl = document.getElementById('bridge-diag-text');
+                                var diagEl = document.getElementById('bridge-diag-text');
                                 if (diagEl) {
-                                    const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
-                                    const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
-                                    const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
-                                    const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                                    var wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
+                                    var peakPercent = Math.round((e.data.peak || 0) * 100);
+                                    var rateDisp = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
+                                    var lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
+                                    var relayInfo = (window._relayPkts > 0) ? 'RELAY: ' + window._relayPkts + ' | ' : '';
+                                    diagEl.textContent = relayInfo + 'BUF: ' + e.data.available + ' | RATE: ' + rateDisp + 'x | ' + lockStatus + ' | WS: ' + wsStatus + ' [DIRECT BRIDGE]';
                                 }
                             }
                         };
@@ -277,58 +277,133 @@
 
             function renderState(s) {
                 if (!s) return;
-                // initAudio(); // Removed to prevent race conditions during high-frequency updates
-                if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
-                if (s.cursor) { 
-                    var cur = document.getElementById('cursor-mirror'); 
-                    if (cur) { 
-                        cur.style.display = 'block'; 
-                        // [v13.8.150] Parent-relative coordinates (100% immune to scaling)
-                        // Added +1.6% Y-Calibration to resolve "too high" report (approx 13px)
-                        var px = s.cursor.x * 100;
-                        var py = (s.cursor.y * 100) + 1.6; 
-                        cur.style.left = px + '%';
-                        cur.style.top = py + '%';
-                        cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
-                        cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
-                    } 
-                }
-                if (s.master) {
-                    document.getElementById('master-volume').value = s.master.volume || 0;
-                    document.getElementById('master-volume-value').textContent = (s.master.volume || 0).toFixed(1) + ' dB';
-                    document.getElementById('master-meter-bar')?.style.setProperty('width', (s.master.meters?.l * 100 || 0) + '%');
-                    document.getElementById('loop-length').value = s.master.loopLength || 4;
-                    document.getElementById('loop-length-value').textContent = (s.master.loopLength || 4).toFixed(1) + 's';
-                    document.getElementById('master-record-button').className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
-                    document.getElementById('lfo-toggle').className = s.master.lfo1?.active ? 'active' : '';
-                    document.getElementById('lfo-meter-bar').style.width = (s.master.lfo1?.value * 100 || 0) + '%';
-                    document.getElementById('lfo-time').value = s.master.lfo1?.time || 1.8;
-                    document.getElementById('lfo-time-value').textContent = (s.master.lfo1?.time || 1.8).toFixed(1) + 's';
-                    document.getElementById('lfo2-toggle').className = s.master.lfo2?.active ? 'active' : '';
-                    document.getElementById('lfo2-meter-bar').style.width = (s.master.lfo2?.value * 100 || 0) + '%';
-                    document.getElementById('lfo2-time').value = s.master.lfo2?.time || 1.8;
-                    document.getElementById('lfo2-time-value').textContent = (s.master.lfo2?.time || 1.8).toFixed(1) + 's';
-                }
-                if (s.sampler) s.sampler.forEach((p,i) => { var b = document.getElementById('sample-'+(i+1)); if (b) { b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); if (p.loaded && p.name) b.textContent = p.name.substring(0,6); } });
-                if (s.tracks) s.tracks.forEach((t,i) => {
-                    document.getElementById('t-scroll-'+i).textContent = t.fileName || 'Ready';
-                    document.getElementById('t-mtr-'+i).style.width = (t.meters?.l * 100 || 0) + '%';
-                    var st = document.getElementById('t-st-'+i); st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
-                    document.getElementById('t-ls-m-'+i).style.left = (t.loopStart * 100) + '%';
-                    document.getElementById('t-le-m-'+i).style.left = (t.loopEnd * 100) + '%';
-                    if (t.params) {
-                        KNOB_CONFIGS.forEach(cfg => {
-                            document.getElementById(`t-${cfg.p}-sl-${i}`).value = t.params[cfg.p] || 0;
-                            document.getElementById(`t-${cfg.p}-val-${i}`).textContent = t.params[cfg.p] || 0;
-                            document.getElementById(`t-lfo1-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[1]?.includes(cfg.p);
-                            document.getElementById(`t-lfo2-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[2]?.includes(cfg.p);
-                        });
-                        document.getElementById(`t-gain-sl-${i}`).value = t.params.inputGain || 0;
-                        document.getElementById(`t-gain-val-${i}`).textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                try {
+                    // 1. TRANSPORT & CLOCK
+                    if (s.transport) {
+                        var rt = document.getElementById('recording-time-display');
+                        if (rt) rt.textContent = s.transport.position;
+                        for (var i = 0; i < 4; i++) {
+                            var tt = document.getElementById('t-time-' + i);
+                            if (tt) tt.textContent = s.transport.position;
+                        }
                     }
-                    if (t.fxSlots) t.fxSlots.forEach((active, idx) => { document.getElementById(`t-fx-chk-${i}-${idx}`).checked = active; document.getElementById(`t-fx-lbl-${i}-${idx}`).style.backgroundColor = active ? 'var(--gold)' : 'transparent'; });
-                    document.getElementById(`t-rec-${i}`).className = t.isRecording ? 'recording' : '';
-                });
+
+                    // 2. CURSOR MIRROR
+                    if (s.cursor) {
+                        var cur = document.getElementById('cursor-mirror');
+                        if (cur) {
+                            cur.style.display = 'block';
+                            var px = s.cursor.x * 100;
+                            var py = (s.cursor.y * 100) + 1.6;
+                            cur.style.left = px + '%';
+                            cur.style.top = py + '%';
+                            cur.style.transform = 'translate3d(-50%, -50%, 0)';
+                            cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
+                        }
+                    }
+
+                    // 3. MASTER COLUMN
+                    if (s.master) {
+                        var mVol = document.getElementById('master-volume');
+                        if (mVol) mVol.value = s.master.volume || 0;
+                        var mVolVal = document.getElementById('master-volume-value');
+                        if (mVolVal) mVolVal.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
+                        
+                        var mmb = document.getElementById('master-meter-bar');
+                        if (mmb && s.master.meters) mmb.style.width = (s.master.meters.l * 100) + '%';
+                        
+                        var lLen = document.getElementById('loop-length');
+                        if (lLen) lLen.value = s.master.loopLength || 4;
+                        var lLenVal = document.getElementById('loop-length-value');
+                        if (lLenVal) lLenVal.textContent = (s.master.loopLength || 4).toFixed(1) + 's';
+                        
+                        var mRec = document.getElementById('master-record-button');
+                        if (mRec) mRec.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                        
+                        if (s.master.lfo1) {
+                            var l1t = document.getElementById('lfo-toggle');
+                            if (l1t) l1t.className = s.master.lfo1.active ? 'active' : '';
+                            var l1m = document.getElementById('lfo-meter-bar');
+                            if (l1m) l1m.style.width = (s.master.lfo1.value * 100 || 0) + '%';
+                            var l1tm = document.getElementById('lfo-time');
+                            if (l1tm) l1tm.value = s.master.lfo1.time || 1.8;
+                            var l1tv = document.getElementById('lfo-time-value');
+                            if (l1tv) l1tv.textContent = (s.master.lfo1.time || 1.8).toFixed(1) + 's';
+                        }
+                        if (s.master.lfo2) {
+                            var l2t = document.getElementById('lfo2-toggle');
+                            if (l2t) l2t.className = s.master.lfo2.active ? 'active' : '';
+                            var l2m = document.getElementById('lfo2-meter-bar');
+                            if (l2m) l2m.style.width = (s.master.lfo2.value * 100 || 0) + '%';
+                            var l2tm = document.getElementById('lfo2-time');
+                            if (l2tm) l2tm.value = s.master.lfo2.time || 1.8;
+                            var l2tv = document.getElementById('lfo2-time-value');
+                            if (l2tv) l2tv.textContent = (s.master.lfo2.time || 1.8).toFixed(1) + 's';
+                        }
+                    }
+
+                    // 4. SAMPLER STATION
+                    if (s.sampler) {
+                        for (var j = 0; j < s.sampler.length; j++) {
+                            var p = s.sampler[j];
+                            var b = document.getElementById('sample-' + (j + 1));
+                            if (b) {
+                                b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn');
+                                if (p.loaded && p.name) b.textContent = p.name.substring(0, 6);
+                            }
+                        }
+                    }
+
+                    // 5. TRACKS
+                    if (s.tracks) {
+                        for (var i = 0; i < s.tracks.length; i++) {
+                            var t = s.tracks[i];
+                            var tScroll = document.getElementById('t-scroll-' + i);
+                            if (tScroll) tScroll.textContent = t.fileName || 'Ready';
+                            
+                            var tMtr = document.getElementById('t-mtr-' + i);
+                            if (tMtr) tMtr.style.width = (t.meters ? (t.meters.l * 100) : 0) + '%';
+                            
+                            var st = document.getElementById('t-st-' + i);
+                            if (st) st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
+                            
+                            var lsM = document.getElementById('t-ls-m-' + i);
+                            if (lsM) lsM.style.left = (t.loopStart * 100) + '%';
+                            var leM = document.getElementById('t-le-m-' + i);
+                            if (leM) leM.style.left = (t.loopEnd * 100) + '%';
+                            
+                            if (t.params) {
+                                for (var k = 0; k < KNOB_CONFIGS.length; k++) {
+                                    var cfg = KNOB_CONFIGS[k];
+                                    var sl = document.getElementById('t-' + cfg.p + '-sl-' + i);
+                                    if (sl) sl.value = t.params[cfg.p] || 0;
+                                    var valDisp = document.getElementById('t-' + cfg.p + '-val-' + i);
+                                    if (valDisp) valDisp.textContent = t.params[cfg.p] || 0;
+                                    
+                                    var lfo1c = document.getElementById('t-lfo1-chk-' + i + '-' + cfg.p);
+                                    if (lfo1c) lfo1c.checked = !!(t.lfoAssigns && t.lfoAssigns[1] && t.lfoAssigns[1].indexOf(cfg.p) !== -1);
+                                    var lfo2c = document.getElementById('t-lfo2-chk-' + i + '-' + cfg.p);
+                                    if (lfo2c) lfo2c.checked = !!(t.lfoAssigns && t.lfoAssigns[2] && t.lfoAssigns[2].indexOf(cfg.p) !== -1);
+                                }
+                                var gSl = document.getElementById('t-gain-sl-' + i);
+                                if (gSl) gSl.value = t.params.inputGain || 0;
+                                var gVal = document.getElementById('t-gain-val-' + i);
+                                if (gVal) gVal.textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                            }
+                            if (t.fxSlots) {
+                                for (var f = 0; f < t.fxSlots.length; f++) {
+                                    var active = t.fxSlots[f];
+                                    var chk = document.getElementById('t-fx-chk-' + i + '-' + f);
+                                    if (chk) chk.checked = active;
+                                    var lbl = document.getElementById('t-fx-lbl-' + i + '-' + f);
+                                    if (lbl) lbl.style.backgroundColor = active ? 'var(--gold)' : 'transparent';
+                                }
+                            }
+                            var rBtn = document.getElementById('t-rec-' + i);
+                            if (rBtn) rBtn.className = t.isRecording ? 'recording' : '';
+                        }
+                    }
+                } catch (e) { console.error("TV: Render Error", e); }
             }
 
             let binaryWS = null;
@@ -350,23 +425,23 @@
                     return;
                 }
                 
-                binaryWS.onopen = () => {
+                binaryWS.onopen = function() {
                     console.log('✅ Binary Bridge Connected');
-                    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
-                    const diagEl = document.getElementById('bridge-diag-text');
+                    relayLogToStudio('✅ TV: WebSocket Connected to ' + url);
+                    var diagEl = document.getElementById('bridge-diag-text');
                     if (diagEl) {
                         diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED|ERROR.*)/, 'WS: CONNECTED');
                         diagEl.style.color = '#0f0';
                         diagEl.style.borderColor = '#0f0';
                     }
-                    const conn = document.getElementById('bridge-status-dot');
+                    var conn = document.getElementById('bridge-status-dot');
                     if (conn) conn.style.backgroundColor = 'var(--green)';
                 };
                 
-                binaryWS.onmessage = async (event) => {
+                binaryWS.onmessage = function(event) {
                     if (typeof event.data === 'string') {
                         try {
-                            const msg = JSON.parse(event.data);
+                            var msg = JSON.parse(event.data);
                             if (msg.type === 'BRIDGE_CONFIG' && msg.config && msg.config.sampleRate) {
                                 initAudio(msg.config.sampleRate);
                             }
@@ -374,52 +449,56 @@
                         return;
                     }
 
-                    let buffer;
-                    if (event.data instanceof ArrayBuffer) {
-                        buffer = event.data;
-                    } else if (event.data instanceof Blob) {
-                        buffer = await event.data.arrayBuffer();
-                    }
-                    
-                    if (buffer) {
-                        if (!audioCtx) await initAudio();
-                        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-                        if (workletNode) {
-                            try {
-                                workletNode.port.postMessage(buffer, [buffer]);
-                            } catch (e) {
-                                workletNode.port.postMessage(buffer);
+                    var processBuffer = function(buffer) {
+                        if (!audioCtx) {
+                             initAudio().then(function() {
+                                 if (workletNode) workletNode.port.postMessage(buffer, [buffer]);
+                             });
+                        } else {
+                            if (audioCtx.state === 'suspended') audioCtx.resume();
+                            if (workletNode) {
+                                try {
+                                    workletNode.port.postMessage(buffer, [buffer]);
+                                } catch (e) {
+                                    workletNode.port.postMessage(buffer);
+                                }
                             }
                         }
                         
-                        // Visual Activity Indicator
-                        const conn = document.getElementById('bridge-status-dot');
+                        var conn = document.getElementById('bridge-status-dot');
                         if (conn) {
                             conn.style.backgroundColor = 'var(--green)';
                             conn.style.boxShadow = '0 0 10px var(--green)';
                         }
+                    };
+
+                    if (event.data instanceof ArrayBuffer) {
+                        processBuffer(event.data);
+                    } else if (event.data instanceof Blob) {
+                        var reader = new FileReader();
+                        reader.onload = function() { processBuffer(reader.result); };
+                        reader.readAsArrayBuffer(event.data);
                     }
                 };
                 
-                binaryWS.onclose = () => {
+                binaryWS.onclose = function() {
                     console.log('🛑 Binary Bridge Closed. Retrying in 5s...');
-                    const conn = document.getElementById('bridge-status-dot');
+                    var conn = document.getElementById('bridge-status-dot');
                     if (conn) conn.style.backgroundColor = 'var(--red)';
-                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+                    wsConnectTimeout = setTimeout(function() { connectBinaryBridge(ip); }, 5000);
                 };
                 
-                binaryWS.onerror = (e) => {
+                binaryWS.onerror = function(e) {
                     console.error('❌ Binary Bridge Error:', e);
-                    relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
-                    const diagEl = document.getElementById('bridge-diag-text');
+                    relayLogToStudio('❌ TV: WebSocket Error on ' + url);
+                    var diagEl = document.getElementById('bridge-diag-text');
                     if (diagEl) {
-                        diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
+                        diagEl.textContent = 'BUF: 0 | STALLS: 0 | WS: ERROR [' + url + ']';
                         diagEl.style.color = 'var(--red)';
                         diagEl.style.borderColor = 'var(--red)';
                     }
-                    // [V13.8.150] Retry loop
                     if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
-                    wsConnectTimeout = setTimeout(() => {
+                    wsConnectTimeout = setTimeout(function() {
                         console.log("📡 TV: Retrying Binary Bridge...");
                         connectBinaryBridge(ip);
                     }, 5000);
