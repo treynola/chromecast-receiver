@@ -2,154 +2,134 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.9.18 [LOGIC RESTORED]</title>
+    <title>MXS-004 Studio Mirror v13.9.19 [AESTHETIC RESTORED]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css?v=13.8.132">
     <style>
-        :root {
-            --bg: #0a0a0a;
-            --surface: #1a1a1a;
-            --accent: #ff0055;
-            --text: #ffffff;
-            --text-dim: #888888;
-            --green: #00ff88;
-            --red: #ff3333;
-            --scale: 1;
-        }
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            margin: 0;
-            padding: 0;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            display: flex;
+        /* [v13.9.19] RECOVERED ORIGINAL CSS BASELINE */
+        html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        .app-loading { opacity: 1 !important; visibility: visible !important; }
+        .container {
+            position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
+            opacity: 1 !important; visibility: visible !important; display: flex !important;
+            background-color: #000 !important; width: 1440px !important; height: 810px !important;
             flex-direction: column;
         }
-        #main-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
+        .header { display: flex; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid #333; }
+        .main-content {
+            display: grid !important;
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 6px !important;
+            width: 100% !important;
+            height: calc(100% - 60px) !important;
+            padding: 10px;
             box-sizing: border-box;
-            transform: scale(var(--scale));
-            transform-origin: top center;
         }
-        #master-column {
-            width: 100%;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .track {
-            background: var(--surface);
-            border-radius: 12px;
-            padding: 15px;
+        .track, .master-column { 
+            background: rgba(20, 20, 20, 0.9) !important; 
+            border: 1px solid var(--green) !important; 
+            border-radius: 8px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            border: 1px solid #333;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            gap: 5px;
         }
-        .track-header { font-weight: 800; font-size: 0.9em; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
-        .track-time-display { font-family: 'JetBrains Mono', monospace; font-size: 1.4em; color: var(--green); margin: 5px 0; }
-        .waveform-box { height: 60px; background: #000; border-radius: 6px; position: relative; overflow: hidden; border: 1px solid #222; }
-        .waveform-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        .status-indicator { font-size: 0.7em; padding: 4px 8px; border-radius: 4px; text-transform: uppercase; font-weight: bold; width: fit-content; }
-        .status-ready { background: rgba(0, 255, 136, 0.15); color: var(--green); }
-        .status-recording { background: rgba(255, 51, 51, 0.15); color: var(--red); animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
-
+        .track-header { font-family: 'Mexcellent', sans-serif; font-size: 1.1em; color: var(--gold); }
+        .track-time-display { font-family: 'JetBrains Mono', monospace; font-size: 1.8em; color: var(--green); text-align: center; margin: 5px 0; }
+        .waveform-box { height: 50px; background: #000; border-radius: 4px; position: relative; border: 1px solid #333; }
+        .waveform-canvas { width: 100%; height: 100%; }
+        .status-indicator { font-size: 0.7em; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; }
+        .status-ready { background: rgba(0, 255, 136, 0.1); color: var(--green); }
+        .status-recording { background: rgba(255, 51, 51, 0.1); color: var(--red); }
+        
+        .track-buttons { display: flex; gap: 4px; margin-top: auto; }
+        .track-buttons button { flex: 1; height: 30px; font-family: 'JetBrains Mono', monospace; font-size: 0.8em; border-radius: 4px; cursor: pointer; }
+        button#t-play { background: var(--green); color: #000; }
+        button#t-rec { background: var(--red); color: #fff; }
+        
         #bridge-diag-panel {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.8);
-            border: 1px solid #0f0;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-family: monospace;
-            font-size: 10px;
-            color: #0f0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            z-index: 1000;
+            position: fixed; bottom: 10px; right: 10px;
+            background: rgba(0,0,0,0.9); border: 1px solid #0f0;
+            padding: 5px 10px; border-radius: 4px; font-family: monospace; font-size: 10px; color: #0f0;
+            display: flex; align-items: center; gap: 8px;
         }
         #bridge-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
         
-        .pa-mic-slider { width: 100%; accent-color: var(--accent); }
-        .knob-container { display: flex; flex-direction: column; gap: 4px; }
-        .knob-label-group { display: flex; justify-content: space-between; font-size: 0.7em; color: var(--text-dim); }
-        .param-value { color: var(--accent); font-weight: bold; }
-        select { background: #333; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 4px; font-size: 0.8em; }
+        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 5px; }
+        .sample-btn { aspect-ratio: 1; background: #222; border: 1px solid #444; color: #888; font-size: 0.8em; }
     </style>
 </head>
-<body>
-    <div id="main-container">
-        <div id="main-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
-            <!-- Dynamic Tracks -->
+<body class="app-loading">
+    <div class="container" id="studio-root">
+        <div class="header">
+            <h1 style="font-family: 'Mexcellent', sans-serif; color: var(--gold); margin:0;">NOWMULTIMEDIA MXS-004</h1>
+            <h2 style="font-size:0.9em; font-family: 'Mexcellent', sans-serif; color: var(--gold); margin:0;">Studio Mirror :: v13.9.19</h2>
         </div>
         
+        <div class="main-content" id="main-grid">
+            <!-- Column 1: MASTER -->
+            <div class="master-column">
+                <div class="track-header">MASTER REC</div>
+                <div id="master-time" class="track-time-display">00:00:00</div>
+                <div class="status-indicator status-ready">MONITORING</div>
+                <div class="waveform-box"></div>
+                <div class="sample-grid" id="sample-grid">
+                    <!-- 20 pads -->
+                </div>
+            </div>
+            <!-- Column 2-5: Tracks -->
+        </div>
+
         <div id="bridge-diag-panel">
             <div id="bridge-status-dot"></div>
-            <div id="bridge-diag-text">BUF: 0 | RATE: 1.0000x | SYNCING | WS: DISCONNECTED [DIRECT BRIDGE]</div>
+            <div id="bridge-diag-text">BUF: 0 | WS: DISCONNECTED [DIRECT BRIDGE]</div>
         </div>
     </div>
 
     <script>
         (function() {
             const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-            const KNOB_CONFIGS = [{ l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' }, { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' }, { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }];
-            
             var audioCtx = null;
             var workletNode = null;
             var binaryWS = null;
-            var lastStateUpdate = Date.now();
+            var lastUpdate = Date.now();
 
             function buildGUI() {
                 const grid = document.getElementById('main-grid');
-                if (!grid) return;
-                grid.innerHTML = '';
+                // Clear dynamic tracks (Columns 2-5)
+                const existingTracks = document.querySelectorAll('.track');
+                existingTracks.forEach(t => t.remove());
 
                 for (let i = 0; i < 4; i++) {
                     const t = document.createElement('div');
                     t.className = 'track';
                     t.id = `track-${i}`;
-                    
-                    let html = `
+                    t.innerHTML = `
                         <div class="track-header">TRACK ${i+1}</div>
-                        <div class="track-time-display" id="t-time-${i}">00:00:00</div>
-                        <div class="status-indicator status-ready" id="t-st-${i}">Ready</div>
-                        <div class="waveform-box">
-                            <canvas class="waveform-canvas" id="t-wf-${i}"></canvas>
+                        <div id="t-time-${i}" class="track-time-display">00:00:00</div>
+                        <div id="t-st-${i}" class="status-indicator status-ready">Ready</div>
+                        <div class="waveform-box"><canvas id="t-wf-l-${i}" class="waveform-canvas"></canvas></div>
+                        <div class="waveform-box"><canvas id="t-wf-r-${i}" class="waveform-canvas"></canvas></div>
+                        <div class="track-buttons">
+                            <button id="t-rec-${i}">REC</button>
+                            <button id="t-play-${i}">PLAY</button>
+                            <button id="t-rev-${i}">REV</button>
                         </div>
-                        <div class="control-group">
-                            <label style="font-size: 0.7em; color: #888;">Input Gain</label>
-                            <input type="range" class="pa-mic-slider" id="t-gain-${i}" min="-48" max="48" step="0.1">
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px;">
                     `;
-                    
-                    KNOB_CONFIGS.slice(0, 4).forEach(cfg => {
-                        html += `
-                            <div class="knob-container">
-                                <div class="knob-label-group">
-                                    <label>${cfg.l}</label>
-                                    <span class="param-value" id="t-${cfg.p}-val-${i}">0</span>
-                                </div>
-                                <input type="range" class="pa-mic-slider" id="t-${cfg.p}-sl-${i}">
-                            </div>
-                        `;
-                    });
-                    
-                    html += `</div>`;
-                    t.innerHTML = html;
                     grid.appendChild(t);
+                }
+
+                const sGrid = document.getElementById('sample-grid');
+                if (sGrid) {
+                    sGrid.innerHTML = '';
+                    for (let p = 1; p <= 20; p++) {
+                        const b = document.createElement('button');
+                        b.className = 'sample-btn';
+                        b.textContent = p;
+                        sGrid.appendChild(b);
+                    }
                 }
                 updateScale();
             }
@@ -157,124 +137,76 @@
             function updateScale() {
                 const winW = window.innerWidth;
                 const winH = window.innerHeight;
-                document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.95);
+                document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98);
             }
 
-            function relayLogToStudio(msg) {
-                console.log(`[TV] ${msg}`);
+            function relayLog(msg) {
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const senders = context.getSenders();
                 if (senders.length > 0) {
-                    try {
-                        context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV LOG] ${msg}` });
-                    } catch(e) {}
+                    context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV] ${msg}` });
                 }
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                    try { binaryWS.send(JSON.stringify({ type: 'TV_LOG', message: msg })); } catch(e) {}
+                    binaryWS.send(JSON.stringify({ type: 'TV_LOG', message: msg }));
                 }
             }
 
             async function initAudio(rate) {
                 const targetRate = rate || 48000;
-                if (!audioCtx || audioCtx.sampleRate !== targetRate) {
-                    if (audioCtx) await audioCtx.close();
-                    
+                if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
                     await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
-                    
                     workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', { outputChannelCount: [2] });
                     workletNode.connect(audioCtx.destination);
-
-                    workletNode.port.onmessage = (e) => {
-                        if (e.data.type === 'DIAG') {
-                            const diagEl = document.getElementById('bridge-diag-text');
-                            if (diagEl) {
-                                const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
-                                diagEl.textContent = `BUF: ${e.data.available} | RATE: ${e.data.rate.toFixed(4)}x | ${e.data.locked ? 'LOCKED' : 'SYNCING'} | WS: ${wsStatus}`;
-                            }
-                        }
-                    };
-                    relayLogToStudio(`✅ TV: Audio Sink Active @ ${audioCtx.sampleRate}Hz`);
+                    relayLog(`✅ Audio Sink Active @ ${audioCtx.sampleRate}Hz`);
                 }
             }
 
-            function connectBinaryBridge(ip) {
+            function connectBridge(ip) {
                 if (binaryWS) binaryWS.close();
-                const url = `ws://${ip}:8080`;
-                binaryWS = new WebSocket(url);
-                binaryWS.binaryType = 'arraybuffer';
-
+                binaryWS = new WebSocket(`ws://${ip}:8080`);
                 binaryWS.onopen = () => {
-                    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
-                    const dot = document.getElementById('bridge-status-dot');
-                    if (dot) dot.style.backgroundColor = '#0f0';
+                    document.getElementById('bridge-status-dot').style.backgroundColor = '#0f0';
                 };
-
-                binaryWS.onmessage = async (event) => {
-                    if (typeof event.data === 'string') {
-                        try {
-                            const msg = JSON.parse(event.data);
-                            if (msg.type === 'BRIDGE_CONFIG') initAudio(msg.config.sampleRate);
-                        } catch(e) {}
-                        return;
+                binaryWS.onmessage = async (e) => {
+                    if (typeof e.data === 'string') {
+                        const m = JSON.parse(e.data);
+                        if (m.type === 'BRIDGE_CONFIG') initAudio(m.config.sampleRate);
+                    } else if (workletNode) {
+                        const buf = (e.data instanceof Blob) ? await e.data.arrayBuffer() : e.data;
+                        workletNode.port.postMessage(buf, [buf]);
                     }
-                    if (workletNode) {
-                        const buffer = (event.data instanceof Blob) ? await event.data.arrayBuffer() : event.data;
-                        workletNode.port.postMessage(buffer, [buffer]);
-                    }
-                };
-
-                binaryWS.onclose = () => {
-                    const dot = document.getElementById('bridge-status-dot');
-                    if (dot) dot.style.backgroundColor = '#f33';
-                    setTimeout(() => connectBinaryBridge(ip), 5000);
                 };
             }
 
-            function renderState(state) {
-                lastStateUpdate = Date.now();
+            function render(state) {
+                lastUpdate = Date.now();
                 if (!state || !state.tracks) return;
                 state.tracks.forEach((track, i) => {
-                    const el = document.getElementById(`track-${i}`);
-                    if (!el) return;
-                    
                     const timeEl = document.getElementById(`t-time-${i}`);
                     if (timeEl) timeEl.textContent = track.displayTime || '00:00:00';
-                    
                     const stEl = document.getElementById(`t-st-${i}`);
                     if (stEl) {
                         stEl.textContent = track.status || 'Ready';
                         stEl.className = `status-indicator status-${track.status?.toLowerCase() || 'ready'}`;
                     }
-
-                    const gainEl = document.getElementById(`t-gain-${i}`);
-                    if (gainEl) gainEl.value = track.gain || 0;
                 });
+                if (state.masterTime) document.getElementById('master-time').textContent = state.masterTime;
             }
 
-            // Start Cast Context
             window.onload = () => {
                 buildGUI();
                 const context = cast.framework.CastReceiverContext.getInstance();
-                
-                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-                    const d = event.data;
-                    if (d.type === 'STATE_UPDATE') renderState(d.state);
-                    if (d.type === 'BRIDGE_IP') connectBinaryBridge(d.ip);
+                context.addCustomMessageListener(CUSTOM_NAMESPACE, (e) => {
+                    if (e.data.type === 'STATE_UPDATE') render(e.data.state);
+                    if (e.data.type === 'BRIDGE_IP') connectBridge(e.data.ip);
                 });
-
-                const options = new cast.framework.CastReceiverOptions();
-                options.maxInactivity = 3600;
-                context.start(options);
-                relayLogToStudio("🚀 TV: Cast Receiver Framework Started");
+                context.start();
+                relayLog("🚀 TV Receiver Ready v13.9.19");
             };
 
-            // Self-Heal Guard
             setInterval(() => {
-                if (Date.now() - lastStateUpdate > 15000) {
-                    relayLogToStudio("⚠️ TV: GUI Signal Timeout. Self-Healing...");
-                    window.location.reload();
-                }
+                if (Date.now() - lastUpdate > 15000) window.location.reload();
             }, 5000);
 
             window.onresize = updateScale;
