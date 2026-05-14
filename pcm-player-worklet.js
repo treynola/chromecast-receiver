@@ -13,9 +13,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     
     // [v13.8.200] Direct Handshake Config
     this._TARGET_BUFFER = 72000; // 750ms @ 48kHz stereo (Drunk-Proof Target)
-    this._MIN_BUFFER = 24000;    // 250ms (Direct Safety Limit)
+    this._MIN_BUFFER = 36000;    // 375ms (Increased Safety Margin)
     this._PREBUFFER = 96000;     // 1000ms (Warm-up threshold)
-    this._DEAD_ZONE = 4800;      // 50ms (Subtle PI Dead-Zone)
+    this._DEAD_ZONE = 2400;      // 25ms (Tighter Precision Dead-Zone)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -29,9 +29,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._errorSum = 0;
     this._smoothedError = 0;
     
-    // PI Gains (Dampened for high-volume bursts)
-    this._kp = 0.00000002; 
-    this._ki = 0.0000000002;
+    // PI Gains (Optimized for 48kHz drift)
+    this._kp = 0.000005; 
+    this._ki = 0.0000005;
 
     this.port.onmessage = (e) => {
       try {
@@ -81,7 +81,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // [v13.9.0] SMOOTHED DRUNK-PROOF SYNC
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.999) + (rawError * 0.001); // ultra-smooth error
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01); 
 
     if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
         this._targetPlaybackRate = 1.0;
@@ -89,11 +89,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     } else {
         this._errorSum += this._smoothedError;
         const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
-        this._targetPlaybackRate = Math.max(0.999, Math.min(1.001, 1.0 + adj));
+        this._targetPlaybackRate = Math.max(0.99, Math.min(1.01, 1.0 + adj));
     }
     
-    // Slow ramp to target rate (Eliminates 'drunk' pitch jumps)
-    this._playbackRate = (this._playbackRate * 0.999) + (this._targetPlaybackRate * 0.001);
+    // Fast but smooth ramp to target rate (Eliminates 'drunk' pitch jumps)
+    this._playbackRate = (this._playbackRate * 0.995) + (this._targetPlaybackRate * 0.005);
 
     const ringLen = this._ringBuffer.length;
 
