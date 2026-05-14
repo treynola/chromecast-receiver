@@ -259,9 +259,14 @@
                 }
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const senders = context.getSenders();
-                if (senders.length > 0) {
                     try {
                         context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV LOG] ${msg}` });
+                    } catch(e) {}
+                }
+                // [v13.9.7] WebSocket Log Tunnel (Bypasses Cast Signaling limits)
+                if (window.binaryWS && window.binaryWS.readyState === WebSocket.OPEN) {
+                    try {
+                        window.binaryWS.send(JSON.stringify({ type: 'TV_LOG', message: msg }));
                     } catch(e) {}
                 }
             }
