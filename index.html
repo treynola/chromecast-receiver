@@ -446,11 +446,23 @@
                         const bytes = new Uint8Array(len);
                         for (let i = 0; i < len; i++) { bytes[i] = binary.charCodeAt(i); }
                         if (workletNode) workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
-                    } else if (d.type === 'STATE_UPDATE') {
+                    if (d.type === 'STATE_UPDATE') {
+                        this._lastStateUpdate = Date.now();
                         renderState(d.state);
                     }
                 } catch(e) {}
             }
+
+            // [v13.9.10] Self-Heal Guard
+            setInterval(() => {
+                const context = cast.framework.CastReceiverContext.getInstance();
+                if (context.getSenders().length > 0) {
+                    if (this._lastStateUpdate && (Date.now() - this._lastStateUpdate > 10000)) {
+                        relayLogToStudio("⚠️ TV: GUI Stuck detected. Hard Reloading...");
+                        window.location.reload(true);
+                    }
+                }
+            }, 5000);
 
             window.onload = function() { 
                 buildGUI(); 
