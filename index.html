@@ -446,11 +446,15 @@
                         const bytes = new Uint8Array(len);
                         for (let i = 0; i < len; i++) { bytes[i] = binary.charCodeAt(i); }
                         if (workletNode) workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
+                    }
+
                     if (d.type === 'STATE_UPDATE') {
                         this._lastStateUpdate = Date.now();
                         renderState(d.state);
                     }
-                } catch(e) {}
+                } catch(e) {
+                    console.error("❌ TV: Inbound Data Error:", e);
+                }
             }
 
             // [v13.9.10] Self-Heal Guard
