@@ -147,36 +147,62 @@
             var KNOB_CONFIGS = [{ l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' }, { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' }, { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }];
 
             function buildGUI() {
-                var g = document.getElementById('sample-grid'); if (g) { g.innerHTML = ''; for (var p = 1; p <= 20; p++) { var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b); } }
+                var g = document.getElementById('sample-grid'); 
+                if (g) { 
+                    g.innerHTML = ''; 
+                    for (var p = 1; p <= 20; p++) { 
+                        var b = document.createElement('button'); 
+                        b.className = 'sample-btn'; 
+                        b.id = 'sample-' + p; 
+                        b.textContent = p; 
+                        g.appendChild(b); 
+                    } 
+                }
                 var grid = document.getElementById('main-grid');
+                if (!grid) return;
+
                 for (var i = 0; i < 4; i++) {
                     if (document.getElementById('track-'+i)) continue;
                     var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
-                    t.innerHTML = `
-                        <div class="track-header">TRACK ${i+1}</div>
-                        <div class="track-time-display" id="t-time-${i}">00:00:00</div>
-                        <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
-                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div></div></div>
-                        <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select class="input-source"><option>Microphone</option></select></div><span class="file-name-display" id="t-file-${i}"></span></div>
-                        <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
-                        <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
-                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0,1,2,3,4,5,6].map(idx => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx+1}</label></div>`).join('')}<button class="fx-chain-arrow">&gt;</button></div></div>
-                        <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map(cfg => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join('')}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
+                    var html = '';
+                    html += '<div class="track-header">TRACK ' + (i+1) + '</div>';
+                    html += '<div class="track-time-display" id="t-time-' + i + '">00:00:00</div>';
+                    html += '<div class="status-indicator status-ready" id="t-st-' + i + '"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-' + i + '">Ready</span></div></div>';
+                    html += '<div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-' + i + '" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-' + i + '" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-' + i + '"></div><div class="loop-marker loop-end-marker" id="t-le-m-' + i + '"></div></div></div>';
+                    html += '<div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select class="input-source"><option>Microphone</option></select></div><span class="file-name-display" id="t-file-' + i + '"></span></div>';
+                    html += '<div class="control-group pa-mic-adjustment" id="t-gain-grp-' + i + '" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-' + i + '" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-' + i + '" style="font-size: 0.72em;">0.0 dB</span></div>';
+                    html += '<div class="track-buttons"><button id="t-rec-' + i + '">REC</button><button id="t-stop-' + i + '">STOP</button><button id="t-play-' + i + '">PLAY</button><button id="t-rev-' + i + '">REV</button></div>';
+                    html += '<div class="loop-controls active" id="t-loop-ctrl-' + i + '" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-' + i + '" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-' + i + '" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-' + i + '">0.00s</span><span class="param-value" id="t-le-val-' + i + '">1.00s</span></div></div></div>';
+                    html += '<div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>';
+                    for (var j = 0; j < 7; j++) {
+                        html += '<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-' + i + '-' + j + '"><label class="fx-chain-slot-label" id="t-fx-lbl-' + i + '-' + j + '">' + (j+1) + '</label></div>';
+                    }
+                    html += '<button class="fx-chain-arrow">&gt;</button></div></div>';
+                    html += '<div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>';
+                    html += '<div class="main-controls">';
+                    for (var k = 0; k < KNOB_CONFIGS.length; k++) {
+                        var cfg = KNOB_CONFIGS[k];
+                        html += '<div class="knob-container"><div class="knob-label-group"><label>' + cfg.l + '</label><span class="param-value" id="t-' + cfg.p + '-val-' + i + '">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-' + i + '-' + cfg.p + '"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-' + i + '-' + cfg.p + '"></div><div class="slider-wrapper"><input type="range" id="t-' + cfg.p + '-sl-' + i + '" class="pa-mic-slider"></div></div>';
+                    }
+                    html += '</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-' + i + '" class="meter-bar"></div></div>';
+                    t.innerHTML = html;
                     grid.appendChild(t);
                 }
                 updateScale();
             }
 
-            function updateScale() { const winW = window.innerWidth; const winH = window.innerHeight; document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); }
+            function updateScale() { 
+                var winW = window.innerWidth; 
+                var winH = window.innerHeight; 
+                document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); 
+            }
 
-            async function initAudio(rate) {
-                const targetRate = rate || 48000;
+            function initAudio(rate) {
+                var targetRate = rate || 48000;
                 if (!audioCtx || audioCtx.sampleRate !== targetRate) {
                     if (audioCtx) {
-                        relayLogToStudio(`📡 TV: Reseting AudioContext for Sample Rate: ${targetRate}`);
-                        try { await audioCtx.close(); } catch(e) {}
+                        relayLogToStudio('📡 TV: Reseting AudioContext for Sample Rate: ' + targetRate);
+                        try { audioCtx.close(); } catch(e) {}
                     }
                     
                     try {
@@ -185,62 +211,58 @@
                             latencyHint: 'interactive'
                         });
 
-                        // Master Gain (Final Stage)
-                        const masterGain = audioCtx.createGain();
+                        var masterGain = audioCtx.createGain();
                         masterGain.gain.value = 1.0;
                         masterGain.connect(audioCtx.destination);
                         
-                        // Keep-Alive Dither (Prevents hardware suspension)
-                        const keepAlive = audioCtx.createOscillator();
-                        const g = audioCtx.createGain();
+                        var keepAlive = audioCtx.createOscillator();
+                        var g = audioCtx.createGain();
                         g.gain.value = 0.000001; 
                         keepAlive.connect(g);
                         g.connect(audioCtx.destination);
                         keepAlive.start();
 
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
-                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
-                            outputChannelCount: [2]
-                        });
-                        workletNode.connect(masterGain);
-                        
-                        // Force System Volume (TV Level)
-                        try {
-                            const context = cast.framework.CastReceiverContext.getInstance();
-                            context.setSystemVolume(1.0);
-                            relayLogToStudio("✅ TV: System Volume Forced to 100%");
-                        } catch(e) {}
+                        audioCtx.audioWorklet.addModule('pcm-player-worklet.js').then(function() {
+                            workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
+                                outputChannelCount: [2]
+                            });
+                            workletNode.connect(masterGain);
+                            
+                            try {
+                                var context = cast.framework.CastReceiverContext.getInstance();
+                                context.setSystemVolume(1.0);
+                                relayLogToStudio("✅ TV: System Volume Forced to 100%");
+                            } catch(e) {}
 
-                        relayLogToStudio('✅ TV: Sink Active @ ' + audioCtx.sampleRate + 'Hz (Requested: ' + targetRate + 'Hz)');
+                            relayLogToStudio('✅ TV: Sink Active @ ' + audioCtx.sampleRate + 'Hz (Requested: ' + targetRate + 'Hz)');
 
-                        workletNode.port.onmessage = function(e) {
-                            if (e.data.type === 'DIAG') {
-                                var diagEl = document.getElementById('bridge-diag-text');
-                                if (diagEl) {
-                                    var wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
-                                    var peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    var rateDisp = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
-                                    var lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
-                                    var relayInfo = (window._relayPkts > 0) ? 'RELAY: ' + window._relayPkts + ' | ' : '';
-                                    diagEl.textContent = relayInfo + 'BUF: ' + e.data.available + ' | RATE: ' + rateDisp + 'x | ' + lockStatus + ' | WS: ' + wsStatus + ' [DIRECT BRIDGE]';
+                            workletNode.port.onmessage = function(e) {
+                                if (e.data.type === 'DIAG') {
+                                    var diagEl = document.getElementById('bridge-diag-text');
+                                    if (diagEl) {
+                                        var wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
+                                        var rateDisp = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
+                                        var lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
+                                        var relayInfo = (window._relayPkts > 0) ? 'RELAY: ' + window._relayPkts + ' | ' : '';
+                                        diagEl.textContent = relayInfo + 'BUF: ' + e.data.available + ' | RATE: ' + rateDisp + 'x | ' + lockStatus + ' | WS: ' + wsStatus + ' [DIRECT BRIDGE]';
+                                    }
                                 }
-                            }
-                        };
+                            };
+                        });
                     } catch (e) {
-                        relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+                        relayLogToStudio('❌ TV ERROR: initAudio failed - ' + e.message);
                     }
                 }
             }
 
-            async function resumeAudio() {
+            function resumeAudio() {
                 if (audioCtx && audioCtx.state === 'suspended') {
-                    try {
-                        await audioCtx.resume();
+                    audioCtx.resume().then(function() {
                         if (audioCtx.state === 'running') {
                             console.log("🔊 Receiver: AudioContext Resumed.");
                             relayLogToStudio("✅ TV: AudioContext Resumed.");
                         }
-                    } catch (e) { console.warn("⚠️ TV: Resume failed", e); }
+                    }).catch(function(e) { console.warn("⚠️ TV: Resume failed", e); });
                 }
             }
 
