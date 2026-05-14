@@ -6,16 +6,16 @@
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._ringBuffer = new Float32Array(48000 * 4); // 4 seconds at 48kHz
+    this._ringBuffer = new Float32Array(48000 * 8); // 8 seconds at 48kHz (Heavy Headroom)
     this._readPtr = 0.0;
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // [v13.8.200] Direct Handshake Config
-    this._TARGET_BUFFER = 72000; // 750ms @ 48kHz stereo (Drunk-Proof Target)
-    this._MIN_BUFFER = 36000;    // 375ms (Increased Safety Margin)
-    this._PREBUFFER = 96000;     // 1000ms (Warm-up threshold)
-    this._DEAD_ZONE = 2400;      // 25ms (Tighter Precision Dead-Zone)
+    // [v13.9.5] Wide-Swing Engine Config
+    this._TARGET_BUFFER = 48000; // 500ms @ 48kHz stereo (Optimal Latency)
+    this._MIN_BUFFER = 12000;    // 125ms (Low-Latency Safety Floor)
+    this._PREBUFFER = 24000;     // 250ms (Instant-Start Threshold)
+    this._DEAD_ZONE = 2400;      // 25ms (Precision Integrator Dead-Zone)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -29,9 +29,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._errorSum = 0;
     this._smoothedError = 0;
     
-    // PI Gains (Optimized for 48kHz drift)
-    this._kp = 0.000005; 
-    this._ki = 0.0000005;
+    // PI Gains (Stabilized for Wide-Swing recovery)
+    this._kp = 0.000001; 
+    this._ki = 0.00000001;
 
     this.port.onmessage = (e) => {
       try {
@@ -79,20 +79,22 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.0] SMOOTHED DRUNK-PROOF SYNC
+    // [v13.9.5] WIDE-SWING SMOOTH SYNC
     const rawError = this._bufferSize - this._TARGET_BUFFER;
     this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01); 
 
     if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
-        this._targetPlaybackRate = 1.0;
+        // Inside dead-zone: Hold the current correction (No snapping!)
+        this._targetPlaybackRate = 1.0 + (this._errorSum * this._ki); 
         this._errorSum *= 0.999; 
     } else {
         this._errorSum += this._smoothedError;
         const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
-        this._targetPlaybackRate = Math.max(0.99, Math.min(1.01, 1.0 + adj));
+        // [IMPORTANT] Wide Swing (0.8 to 1.2) to handle 44.1/48kHz mismatches
+        this._targetPlaybackRate = Math.max(0.8, Math.min(1.2, 1.0 + adj));
     }
     
-    // Fast but smooth ramp to target rate (Eliminates 'drunk' pitch jumps)
+    // Smooth transition to target rate
     this._playbackRate = (this._playbackRate * 0.995) + (this._targetPlaybackRate * 0.005);
 
     const ringLen = this._ringBuffer.length;
