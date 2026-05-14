@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.9.19 [AESTHETIC RESTORED]</title>
+    <title>MXS-004 Studio Mirror v13.8.150 [STYLING & AUDIO FIX]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css?v=13.8.132">
     <style>
-        /* [v13.9.19] RECOVERED ORIGINAL CSS BASELINE */
+        /* [v13.8.150] Studio Perfection - Hardened UI & Audio */
         html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
         .app-loading { opacity: 1 !important; visibility: visible !important; }
         .container {
@@ -15,201 +15,542 @@
             transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
             opacity: 1 !important; visibility: visible !important; display: flex !important;
             background-color: #000 !important; width: 1440px !important; height: 810px !important;
-            flex-direction: column;
         }
-        .header { display: flex; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid #333; }
+        #cursor-mirror {
+            position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.9); 
+            border-radius: 50%; pointer-events: none; z-index: 10000; border: 2px solid white; 
+            display: none; box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            left: 0; top: 0; transform-origin: center;
+        }
+        cast-media-player { display: none; }
         .main-content {
             display: grid !important;
             grid-template-columns: repeat(5, 1fr) !important;
             gap: 6px !important;
             width: 100% !important;
-            height: calc(100% - 60px) !important;
-            padding: 10px;
-            box-sizing: border-box;
+            height: calc(100% - 40px) !important;
         }
-        .track, .master-column { 
-            background: rgba(20, 20, 20, 0.9) !important; 
+        .track { 
+            background: rgba(20, 20, 20, 0.8) !important; 
             border: 1px solid var(--green) !important; 
-            border-radius: 8px;
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
         }
-        .track-header { font-family: 'Mexcellent', sans-serif; font-size: 1.1em; color: var(--gold); }
-        .track-time-display { font-family: 'JetBrains Mono', monospace; font-size: 1.8em; color: var(--green); text-align: center; margin: 5px 0; }
-        .waveform-box { height: 50px; background: #000; border-radius: 4px; position: relative; border: 1px solid #333; }
-        .waveform-canvas { width: 100%; height: 100%; }
-        .status-indicator { font-size: 0.7em; padding: 4px; text-align: center; border-radius: 4px; font-weight: bold; }
-        .status-ready { background: rgba(0, 255, 136, 0.1); color: var(--green); }
-        .status-recording { background: rgba(255, 51, 51, 0.1); color: var(--red); }
-        
-        .track-buttons { display: flex; gap: 4px; margin-top: auto; }
-        .track-buttons button { flex: 1; height: 30px; font-family: 'JetBrains Mono', monospace; font-size: 0.8em; border-radius: 4px; cursor: pointer; }
-        button#t-play { background: var(--green); color: #000; }
-        button#t-rec { background: var(--red); color: #fff; }
-        
-        #bridge-diag-panel {
-            position: fixed; bottom: 10px; right: 10px;
-            background: rgba(0,0,0,0.9); border: 1px solid #0f0;
-            padding: 5px 10px; border-radius: 4px; font-family: monospace; font-size: 10px; color: #0f0;
-            display: flex; align-items: center; gap: 8px;
+        .master-column {
+            border: 1px solid var(--green) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2px !important;
         }
-        #bridge-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 2px !important; }
+        .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
+        .hidden { display: none !important; }
         
-        .sample-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 5px; }
-        .sample-btn { aspect-ratio: 1; background: #222; border: 1px solid #444; color: #888; font-size: 0.8em; }
+        #audio-unlock-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); color: var(--gold);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100000; cursor: pointer; text-align: center;
+            font-family: 'Mexcellent', sans-serif;
+        }
+        #audio-unlock-overlay h1 { font-size: 3em; margin-bottom: 20px; }
+        #audio-unlock-overlay p { font-size: 1.5em; font-family: 'Cousine', monospace; }
+        
+        .scrolling-text-wrapper { overflow: hidden; white-space: nowrap; width: 100%; position: relative; }
+        .scrolling-text { display: inline-block; padding-left: 100%; animation: scroll-text 10s linear infinite; font-size: 0.7em; }
+        @keyframes scroll-text {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* [v13.8.150] ORIGINAL .APP BUTTON STYLING */
+        .track-buttons { display: flex; justify-content: space-between; gap: 2px; margin: 5px 0; }
+        .track-buttons button { flex: 1; height: 24px; font-size: 0.75em; font-family: 'Cousine', monospace; font-weight: 720; cursor: pointer; text-transform: uppercase; border-radius: 4px; }
+        
+        /* PLAY Button */
+        .track-buttons button[id^="t-play-"] { background-color: var(--green) !important; color: var(--gold) !important; border: 1px solid var(--gold) !important; }
+        /* STOP Button */
+        .track-buttons button[id^="t-stop-"] { background-color: var(--gold) !important; color: var(--red) !important; border: 1px solid var(--red) !important; }
+        /* REC Button */
+        .track-buttons button[id^="t-rec-"] { background-color: var(--red) !important; color: var(--gold) !important; border: 1px solid var(--gold) !important; }
+        /* REV Button */
+        .track-buttons button[id^="t-rev-"] { background-color: var(--gold) !important; color: var(--green) !important; border: 1px solid var(--green) !important; }
+        
+        .track-buttons button.recording { animation: text-blink 0.5s infinite; }
+        @keyframes text-blink { 50% { color: var(--dark-gray); } }
     </style>
 </head>
 <body class="app-loading">
+    <div id="audio-unlock-overlay" style="display:none !important;"></div>
     <div class="container" id="studio-root">
+    <div id="cursor-mirror"></div>
         <div class="header">
-            <h1 style="font-family: 'Mexcellent', sans-serif; color: var(--gold); margin:0;">NOWMULTIMEDIA MXS-004</h1>
-            <h2 style="font-size:0.9em; font-family: 'Mexcellent', sans-serif; color: var(--gold); margin:0;">Studio Mirror :: v13.9.19</h2>
+            <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
+            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: v13.8.150</h2></div>
         </div>
-        
         <div class="main-content" id="main-grid">
             <!-- Column 1: MASTER -->
-            <div class="master-column">
-                <div class="track-header">MASTER REC</div>
-                <div id="master-time" class="track-time-display">00:00:00</div>
-                <div class="status-indicator status-ready">MONITORING</div>
-                <div class="waveform-box"></div>
-                <div class="sample-grid" id="sample-grid">
-                    <!-- 20 pads -->
+            <div class="master-column" id="master-column">
+                <div class="track-header">Master Recording:</div>
+                <div id="recording-time-display" class="track-time-display">00:00:00</div>
+                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Vol</label>
+                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0">
+                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em;">0.0 dB</span>
+                </div>
+                <div class="master-item master-waveform-item">
+                    <div class="waveform-box master-waveform-box">
+                        <div class="waveform-labels"><div class="waveform-label-external" style="margin-top: 2px;">L</div><div class="waveform-label-external">R</div></div>
+                        <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;"><canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas><canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas></div>
+                    </div>
+                </div>
+                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
+                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Loop Length</label>
+                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
+                    <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em;">4.0s</span>
+                </div>
+                <div class="master-item master-bottom-item"><div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:2px;"><button id="master-record-button" class="rec-btn">REC</button><select id="record-as-select"><option value="master">Stereo (WAV)</option></select></div></div>
+                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:2px; margin-bottom:2px;">
+                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:1px;"><button id="lfo-toggle" style="height:22px; font-size:0.65em;">LFO 1</button></div><div class="master-item lfo-meter-item" style="padding:1px;"><div class="meter-container lfo-meter" style="height:3px;"><div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control" style="margin-top:0;"><label class="master-label" style="font-size:0.6em; margin:0;">Sweep 1</label><input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo-time-value" class="master-value" style="font-size:0.6em;">1.8s</span></div></div>
+                    <div class="lfo-separator" style="width:1px; background:var(--gold); margin:0 4px;"></div>
+                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:1px;"><button id="lfo2-toggle" style="height:22px; font-size:0.65em;">LFO 2</button></div><div class="master-item lfo-meter-item" style="padding:1px;"><div class="meter-container lfo-meter" style="height:3px;"><div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control" style="margin-top:0;"><label class="master-label" style="font-size:0.6em; margin:0;">Sweep 2</label><input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo2-time-value" class="master-value" style="font-size:0.6em;">1.8s</span></div></div>
+                </div>
+                <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
+                <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
+                <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
+                <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
+                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); color: #0f0; padding: 15px; font-family: 'Cousine', monospace; font-size: 1.4em; z-index: 1000000; border: 2px solid #0f0; border-radius: 8px; box-shadow: 0 0 20px rgba(0,255,0,0.5); min-width: 400px;">
+                    BUF: -- | STALLS: -- | WS: DISCONNECTED
+                </div>
+                <!-- [v13.8.150] Silent Video Hot-Wire (Unlocks Auto-Play) -->
+                <video id="audio-unlocker" playsinline muted autoplay loop style="position:fixed; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none;">
+                    <source src="https://raw.githubusercontent.com/anars/blank-audio/master/silent-1sec.mp4" type="video/mp4">
+                </video>
+                <div id="tv-console" style="position: fixed; top: 120px; left: 10px; width: 400px; height: 200px; background: rgba(0,0,0,0.7); color: #aaa; font-family: monospace; font-size: 0.7em; padding: 10px; overflow: hidden; z-index: 999999; border-radius: 4px; border: 1px solid #333; pointer-events: none;">
+                    <div id="tv-console-inner"></div>
+                </div>
+                <div class="buffer-status" style="font-size:0.6em; color:var(--gold); margin-top:2px; display:flex; flex-direction:column; gap:2px;">
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <div id="bridge-status-dot" style="width:8px; height:8px; border-radius:50%; background:var(--red);"></div>
+                        BRIDGE: <div class="meter-container" style="flex:1; height:4px; background:#222;"><div id="buffer-health-bar" style="width:0; height:100%; background:var(--green); transition: width 0.1s;"></div></div>
+                    </div>
                 </div>
             </div>
-            <!-- Column 2-5: Tracks -->
-        </div>
-
-        <div id="bridge-diag-panel">
-            <div id="bridge-status-dot"></div>
-            <div id="bridge-diag-text">BUF: 0 | WS: DISCONNECTED [DIRECT BRIDGE]</div>
         </div>
     </div>
 
     <script>
         (function() {
+            var audioCtx = null; var workletNode = null; var targetRate = 48000;
             const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-            var audioCtx = null;
-            var workletNode = null;
-            var binaryWS = null;
-            var lastUpdate = Date.now();
+            const KNOB_CONFIGS = [{ l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' }, { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' }, { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }];
 
             function buildGUI() {
-                const grid = document.getElementById('main-grid');
-                // Clear dynamic tracks (Columns 2-5)
-                const existingTracks = document.querySelectorAll('.track');
-                existingTracks.forEach(t => t.remove());
-
-                for (let i = 0; i < 4; i++) {
-                    const t = document.createElement('div');
-                    t.className = 'track';
-                    t.id = `track-${i}`;
+                var g = document.getElementById('sample-grid'); if (g) { g.innerHTML = ''; for (var p = 1; p <= 20; p++) { var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b); } }
+                var grid = document.getElementById('main-grid');
+                for (var i = 0; i < 4; i++) {
+                    if (document.getElementById('track-'+i)) continue;
+                    var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
                     t.innerHTML = `
                         <div class="track-header">TRACK ${i+1}</div>
-                        <div id="t-time-${i}" class="track-time-display">00:00:00</div>
-                        <div id="t-st-${i}" class="status-indicator status-ready">Ready</div>
-                        <div class="waveform-box"><canvas id="t-wf-l-${i}" class="waveform-canvas"></canvas></div>
-                        <div class="waveform-box"><canvas id="t-wf-r-${i}" class="waveform-canvas"></canvas></div>
-                        <div class="track-buttons">
-                            <button id="t-rec-${i}">REC</button>
-                            <button id="t-play-${i}">PLAY</button>
-                            <button id="t-rev-${i}">REV</button>
-                        </div>
-                    `;
+                        <div class="track-time-display" id="t-time-${i}">00:00:00</div>
+                        <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
+                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div></div></div>
+                        <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select class="input-source"><option>Microphone</option></select></div><span class="file-name-display" id="t-file-${i}"></span></div>
+                        <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
+                        <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
+                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
+                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0,1,2,3,4,5,6].map(idx => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx+1}</label></div>`).join('')}<button class="fx-chain-arrow">&gt;</button></div></div>
+                        <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
+                        <div class="main-controls">${KNOB_CONFIGS.map(cfg => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join('')}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
                     grid.appendChild(t);
-                }
-
-                const sGrid = document.getElementById('sample-grid');
-                if (sGrid) {
-                    sGrid.innerHTML = '';
-                    for (let p = 1; p <= 20; p++) {
-                        const b = document.createElement('button');
-                        b.className = 'sample-btn';
-                        b.textContent = p;
-                        sGrid.appendChild(b);
-                    }
                 }
                 updateScale();
             }
 
-            function updateScale() {
-                const winW = window.innerWidth;
-                const winH = window.innerHeight;
-                document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98);
+            function updateScale() { const winW = window.innerWidth; const winH = window.innerHeight; document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); }
+
+            async function initAudio(rate) {
+                const targetRate = rate || 44100;
+                if (!audioCtx || audioCtx.sampleRate !== targetRate) {
+                    if (audioCtx) {
+                        relayLogToStudio(`📡 TV: Reseting AudioContext for Sample Rate: ${targetRate}`);
+                        try { await audioCtx.close(); } catch(e) {}
+                    }
+                    
+                    try {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
+                            sampleRate: targetRate,
+                            latencyHint: 'interactive'
+                        });
+
+                        // Master Gain (Final Stage)
+                        const masterGain = audioCtx.createGain();
+                        masterGain.gain.value = 1.0;
+                        masterGain.connect(audioCtx.destination);
+                        
+                        // Keep-Alive Dither (Prevents hardware suspension)
+                        const keepAlive = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        g.gain.value = 0.000001; 
+                        keepAlive.connect(g);
+                        g.connect(audioCtx.destination);
+                        keepAlive.start();
+
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
+                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
+                            outputChannelCount: [2]
+                        });
+                        workletNode.connect(masterGain);
+                        
+                        // Force System Volume (TV Level)
+                        try {
+                            const context = cast.framework.CastReceiverContext.getInstance();
+                            context.setSystemVolume(1.0);
+                            relayLogToStudio("✅ TV: System Volume Forced to 100%");
+                        } catch(e) {}
+
+                        relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${targetRate}Hz`);
+
+                        workletNode.port.onmessage = (e) => {
+                            if (e.data.type === 'DIAG') {
+                                const diagEl = document.getElementById('bridge-diag-text');
+                                if (diagEl) {
+                                    const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
+                                    const peakPercent = Math.round((e.data.peak || 0) * 100);
+                                    const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
+                                    const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
+                                    const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                                }
+                            }
+                        };
+                    } catch (e) {
+                        relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+                    }
+                }
             }
 
-            function relayLog(msg) {
+            async function resumeAudio() {
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    try {
+                        await audioCtx.resume();
+                        if (audioCtx.state === 'running') {
+                            console.log("🔊 Receiver: AudioContext Resumed.");
+                            relayLogToStudio("✅ TV: AudioContext Resumed.");
+                        }
+                    } catch (e) { console.warn("⚠️ TV: Resume failed", e); }
+                }
+            }
+
+            // Global interaction listener to unlock audio
+            window.addEventListener('click', () => {
+                resumeAudio();
+            });
+            window.addEventListener('touchstart', () => {
+                resumeAudio();
+            });
+
+            function relayLogToStudio(msg) {
+                const inner = document.getElementById('tv-console-inner');
+                if (inner) {
+                    const line = document.createElement('div');
+                    line.textContent = `> ${msg}`;
+                    inner.appendChild(line);
+                    if (inner.childNodes.length > 15) inner.removeChild(inner.firstChild);
+                }
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const senders = context.getSenders();
                 if (senders.length > 0) {
-                    context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV] ${msg}` });
-                }
-                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                    binaryWS.send(JSON.stringify({ type: 'TV_LOG', message: msg }));
-                }
-            }
-
-            async function initAudio(rate) {
-                const targetRate = rate || 48000;
-                if (!audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetRate });
-                    await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
-                    workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', { outputChannelCount: [2] });
-                    workletNode.connect(audioCtx.destination);
-                    relayLog(`✅ Audio Sink Active @ ${audioCtx.sampleRate}Hz`);
+                    try {
+                        context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV LOG] ${msg}` });
+                    } catch(e) {}
                 }
             }
 
-            function connectBridge(ip) {
-                if (binaryWS) binaryWS.close();
-                binaryWS = new WebSocket(`ws://${ip}:8080`);
+            function renderState(s) {
+                if (!s) return;
+                // initAudio(); // Removed to prevent race conditions during high-frequency updates
+                if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
+                if (s.cursor) { 
+                    var cur = document.getElementById('cursor-mirror'); 
+                    if (cur) { 
+                        cur.style.display = 'block'; 
+                        // [v13.8.150] Parent-relative coordinates (100% immune to scaling)
+                        // Added +1.6% Y-Calibration to resolve "too high" report (approx 13px)
+                        var px = s.cursor.x * 100;
+                        var py = (s.cursor.y * 100) + 1.6; 
+                        cur.style.left = px + '%';
+                        cur.style.top = py + '%';
+                        cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
+                        cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
+                    } 
+                }
+                if (s.master) {
+                    document.getElementById('master-volume').value = s.master.volume || 0;
+                    document.getElementById('master-volume-value').textContent = (s.master.volume || 0).toFixed(1) + ' dB';
+                    document.getElementById('master-meter-bar')?.style.setProperty('width', (s.master.meters?.l * 100 || 0) + '%');
+                    document.getElementById('loop-length').value = s.master.loopLength || 4;
+                    document.getElementById('loop-length-value').textContent = (s.master.loopLength || 4).toFixed(1) + 's';
+                    document.getElementById('master-record-button').className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                    document.getElementById('lfo-toggle').className = s.master.lfo1?.active ? 'active' : '';
+                    document.getElementById('lfo-meter-bar').style.width = (s.master.lfo1?.value * 100 || 0) + '%';
+                    document.getElementById('lfo-time').value = s.master.lfo1?.time || 1.8;
+                    document.getElementById('lfo-time-value').textContent = (s.master.lfo1?.time || 1.8).toFixed(1) + 's';
+                    document.getElementById('lfo2-toggle').className = s.master.lfo2?.active ? 'active' : '';
+                    document.getElementById('lfo2-meter-bar').style.width = (s.master.lfo2?.value * 100 || 0) + '%';
+                    document.getElementById('lfo2-time').value = s.master.lfo2?.time || 1.8;
+                    document.getElementById('lfo2-time-value').textContent = (s.master.lfo2?.time || 1.8).toFixed(1) + 's';
+                }
+                if (s.sampler) s.sampler.forEach((p,i) => { var b = document.getElementById('sample-'+(i+1)); if (b) { b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); if (p.loaded && p.name) b.textContent = p.name.substring(0,6); } });
+                if (s.tracks) s.tracks.forEach((t,i) => {
+                    document.getElementById('t-scroll-'+i).textContent = t.fileName || 'Ready';
+                    document.getElementById('t-mtr-'+i).style.width = (t.meters?.l * 100 || 0) + '%';
+                    var st = document.getElementById('t-st-'+i); st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
+                    document.getElementById('t-ls-m-'+i).style.left = (t.loopStart * 100) + '%';
+                    document.getElementById('t-le-m-'+i).style.left = (t.loopEnd * 100) + '%';
+                    if (t.params) {
+                        KNOB_CONFIGS.forEach(cfg => {
+                            document.getElementById(`t-${cfg.p}-sl-${i}`).value = t.params[cfg.p] || 0;
+                            document.getElementById(`t-${cfg.p}-val-${i}`).textContent = t.params[cfg.p] || 0;
+                            document.getElementById(`t-lfo1-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[1]?.includes(cfg.p);
+                            document.getElementById(`t-lfo2-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[2]?.includes(cfg.p);
+                        });
+                        document.getElementById(`t-gain-sl-${i}`).value = t.params.inputGain || 0;
+                        document.getElementById(`t-gain-val-${i}`).textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                    }
+                    if (t.fxSlots) t.fxSlots.forEach((active, idx) => { document.getElementById(`t-fx-chk-${i}-${idx}`).checked = active; document.getElementById(`t-fx-lbl-${i}-${idx}`).style.backgroundColor = active ? 'var(--gold)' : 'transparent'; });
+                    document.getElementById(`t-rec-${i}`).className = t.isRecording ? 'recording' : '';
+                });
+            }
+
+            let binaryWS = null;
+            let wsConnectTimeout = null;
+
+            function connectBinaryBridge(ip) {
+                if (binaryWS) {
+                    try { binaryWS.close(); } catch(e) {}
+                }
+                
+                const url = `ws://${ip}:8080`;
+                try {
+                    relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
+                    binaryWS = new WebSocket(url);
+                    binaryWS.binaryType = 'arraybuffer';
+                } catch (err) {
+                    relayLogToStudio(`❌ TV: WebSocket Constructor Failed: ${err.message}`);
+                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+                    return;
+                }
+                
                 binaryWS.onopen = () => {
-                    document.getElementById('bridge-status-dot').style.backgroundColor = '#0f0';
-                };
-                binaryWS.onmessage = async (e) => {
-                    if (typeof e.data === 'string') {
-                        const m = JSON.parse(e.data);
-                        if (m.type === 'BRIDGE_CONFIG') initAudio(m.config.sampleRate);
-                    } else if (workletNode) {
-                        const buf = (e.data instanceof Blob) ? await e.data.arrayBuffer() : e.data;
-                        workletNode.port.postMessage(buf, [buf]);
+                    console.log('✅ Binary Bridge Connected');
+                    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
+                    const diagEl = document.getElementById('bridge-diag-text');
+                    if (diagEl) {
+                        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED|ERROR.*)/, 'WS: CONNECTED');
+                        diagEl.style.color = '#0f0';
+                        diagEl.style.borderColor = '#0f0';
                     }
+                    const conn = document.getElementById('bridge-status-dot');
+                    if (conn) conn.style.backgroundColor = 'var(--green)';
+                };
+                
+                binaryWS.onmessage = async (event) => {
+                    if (typeof event.data === 'string') {
+                        try {
+                            const msg = JSON.parse(event.data);
+                            if (msg.type === 'BRIDGE_CONFIG' && msg.config && msg.config.sampleRate) {
+                                relayLogToStudio(`🔄 TV: WebSocket BRIDGE_CONFIG -> ${msg.config.sampleRate}Hz`);
+                                initAudio(msg.config.sampleRate);
+                            }
+                        } catch (e) {}
+                        return;
+                    }
+
+                    let buffer;
+                    if (event.data instanceof ArrayBuffer) {
+                        buffer = event.data;
+                    } else if (event.data instanceof Blob) {
+                        buffer = await event.data.arrayBuffer();
+                    }
+                    
+                    if (buffer) {
+                        if (!audioCtx) await initAudio();
+                        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+                        if (workletNode) {
+                            try {
+                                workletNode.port.postMessage(buffer, [buffer]);
+                            } catch (e) {
+                                workletNode.port.postMessage(buffer);
+                            }
+                        }
+                        
+                        // Visual Activity Indicator
+                        const conn = document.getElementById('bridge-status-dot');
+                        if (conn) {
+                            conn.style.backgroundColor = 'var(--green)';
+                            conn.style.boxShadow = '0 0 10px var(--green)';
+                        }
+                    }
+                };
+                
+                binaryWS.onclose = () => {
+                    console.log('🛑 Binary Bridge Closed. Retrying in 5s...');
+                    const conn = document.getElementById('bridge-status-dot');
+                    if (conn) conn.style.backgroundColor = 'var(--red)';
+                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+                };
+                
+                binaryWS.onerror = (e) => {
+                    console.error('❌ Binary Bridge Error:', e);
+                    relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
+                    const diagEl = document.getElementById('bridge-diag-text');
+                    if (diagEl) {
+                        diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
+                        diagEl.style.color = 'var(--red)';
+                        diagEl.style.borderColor = 'var(--red)';
+                    }
+                    // [V13.8.150] Retry loop
+                    if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
+                    wsConnectTimeout = setTimeout(() => {
+                        console.log("📡 TV: Retrying Binary Bridge...");
+                        connectBinaryBridge(ip);
+                    }, 5000);
                 };
             }
 
-            function render(state) {
-                lastUpdate = Date.now();
-                if (!state || !state.tracks) return;
-                state.tracks.forEach((track, i) => {
-                    const timeEl = document.getElementById(`t-time-${i}`);
-                    if (timeEl) timeEl.textContent = track.displayTime || '00:00:00';
-                    const stEl = document.getElementById(`t-st-${i}`);
-                    if (stEl) {
-                        stEl.textContent = track.status || 'Ready';
-                        stEl.className = `status-indicator status-${track.status?.toLowerCase() || 'ready'}`;
+            function handleInboundData(data) {
+                try {
+                    const d = typeof data === 'string' ? JSON.parse(data) : data;
+                    
+                    // [v13.8.150] Discovery of Sender IP and Config for Binary Bridge
+                    if (d.type === 'BRIDGE_CONFIG') {
+                        if (d.config && d.config.sampleRate) {
+                            initAudio(d.config.sampleRate);
+                        }
+                        if (d.ip) connectBinaryBridge(d.ip);
+                        return;
                     }
-                });
-                if (state.masterTime) document.getElementById('master-time').textContent = state.masterTime;
+
+                    if (d.type === 'PCM_CHUNK') {
+                        // [DEPRECATED] Keep as fallback for slow networks if binary bridge fails
+                        const binary = window.atob(d.payload);
+                        const len = binary.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) { bytes[i] = binary.charCodeAt(i); }
+                        if (workletNode) workletNode.port.postMessage(bytes.buffer, [bytes.buffer]);
+                    } else if (d.type === 'STATE_UPDATE') {
+                        renderState(d.state);
+                    }
+                } catch(e) {}
             }
 
-            window.onload = () => {
-                buildGUI();
-                const context = cast.framework.CastReceiverContext.getInstance();
-                context.addCustomMessageListener(CUSTOM_NAMESPACE, (e) => {
-                    if (e.data.type === 'STATE_UPDATE') render(e.data.state);
-                    if (e.data.type === 'BRIDGE_IP') connectBridge(e.data.ip);
+            window.onload = function() { 
+                buildGUI(); 
+                window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
+                const context = window.castReceiverContext;
+                
+                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
+                    console.log("📡 Sender connected - Resuming AudioContext...");
+                    initAudio();
                 });
-                context.start();
-                relayLog("🚀 TV Receiver Ready v13.9.19");
+
+                context.addEventListener(cast.framework.events.EventType.SENDER_DISCONNECTED, () => {
+                    if (binaryWS) {
+                        binaryWS.close();
+                        binaryWS = null;
+                    }
+                    if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
+                });
+
+                // [v13.8.150] Auto-Discovery Fallback
+                // If we don't get a BRIDGE_CONFIG within 3 seconds, try the last known Studio IP.
+                setTimeout(() => {
+                    if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
+                        console.log("📡 TV: Auto-Discovery Fallback triggered...");
+                        connectBinaryBridge('192.168.1.11');
+                    }
+                }, 3000);
+
+                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+                    if (event.data) {
+                        if (event.data.type === 'BRIDGE_CONFIG') {
+                            const newRate = event.data.config.sampleRate;
+                            if (newRate && newRate !== targetRate) {
+                                targetRate = newRate;
+                                relayLogToStudio(`🔄 TV: Re-aligning Sink to ${targetRate}Hz`);
+                                initAudio();
+                            }
+                        }
+                        if (event.data.type === 'SINE_TEST') {
+                            playSineTest();
+                        } else if (event.data.type === 'PCM_RELAY') {
+                            // [v13.8.200] Direct Handshake Logic
+                            // If Binary WS is active, IGNORE Cast Channel audio to prevent collisions
+                            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                                return;
+                            }
+
+                            let buffer = event.data.binary || event.data.data;
+                            if (buffer && workletNode) {
+                                try {
+                                    workletNode.port.postMessage(buffer, [buffer]);
+                                } catch(e) {
+                                    workletNode.port.postMessage(buffer);
+                                }
+                                window._relayPkts = (window._relayPkts || 0) + 1;
+                            }
+                        }
+                        handleInboundData(event.data);
+                    }
+                }); 
+                
+                // [v13.8.150] Attempt silent resume on connect
+                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
+                    initAudio();
+                    resumeAudio();
+                });
+
+                function playSineTest() {
+                    if (!audioCtx) initAudio();
+                    resumeAudio();
+                    if (workletNode) {
+                        workletNode.port.postMessage({ type: 'TEST_BEEP' });
+                        relayLogToStudio("🔊 Sine Test Sent to Worklet");
+                    } else {
+                        // Fallback to native if worklet not loaded
+                        const osc = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        osc.connect(g);
+                        g.connect(audioCtx.destination);
+                        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 1);
+                        relayLogToStudio("🔊 Sine Test Played on Native Context (Worklet Null)");
+                    }
+                }
+
+                context.start({ disableIdleTimeout: true }); 
+
+                // [V13.8.150] RECURSIVE AUTO-RESUME
+                const autoUnlock = setInterval(() => {
+                    if (audioCtx) {
+                        if (audioCtx.state === 'suspended') {
+                            audioCtx.resume().then(() => {
+                                if (audioCtx.state === 'running') {
+                                    relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
+                                }
+                            });
+                        }
+                    } else {
+                        // initAudio is now a singleton, safe to call
+                        initAudio(); 
+                    }
+                }, 1000); // 1s interval to be less aggressive
+
+                window.addEventListener('resize', updateScale); 
+                relayLogToStudio("🎬 TV: Startup Complete.");
             };
-
-            setInterval(() => {
-                if (Date.now() - lastUpdate > 15000) window.location.reload();
-            }, 5000);
-
-            window.onresize = updateScale;
         })();
     </script>
 </body>
