@@ -29,9 +29,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._errorSum = 0;
     this._smoothedError = 0;
     
-    // PI Gains (Stabilized for Wide-Swing recovery)
-    this._kp = 0.000001; 
-    this._ki = 0.00000001;
+    // PI Gains (Aggressive for Latency Killing)
+    this._kp = 0.000005; 
+    this._ki = 0.00000002;
+    this._diagCount = 0;
 
     this.port.onmessage = (e) => {
       try {
@@ -54,9 +55,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
   _writeToBuffer(pcm) {
     for (let i = 0; i < pcm.length; i++) {
-      this._ringBuffer[this._writePtr] = pcm[i];
+      // [v13.9.6] Normalize 16-bit to Float (-1.0 to 1.0)
+      this._ringBuffer[this._writePtr] = pcm[i] / 32768.0;
       this._writePtr = (this._writePtr + 1) % this._ringBuffer.length;
       this._bufferSize++;
+    }
+    
+    // [v13.9.6] Hard-Reset on massive lag (>1.5s)
+    if (this._bufferSize > 144000) {
+      this._readPtr = this._writePtr - this._TARGET_BUFFER;
+      if (this._readPtr < 0) this._readPtr += this._ringBuffer.length;
+      this._bufferSize = this._TARGET_BUFFER;
+      this._errorSum = 0;
     }
   }
 
@@ -147,6 +157,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
+    }
+
+    this._diagCount++;
+    if (this._diagCount % 150 === 0) {
+        this.port.postMessage({
+            type: 'DIAG',
+            rate: this._playbackRate,
+            buf: this._bufferSize,
+            locked: !this._isBuffering
+        });
     }
 
     return true;
