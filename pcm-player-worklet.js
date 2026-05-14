@@ -25,6 +25,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     
     // PI Sync Controller Variables
     this._playbackRate = 1.0;
+    this._targetPlaybackRate = 1.0;
     this._errorSum = 0;
     this._smoothedError = 0;
     
@@ -78,18 +79,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.180] HIGH-VOLUME DAMPENED SYNC
+    // [v13.9.0] SMOOTHED DRUNK-PROOF SYNC
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
+    this._smoothedError = (this._smoothedError * 0.999) + (rawError * 0.001); // ultra-smooth error
 
     if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
-        this._playbackRate = 1.0;
+        this._targetPlaybackRate = 1.0;
         this._errorSum *= 0.999; 
     } else {
         this._errorSum += this._smoothedError;
         const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
-        this._playbackRate = Math.max(0.999, Math.min(1.001, 1.0 + adj));
+        this._targetPlaybackRate = Math.max(0.999, Math.min(1.001, 1.0 + adj));
     }
+    
+    // Slow ramp to target rate (Eliminates 'drunk' pitch jumps)
+    this._playbackRate = (this._playbackRate * 0.999) + (this._targetPlaybackRate * 0.001);
 
     const ringLen = this._ringBuffer.length;
 
