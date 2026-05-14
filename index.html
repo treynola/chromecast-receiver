@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MXS-004 Studio Mirror v13.8.150 [STYLING & AUDIO FIX]</title>
+    <title>MXS-004 Studio Mirror v13.9.16 [UNIVERSAL ES5]</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles_main.css?v=13.8.132">
@@ -654,6 +654,20 @@
                 window.addEventListener('resize', updateScale); 
                 relayLogToStudio("🎬 TV: Startup Complete.");
             };
+        })();
+    </script>
+    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <script>
+        (function() {
+            var bootCheck = setInterval(function() {
+                if (window.cast && cast.framework) {
+                    clearInterval(bootCheck);
+                    if (document.getElementById('track-0') === null) {
+                        console.log("⚠️ TV: Boot stall detected. Forcing Render...");
+                        if (typeof buildGUI === 'function') buildGUI();
+                    }
+                }
+            }, 500);
         })();
     </script>
 </body>
