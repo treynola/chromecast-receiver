@@ -208,8 +208,21 @@
                         keepAlive.start();
 
                         await audioCtx.audioWorklet.addModule('pcm-player-worklet.js');
+                        
+                        // [v13.9.27] DYNAMIC RATE TRANSFORMATION
+                        // If hardware is 44.1k and Studio is 48k, we MUST play at ~1.088x base
+                        const hwRate = audioCtx.sampleRate;
+                        const studioRate = targetRate || 48000;
+                        const baseRateRatio = studioRate / hwRate;
+                        
+                        console.log(`📏 TV Clock: ${hwRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`);
+                        relayLogToStudio(`📏 TV Clock: ${hwRate}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`);
+
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
-                            outputChannelCount: [2]
+                            outputChannelCount: [2],
+                            processorOptions: {
+                                baseRateRatio: baseRateRatio
+                            }
                         });
                         workletNode.connect(masterGain);
                         

@@ -4,18 +4,22 @@
  * Optimized for zero-jitter Direct Binary Bridge (WebSocket).
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
     this._ringBuffer = new Float32Array(48000 * 4); // 4 seconds at 48kHz
     this._readPtr = 0.0;
     this._writePtr = 0;
     this._bufferSize = 0;
     
-    // [v13.8.200] Direct Handshake Config
-    this._TARGET_BUFFER = 96000; // 1000ms @ 48kHz stereo (Direct Handshake Stability Target)
-    this._MIN_BUFFER = 48000;    // 500ms (Direct Safety Limit)
-    this._PREBUFFER = 120000;    // 1250ms (Warm-up threshold)
-    this._DEAD_ZONE = 9600;      // 100ms (Dead-Zone for PI controller)
+    // [v13.9.27] DYNAMIC RATE ALIGNMENT
+    this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
+    this._playbackRate = this._baseRate;
+    
+    // [v13.9.27] LOW-LATENCY TARGETS (100ms target, 200ms prebuffer)
+    this._TARGET_BUFFER = 9600; // 100ms @ 48kHz stereo
+    this._MIN_BUFFER = 2400;    // 25ms (Direct Safety Limit)
+    this._PREBUFFER = 19200;    // 200ms (Warm-up threshold)
+    this._DEAD_ZONE = 960;      // 10ms (Dead-Zone for PI controller)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -23,14 +27,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._currentPeak = 0;
     this._fade = 1.0; 
     
-    // PI Sync Controller Variables
-    this._playbackRate = 1.0;
+    // PI Sync Controller Variables (Aggressive tuning)
     this._errorSum = 0;
     this._smoothedError = 0;
-    
-    // PI Gains (Dampened for high-volume bursts)
-    this._kp = 0.00000002; 
-    this._ki = 0.0000000002;
+    this._kp = 0.0001; 
+    this._ki = 0.00001;
 
     this.port.onmessage = (e) => {
       try {
@@ -83,12 +84,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
 
     if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
-        this._playbackRate = 1.0;
+        this._playbackRate = this._baseRate;
         this._errorSum *= 0.999; 
     } else {
         this._errorSum += this._smoothedError;
         const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
-        this._playbackRate = Math.max(0.999, Math.min(1.001, 1.0 + adj));
+        // [v13.9.27] Expanded swing limit (15%) to support 44.1k hardware
+        this._playbackRate = Math.max(0.85 * this._baseRate, Math.min(1.15 * this._baseRate, this._baseRate + adj));
     }
 
     const ringLen = this._ringBuffer.length;
