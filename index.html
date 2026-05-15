@@ -401,6 +401,8 @@
                             if (msg.type === 'BRIDGE_CONFIG' && msg.config && msg.config.sampleRate) {
                                 relayLogToStudio(`🔄 TV: WebSocket BRIDGE_CONFIG -> ${msg.config.sampleRate}Hz`);
                                 initAudio(msg.config.sampleRate);
+                            } else if (msg.type === 'STATE_UPDATE') {
+                                renderState(msg.state);
                             }
                         } catch (e) {}
                         return;
