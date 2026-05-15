@@ -168,8 +168,20 @@
 
             function updateScale() { const winW = window.innerWidth; const winH = window.innerHeight; document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); }
 
+            let configReceived = false;
+            let targetRate = 48000;
+
             async function initAudio(rate) {
-                const targetRate = rate || 48000;
+                if (rate) {
+                    targetRate = rate;
+                    configReceived = true;
+                }
+                
+                // [v13.9.27] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
+                if (!configReceived) {
+                    relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
+                    return;
+                }
                 if (!audioCtx || audioCtx.sampleRate !== targetRate) {
                     if (audioCtx) {
                         relayLogToStudio(`📡 TV: Reseting AudioContext for Sample Rate: ${targetRate}`);
@@ -220,6 +232,14 @@
                                     const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
                                     diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                                }
+
+                                // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
+                                if (!window._lastDiagSent || Date.now() - window._lastDiagSent > 10000) {
+                                    const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
+                                    const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
+                                    relayLogToStudio(`📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available})`);
+                                    window._lastDiagSent = Date.now();
                                 }
                             }
                         };
@@ -322,10 +342,17 @@
                 });
             }
 
+            let currentBridgeIp = null;
             let binaryWS = null;
             let wsConnectTimeout = null;
 
             function connectBinaryBridge(ip) {
+                if (binaryWS && binaryWS.readyState === WebSocket.OPEN && currentBridgeIp === ip) {
+                    // [v13.9.27] Already connected to this Studio IP. Ignore heartbeat redundancy.
+                    return;
+                }
+                
+                currentBridgeIp = ip;
                 if (binaryWS) {
                     try { binaryWS.close(); } catch(e) {}
                 }
@@ -450,8 +477,8 @@
                 const context = window.castReceiverContext;
                 
                 context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
-                    console.log("📡 Sender connected - Resuming AudioContext...");
-                    initAudio();
+                    console.log("📡 Sender connected - Waiting for config...");
+                    // We don't call initAudio here anymore - we wait for the message
                 });
 
                 context.addEventListener(cast.framework.events.EventType.SENDER_DISCONNECTED, () => {
@@ -506,7 +533,6 @@
                 
                 // [v13.8.150] Attempt silent resume on connect
                 context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
-                    initAudio();
                     resumeAudio();
                 });
 
@@ -543,8 +569,8 @@
                             });
                         }
                     } else {
-                        // initAudio is now a singleton, safe to call
-                        initAudio(); 
+                        // Only auto-init if we already have the config
+                        if (configReceived) initAudio(); 
                     }
                 }, 1000); // 1s interval to be less aggressive
 
