@@ -538,24 +538,29 @@
 
                 context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
                     if (event.data) {
-                        if (event.data.type === 'BRIDGE_CONFIG') {
-                            const newRate = event.data.config.sampleRate;
+                        let msgData = event.data;
+                        if (msgData && typeof msgData.data === 'string') {
+                            try { msgData = JSON.parse(msgData.data); } catch(e) {}
+                        }
+
+                        if (msgData.type === 'BRIDGE_CONFIG') {
+                            const newRate = msgData.config ? msgData.config.sampleRate : null;
                             if (newRate && newRate !== targetRate) {
                                 targetRate = newRate;
                                 relayLogToStudio(`🔄 TV: Re-aligning Sink to ${targetRate}Hz`);
                                 initAudio();
                             }
                         }
-                        if (event.data.type === 'SINE_TEST') {
+                        if (msgData.type === 'SINE_TEST') {
                             playSineTest();
-                        } else if (event.data.type === 'PCM_RELAY') {
+                        } else if (msgData.type === 'PCM_RELAY') {
                             // [v13.8.200] Direct Handshake Logic
                             // If Binary WS is active, IGNORE Cast Channel audio to prevent collisions
                             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                                 return;
                             }
 
-                            let buffer = event.data.binary || event.data.data;
+                            let buffer = msgData.binary || msgData.data;
                             if (buffer && workletNode) {
                                 try {
                                     workletNode.port.postMessage(buffer, [buffer]);
@@ -565,7 +570,7 @@
                                 window._relayPkts = (window._relayPkts || 0) + 1;
                             }
                         }
-                        handleInboundData(event.data);
+                        handleInboundData(msgData);
                     }
                 }); 
                 
