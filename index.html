@@ -510,9 +510,16 @@
 
             window.onload = function() { 
                 buildGUI(); 
+                
+                // [V13.9.40] Aggressive Startup Trace
+                console.log("🎬 TV: Startup sequence initiated.");
+                console.log("🔗 URL: " + window.location.href);
+
                 window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
                 const context = window.castReceiverContext;
                 
+                relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
+
                 context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
                     console.log("📡 Sender connected - Waiting for config...");
                     // We don't call initAudio here anymore - we wait for the message
