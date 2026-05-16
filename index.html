@@ -538,11 +538,13 @@
                 context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
                     if (event.data) {
                         let msgData = event.data;
-                        if (msgData && typeof msgData.data === 'string') {
+                        if (typeof msgData === 'string') {
+                            try { msgData = JSON.parse(msgData); } catch(e) {}
+                        } else if (msgData && typeof msgData.data === 'string') {
                             try { msgData = JSON.parse(msgData.data); } catch(e) {}
                         }
 
-                        if (msgData.type === 'BRIDGE_CONFIG') {
+                        if (msgData && msgData.type === 'BRIDGE_CONFIG') {
                             const newRate = msgData.config ? msgData.config.sampleRate : null;
                             if (newRate && newRate !== targetRate) {
                                 targetRate = newRate;
@@ -550,9 +552,9 @@
                                 initAudio();
                             }
                         }
-                        if (msgData.type === 'SINE_TEST') {
+                        if (msgData && msgData.type === 'SINE_TEST') {
                             playSineTest();
-                        } else if (msgData.type === 'PCM_RELAY') {
+                        } else if (msgData && msgData.type === 'PCM_RELAY') {
                             // [v13.8.200] Direct Handshake Logic
                             // If Binary WS is active, IGNORE Cast Channel audio to prevent collisions
                             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
