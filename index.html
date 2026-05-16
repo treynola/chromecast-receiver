@@ -440,43 +440,21 @@
                 };
                 
                 binaryWS.onmessage = async (event) => {
-                    if (typeof event.data === 'string') {
-                        try {
-                            const msg = JSON.parse(event.data);
-                            if (msg.type === 'BRIDGE_CONFIG' && msg.config && msg.config.sampleRate) {
-                                relayLogToStudio(`🔄 TV: WebSocket BRIDGE_CONFIG -> ${msg.config.sampleRate}Hz`);
-                                initAudio(msg.config.sampleRate);
-                            } else if (msg.type === 'STATE_UPDATE') {
-                                renderState(msg.state);
-                            }
-                        } catch (e) {}
-                        return;
-                    }
-
-                    let buffer;
                     if (event.data instanceof ArrayBuffer) {
-                        buffer = event.data;
-                    } else if (event.data instanceof Blob) {
-                        buffer = await event.data.arrayBuffer();
-                    }
-                    
-                    if (buffer) {
-                        if (!audioCtx) await initAudio();
-                        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
                         if (workletNode) {
-                            try {
-                                workletNode.port.postMessage(buffer, [buffer]);
-                            } catch (e) {
-                                workletNode.port.postMessage(buffer);
+                            workletNode.port.postMessage(event.data, [event.data]);
+                        }
+                    } else if (typeof event.data === 'string') {
+                        try {
+                            const d = JSON.parse(event.data);
+                            if (d.type === 'STATE_UPDATE') {
+                                renderState(d.state);
+                            } else if (d.type === 'BRIDGE_CONFIG') {
+                                if (d.config && d.config.sampleRate) {
+                                    initAudio(d.config.sampleRate);
+                                }
                             }
-                        }
-                        
-                        // Visual Activity Indicator
-                        const conn = document.getElementById('bridge-status-dot');
-                        if (conn) {
-                            conn.style.backgroundColor = 'var(--green)';
-                            conn.style.boxShadow = '0 0 10px var(--green)';
-                        }
+                        } catch(e) {}
                     }
                 };
                 
