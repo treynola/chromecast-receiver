@@ -301,58 +301,103 @@
 
             function renderState(s) {
                 if (!s) return;
-                // initAudio(); // Removed to prevent race conditions during high-frequency updates
-                if (s.transport) { document.getElementById('recording-time-display').textContent = s.transport.position; for(var i=0; i<4; i++) { var tt = document.getElementById('t-time-'+i); if(tt) tt.textContent = s.transport.position; } }
-                if (s.cursor) { 
-                    var cur = document.getElementById('cursor-mirror'); 
-                    if (cur) { 
-                        cur.style.display = 'block'; 
-                        // [v13.8.150] Parent-relative coordinates (100% immune to scaling)
-                        // Added +1.6% Y-Calibration to resolve "too high" report (approx 13px)
-                        var px = s.cursor.x * 100;
-                        var py = (s.cursor.y * 100) + 1.6; 
-                        cur.style.left = px + '%';
-                        cur.style.top = py + '%';
-                        cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
-                        cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
-                    } 
-                }
-                if (s.master) {
-                    document.getElementById('master-volume').value = s.master.volume || 0;
-                    document.getElementById('master-volume-value').textContent = (s.master.volume || 0).toFixed(1) + ' dB';
-                    document.getElementById('master-meter-bar')?.style.setProperty('width', (s.master.meters?.l * 100 || 0) + '%');
-                    document.getElementById('loop-length').value = s.master.loopLength || 4;
-                    document.getElementById('loop-length-value').textContent = (s.master.loopLength || 4).toFixed(1) + 's';
-                    document.getElementById('master-record-button').className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
-                    document.getElementById('lfo-toggle').className = s.master.lfo1?.active ? 'active' : '';
-                    document.getElementById('lfo-meter-bar').style.width = (s.master.lfo1?.value * 100 || 0) + '%';
-                    document.getElementById('lfo-time').value = s.master.lfo1?.time || 1.8;
-                    document.getElementById('lfo-time-value').textContent = (s.master.lfo1?.time || 1.8).toFixed(1) + 's';
-                    document.getElementById('lfo2-toggle').className = s.master.lfo2?.active ? 'active' : '';
-                    document.getElementById('lfo2-meter-bar').style.width = (s.master.lfo2?.value * 100 || 0) + '%';
-                    document.getElementById('lfo2-time').value = s.master.lfo2?.time || 1.8;
-                    document.getElementById('lfo2-time-value').textContent = (s.master.lfo2?.time || 1.8).toFixed(1) + 's';
-                }
-                if (s.sampler) s.sampler.forEach((p,i) => { var b = document.getElementById('sample-'+(i+1)); if (b) { b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); if (p.loaded && p.name) b.textContent = p.name.substring(0,6); } });
-                if (s.tracks) s.tracks.forEach((t,i) => {
-                    document.getElementById('t-scroll-'+i).textContent = t.fileName || 'Ready';
-                    document.getElementById('t-mtr-'+i).style.width = (t.meters?.l * 100 || 0) + '%';
-                    var st = document.getElementById('t-st-'+i); st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
-                    document.getElementById('t-ls-m-'+i).style.left = (t.loopStart * 100) + '%';
-                    document.getElementById('t-le-m-'+i).style.left = (t.loopEnd * 100) + '%';
-                    if (t.params) {
-                        KNOB_CONFIGS.forEach(cfg => {
-                            document.getElementById(`t-${cfg.p}-sl-${i}`).value = t.params[cfg.p] || 0;
-                            document.getElementById(`t-${cfg.p}-val-${i}`).textContent = t.params[cfg.p] || 0;
-                            document.getElementById(`t-lfo1-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[1]?.includes(cfg.p);
-                            document.getElementById(`t-lfo2-chk-${i}-${cfg.p}`).checked = t.lfoAssigns?.[2]?.includes(cfg.p);
-                        });
-                        document.getElementById(`t-gain-sl-${i}`).value = t.params.inputGain || 0;
-                        document.getElementById(`t-gain-val-${i}`).textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                try {
+                    if (s.transport) { 
+                        const rt = document.getElementById('recording-time-display');
+                        if (rt) rt.textContent = s.transport.position; 
+                        for(var i=0; i<4; i++) { 
+                            var tt = document.getElementById('t-time-'+i); 
+                            if(tt) tt.textContent = s.transport.position; 
+                        } 
                     }
-                    if (t.fxSlots) t.fxSlots.forEach((active, idx) => { document.getElementById(`t-fx-chk-${i}-${idx}`).checked = active; document.getElementById(`t-fx-lbl-${i}-${idx}`).style.backgroundColor = active ? 'var(--gold)' : 'transparent'; });
-                    document.getElementById(`t-rec-${i}`).className = t.isRecording ? 'recording' : '';
-                });
+                    if (s.cursor) { 
+                        var cur = document.getElementById('cursor-mirror'); 
+                        if (cur) { 
+                            cur.style.display = 'block'; 
+                            var px = s.cursor.x * 100;
+                            var py = (s.cursor.y * 100) + 1.6; 
+                            cur.style.left = px + '%';
+                            cur.style.top = py + '%';
+                            cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
+                            cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
+                        } 
+                    }
+                    if (s.master) {
+                        const mv = document.getElementById('master-volume');
+                        if (mv) mv.value = s.master.volume || 0;
+                        const mvv = document.getElementById('master-volume-value');
+                        if (mvv) mvv.textContent = (s.master.volume || 0).toFixed(1) + ' dB';
+                        const mmb = document.getElementById('master-meter-bar');
+                        if (mmb) mmb.style.width = (s.master.meters?.l * 100 || 0) + '%';
+                        const ll = document.getElementById('loop-length');
+                        if (ll) ll.value = s.master.loopLength || 4;
+                        const llv = document.getElementById('loop-length-value');
+                        if (llv) llv.textContent = (s.master.loopLength || 4).toFixed(1) + 's';
+                        const mrb = document.getElementById('master-record-button');
+                        if (mrb) mrb.className = s.master.isRecording ? 'rec-btn recording' : 'rec-btn';
+                        const lt = document.getElementById('lfo-toggle');
+                        if (lt) lt.className = s.master.lfo1?.active ? 'active' : '';
+                        const lmb = document.getElementById('lfo-meter-bar');
+                        if (lmb) lmb.style.width = (s.master.lfo1?.value * 100 || 0) + '%';
+                        const ltim = document.getElementById('lfo-time');
+                        if (ltim) ltim.value = s.master.lfo1?.time || 1.8;
+                        const ltv = document.getElementById('lfo-time-value');
+                        if (ltv) ltv.textContent = (s.master.lfo1?.time || 1.8).toFixed(1) + 's';
+                        const l2t = document.getElementById('lfo2-toggle');
+                        if (l2t) l2t.className = s.master.lfo2?.active ? 'active' : '';
+                        const l2mb = document.getElementById('lfo2-meter-bar');
+                        if (l2mb) l2mb.style.width = (s.master.lfo2?.value * 100 || 0) + '%';
+                        const l2tim = document.getElementById('lfo2-time');
+                        if (l2tim) l2tim.value = s.master.lfo2?.time || 1.8;
+                        const l2tv = document.getElementById('lfo2-time-value');
+                        if (l2tv) l2tv.textContent = (s.master.lfo2?.time || 1.8).toFixed(1) + 's';
+                    }
+                    if (s.sampler) s.sampler.forEach((p,i) => { 
+                        var b = document.getElementById('sample-'+(i+1)); 
+                        if (b) { 
+                            b.className = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); 
+                            if (p.loaded && p.name) b.textContent = p.name.substring(0,6); 
+                        } 
+                    });
+                    if (s.tracks) s.tracks.forEach((t,i) => {
+                        const ts = document.getElementById('t-scroll-'+i);
+                        if (ts) ts.textContent = t.fileName || 'Ready';
+                        const tm = document.getElementById('t-mtr-'+i);
+                        if (tm) tm.style.width = (t.meters?.l * 100 || 0) + '%';
+                        var st = document.getElementById('t-st-'+i); 
+                        if (st) st.className = 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready'));
+                        const lsm = document.getElementById('t-ls-m-'+i);
+                        if (lsm) lsm.style.left = (t.loopStart * 100) + '%';
+                        const lem = document.getElementById('t-le-m-'+i);
+                        if (lem) lem.style.left = (t.loopEnd * 100) + '%';
+                        if (t.params) {
+                            KNOB_CONFIGS.forEach(cfg => {
+                                const sl = document.getElementById(`t-${cfg.p}-sl-${i}`);
+                                if (sl) sl.value = t.params[cfg.p] || 0;
+                                const val = document.getElementById(`t-${cfg.p}-val-${i}`);
+                                if (val) val.textContent = t.params[cfg.p] || 0;
+                                const l1 = document.getElementById(`t-lfo1-chk-${i}-${cfg.p}`);
+                                if (l1) l1.checked = t.lfoAssigns?.[1]?.includes(cfg.p);
+                                const l2 = document.getElementById(`t-lfo2-chk-${i}-${cfg.p}`);
+                                if (l2) l2.checked = t.lfoAssigns?.[2]?.includes(cfg.p);
+                            });
+                            const gsl = document.getElementById(`t-gain-sl-${i}`);
+                            if (gsl) gsl.value = t.params.inputGain || 0;
+                            const gval = document.getElementById(`t-gain-val-${i}`);
+                            if (gval) gval.textContent = (t.params.inputGain || 0).toFixed(1) + ' dB';
+                        }
+                        if (t.fxSlots) t.fxSlots.forEach((active, idx) => { 
+                            const chk = document.getElementById(`t-fx-chk-${i}-${idx}`);
+                            if (chk) chk.checked = active; 
+                            const lbl = document.getElementById(`t-fx-lbl-${i}-${idx}`);
+                            if (lbl) lbl.style.backgroundColor = active ? 'var(--gold)' : 'transparent'; 
+                        });
+                        const rb = document.getElementById(`t-rec-${i}`);
+                        if (rb) rb.className = t.isRecording ? 'recording' : '';
+                    });
+                } catch(e) {
+                    console.error("❌ TV Render Error:", e);
+                }
             }
 
             let currentBridgeIp = null;
