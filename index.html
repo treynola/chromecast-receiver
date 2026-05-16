@@ -169,7 +169,6 @@
             function updateScale() { const winW = window.innerWidth; const winH = window.innerHeight; document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); }
 
             let configReceived = false;
-            let targetRate = 48000;
 
             async function initAudio(rate) {
                 if (rate) {
