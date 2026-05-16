@@ -18,7 +18,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // [v13.9.27] LOW-LATENCY TARGETS (100ms target, 200ms prebuffer)
     this._TARGET_BUFFER = 9600; // 100ms @ 48kHz stereo
     this._MIN_BUFFER = 2400;    // 25ms (Direct Safety Limit)
-    this._PREBUFFER = 19200;    // 200ms (Warm-up threshold)
+    this._PREBUFFER = 48000;    // 500ms (Warm-up threshold - Industrial Resilience)
     this._DEAD_ZONE = 960;      // 10ms (Dead-Zone for PI controller)
     
     this._isBuffering = true;
