@@ -255,6 +255,8 @@
                                     relayLogToStudio(`📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available})`);
                                     window._lastDiagSent = Date.now();
                                 }
+                            } else if (e.data.type === 'LOG') {
+                                relayLogToStudio(e.data.msg);
                             }
                         };
                     } catch (e) {
@@ -304,6 +306,13 @@
                     inner.appendChild(line);
                     if (inner.childNodes.length > 15) inner.removeChild(inner.firstChild);
                 }
+                // Send over WebSocket if available (crucial for Samsung Tizen Browser / DIAL)
+                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                    try {
+                        binaryWS.send(JSON.stringify({ type: 'LOG', msg: `[TV LOG] ${msg}` }));
+                    } catch(e) {}
+                }
+                // Send over ChromeCast custom namespace if available
                 const context = cast.framework.CastReceiverContext.getInstance();
                 const senders = context.getSenders();
                 if (senders.length > 0) {
