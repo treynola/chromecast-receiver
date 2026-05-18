@@ -103,8 +103,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // Smooth continuous Proportional controller
       // [v13.9.103] 20x stronger gain. Requires only ~4,400 sample steady-state error to output 0.0884x drift compensation.
       adj = this._smoothedError * 0.0000200;
-      // Clamp rate correction to +/- 15.0% to overcome embedded hardware sample rate lies (e.g. Tizen 48k/44.1k mismatch)
-      adj = Math.max(-0.15, Math.min(0.15, adj));
+      // [v13.9.104] Increase clamp to +/- 1.0 to handle extreme hardware sample rate mismatches like Tizen 32kHz clocks.
+      adj = Math.max(-1.0, Math.min(1.0, adj));
     }
     this._playbackRate = this._baseRate + adj;
 
