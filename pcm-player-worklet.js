@@ -15,11 +15,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.27] LOW-LATENCY TARGETS (100ms target, 200ms prebuffer)
-    this._TARGET_BUFFER = 9600; // 100ms @ 48kHz stereo
-    this._MIN_BUFFER = 2400;    // 25ms (Direct Safety Limit)
-    this._PREBUFFER = 48000;    // 500ms (Warm-up threshold - Industrial Resilience)
-    this._DEAD_ZONE = 960;      // 10ms (Dead-Zone for PI controller)
+    // [v13.9.27] LOW-LATENCY TARGETS (100ms target, 150ms prebuffer)
+    this._TARGET_BUFFER = 9600;  // 100ms @ 48kHz stereo
+    this._MIN_BUFFER = 1920;     // 20ms (Direct Safety Limit)
+    this._PREBUFFER = 14400;     // 150ms (Warm-up threshold - Low-Latency Synchronization)
+    this._DEAD_ZONE = 960;       // 10ms (Dead-Zone for PI controller)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -53,10 +53,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   }
 
   _writeToBuffer(pcm) {
+    const ringLen = this._ringBuffer.length;
     for (let i = 0; i < pcm.length; i++) {
       this._ringBuffer[this._writePtr] = pcm[i];
-      this._writePtr = (this._writePtr + 1) % this._ringBuffer.length;
-      this._bufferSize++;
+      this._writePtr = (this._writePtr + 1) % ringLen;
+      this._bufferSize = Math.min(ringLen, this._bufferSize + 1);
     }
   }
 
@@ -115,7 +116,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const valR = vR1 + fract * (vR2 - vR1);
 
         this._readPtr = (this._readPtr + (2 * this._playbackRate)) % ringLen;
-        this._bufferSize -= (2 * this._playbackRate);
+        this._bufferSize = Math.max(0, this._bufferSize - (2 * this._playbackRate));
 
         if (this._fade < 1.0) this._fade += 0.02;
         
