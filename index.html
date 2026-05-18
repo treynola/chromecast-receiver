@@ -581,8 +581,13 @@
                 setTimeout(() => {
                     if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
                         console.log("📡 TV: Auto-Discovery Fallback triggered...");
-                        const guessIp = (window.location.hostname && window.location.hostname.includes('.')) ? window.location.hostname : '192.168.1.11';
-                        connectBinaryBridge(guessIp);
+                        const hostname = window.location.hostname;
+                        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+                        if (isLocal) {
+                            connectBinaryBridge(hostname);
+                        } else {
+                            console.log("📡 TV: Public hosting detected. Staying silent until BRIDGE_CONFIG.");
+                        }
                     }
                 }, 3000);
 
