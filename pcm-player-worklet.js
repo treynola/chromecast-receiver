@@ -80,19 +80,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.8.180] HIGH-VOLUME DAMPENED SYNC
+    // [v13.9.50] Low-Latency Stable Sync
+    // We use a highly dampened, inaudible clock correction (max 0.1% adjustment) to prevent garbling/pitch warble.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
+    this._smoothedError = (this._smoothedError * 0.999) + (rawError * 0.001);
 
-    if (Math.abs(this._smoothedError) < this._DEAD_ZONE) {
-        this._playbackRate = this._baseRate;
-        this._errorSum *= 0.999; 
-    } else {
-        this._errorSum += this._smoothedError;
-        const adj = (this._smoothedError * this._kp) + (this._errorSum * this._ki);
-        // [v13.9.27] Expanded swing limit (15%) to support 44.1k hardware
-        this._playbackRate = Math.max(0.85 * this._baseRate, Math.min(1.15 * this._baseRate, this._baseRate + adj));
+    let adj = 0;
+    if (Math.abs(this._smoothedError) > this._DEAD_ZONE) {
+        // Extremely gentle correction (0.1%) to prevent drift while preserving perfect pitch purity
+        adj = Math.sign(this._smoothedError) * 0.001;
     }
+    this._playbackRate = this._baseRate + adj;
 
     const ringLen = this._ringBuffer.length;
 
