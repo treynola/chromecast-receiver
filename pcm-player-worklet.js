@@ -80,6 +80,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     if (this._isBuffering) {
       if (this._bufferSize >= this._PREBUFFER) {
         this._isBuffering = false;
+        // [v13.9.60] INSTANT STARTUP ALIGNMENT
+        // If there was a buildup during the buffering phase (e.g. browser context waking up),
+        // instantly align buffer size to _PREBUFFER to guarantee zero startup lag!
+        if (this._bufferSize > this._PREBUFFER) {
+          const ringLen = this._ringBuffer.length;
+          const excess = this._bufferSize - this._PREBUFFER;
+          this._readPtr = (this._readPtr + excess) % ringLen;
+          this._bufferSize = this._PREBUFFER;
+          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup Align: Sliced ${Math.round(excess)} backlog samples to start exactly at target prebuffer.` });
+        }
       } else {
         return true; 
       }
