@@ -67,14 +67,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel1 = output[1];
 
     // [v13.9.60] LATENCY CATCH-UP (FAST-FLUSH)
-    // If the buffer size ever balloons past 300ms (28,800 samples) due to initial startup lag,
-    // browser suspension, or heavy network bursts, instantly discard old samples and align to 150ms.
-    if (this._bufferSize > 28800) {
+    // If the buffer size ever balloons past 1.5 seconds (144,000 samples) due to prolonged
+    // browser suspension or long network drops, instantly discard old samples and align to 150ms.
+    if (this._bufferSize > 144000) {
       const ringLen = this._ringBuffer.length;
       const excess = this._bufferSize - this._PREBUFFER;
       this._readPtr = (this._readPtr + excess) % ringLen;
       this._bufferSize = this._PREBUFFER;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess samples to restore target 150ms latency.` });
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples to restore target 150ms latency.` });
     }
 
     if (this._isBuffering) {
@@ -91,15 +91,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.50] Low-Latency Stable Sync
-    // We use a highly dampened, inaudible clock correction (max 0.1% adjustment) to prevent garbling/pitch warble.
+    // [v13.9.50] Low-Latency Stable Sync & Dynamic Rate Scaling
+    // Uses a dual-stage controller: 0.1% adjustment for micro-drifts (under 200ms) to preserve
+    // absolute pitch purity, and 1.0% adjustment for larger deviations (over 200ms) to safely
+    // pull down buffered network bursts without triggering an abrupt drop/flush.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.999) + (rawError * 0.001);
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
 
     let adj = 0;
-    if (Math.abs(this._smoothedError) > this._DEAD_ZONE) {
-        // Extremely gentle correction (0.1%) to prevent drift while preserving perfect pitch purity
-        adj = Math.sign(this._smoothedError) * 0.001;
+    const absError = Math.abs(this._smoothedError);
+    if (absError > this._DEAD_ZONE) {
+      if (absError > 19200) { // > 200ms deviation
+        adj = Math.sign(this._smoothedError) * 0.01; // Moderate 1% rate correction for fast recovery
+      } else {
+        adj = Math.sign(this._smoothedError) * 0.001; // Ultra-fine 0.1% correction for pitch purity
+      }
     }
     this._playbackRate = this._baseRate + adj;
 
