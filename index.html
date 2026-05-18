@@ -472,6 +472,7 @@
                 binaryWS.onmessage = async (event) => {
                     if (event.data instanceof ArrayBuffer) {
                         if (workletNode) {
+                            if (audioCtx && audioCtx.state === 'suspended') resumeAudio();
                             workletNode.port.postMessage(event.data, [event.data]);
                         }
                     } else if (typeof event.data === 'string') {
