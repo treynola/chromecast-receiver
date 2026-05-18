@@ -309,7 +309,7 @@
                 // Send over WebSocket if available (crucial for Samsung Tizen Browser / DIAL)
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                     try {
-                        binaryWS.send(JSON.stringify({ type: 'LOG', msg: `[TV LOG] ${msg}` }));
+                        binaryWS.send(JSON.stringify({ type: 'LOG', msg: msg }));
                     } catch(e) {}
                 }
                 // Send over ChromeCast custom namespace if available
@@ -317,7 +317,7 @@
                 const senders = context.getSenders();
                 if (senders.length > 0) {
                     try {
-                        context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: `[TV LOG] ${msg}` });
+                        context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: msg });
                     } catch(e) {}
                 }
             }

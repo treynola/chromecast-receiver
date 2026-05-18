@@ -66,6 +66,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
 
+    // [v13.9.60] LATENCY CATCH-UP (FAST-FLUSH)
+    // If the buffer size ever balloons past 300ms (28,800 samples) due to initial startup lag,
+    // browser suspension, or heavy network bursts, instantly discard old samples and align to 150ms.
+    if (this._bufferSize > 28800) {
+      const ringLen = this._ringBuffer.length;
+      const excess = this._bufferSize - this._PREBUFFER;
+      this._readPtr = (this._readPtr + excess) % ringLen;
+      this._bufferSize = this._PREBUFFER;
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess samples to restore target 150ms latency.` });
+    }
+
     if (this._isBuffering) {
       if (this._bufferSize >= this._PREBUFFER) {
         this._isBuffering = false;
