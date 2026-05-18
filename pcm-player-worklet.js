@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.8.200]
- * Optimized for zero-jitter Direct Binary Bridge (WebSocket).
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.100]
+ * Optimized for zero-jitter, zero-allocation Direct Binary Bridge (WebSocket).
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -15,11 +15,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.60] ULTRA-LOW-LATENCY TARGETS (50ms target, 75ms prebuffer)
-    this._TARGET_BUFFER = 4800;  // 50ms @ 48kHz stereo
-    this._MIN_BUFFER = 960;      // 10ms (Direct Safety Limit)
-    this._PREBUFFER = 7200;      // 75ms (Warm-up threshold - Low-Latency Synchronization)
-    this._DEAD_ZONE = 480;       // 5ms (Dead-Zone for PI controller)
+    // [v13.9.100] JITTER-PROOF BUFFER TARGETS (150ms cushion, 200ms prebuffer)
+    this._TARGET_BUFFER = 14400;  // 150ms @ 48kHz stereo
+    this._MIN_BUFFER = 2880;      // 30ms (Direct Safety Limit)
+    this._PREBUFFER = 19200;      // 200ms (Warm-up threshold)
+    this._DEAD_ZONE = 960;       // 10ms (Dead-Zone for PI controller)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -27,11 +27,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._currentPeak = 0;
     this._fade = 1.0; 
     
-    // PI Sync Controller Variables (Aggressive tuning)
-    this._errorSum = 0;
+    // Controller Variables (Smoothed Error for Proportional Control)
     this._smoothedError = 0;
-    this._kp = 0.0001; 
-    this._ki = 0.00001;
 
     this.port.onmessage = (e) => {
       try {
@@ -39,26 +36,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (!arrayBuffer) return;
         
         const pcm16 = new Int16Array(arrayBuffer);
-        const float32 = new Float32Array(pcm16.length);
+        const ringLen = this._ringBuffer.length;
         
+        // [v13.9.100] Zero-Allocation Direct Ingestion
+        // Copy and decode 16-bit PCM directly into Float32 ring buffer to avoid GC churn entirely
         for (let i = 0; i < pcm16.length; i++) {
-          float32[i] = pcm16[i] / 32768;
+          this._ringBuffer[this._writePtr] = pcm16[i] / 32768;
+          this._writePtr = (this._writePtr + 1) % ringLen;
         }
-        
-        this._writeToBuffer(float32);
+        this._bufferSize = Math.min(ringLen, this._bufferSize + pcm16.length);
       } catch (err) {
         this.port.postMessage({ type: 'LOG', msg: `❌ Worklet Error: ${err.message}` });
       }
     };
-  }
-
-  _writeToBuffer(pcm) {
-    const ringLen = this._ringBuffer.length;
-    for (let i = 0; i < pcm.length; i++) {
-      this._ringBuffer[this._writePtr] = pcm[i];
-      this._writePtr = (this._writePtr + 1) % ringLen;
-      this._bufferSize = Math.min(ringLen, this._bufferSize + 1);
-    }
   }
 
   process(inputs, outputs) {
@@ -68,13 +58,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // [v13.9.60] LATENCY CATCH-UP (FAST-FLUSH)
     // If the buffer size ever balloons past 400ms (38,400 samples) due to prolonged
-    // browser suspension or network recovery lag, instantly discard old samples and align to 75ms.
+    // browser suspension or network recovery lag, instantly discard old samples and align to prebuffer.
     if (this._bufferSize > 38400) {
       const ringLen = this._ringBuffer.length;
       const excess = this._bufferSize - this._PREBUFFER;
       this._readPtr = (this._readPtr + excess) % ringLen;
       this._bufferSize = this._PREBUFFER;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples to restore target 75ms latency.` });
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples to restore target 200ms latency.` });
     }
 
     if (this._isBuffering) {
@@ -101,21 +91,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.50] Low-Latency Stable Sync & Dynamic Rate Scaling
-    // Uses a dual-stage controller: 0.1% adjustment for micro-drifts (under 100ms) to preserve
-    // absolute pitch purity, and 1.0% adjustment for larger deviations (over 100ms) to safely
-    // pull down buffered network bursts without triggering an abrupt drop/flush.
+    // [v13.9.100] Continuous Proportional Playback Rate Controller
+    // Pitch adjusts smoothly, silently, and dynamically to lock perfectly with the sender's stream.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
     this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
 
     let adj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      if (absError > 9600) { // > 100ms deviation
-        adj = Math.sign(this._smoothedError) * 0.01; // Moderate 1% rate correction for fast recovery
-      } else {
-        adj = Math.sign(this._smoothedError) * 0.001; // Ultra-fine 0.1% correction for pitch purity
-      }
+      // Smooth continuous Proportional controller
+      adj = this._smoothedError * 0.0000005;
+      // Clamp rate correction to +/- 1.5% for absolute pitch stability
+      adj = Math.max(-0.015, Math.min(0.015, adj));
     }
     this._playbackRate = this._baseRate + adj;
 
