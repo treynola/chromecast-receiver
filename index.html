@@ -183,7 +183,8 @@
                     relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
                     return;
                 }
-                if (!audioCtx || audioCtx.sampleRate !== targetRate) {
+                if (!audioCtx || window._lastTargetRate !== targetRate) {
+                    window._lastTargetRate = targetRate;
                     if (audioCtx) {
                         relayLogToStudio(`📡 TV: Reseting AudioContext for Sample Rate: ${targetRate}`);
                         try { await audioCtx.close(); } catch(e) {}
@@ -191,7 +192,6 @@
                     
                     try {
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
-                            sampleRate: targetRate,
                             latencyHint: 'interactive'
                         });
 
