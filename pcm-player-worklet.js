@@ -15,11 +15,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.27] LOW-LATENCY TARGETS (100ms target, 150ms prebuffer)
-    this._TARGET_BUFFER = 9600;  // 100ms @ 48kHz stereo
-    this._MIN_BUFFER = 1920;     // 20ms (Direct Safety Limit)
-    this._PREBUFFER = 14400;     // 150ms (Warm-up threshold - Low-Latency Synchronization)
-    this._DEAD_ZONE = 960;       // 10ms (Dead-Zone for PI controller)
+    // [v13.9.60] ULTRA-LOW-LATENCY TARGETS (50ms target, 75ms prebuffer)
+    this._TARGET_BUFFER = 4800;  // 50ms @ 48kHz stereo
+    this._MIN_BUFFER = 960;      // 10ms (Direct Safety Limit)
+    this._PREBUFFER = 7200;      // 75ms (Warm-up threshold - Low-Latency Synchronization)
+    this._DEAD_ZONE = 480;       // 5ms (Dead-Zone for PI controller)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -67,14 +67,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel1 = output[1];
 
     // [v13.9.60] LATENCY CATCH-UP (FAST-FLUSH)
-    // If the buffer size ever balloons past 1.5 seconds (144,000 samples) due to prolonged
-    // browser suspension or long network drops, instantly discard old samples and align to 150ms.
-    if (this._bufferSize > 144000) {
+    // If the buffer size ever balloons past 400ms (38,400 samples) due to prolonged
+    // browser suspension or network recovery lag, instantly discard old samples and align to 75ms.
+    if (this._bufferSize > 38400) {
       const ringLen = this._ringBuffer.length;
       const excess = this._bufferSize - this._PREBUFFER;
       this._readPtr = (this._readPtr + excess) % ringLen;
       this._bufferSize = this._PREBUFFER;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples to restore target 150ms latency.` });
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples to restore target 75ms latency.` });
     }
 
     if (this._isBuffering) {
@@ -92,8 +92,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     }
 
     // [v13.9.50] Low-Latency Stable Sync & Dynamic Rate Scaling
-    // Uses a dual-stage controller: 0.1% adjustment for micro-drifts (under 200ms) to preserve
-    // absolute pitch purity, and 1.0% adjustment for larger deviations (over 200ms) to safely
+    // Uses a dual-stage controller: 0.1% adjustment for micro-drifts (under 100ms) to preserve
+    // absolute pitch purity, and 1.0% adjustment for larger deviations (over 100ms) to safely
     // pull down buffered network bursts without triggering an abrupt drop/flush.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
     this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
@@ -101,7 +101,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     let adj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      if (absError > 19200) { // > 200ms deviation
+      if (absError > 9600) { // > 100ms deviation
         adj = Math.sign(this._smoothedError) * 0.01; // Moderate 1% rate correction for fast recovery
       } else {
         adj = Math.sign(this._smoothedError) * 0.001; // Ultra-fine 0.1% correction for pitch purity
