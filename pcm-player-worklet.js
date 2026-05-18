@@ -15,7 +15,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.100] JITTER-PROOF BUFFER TARGETS (150ms cushion, 200ms prebuffer)
+    // [v13.9.101] JITTER-PROOF BUFFER TARGETS (150ms cushion, 200ms prebuffer)
     this._TARGET_BUFFER = 14400;  // 150ms @ 48kHz stereo
     this._MIN_BUFFER = 2880;      // 30ms (Direct Safety Limit)
     this._PREBUFFER = 19200;      // 200ms (Warm-up threshold)
@@ -56,10 +56,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
 
-    // [v13.9.60] LATENCY CATCH-UP (FAST-FLUSH)
-    // If the buffer size ever balloons past 400ms (38,400 samples) due to prolonged
-    // browser suspension or network recovery lag, instantly discard old samples and align to prebuffer.
-    if (this._bufferSize > 38400) {
+    // [v13.9.101] LATENCY CATCH-UP (FAST-FLUSH)
+    // If the buffer size ever balloons past 1.5 seconds (144,000 samples) due to prolonged
+    // browser suspension or major network recovery lag, instantly discard old samples and align to prebuffer.
+    // This high limit prevents false flushes from normal TCP network bursts.
+    if (this._bufferSize > 144000) {
       const ringLen = this._ringBuffer.length;
       const excess = this._bufferSize - this._PREBUFFER;
       this._readPtr = (this._readPtr + excess) % ringLen;
@@ -100,9 +101,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
       // Smooth continuous Proportional controller
-      adj = this._smoothedError * 0.0000005;
-      // Clamp rate correction to +/- 1.5% for absolute pitch stability
-      adj = Math.max(-0.015, Math.min(0.015, adj));
+      // Increased coefficient from 0.0000005 to 0.0000010 for faster, more responsive tracking
+      adj = this._smoothedError * 0.0000010;
+      // Clamp rate correction to +/- 3.0% for robust pitch tracking and catch-up speed
+      adj = Math.max(-0.03, Math.min(0.03, adj));
     }
     this._playbackRate = this._baseRate + adj;
 
