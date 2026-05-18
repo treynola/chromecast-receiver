@@ -103,8 +103,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // Smooth continuous Proportional controller
       // Increased coefficient from 0.0000005 to 0.0000010 for faster, more responsive tracking
       adj = this._smoothedError * 0.0000010;
-      // Clamp rate correction to +/- 3.0% for robust pitch tracking and catch-up speed
-      adj = Math.max(-0.03, Math.min(0.03, adj));
+      // Clamp rate correction to +/- 15.0% to overcome embedded hardware sample rate lies (e.g. Tizen 48k/44.1k mismatch)
+      adj = Math.max(-0.15, Math.min(0.15, adj));
     }
     this._playbackRate = this._baseRate + adj;
 
