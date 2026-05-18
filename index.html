@@ -435,10 +435,17 @@
                 
                 currentBridgeIp = ip;
                 if (binaryWS) {
-                    try { binaryWS.close(); } catch(e) {}
+                    try {
+                        binaryWS.onopen = null;
+                        binaryWS.onmessage = null;
+                        binaryWS.onclose = null;
+                        binaryWS.onerror = null;
+                        binaryWS.close();
+                    } catch(e) {}
+                    binaryWS = null;
                 }
                 
-                const url = `ws://${ip}:8080`;
+                const url = `ws://${ip}:8080/?role=receiver`;
                 try {
                     relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
                     binaryWS = new WebSocket(url);
