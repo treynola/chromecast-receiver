@@ -366,8 +366,13 @@
                 }
             }
 
+            let lastRenderTime = 0;
+            const RENDER_THROTTLE_MS = 100; // Throttle to 10 FPS to protect CPU for audio processing
             function renderState(s) {
                 if (!s) return;
+                const now = Date.now();
+                if (now - lastRenderTime < RENDER_THROTTLE_MS) return;
+                lastRenderTime = now;
                 try {
                     if (s.transport) { 
                         updateText('recording-time-display', s.transport.position);
