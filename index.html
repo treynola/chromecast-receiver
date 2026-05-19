@@ -192,7 +192,7 @@
                     
                     try {
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
-                            latencyHint: 'interactive'
+                            latencyHint: 'playback'
                         });
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
@@ -367,7 +367,12 @@
             }
 
             let lastRenderTime = 0;
-            const RENDER_THROTTLE_MS = 100; // Throttle to 10 FPS to protect CPU for audio processing
+            const RENDER_THROTTLE_MS = 250; // Throttle to 4 FPS to protect CPU for audio processing
+            
+            const _lastParamsCache = [];
+            const _lastFxCache = [];
+            let _lastSamplerCache = '';
+
             function renderState(s) {
                 if (!s) return;
                 const now = Date.now();
@@ -386,11 +391,9 @@
                             const curKey = `${s.cursor.x}_${s.cursor.y}_${s.cursor.isClicking}`;
                             if (valCache['cursor'] !== curKey) {
                                 cur.style.display = 'block'; 
-                                var px = s.cursor.x * 100;
-                                var py = (s.cursor.y * 100) + 1.6; 
-                                cur.style.left = px + '%';
-                                cur.style.top = py + '%';
-                                cur.style.transform = 'translate3d(-50%, -50%, 0)'; 
+                                var px = s.cursor.x * 1440;
+                                var py = (s.cursor.y * 810) + 13; 
+                                cur.style.transform = `translate3d(${px}px, ${py}px, 0) translate3d(-50%, -50%, 0)`; 
                                 cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
                                 valCache['cursor'] = curKey;
                             }
@@ -412,52 +415,71 @@
                         updateValue('lfo2-time', (s.master.lfo2 && s.master.lfo2.time) || 1.8);
                         updateText('lfo2-time-value', ((s.master.lfo2 && s.master.lfo2.time) || 1.8).toFixed(1) + 's');
                     }
-                    if (s.sampler) s.sampler.forEach((p,i) => { 
-                        const btnId = 'sample-'+(i+1);
-                        const cls = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); 
-                        updateClass(btnId, cls);
-                        if (p.loaded && p.name) {
-                            updateText(btnId, p.name.substring(0,6));
+                    if (s.sampler) {
+                        const samplerStr = JSON.stringify(s.sampler);
+                        if (_lastSamplerCache !== samplerStr) {
+                            _lastSamplerCache = samplerStr;
+                            s.sampler.forEach((p,i) => { 
+                                const btnId = 'sample-'+(i+1);
+                                const cls = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); 
+                                updateClass(btnId, cls);
+                                if (p.loaded && p.name) {
+                                    updateText(btnId, p.name.substring(0,6));
+                                }
+                            });
                         }
-                    });
+                    }
                     if (s.tracks) s.tracks.forEach((t,i) => {
                         updateText('t-scroll-'+i, t.fileName || 'Ready');
                         updateStyleWidth('t-mtr-'+i, ((t.meters && t.meters.l) * 100 || 0) + '%');
                         updateClass('t-st-'+i, 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready')));
                         updateStyleLeft('t-ls-m-'+i, (t.loopStart * 100) + '%');
                         updateStyleLeft('t-le-m-'+i, (t.loopEnd * 100) + '%');
+                        
                         if (t.params) {
-                            KNOB_CONFIGS.forEach(cfg => {
-                                updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
-                                updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
-                                
-                                const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
-                                const l1Checked = !!(t.lfoAssigns && t.lfoAssigns[1] && t.lfoAssigns[1].includes(cfg.p));
-                                if (l1 && l1.checked !== l1Checked) {
-                                    l1.checked = l1Checked;
-                                }
-                                const l2 = getEl(`t-lfo2-chk-${i}-${cfg.p}`);
-                                const l2Checked = !!(t.lfoAssigns && t.lfoAssigns[2] && t.lfoAssigns[2].includes(cfg.p));
-                                if (l2 && l2.checked !== l2Checked) {
-                                    l2.checked = l2Checked;
-                                }
-                            });
-                            updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
-                            updateText(`t-gain-val-${i}`, (t.params.inputGain || 0).toFixed(1) + ' dB');
+                            const paramsStr = JSON.stringify(t.params);
+                            const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
+                            const trackCacheKey = paramsStr + "_" + lfoAssignsStr;
+                            if (_lastParamsCache[i] !== trackCacheKey) {
+                                _lastParamsCache[i] = trackCacheKey;
+                                KNOB_CONFIGS.forEach(cfg => {
+                                    updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
+                                    updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
+                                    
+                                    const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
+                                    const l1Checked = !!(t.lfoAssigns && t.lfoAssigns[1] && t.lfoAssigns[1].includes(cfg.p));
+                                    if (l1 && l1.checked !== l1Checked) {
+                                        l1.checked = l1Checked;
+                                    }
+                                    const l2 = getEl(`t-lfo2-chk-${i}-${cfg.p}`);
+                                    const l2Checked = !!(t.lfoAssigns && t.lfoAssigns[2] && t.lfoAssigns[2].includes(cfg.p));
+                                    if (l2 && l2.checked !== l2Checked) {
+                                        l2.checked = l2Checked;
+                                    }
+                                });
+                                updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
+                                updateText(`t-gain-val-${i}`, (t.params.inputGain || 0).toFixed(1) + ' dB');
+                            }
                         }
-                        if (t.fxSlots) t.fxSlots.forEach((active, idx) => { 
-                            const chk = getEl(`t-fx-chk-${i}-${idx}`);
-                            if (chk && chk.checked !== active) {
-                                chk.checked = active;
+                        if (t.fxSlots) {
+                            const fxStr = JSON.stringify(t.fxSlots);
+                            if (_lastFxCache[i] !== fxStr) {
+                                _lastFxCache[i] = fxStr;
+                                t.fxSlots.forEach((active, idx) => { 
+                                    const chk = getEl(`t-fx-chk-${i}-${idx}`);
+                                    if (chk && chk.checked !== active) {
+                                        chk.checked = active;
+                                    }
+                                    const lbl = getEl(`t-fx-lbl-${i}-${idx}`);
+                                    const bg = active ? 'var(--gold)' : 'transparent';
+                                    const bgKey = `t-fx-lbl-bg-${i}-${idx}`;
+                                    if (lbl && valCache[bgKey] !== bg) {
+                                        lbl.style.backgroundColor = bg;
+                                        valCache[bgKey] = bg;
+                                    }
+                                });
                             }
-                            const lbl = getEl(`t-fx-lbl-${i}-${idx}`);
-                            const bg = active ? 'var(--gold)' : 'transparent';
-                            const bgKey = `t-fx-lbl-bg-${i}-${idx}`;
-                            if (lbl && valCache[bgKey] !== bg) {
-                                lbl.style.backgroundColor = bg;
-                                valCache[bgKey] = bg;
-                            }
-                        });
+                        }
                         updateClass(`t-rec-${i}`, t.isRecording ? 'recording' : '');
                     });
                 } catch(e) {
