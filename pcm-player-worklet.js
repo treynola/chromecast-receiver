@@ -16,12 +16,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.330] Robust Jitter-Buffer Targets (500ms target for TV stability)
-    this._TARGET_BUFFER = 48000;   // 500ms @ 48kHz stereo — operating target
+    // [v13.9.330] Robust Jitter-Buffer Targets (Accommodating 1.0s network bursts)
+    this._TARGET_BUFFER = 96000;   // 1.0s @ 48kHz stereo — operating target to absorb bursts
     this._MIN_BUFFER = 9600;       // 100ms (stall threshold)
-    this._PREBUFFER = 48000;       // 500ms (warm-up)
-    this._DEAD_ZONE = 4800;        // 100ms (PI dead zone)
-    this._FLUSH_THRESHOLD = 144000; // 1500ms (1.5s) — generous headroom for PI convergence
+    this._PREBUFFER = 96000;       // 1.0s (warm-up)
+    this._DEAD_ZONE = 24000;       // 250ms (PI dead zone)
+    this._FLUSH_THRESHOLD = 288000; // 3.0s — generous headroom for PI convergence and 1.0s network bursts
     
     this._isBuffering = true;
     this._stallCount = 0;
