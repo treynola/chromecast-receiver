@@ -29,6 +29,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     
     // Controller Variables (Smoothed Error for Proportional Control)
     this._smoothedError = 0;
+    this._integralError = 0; // [v13.9.107] Integral accumulator for hardware drift discovery
 
     this.port.onmessage = (e) => {
       try {
@@ -95,19 +96,29 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // [v13.9.100] Continuous Proportional Playback Rate Controller
     // Pitch adjusts smoothly, silently, and dynamically to lock perfectly with the sender's stream.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    // [v13.9.106] Safe smoothing now that baseRate is accurate
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    // [v13.9.107] Faster smoothing to quickly measure drift trend
+    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
 
-    let adj = 0;
+    let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      // Smooth continuous Proportional controller
-      // [v13.9.106] Gentle gain. Controller only handles micro-drifts and network jitter now.
-      adj = this._smoothedError * 0.0000020;
-      // [v13.9.106] Clamp tightened back to +/- 0.03 (3%) to absolutely prevent audible pitch shifting
-      adj = Math.max(-0.03, Math.min(0.03, adj));
+      // Proportional: Gentle correction for immediate jitter (+/- 2% max)
+      pAdj = this._smoothedError * 0.0000050;
+      
+      // Integral Anti-Windup: Only accumulate if Proportional isn't fully saturated
+      const isClamped = (pAdj + this._integralError > 1.0) || (pAdj + this._integralError < -0.5);
+      if (!isClamped) {
+          // Integral: Extremely slow accumulation to discover true hardware sample rate (e.g., 32kHz, 44.1kHz)
+          this._integralError += this._smoothedError * 0.0000001; 
+      }
     }
-    this._playbackRate = this._baseRate + adj;
+    
+    // The Integral is allowed to compensate for extreme hardware lies (e.g. up to 1.6x for 30kHz clocks)
+    // The Proportional is clamped tightly (+/- 0.02) to prevent audible wobbling.
+    this._integralError = Math.max(-0.5, Math.min(0.6, this._integralError));
+    pAdj = Math.max(-0.02, Math.min(0.02, pAdj));
+    
+    this._playbackRate = this._baseRate + pAdj + this._integralError;
 
     const ringLen = this._ringBuffer.length;
 

@@ -208,19 +208,11 @@
                         g.connect(audioCtx.destination);
                         keepAlive.start();
 
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.9.106');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.9.107');
                         
                         // [v13.9.27] DYNAMIC RATE TRANSFORMATION
                         // If hardware is 44.1k and Studio is 48k, we MUST play at ~1.088x base
-                        let hwRate = audioCtx.sampleRate;
-                        
-                        // [v13.9.106] TIZEN HARDWARE BUG WORKAROUND
-                        // Tizen browsers falsely report 48000Hz but execute audio callbacks at 44.1kHz.
-                        if (navigator.userAgent.toLowerCase().includes('tizen')) {
-                            hwRate = 44100;
-                            relayLogToStudio("🛠️ TV: Tizen OS Detected. Forcing base hardware clock to 44100Hz.");
-                        }
-
+                        const hwRate = audioCtx.sampleRate;
                         const studioRate = targetRate || 48000;
                         const baseRateRatio = studioRate / hwRate;
                         
