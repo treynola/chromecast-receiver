@@ -208,7 +208,7 @@
                         g.connect(audioCtx.destination);
                         keepAlive.start();
 
-                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.9.310');
+                        await audioCtx.audioWorklet.addModule('pcm-player-worklet.js?v=13.9.325');
                         
                         // [v13.9.27] DYNAMIC RATE TRANSFORMATION
                         // If hardware is 44.1k and Studio is 48k, we MUST play at ~1.088x base
