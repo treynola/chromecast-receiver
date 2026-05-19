@@ -192,10 +192,10 @@
                     }
                     
                     try {
-                        // [v13.9.330] FORCE TV TO 24kHz — sweet spot for Chromecast CPU
-                        // 24kHz = 187 callbacks/sec with 2.0x decimation (good quality)
+                        // [v13.9.330] NATIVE 48kHz — bypasses Chrome internal resampling
+                        // and prevents callback starvation on Chromecast CPU.
                         // The pointer-based ring buffer in the worklet now prevents buffer drift.
-                        const HARDWARE_RATE = 24000;
+                        const HARDWARE_RATE = 48000;
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
                             sampleRate: HARDWARE_RATE,
                             latencyHint: 'playback'

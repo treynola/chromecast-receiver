@@ -21,10 +21,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._playbackRate = this._baseRate;
     
     // Jitter-Buffer Targets (sample counts, 48kHz stereo)
-    this._TARGET_BUFFER = 48000;   // 500ms operating target
+    this._TARGET_BUFFER = 19200;   // 200ms operating target
     this._MIN_BUFFER = 4800;       // 50ms stall threshold
-    this._PREBUFFER = 24000;       // 250ms warm-up before first play
-    this._FLUSH_THRESHOLD = 192000; // 2.0s — hard flush ceiling
+    this._PREBUFFER = 14400;       // 150ms warm-up before first play
+    this._FLUSH_THRESHOLD = 48000;  // 500ms — hard flush ceiling
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -123,20 +123,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // PI CONTROLLER — ultra-smooth, wide dead zone
+    // PI CONTROLLER — continuous, ultra-smooth
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
+    this._smoothedError = (this._smoothedError * 0.998) + (rawError * 0.002);
 
-    let pAdj = 0;
-    const absError = Math.abs(this._smoothedError);
-    if (absError > 12000) { // Dead zone: ±125ms — ignores normal network jitter
-      pAdj = this._smoothedError * 0.0000001;
-      this._integralError += this._smoothedError * 0.0000000005;
-    }
+    let pAdj = this._smoothedError * 0.00000002;
+    this._integralError += this._smoothedError * 0.00000000005;
     
-    this._integralError *= 0.99999;
-    this._integralError = Math.max(-0.006, Math.min(0.006, this._integralError));
-    pAdj = Math.max(-0.004, Math.min(0.004, pAdj));
+    this._integralError *= 0.9999;
+    this._integralError = Math.max(-0.001, Math.min(0.001, this._integralError));
+    pAdj = Math.max(-0.0005, Math.min(0.0005, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
@@ -150,12 +146,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     for (let i = 0; i < channel0.length; i++) {
       if (available - samplesConsumed >= 4) {
-        // Nearest Neighbor (fast integer cast via bitwise OR)
-        const frameIndex = (readPtr / 2) | 0;
-        const iL = frameIndex * 2;
+        // Linear Interpolation
+        const frameFloat = readPtr / 2;
+        const frameIndex = frameFloat | 0;
+        const frac = frameFloat - frameIndex;
         
-        const valL = this._ringBuffer[iL];
-        const valR = this._ringBuffer[iL + 1];
+        const iL1 = frameIndex * 2;
+        const iR1 = iL1 + 1;
+        
+        let iL2 = iL1 + 2;
+        if (iL2 >= ringLen) iL2 -= ringLen;
+        const iR2 = iL2 + 1;
+
+        const valL = this._ringBuffer[iL1] * (1 - frac) + this._ringBuffer[iL2] * frac;
+        const valR = this._ringBuffer[iR1] * (1 - frac) + this._ringBuffer[iR2] * frac;
 
         // Advance read pointer by playbackRate frames (× 2 for stereo samples)
         readPtr += samplesPerFrame;
