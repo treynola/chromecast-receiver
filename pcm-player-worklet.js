@@ -1,7 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.100]
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.200]
  * Optimized for zero-jitter, zero-allocation Direct Binary Bridge (WebSocket).
+ * [v13.9.200] Fixed PI controller integral drift that caused permanent pitch shifting.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -15,11 +16,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.101] JITTER-PROOF BUFFER TARGETS (150ms cushion, 200ms prebuffer)
-    this._TARGET_BUFFER = 14400;  // 150ms @ 48kHz stereo
+    // [v13.9.200] TUNED BUFFER TARGETS (100ms target, 100ms prebuffer)
+    this._TARGET_BUFFER = 9600;   // 100ms @ 48kHz stereo
     this._MIN_BUFFER = 2880;      // 30ms (Direct Safety Limit)
-    this._PREBUFFER = 19200;      // 200ms (Warm-up threshold)
-    this._DEAD_ZONE = 960;       // 10ms (Dead-Zone for PI controller)
+    this._PREBUFFER = 9600;       // 100ms (Warm-up threshold)
+    this._DEAD_ZONE = 480;        // 5ms (Dead-Zone for PI controller)
+    this._FLUSH_THRESHOLD = 48000; // 500ms — trigger emergency flush
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -57,30 +59,33 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
 
-    // [v13.9.101] LATENCY CATCH-UP (FAST-FLUSH)
-    // If the buffer size ever balloons past 1.5 seconds (144,000 samples) due to prolonged
-    // browser suspension or major network recovery lag, instantly discard old samples and align to prebuffer.
-    // This high limit prevents false flushes from normal TCP network bursts.
-    if (this._bufferSize > 144000) {
+    // [v13.9.200] LATENCY CATCH-UP (FAST-FLUSH)
+    // If the buffer exceeds 500ms, instantly discard old samples and reset controller state.
+    // This prevents the PI controller from accumulating permanent drift during overflow events.
+    if (this._bufferSize > this._FLUSH_THRESHOLD) {
       const ringLen = this._ringBuffer.length;
-      const excess = this._bufferSize - this._PREBUFFER;
+      const excess = this._bufferSize - this._TARGET_BUFFER;
       this._readPtr = (this._readPtr + excess) % ringLen;
-      this._bufferSize = this._PREBUFFER;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples to restore target 200ms latency.` });
+      this._bufferSize = this._TARGET_BUFFER;
+      // [v13.9.200] CRITICAL: Reset PI state after flush to prevent permanent rate warp
+      this._smoothedError = 0;
+      this._integralError = 0;
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples. PI controller reset.` });
     }
 
     if (this._isBuffering) {
       if (this._bufferSize >= this._PREBUFFER) {
         this._isBuffering = false;
-        // [v13.9.60] INSTANT STARTUP ALIGNMENT
-        // If there was a buildup during the buffering phase (e.g. browser context waking up),
-        // instantly align buffer size to _PREBUFFER to guarantee zero startup lag!
-        if (this._bufferSize > this._PREBUFFER) {
+        // [v13.9.200] Reset PI state on every rebuffer exit for clean start
+        this._smoothedError = 0;
+        this._integralError = 0;
+        // If there was a buildup during the buffering phase, align to target.
+        if (this._bufferSize > this._TARGET_BUFFER) {
           const ringLen = this._ringBuffer.length;
-          const excess = this._bufferSize - this._PREBUFFER;
+          const excess = this._bufferSize - this._TARGET_BUFFER;
           this._readPtr = (this._readPtr + excess) % ringLen;
-          this._bufferSize = this._PREBUFFER;
-          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup Align: Sliced ${Math.round(excess)} backlog samples to start exactly at target prebuffer.` });
+          this._bufferSize = this._TARGET_BUFFER;
+          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup Align: Trimmed ${Math.round(excess)} samples to target buffer.` });
         }
       } else {
         return true; 
@@ -90,33 +95,33 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     if (this._bufferSize < this._MIN_BUFFER) {
       this._stallCount++;
       this._isBuffering = true;
+      this._fade = 0; // [v13.9.200] Hard mute on stall to prevent click
       return true;
     }
 
-    // [v13.9.100] Continuous Proportional Playback Rate Controller
-    // Pitch adjusts smoothly, silently, and dynamically to lock perfectly with the sender's stream.
+    // [v13.9.200] Continuous PI Playback Rate Controller (with integral decay)
+    // The baseRate already compensates for hardware clock differences (e.g. 44.1k vs 48k).
+    // The PI controller ONLY corrects for minor network jitter and drift — NOT hardware mismatch.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    // [v13.9.107] Faster smoothing to quickly measure drift trend
-    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
 
     let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      // Proportional: Gentle correction for immediate jitter (+/- 2% max)
-      pAdj = this._smoothedError * 0.0000050;
+      // Proportional: Responsive correction (+/- 3% max)
+      pAdj = this._smoothedError * 0.000008;
       
-      // Integral Anti-Windup: Only accumulate if Proportional isn't fully saturated
-      const isClamped = (pAdj + this._integralError > 1.0) || (pAdj + this._integralError < -0.5);
-      if (!isClamped) {
-          // Integral: Extremely slow accumulation to discover true hardware sample rate (e.g., 32kHz, 44.1kHz)
-          this._integralError += this._smoothedError * 0.0000001; 
-      }
+      // Integral: Very slow accumulation for persistent drift, WITH DECAY
+      this._integralError += this._smoothedError * 0.00000005;
     }
     
-    // The Integral is allowed to compensate for extreme hardware lies (e.g. up to 1.6x for 30kHz clocks)
-    // The Proportional is clamped tightly (+/- 0.02) to prevent audible wobbling.
-    this._integralError = Math.max(-0.5, Math.min(0.6, this._integralError));
-    pAdj = Math.max(-0.02, Math.min(0.02, pAdj));
+    // [v13.9.200] INTEGRAL DECAY: Prevents permanent rate warp.
+    // Without this, the integral drifts to 0.5+ and never returns.
+    this._integralError *= 0.99999;
+    
+    // [v13.9.200] Tight clamps: baseRate handles hardware; PI handles jitter only
+    this._integralError = Math.max(-0.08, Math.min(0.08, this._integralError));
+    pAdj = Math.max(-0.03, Math.min(0.03, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
