@@ -7,10 +7,10 @@
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this._ringBuffer = new Float32Array(48000 * 4); // 4 seconds at 48kHz
-    this._readPtr = 0.0;
-    this._writePtr = 0;
-    this._bufferSize = 0;
+    this._ringBuffer = new Float32Array(48000 * 2 * 4); // 4 seconds of stereo (384000 samples)
+    this._readPtr = 0.0; // Frame-based read pointer (0.0 to 192000.0)
+    this._writePtr = 0;  // Sample-based write pointer (0 to 384000)
+    this._bufferSize = 0; // Sample-based buffer size
     
     // [v13.9.27] DYNAMIC RATE ALIGNMENT
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
@@ -21,7 +21,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._MIN_BUFFER = 9600;       // 100ms (stall threshold)
     this._PREBUFFER = 48000;       // 500ms (warm-up)
     this._DEAD_ZONE = 4800;        // 100ms (PI dead zone)
-    this._FLUSH_THRESHOLD = 96000; // 1000ms (1.0s) — generous headroom for PI convergence
+    this._FLUSH_THRESHOLD = 144000; // 1500ms (1.5s) — generous headroom for PI convergence
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -60,13 +60,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
     const ringLen = this._ringBuffer.length;
+    const ringFrames = ringLen / 2;
 
     // [v13.9.330] LATENCY CATCH-UP (FAST-FLUSH OPTIMIZED)
-    // If the buffer exceeds 1 second, instantly discard old samples.
+    // If the buffer exceeds 1.5 seconds, instantly discard old samples.
     if (this._bufferSize > this._FLUSH_THRESHOLD) {
       const excess = this._bufferSize - this._TARGET_BUFFER;
-      let readPtr = this._readPtr + excess;
-      while (readPtr >= ringLen) readPtr -= ringLen;
+      const excessFrames = excess / 2;
+      let readPtr = this._readPtr + excessFrames;
+      while (readPtr >= ringFrames) readPtr -= ringFrames;
       this._readPtr = readPtr;
       this._bufferSize = this._TARGET_BUFFER;
       this._smoothedError = 0;
@@ -82,8 +84,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         // Trim any excess above target
         if (this._bufferSize > this._TARGET_BUFFER) {
           const excess = this._bufferSize - this._TARGET_BUFFER;
-          let readPtr = this._readPtr + excess;
-          while (readPtr >= ringLen) readPtr -= ringLen;
+          const excessFrames = excess / 2;
+          let readPtr = this._readPtr + excessFrames;
+          while (readPtr >= ringFrames) readPtr -= ringFrames;
           this._readPtr = readPtr;
           this._bufferSize = this._TARGET_BUFFER;
           this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${Math.round(excess)} samples. Integral reset.` });
@@ -132,29 +135,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     for (let i = 0; i < channel0.length; i++) {
       if (bufferSize >= 4) {
-        // Linear Interpolation (Optimized - No division/modulo)
-        const frameIndex = Math.floor(readPtr / 2);
+        // Linear Interpolation (Optimized - No division/modulo, frame-based pointer)
+        const frameIndex = Math.floor(readPtr);
+        const fract = readPtr - frameIndex;
         const iL = frameIndex * 2;
         
-        let nextIL = iL + 2;
-        if (nextIL >= ringLen) nextIL -= ringLen;
-        
-        const fract = (readPtr / 2) - frameIndex;
+        let nextIndex = frameIndex + 1;
+        if (nextIndex >= ringFrames) nextIndex = 0;
+        const nextIL = nextIndex * 2;
 
         const vL1 = this._ringBuffer[iL];
         const vL2 = this._ringBuffer[nextIL];
         const valL = vL1 + fract * (vL2 - vL1);
 
-        const iR = iL + 1;
-        let nextIR = iL + 3;
-        if (nextIR >= ringLen) nextIR -= ringLen;
-        
-        const vR1 = this._ringBuffer[iR];
-        const vR2 = this._ringBuffer[nextIR];
+        const vR1 = this._ringBuffer[iL + 1];
+        const vR2 = this._ringBuffer[nextIL + 1];
         const valR = vR1 + fract * (vR2 - vR1);
 
-        readPtr += 2 * playbackRate;
-        if (readPtr >= ringLen) readPtr -= ringLen;
+        readPtr += playbackRate;
+        if (readPtr >= ringFrames) readPtr -= ringFrames;
         
         bufferSize = Math.max(0, bufferSize - (2 * playbackRate));
 
@@ -163,8 +162,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         channel0[i] = valL * fade;
         channel1[i] = valR * fade;
 
-        const p = Math.max(Math.abs(valL), Math.abs(valR));
-        if (p > this._currentPeak) this._currentPeak = p;
+        // Optimized Peak Finder (Avoids expensive Math.max and Math.abs calls in hot path)
+        const absL = valL < 0 ? -valL : valL;
+        const absR = valR < 0 ? -valR : valR;
+        const peak = absL > absR ? absL : absR;
+        if (peak > this._currentPeak) this._currentPeak = peak;
       } else {
         if (fade > 0) fade -= 0.05;
         channel0[i] = 0;
