@@ -42,8 +42,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const ringLen = this._ringBuffer.length;
         
         let writePtr = this._writePtr;
+        const INV_32768 = 0.000030517578125; // Pre-calculated inverse for fast multiplication
         for (let i = 0; i < pcm16.length; i++) {
-          this._ringBuffer[writePtr] = pcm16[i] / 32768;
+          this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
           writePtr++;
           if (writePtr >= ringLen) writePtr = 0;
         }
@@ -135,22 +136,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     for (let i = 0; i < channel0.length; i++) {
       if (bufferSize >= 4) {
-        // Linear Interpolation (Optimized - No division/modulo, frame-based pointer)
-        const frameIndex = Math.floor(readPtr);
-        const fract = readPtr - frameIndex;
+        // Nearest Neighbor (Ultra-Optimized for Weak Chromecast CPUs)
+        const frameIndex = readPtr | 0; // Fast integer cast
         const iL = frameIndex * 2;
         
-        let nextIndex = frameIndex + 1;
-        if (nextIndex >= ringFrames) nextIndex = 0;
-        const nextIL = nextIndex * 2;
-
-        const vL1 = this._ringBuffer[iL];
-        const vL2 = this._ringBuffer[nextIL];
-        const valL = vL1 + fract * (vL2 - vL1);
-
-        const vR1 = this._ringBuffer[iL + 1];
-        const vR2 = this._ringBuffer[nextIL + 1];
-        const valR = vR1 + fract * (vR2 - vR1);
+        const valL = this._ringBuffer[iL];
+        const valR = this._ringBuffer[iL + 1];
 
         readPtr += playbackRate;
         if (readPtr >= ringFrames) readPtr -= ringFrames;
