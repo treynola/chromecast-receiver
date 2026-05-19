@@ -192,10 +192,10 @@
                     }
                     
                     try {
-                        // [v13.9.50] FORCE TV TO 16kHz TO MASSIVELY REDUCE CPU LOAD
-                        // The Chromecast ARM CPU taps out at ~150 Worklet callbacks per second.
-                        // 16000Hz requires only 125 callbacks/sec, safely below the hardware limit!
-                        const HARDWARE_RATE = 16000;
+                        // [v13.9.330] FORCE TV TO 24kHz — sweet spot for Chromecast CPU
+                        // 24kHz = 187 callbacks/sec with 2.0x decimation (good quality)
+                        // The pointer-based ring buffer in the worklet now prevents buffer drift.
+                        const HARDWARE_RATE = 24000;
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
                             sampleRate: HARDWARE_RATE,
                             latencyHint: 'playback'

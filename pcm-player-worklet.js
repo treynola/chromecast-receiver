@@ -1,37 +1,40 @@
-/* global AudioWorkletProcessor, registerProcessor */
+/* global AudioWorkletProcessor, registerProcessor, sampleRate */
 /**
  * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.330]
- * Optimized for zero-jitter, zero-allocation Direct Binary Bridge (WebSocket).
- * [v13.9.330] Balanced PI controller after fixing duplicate WS data source.
+ * [v13.9.330] POINTER-BASED RING BUFFER — eliminates thread-race buffer drift.
+ * The old separate _bufferSize counter drifted because onmessage (message thread)
+ * and process() (audio thread) both mutated it without atomics.
+ * Now we compute available data directly from (writePtr - readPtr) mod ringLen.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this._ringBuffer = new Float32Array(48000 * 2 * 4); // 4 seconds of stereo (384000 samples)
-    this._readPtr = 0.0; // Frame-based read pointer (0.0 to 192000.0)
-    this._writePtr = 0;  // Sample-based write pointer (0 to 384000)
-    this._bufferSize = 0; // Sample-based buffer size
+    // 8 seconds of stereo @ 48kHz = 768,000 samples — generous ring buffer
+    this._ringBuffer = new Float32Array(48000 * 2 * 8);
+    this._writePtr = 0;  // Sample index (written by onmessage)
+    this._readPtr = 0;   // Sample index (advanced by process)
+    this._totalWritten = 0; // Monotonic write counter (never wraps)
+    this._totalRead = 0;    // Monotonic read counter (never wraps)
     
     // [v13.9.27] DYNAMIC RATE ALIGNMENT
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.330] Robust Jitter-Buffer Targets (Accommodating 1.0s network bursts)
-    this._TARGET_BUFFER = 96000;   // 1.0s @ 48kHz stereo — operating target to absorb bursts
-    this._MIN_BUFFER = 9600;       // 100ms (stall threshold)
-    this._PREBUFFER = 96000;       // 1.0s (warm-up)
-    this._DEAD_ZONE = 48000;       // 500ms (PI dead zone - fully encompasses network jitter)
-    this._FLUSH_THRESHOLD = 288000; // 3.0s — generous headroom for PI convergence and 1.0s network bursts
+    // Jitter-Buffer Targets (sample counts, 48kHz stereo)
+    this._TARGET_BUFFER = 48000;   // 500ms operating target
+    this._MIN_BUFFER = 4800;       // 50ms stall threshold
+    this._PREBUFFER = 24000;       // 250ms warm-up before first play
+    this._FLUSH_THRESHOLD = 192000; // 2.0s — hard flush ceiling
     
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
     this._currentPeak = 0;
-    this._fade = 1.0; 
+    this._fade = 1.0;
     
-    // Controller Variables (Smoothed Error for Proportional Control)
+    // PI Controller
     this._smoothedError = 0;
-    this._integralError = 0; // [v13.9.107] Integral accumulator for hardware drift discovery
+    this._integralError = 0;
 
     this.port.onmessage = (e) => {
       try {
@@ -42,14 +45,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const ringLen = this._ringBuffer.length;
         
         let writePtr = this._writePtr;
-        const INV_32768 = 0.000030517578125; // Pre-calculated inverse for fast multiplication
+        const INV_32768 = 0.000030517578125;
         for (let i = 0; i < pcm16.length; i++) {
           this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
           writePtr++;
           if (writePtr >= ringLen) writePtr = 0;
         }
         this._writePtr = writePtr;
-        this._bufferSize = Math.min(ringLen, this._bufferSize + pcm16.length);
+        this._totalWritten += pcm16.length;
       } catch (err) {
         this.port.postMessage({ type: 'LOG', msg: `❌ Worklet Error: ${err.message}` });
       }
@@ -61,100 +64,111 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
     const ringLen = this._ringBuffer.length;
-    const ringFrames = ringLen / 2;
 
-    // [v13.9.330] LATENCY CATCH-UP (FAST-FLUSH OPTIMIZED)
-    // If the buffer exceeds 1.5 seconds, instantly discard old samples.
-    if (this._bufferSize > this._FLUSH_THRESHOLD) {
-      const excess = this._bufferSize - this._TARGET_BUFFER;
-      const excessFrames = excess / 2;
-      let readPtr = this._readPtr + excessFrames;
-      while (readPtr >= ringFrames) readPtr -= ringFrames;
-      this._readPtr = readPtr;
-      this._bufferSize = this._TARGET_BUFFER;
+    // POINTER-BASED buffer size: immune to thread race conditions
+    let available = this._totalWritten - this._totalRead;
+    // Clamp to ring buffer size (if write lapped read, we lost data)
+    if (available > ringLen) {
+      // Write pointer lapped read pointer — skip ahead to avoid garbled playback
+      const skip = available - this._TARGET_BUFFER;
+      this._totalRead += skip;
+      this._readPtr = this._writePtr;
+      // Walk readPtr back by TARGET_BUFFER samples
+      this._readPtr -= this._TARGET_BUFFER;
+      if (this._readPtr < 0) this._readPtr += ringLen;
+      available = this._TARGET_BUFFER;
       this._smoothedError = 0;
-      this._integralError = 0; // Reset integral on hard flush to prevent speed pegging
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess. Integral reset.` });
+      this._integralError = 0;
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Ring Overrun: Recovered. Available reset to ${available}.` });
     }
 
+    // LATENCY CATCH-UP
+    if (available > this._FLUSH_THRESHOLD) {
+      const excess = available - this._TARGET_BUFFER;
+      this._totalRead += excess;
+      this._readPtr += excess;
+      while (this._readPtr >= ringLen) this._readPtr -= ringLen;
+      available = this._TARGET_BUFFER;
+      this._smoothedError = 0;
+      this._integralError = 0;
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess. Integral reset.` });
+    }
+
+    // PRE-BUFFER
     if (this._isBuffering) {
-      if (this._bufferSize >= this._PREBUFFER) {
+      if (available >= this._PREBUFFER) {
         this._isBuffering = false;
         this._smoothedError = 0;
-        this._integralError = 0; // Reset integral on startup for a clean slate
-        // Trim any excess above target
-        if (this._bufferSize > this._TARGET_BUFFER) {
-          const excess = this._bufferSize - this._TARGET_BUFFER;
-          const excessFrames = excess / 2;
-          let readPtr = this._readPtr + excessFrames;
-          while (readPtr >= ringFrames) readPtr -= ringFrames;
-          this._readPtr = readPtr;
-          this._bufferSize = this._TARGET_BUFFER;
-          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${Math.round(excess)} samples. Integral reset.` });
+        this._integralError = 0;
+        // Trim excess above target on startup
+        if (available > this._TARGET_BUFFER) {
+          const excess = available - this._TARGET_BUFFER;
+          this._totalRead += excess;
+          this._readPtr += excess;
+          while (this._readPtr >= ringLen) this._readPtr -= ringLen;
+          available = this._TARGET_BUFFER;
+          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${excess} samples.` });
         }
       } else {
         return true;
       }
     }
 
-    if (this._bufferSize < this._MIN_BUFFER) {
+    // STALL DETECTION
+    if (available < this._MIN_BUFFER) {
       this._stallCount++;
       this._isBuffering = true;
       this._fade = 0;
-      this._integralError = 0; // Reset integral on stall to allow fresh drift measurement
+      this._integralError = 0;
       return true;
     }
 
-    // [v13.9.330] Ultra-Smooth PI Playback Rate Controller (Max +/- 1.0% speed warp)
-    const rawError = this._bufferSize - this._TARGET_BUFFER;
-    // Massive 5-second smoothing window to completely flatten 1-second network packet bursts
-    this._smoothedError = (this._smoothedError * 0.999) + (rawError * 0.001);
+    // PI CONTROLLER — ultra-smooth, wide dead zone
+    const rawError = available - this._TARGET_BUFFER;
+    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
 
     let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
-    if (absError > this._DEAD_ZONE) {
-      // Proportional: Gentle response (max +/- 0.4% speed adjustment at 40000 error)
+    if (absError > 12000) { // Dead zone: ±125ms — ignores normal network jitter
       pAdj = this._smoothedError * 0.0000001;
-      
-      // Integral: Extremely slow accumulation for clock drift (max +/- 0.6% speed adjustment)
-      this._integralError += this._smoothedError * 0.0000000001;
+      this._integralError += this._smoothedError * 0.0000000005;
     }
     
-    // Slow integral decay to prevent windup
     this._integralError *= 0.99999;
-    
-    // Strict clamps: Proportional +/- 0.4%, Integral +/- 0.6% -> max +/- 1.0% speed adjustment
     this._integralError = Math.max(-0.006, Math.min(0.006, this._integralError));
     pAdj = Math.max(-0.004, Math.min(0.004, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
-    // Cache properties in local variables for hot loop optimization
+    // RENDER LOOP
     let readPtr = this._readPtr;
-    let bufferSize = this._bufferSize;
+    let samplesConsumed = 0;
     const playbackRate = this._playbackRate;
     let fade = this._fade;
+    // How many samples per output frame we consume (stereo pairs × rate)
+    const samplesPerFrame = 2 * playbackRate;
 
     for (let i = 0; i < channel0.length; i++) {
-      if (bufferSize >= 4) {
-        // Nearest Neighbor (Ultra-Optimized for Weak Chromecast CPUs)
-        const frameIndex = readPtr | 0; // Fast integer cast
+      if (available - samplesConsumed >= 4) {
+        // Nearest Neighbor (fast integer cast via bitwise OR)
+        const frameIndex = (readPtr / 2) | 0;
         const iL = frameIndex * 2;
         
         const valL = this._ringBuffer[iL];
         const valR = this._ringBuffer[iL + 1];
 
-        readPtr += playbackRate;
-        if (readPtr >= ringFrames) readPtr -= ringFrames;
+        // Advance read pointer by playbackRate frames (× 2 for stereo samples)
+        readPtr += samplesPerFrame;
+        if (readPtr >= ringLen) readPtr -= ringLen;
         
-        bufferSize = Math.max(0, bufferSize - (2 * playbackRate));
+        samplesConsumed += samplesPerFrame;
 
         if (fade < 1.0) fade += 0.02;
         
         channel0[i] = valL * fade;
         channel1[i] = valR * fade;
 
-        // Optimized Peak Finder (Avoids expensive Math.max and Math.abs calls in hot path)
+        // Peak detection (branchless-friendly)
         const absL = valL < 0 ? -valL : valL;
         const absR = valR < 0 ? -valR : valR;
         const peak = absL > absR ? absL : absR;
@@ -166,20 +180,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
     }
 
-    // Sync back cached local variables
     this._readPtr = readPtr;
-    this._bufferSize = bufferSize;
+    this._totalRead += samplesConsumed;
     this._fade = fade;
 
     this._sampleCount += 128;
     if (this._sampleCount >= 10000) { 
+      const currentAvailable = this._totalWritten - this._totalRead;
       this.port.postMessage({ 
         type: 'DIAG', 
-        available: Math.floor(this._bufferSize), 
+        available: Math.floor(currentAvailable), 
         stalled: this._stallCount,
         peak: this._currentPeak,
         rate: this._playbackRate,
-        locked: (Math.abs(this._smoothedError) < this._DEAD_ZONE)
+        locked: (Math.abs(this._smoothedError) < 12000)
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
