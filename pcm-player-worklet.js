@@ -95,14 +95,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // [v13.9.100] Continuous Proportional Playback Rate Controller
     // Pitch adjusts smoothly, silently, and dynamically to lock perfectly with the sender's stream.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.95) + (rawError * 0.05);
+    // [v13.9.105] Slower smoothing (0.995) to prevent rapid pitch changes (wow and flutter)
+    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
 
     let adj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
       // Smooth continuous Proportional controller
-      // [v13.9.103] 20x stronger gain. Requires only ~4,400 sample steady-state error to output 0.0884x drift compensation.
-      adj = this._smoothedError * 0.0000200;
+      // [v13.9.105] Lower gain (0.0000050) to prevent overcorrection and oscillation.
+      adj = this._smoothedError * 0.0000050;
       // [v13.9.104] Increase clamp to +/- 1.0 to handle extreme hardware sample rate mismatches like Tizen 32kHz clocks.
       adj = Math.max(-1.0, Math.min(1.0, adj));
     }
