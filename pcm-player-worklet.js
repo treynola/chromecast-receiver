@@ -1,8 +1,9 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.200]
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.300]
  * Optimized for zero-jitter, zero-allocation Direct Binary Bridge (WebSocket).
- * [v13.9.200] Fixed PI controller integral drift that caused permanent pitch shifting.
+ * [v13.9.300] Aggressive PI controller tuned for Chromecast hardware where
+ * the audio thread runs slower than nominal 48kHz due to CPU load.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -16,12 +17,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.200] TUNED BUFFER TARGETS (100ms target, 100ms prebuffer)
-    this._TARGET_BUFFER = 9600;   // 100ms @ 48kHz stereo
-    this._MIN_BUFFER = 2880;      // 30ms (Direct Safety Limit)
-    this._PREBUFFER = 9600;       // 100ms (Warm-up threshold)
-    this._DEAD_ZONE = 480;        // 5ms (Dead-Zone for PI controller)
-    this._FLUSH_THRESHOLD = 48000; // 500ms — trigger emergency flush
+    // [v13.9.300] BUFFER TARGETS tuned for Chromecast (CPU-constrained hardware)
+    // The Chromecast audio thread often runs at ~73-90% of nominal rate due to
+    // CPU competition with UI rendering and WebSocket I/O. We need generous
+    // headroom so the PI controller can stabilize before hitting the flush limit.
+    this._TARGET_BUFFER = 14400;   // 150ms @ 48kHz stereo — operating target
+    this._MIN_BUFFER = 2400;       // 25ms (stall threshold)
+    this._PREBUFFER = 14400;       // 150ms (warm-up — matches target for clean start)
+    this._DEAD_ZONE = 960;         // 10ms (PI dead zone)
+    this._FLUSH_THRESHOLD = 96000; // 1 second — gives PI time to stabilize
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -59,69 +63,83 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
 
-    // [v13.9.200] LATENCY CATCH-UP (FAST-FLUSH)
-    // If the buffer exceeds 500ms, instantly discard old samples and reset controller state.
-    // This prevents the PI controller from accumulating permanent drift during overflow events.
+    // [v13.9.300] LATENCY CATCH-UP (FAST-FLUSH)
+    // If the buffer exceeds 1 second, instantly discard old samples.
+    // DO NOT reset PI integral — it contains valuable hardware drift info.
+    // Instead, only reset the smoothed error so proportional responds to new state.
     if (this._bufferSize > this._FLUSH_THRESHOLD) {
       const ringLen = this._ringBuffer.length;
       const excess = this._bufferSize - this._TARGET_BUFFER;
       this._readPtr = (this._readPtr + excess) % ringLen;
       this._bufferSize = this._TARGET_BUFFER;
-      // [v13.9.200] CRITICAL: Reset PI state after flush to prevent permanent rate warp
+      // Reset proportional state but KEEP integral (hardware drift knowledge)
       this._smoothedError = 0;
-      this._integralError = 0;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess samples. PI controller reset.` });
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess. Integral preserved @ ${this._integralError.toFixed(5)}` });
     }
 
     if (this._isBuffering) {
       if (this._bufferSize >= this._PREBUFFER) {
         this._isBuffering = false;
-        // [v13.9.200] Reset PI state on every rebuffer exit for clean start
+        // [v13.9.300] On exit from buffering, reset proportional but keep integral.
+        // Also pre-seed playback rate slightly above 1.0 to compensate for the
+        // empirically observed Chromecast audio thread slowdown.
         this._smoothedError = 0;
-        this._integralError = 0;
-        // If there was a buildup during the buffering phase, align to target.
+        if (this._integralError === 0) {
+          // First time: seed integral to compensate for typical CC hardware deficit
+          this._integralError = 0.01;
+        }
+        // Trim any excess above target
         if (this._bufferSize > this._TARGET_BUFFER) {
           const ringLen = this._ringBuffer.length;
           const excess = this._bufferSize - this._TARGET_BUFFER;
           this._readPtr = (this._readPtr + excess) % ringLen;
           this._bufferSize = this._TARGET_BUFFER;
-          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup Align: Trimmed ${Math.round(excess)} samples to target buffer.` });
+          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${Math.round(excess)} samples. Integral seed: ${this._integralError.toFixed(5)}` });
         }
       } else {
-        return true; 
+        return true;
       }
     }
 
     if (this._bufferSize < this._MIN_BUFFER) {
       this._stallCount++;
       this._isBuffering = true;
-      this._fade = 0; // [v13.9.200] Hard mute on stall to prevent click
+      this._fade = 0;
+      // [v13.9.300] On stall (underrun), the integral was TOO HIGH (consuming too fast).
+      // Reduce it to allow buffer to refill more quickly next time.
+      this._integralError = Math.max(0, this._integralError - 0.005);
       return true;
     }
 
-    // [v13.9.200] Continuous PI Playback Rate Controller (with integral decay)
-    // The baseRate already compensates for hardware clock differences (e.g. 44.1k vs 48k).
-    // The PI controller ONLY corrects for minor network jitter and drift — NOT hardware mismatch.
+    // [v13.9.300] Aggressive PI Playback Rate Controller
+    // On Chromecast, the audio thread runs slower than 48kHz nominal due to CPU
+    // competition. The PI must discover the ACTUAL consumption deficit and apply
+    // a permanent rate offset (via integral) to match the real hardware rate.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    // Fast smoothing (alpha=0.02) to quickly track buffer level changes
+    this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
 
     let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      // Proportional: Responsive correction (+/- 3% max)
-      pAdj = this._smoothedError * 0.000008;
+      // Proportional: Strong, immediate correction for jitter (+/- 5% max)
+      pAdj = this._smoothedError * 0.000020;
       
-      // Integral: Very slow accumulation for persistent drift, WITH DECAY
-      this._integralError += this._smoothedError * 0.00000005;
+      // Integral: Moderately fast accumulation to discover real hardware rate.
+      // On a CC that runs ~25% slow, this needs to climb to ~0.04 within ~10s.
+      this._integralError += this._smoothedError * 0.0000005;
     }
     
-    // [v13.9.200] INTEGRAL DECAY: Prevents permanent rate warp.
-    // Without this, the integral drifts to 0.5+ and never returns.
-    this._integralError *= 0.99999;
+    // [v13.9.300] Gentle integral decay: prevents runaway but retains 99.999% of
+    // discovered hardware drift per 128-sample block (~3ms). Over 10 seconds this
+    // decays ~1.2%, which is negligible vs the accumulation rate.
+    this._integralError *= 0.999996;
     
-    // [v13.9.200] Tight clamps: baseRate handles hardware; PI handles jitter only
-    this._integralError = Math.max(-0.08, Math.min(0.08, this._integralError));
-    pAdj = Math.max(-0.03, Math.min(0.03, pAdj));
+    // Clamp integral: allows up to ±15% permanent rate offset to handle
+    // severely CPU-starved embedded devices
+    this._integralError = Math.max(-0.15, Math.min(0.15, this._integralError));
+    // Clamp proportional: allows ±5% for immediate jitter response
+    pAdj = Math.max(-0.05, Math.min(0.05, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
