@@ -216,12 +216,15 @@
 
                         await audioCtx.audioWorklet.addModule(`pcm-player-worklet.js?v=13.9.330&cb=${Date.now()}`);
                         
-                        // [v13.9.27] DYNAMIC RATE TRANSFORMATION
+                        // [v13.9.330] DYNAMIC RATE TRANSFORMATION
+                        // Use audioCtx.sampleRate (the ACTUAL rate the browser gave us)
+                        // NOT the hardcoded HARDWARE_RATE — Chromecast may silently override
                         const studioRate = targetRate || 48000;
-                        const baseRateRatio = studioRate / HARDWARE_RATE;
+                        const actualRate = audioCtx.sampleRate;
+                        const baseRateRatio = studioRate / actualRate;
                         
-                        console.log(`📏 TV Clock: ${HARDWARE_RATE}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`);
-                        relayLogToStudio(`📏 TV Clock: ${HARDWARE_RATE}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`);
+                        console.log(`📏 TV Clock: requested=${HARDWARE_RATE}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`);
+                        relayLogToStudio(`📏 TV Clock: ${actualRate}Hz (req=${HARDWARE_RATE}) | Ratio: ${baseRateRatio.toFixed(4)}x`);
 
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
                             outputChannelCount: [2],
