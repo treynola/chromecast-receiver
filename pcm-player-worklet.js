@@ -16,11 +16,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.320] Robust Jitter-Buffer Targets (500ms target for TV stability)
+    // [v13.9.330] Robust Jitter-Buffer Targets (500ms target for TV stability)
     this._TARGET_BUFFER = 48000;   // 500ms @ 48kHz stereo — operating target
     this._MIN_BUFFER = 9600;       // 100ms (stall threshold)
     this._PREBUFFER = 48000;       // 500ms (warm-up)
-    this._DEAD_ZONE = 1920;        // 20ms (PI dead zone)
+    this._DEAD_ZONE = 4800;        // 100ms (PI dead zone)
     this._FLUSH_THRESHOLD = 96000; // 1000ms (1.0s) — generous headroom for PI convergence
     
     this._isBuffering = true;
@@ -61,7 +61,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel1 = output[1];
     const ringLen = this._ringBuffer.length;
 
-    // [v13.9.325] LATENCY CATCH-UP (FAST-FLUSH OPTIMIZED)
+    // [v13.9.330] LATENCY CATCH-UP (FAST-FLUSH OPTIMIZED)
     // If the buffer exceeds 1 second, instantly discard old samples.
     if (this._bufferSize > this._FLUSH_THRESHOLD) {
       const excess = this._bufferSize - this._TARGET_BUFFER;
@@ -70,13 +70,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._readPtr = readPtr;
       this._bufferSize = this._TARGET_BUFFER;
       this._smoothedError = 0;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess. Integral preserved @ ${this._integralError.toFixed(5)}` });
+      this._integralError = 0; // Reset integral on hard flush to prevent speed pegging
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${Math.round(excess)} excess. Integral reset.` });
     }
 
     if (this._isBuffering) {
       if (this._bufferSize >= this._PREBUFFER) {
         this._isBuffering = false;
         this._smoothedError = 0;
+        this._integralError = 0; // Reset integral on startup for a clean slate
         // Trim any excess above target
         if (this._bufferSize > this._TARGET_BUFFER) {
           const excess = this._bufferSize - this._TARGET_BUFFER;
@@ -84,7 +86,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           while (readPtr >= ringLen) readPtr -= ringLen;
           this._readPtr = readPtr;
           this._bufferSize = this._TARGET_BUFFER;
-          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${Math.round(excess)} samples. Integral seed: ${this._integralError.toFixed(5)}` });
+          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${Math.round(excess)} samples. Integral reset.` });
         }
       } else {
         return true;
@@ -95,24 +97,30 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._stallCount++;
       this._isBuffering = true;
       this._fade = 0;
-      this._integralError = Math.max(0, this._integralError - 0.005);
+      this._integralError = 0; // Reset integral on stall to allow fresh drift measurement
       return true;
     }
 
-    // [v13.9.325] Balanced PI Playback Rate Controller
+    // [v13.9.330] Ultra-Smooth PI Playback Rate Controller (Max +/- 1.0% speed warp)
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
 
     let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      pAdj = this._smoothedError * 0.000012;
-      this._integralError += this._smoothedError * 0.0000002;
+      // Proportional: Gentle response (max +/- 0.4% speed adjustment at 40000 error)
+      pAdj = this._smoothedError * 0.0000001;
+      
+      // Integral: Extremely slow accumulation for clock drift (max +/- 0.6% speed adjustment)
+      this._integralError += this._smoothedError * 0.0000000001;
     }
     
-    this._integralError *= 0.999998;
-    this._integralError = Math.max(-0.30, Math.min(0.30, this._integralError));
-    pAdj = Math.max(-0.10, Math.min(0.10, pAdj));
+    // Slow integral decay to prevent windup
+    this._integralError *= 0.99999;
+    
+    // Strict clamps: Proportional +/- 0.4%, Integral +/- 0.6% -> max +/- 1.0% speed adjustment
+    this._integralError = Math.max(-0.006, Math.min(0.006, this._integralError));
+    pAdj = Math.max(-0.004, Math.min(0.004, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
