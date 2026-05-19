@@ -20,7 +20,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 96000;   // 1.0s @ 48kHz stereo — operating target to absorb bursts
     this._MIN_BUFFER = 9600;       // 100ms (stall threshold)
     this._PREBUFFER = 96000;       // 1.0s (warm-up)
-    this._DEAD_ZONE = 24000;       // 250ms (PI dead zone)
+    this._DEAD_ZONE = 48000;       // 500ms (PI dead zone - fully encompasses network jitter)
     this._FLUSH_THRESHOLD = 288000; // 3.0s — generous headroom for PI convergence and 1.0s network bursts
     
     this._isBuffering = true;
@@ -107,7 +107,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // [v13.9.330] Ultra-Smooth PI Playback Rate Controller (Max +/- 1.0% speed warp)
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    // Massive 5-second smoothing window to completely flatten 1-second network packet bursts
+    this._smoothedError = (this._smoothedError * 0.999) + (rawError * 0.001);
 
     let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
