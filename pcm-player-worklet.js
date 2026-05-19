@@ -124,10 +124,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // Gentle integral decay to prevent permanent rate warp
     this._integralError *= 0.999998;
     
-    // Clamp integral: ±5% covers all reasonable clock drifts
-    this._integralError = Math.max(-0.05, Math.min(0.05, this._integralError));
-    // Clamp proportional: ±3% for immediate jitter response
-    pAdj = Math.max(-0.03, Math.min(0.03, pAdj));
+    // Clamp integral: ±30% covers severe CPU starvation on Chromecast
+    this._integralError = Math.max(-0.30, Math.min(0.30, this._integralError));
+    // Clamp proportional: ±10% for immediate jitter response
+    pAdj = Math.max(-0.10, Math.min(0.10, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
