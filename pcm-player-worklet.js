@@ -1,9 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.300]
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.310]
  * Optimized for zero-jitter, zero-allocation Direct Binary Bridge (WebSocket).
- * [v13.9.300] Aggressive PI controller tuned for Chromecast hardware where
- * the audio thread runs slower than nominal 48kHz due to CPU load.
+ * [v13.9.310] Balanced PI controller after fixing duplicate WS data source.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -17,15 +16,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = this._baseRate;
     
-    // [v13.9.300] BUFFER TARGETS tuned for Chromecast (CPU-constrained hardware)
-    // The Chromecast audio thread often runs at ~73-90% of nominal rate due to
-    // CPU competition with UI rendering and WebSocket I/O. We need generous
-    // headroom so the PI controller can stabilize before hitting the flush limit.
+    // [v13.9.310] BUFFER TARGETS (balanced for single-stream operation)
     this._TARGET_BUFFER = 14400;   // 150ms @ 48kHz stereo — operating target
     this._MIN_BUFFER = 2400;       // 25ms (stall threshold)
     this._PREBUFFER = 14400;       // 150ms (warm-up — matches target for clean start)
     this._DEAD_ZONE = 960;         // 10ms (PI dead zone)
-    this._FLUSH_THRESHOLD = 96000; // 1 second — gives PI time to stabilize
+    this._FLUSH_THRESHOLD = 72000; // 750ms — generous headroom for PI convergence
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -84,10 +80,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         // Also pre-seed playback rate slightly above 1.0 to compensate for the
         // empirically observed Chromecast audio thread slowdown.
         this._smoothedError = 0;
-        if (this._integralError === 0) {
-          // First time: seed integral to compensate for typical CC hardware deficit
-          this._integralError = 0.01;
-        }
+        // [v13.9.310] No integral seed — with the duplicate WS fix,
+        // data arrives at 1x rate and PI converges naturally.
         // Trim any excess above target
         if (this._bufferSize > this._TARGET_BUFFER) {
           const ringLen = this._ringBuffer.length;
@@ -111,35 +105,29 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.300] Aggressive PI Playback Rate Controller
-    // On Chromecast, the audio thread runs slower than 48kHz nominal due to CPU
-    // competition. The PI must discover the ACTUAL consumption deficit and apply
-    // a permanent rate offset (via integral) to match the real hardware rate.
+    // [v13.9.310] Balanced PI Playback Rate Controller
+    // With duplicate WS fix in place, data arrives at true 1x rate.
+    // The PI only needs to correct for minor clock drift and network jitter.
     const rawError = this._bufferSize - this._TARGET_BUFFER;
-    // Fast smoothing (alpha=0.02) to quickly track buffer level changes
     this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
 
     let pAdj = 0;
     const absError = Math.abs(this._smoothedError);
     if (absError > this._DEAD_ZONE) {
-      // Proportional: Strong, immediate correction for jitter (+/- 5% max)
-      pAdj = this._smoothedError * 0.000020;
+      // Proportional: Moderate correction (+/- 3% max)
+      pAdj = this._smoothedError * 0.000012;
       
-      // Integral: Moderately fast accumulation to discover real hardware rate.
-      // On a CC that runs ~25% slow, this needs to climb to ~0.04 within ~10s.
-      this._integralError += this._smoothedError * 0.0000005;
+      // Integral: Slow accumulation for persistent clock drift
+      this._integralError += this._smoothedError * 0.0000002;
     }
     
-    // [v13.9.300] Gentle integral decay: prevents runaway but retains 99.999% of
-    // discovered hardware drift per 128-sample block (~3ms). Over 10 seconds this
-    // decays ~1.2%, which is negligible vs the accumulation rate.
-    this._integralError *= 0.999996;
+    // Gentle integral decay to prevent permanent rate warp
+    this._integralError *= 0.999998;
     
-    // Clamp integral: allows up to ±15% permanent rate offset to handle
-    // severely CPU-starved embedded devices
-    this._integralError = Math.max(-0.15, Math.min(0.15, this._integralError));
-    // Clamp proportional: allows ±5% for immediate jitter response
-    pAdj = Math.max(-0.05, Math.min(0.05, pAdj));
+    // Clamp integral: ±5% covers all reasonable clock drifts
+    this._integralError = Math.max(-0.05, Math.min(0.05, this._integralError));
+    // Clamp proportional: ±3% for immediate jitter response
+    pAdj = Math.max(-0.03, Math.min(0.03, pAdj));
     
     this._playbackRate = this._baseRate + pAdj + this._integralError;
 
