@@ -1,8 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.310]
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.330]
  * Optimized for zero-jitter, zero-allocation Direct Binary Bridge (WebSocket).
- * [v13.9.310] Balanced PI controller after fixing duplicate WS data source.
+ * [v13.9.330] Balanced PI controller after fixing duplicate WS data source.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
