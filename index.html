@@ -230,7 +230,8 @@
                         workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
                             outputChannelCount: [2],
                             processorOptions: {
-                                baseRateRatio: baseRateRatio
+                                baseRateRatio: baseRateRatio,
+                                studioRate: studioRate
                             }
                         });
                         workletNode.connect(masterGain);
