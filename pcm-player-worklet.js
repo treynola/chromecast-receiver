@@ -39,10 +39,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // Telemetry and Calibration trackers
     this._callbackCount = 0;
     this._lastCallbackTime = 0;
-    // Clamp calibration to ±20% around the initial ratio — never let it go off-rails
+    // Clamp calibration to ±40% around the initial ratio — wide enough for real-world
+    // Chromecast scheduling variance (150Hz vs 187.5Hz = 1.25x = +25% needed)
     this._baseRateInitial = this._baseRate;
-    this._baseRateMin = this._baseRate * 0.80;
-    this._baseRateMax = this._baseRate * 1.20;
+    this._baseRateMin = this._baseRate * 0.60;
+    this._baseRateMax = this._baseRate * 1.40;
     this._calibrationCount = 0; // how many 5s windows have calibrated
 
     this.port.onmessage = (e) => {
@@ -95,13 +96,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // Clamp candidate to safe band — never let it spiral outside ±20% of initial
       const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
 
-      // Only apply after first window (first measurement may be stale startup counts)
-      if (this._calibrationCount > 0) {
-        // Blend 80% old, 20% new — smooth adaptation, robust against one-off bad windows
-        this._baseRate = this._baseRate * 0.8 + clampedRate * 0.2;
-        // Also re-clamp after blend
-        this._baseRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._baseRate));
-      }
+      // Apply from first window — the 5s aggregate is already stable enough
+      // Blend 70% old, 30% new — faster convergence to true rate
+      this._baseRate = this._baseRate * 0.7 + clampedRate * 0.3;
+      // Also re-clamp after blend
+      this._baseRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._baseRate));
       this._calibrationCount++;
 
       this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz (expected: ${(sampleRate / 128).toFixed(1)} Hz) | BaseRate: ${this._baseRate.toFixed(4)} (candidate: ${candidateRate.toFixed(4)})` });
@@ -191,8 +190,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const targetRate = this._baseRate + pAdj + this._integralError;
     const clampedTargetRate = Math.max(this._baseRate - MAX_ADJUST, Math.min(this._baseRate + MAX_ADJUST, targetRate));
 
-    // Heavy low-pass filter on playbackRate to make all adjustments completely inaudible
-    this._playbackRate = (this._playbackRate * 0.995) + (clampedTargetRate * 0.005);
+    // Low-pass filter on playbackRate — fast enough to track calibration changes
+    // without audible pitch wobble (~50 callbacks / 0.3s convergence)
+    this._playbackRate = (this._playbackRate * 0.98) + (clampedTargetRate * 0.02);
 
     // RENDER LOOP
     let readPtrFrames = this._readPtr / 2;
