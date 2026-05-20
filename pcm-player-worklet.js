@@ -1,9 +1,9 @@
 /* global AudioWorkletProcessor, registerProcessor, sampleRate */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.350]
- * [v13.9.350] POINTER-BASED RING BUFFER — eliminates thread-race buffer drift.
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.360]
+ * [v13.9.360] POINTER-BASED RING BUFFER — eliminates thread-race buffer drift.
  * Optimized render loop using division-free frame-based indexing.
- * Dynamically adjusts base rate to match actual wall-clock callback frequency.
+ * Stable 5s-window base rate calibration — immune to per-callback jitter.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -39,8 +39,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // Telemetry and Calibration trackers
     this._callbackCount = 0;
     this._lastCallbackTime = 0;
-    this._smoothedCallbackRate = sampleRate / 128;
-    this._lastProcessTime = 0;
+    // Clamp calibration to ±20% around the initial ratio — never let it go off-rails
+    this._baseRateInitial = this._baseRate;
+    this._baseRateMin = this._baseRate * 0.80;
+    this._baseRateMax = this._baseRate * 1.20;
+    this._calibrationCount = 0; // how many 5s windows have calibrated
 
     this.port.onmessage = (e) => {
       try {
@@ -75,32 +78,35 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const ringLen = this._ringBuffer.length;
     const now = Date.now();
 
-    // 1. Callback Rate Telemetry & Calibration
-    this._callbackCount = (this._callbackCount || 0) + 1;
+    // 1. Callback Rate Telemetry & Stable-Window Calibration
+    // Count callbacks per 5-second window — far more stable than per-callback deltas
+    // which are wildly jittery on resource-constrained Chromecast CPUs.
+    this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
     if (now - this._lastCallbackTime >= 5000) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
-      const rate = this._callbackCount / elapsed;
-      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${rate.toFixed(1)} Hz (expected: ${(sampleRate / 128).toFixed(1)} Hz) | BaseRate: ${this._baseRate.toFixed(4)}` });
+      const measuredHz = this._callbackCount / elapsed;
+
+      // Compute a new candidate baseRate from the stable window
+      // actualSampleRate = how many samples the TV actually consumed in this window
+      const actualSampleRate = measuredHz * 128;
+      const candidateRate = this._studioRate / actualSampleRate;
+
+      // Clamp candidate to safe band — never let it spiral outside ±20% of initial
+      const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
+
+      // Only apply after first window (first measurement may be stale startup counts)
+      if (this._calibrationCount > 0) {
+        // Blend 80% old, 20% new — smooth adaptation, robust against one-off bad windows
+        this._baseRate = this._baseRate * 0.8 + clampedRate * 0.2;
+        // Also re-clamp after blend
+        this._baseRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._baseRate));
+      }
+      this._calibrationCount++;
+
+      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz (expected: ${(sampleRate / 128).toFixed(1)} Hz) | BaseRate: ${this._baseRate.toFixed(4)} (candidate: ${candidateRate.toFixed(4)})` });
       this._callbackCount = 0;
       this._lastCallbackTime = now;
-    }
-
-    // Dynamic Base Rate calibration based on actual callback frequency
-    if (!this._lastProcessTime) {
-      this._lastProcessTime = now;
-    } else {
-      const delta = (now - this._lastProcessTime) / 1000;
-      if (delta > 0 && delta < 0.2) { // Guard against sleep/suspend jumps
-        const instantRate = 1 / delta;
-        // Moderate smoothing (converges in ~1000 callbacks / ~6-7 seconds)
-        this._smoothedCallbackRate = (this._smoothedCallbackRate * 0.999) + (instantRate * 0.001);
-        if (this._smoothedCallbackRate > 50) {
-          const actualSampleRate = this._smoothedCallbackRate * 128;
-          this._baseRate = this._studioRate / actualSampleRate;
-        }
-      }
-      this._lastProcessTime = now;
     }
 
     // POINTER-BASED buffer size: immune to thread race conditions
