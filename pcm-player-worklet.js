@@ -24,7 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 19200;   // 200ms operating target
     this._MIN_BUFFER = 4800;       // 50ms stall threshold
     this._PREBUFFER = 14400;       // 150ms warm-up before first play
-    this._FLUSH_THRESHOLD = 96000;  // 1000ms — hard flush ceiling (gives PI controller room to settle)
+    this._FLUSH_THRESHOLD = 57600;  // 600ms — hard flush ceiling (clears main-thread decoding backlogs instantly)
     
     this._isBuffering = true;
     this._stallCount = 0;
@@ -123,30 +123,32 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // PI CONTROLLER — continuous, active drift tracking [v13.9.340]
+    // PI CONTROLLER — continuous, active drift tracking [v13.9.380]
     const rawError = available - this._TARGET_BUFFER;
-    // Faster error smoothing filter to track transient network/rendering deviations
+    // Moderate error smoothing to prevent reaction to micro-jitter
     this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
 
-    // If buffer error is 10,000 samples, we want ~4% (0.04) adjustment:
-    // P gain: 4e-6
-    let pAdj = this._smoothedError * 0.000004;
+    // Strict limits for high-fidelity audio: max 1.5% adjustment to prevent audible pitch shifts
+    const MAX_ADJUST = 0.015;
     
-    // I gain: 1e-9 to integrate out clock drift steady-state error
-    this._integralError += this._smoothedError * 0.000000001;
+    // P gain: 1.5e-6 (at 10,000 error, proportional correction is 0.015, which hits the clamp)
+    let pAdj = this._smoothedError * 0.0000015;
+    
+    // I gain: 1.5e-9 to integrate out steady-state clock drift
+    this._integralError += this._smoothedError * 0.0000000015;
     
     // Anti-windup leakage
     this._integralError *= 0.9995;
     
-    // Limits: allow up to +1.5x / -0.5x rate modification to absorb 2x or 0.5x throttled device callbacks
-    this._integralError = Math.max(-0.5, Math.min(1.0, this._integralError));
-    pAdj = Math.max(-0.5, Math.min(1.0, pAdj));
+    // Clamp component adjustments to MAX_ADJUST
+    this._integralError = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, this._integralError));
+    pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     
     const targetRate = this._baseRate + pAdj + this._integralError;
-    const clampedTargetRate = Math.max(0.5, Math.min(2.5, targetRate));
+    const clampedTargetRate = Math.max(this._baseRate - MAX_ADJUST, Math.min(this._baseRate + MAX_ADJUST, targetRate));
 
-    // Low-pass filter the playbackRate itself to prevent any clicks or sudden pitch warble
-    this._playbackRate = (this._playbackRate * 0.98) + (clampedTargetRate * 0.02);
+    // Heavy low-pass filter on playbackRate to make all adjustments completely inaudible
+    this._playbackRate = (this._playbackRate * 0.995) + (clampedTargetRate * 0.005);
 
     // RENDER LOOP
     let readPtr = this._readPtr;
