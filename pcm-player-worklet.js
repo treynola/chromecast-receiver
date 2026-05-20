@@ -93,13 +93,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const actualSampleRate = measuredHz * 128;
       const candidateRate = this._studioRate / actualSampleRate;
 
-      // Clamp candidate to safe band — never let it spiral outside ±20% of initial
+      // Clamp candidate to safe band — never let it spiral outside ±40% of initial
       const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
 
-      // Apply from first window — the 5s aggregate is already stable enough
-      // Blend 70% old, 30% new — faster convergence to true rate
-      this._baseRate = this._baseRate * 0.7 + clampedRate * 0.3;
-      // Also re-clamp after blend
+      if (this._calibrationCount === 0) {
+        // FIRST WINDOW: slam directly to the measured rate — no blending.
+        // This eliminates the multi-window convergence wobble entirely.
+        this._baseRate = clampedRate;
+        this._playbackRate = clampedRate; // Also seed playbackRate to avoid LPF lag
+        this._smoothedError = 0;
+        this._integralError = 0;
+      } else {
+        // Subsequent windows: gentle 70/30 blend for stability
+        this._baseRate = this._baseRate * 0.7 + clampedRate * 0.3;
+      }
+      // Re-clamp after any update
       this._baseRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._baseRate));
       this._calibrationCount++;
 
