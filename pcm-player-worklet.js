@@ -32,9 +32,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._currentPeak = 0;
     this._fade = 1.0;
     
-    // PI Controller
+    // Jitter-Buffer error tracking
     this._smoothedError = 0;
-    this._integralError = 0;
 
     // Telemetry and Calibration trackers
     this._callbackCount = 0;
@@ -80,38 +79,50 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const now = Date.now();
 
     // 1. Callback Rate Telemetry & Stable-Window Calibration
-    // Count callbacks per 5-second window — far more stable than per-callback deltas
-    // which are wildly jittery on resource-constrained Chromecast CPUs.
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
-    if (now - this._lastCallbackTime >= 5000) {
+    
+    // A. FAST STARTUP CALIBRATION (After 150 callbacks, ~1.0s)
+    if (this._calibrationCount === 0 && this._callbackCount === 150) {
+      const elapsed = (now - this._lastCallbackTime) / 1000;
+      if (elapsed > 0.1) {
+        const measuredHz = this._callbackCount / elapsed;
+        const actualSampleRate = measuredHz * 128;
+        const candidateRate = this._studioRate / actualSampleRate;
+        const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
+        
+        this._baseRate = clampedRate;
+        this._playbackRate = clampedRate;
+        this._smoothedError = 0;
+        this._calibrationCount = 1;
+        
+        this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Calibration: ${measuredHz.toFixed(1)} Hz | BaseRate: ${this._baseRate.toFixed(4)}` });
+      }
+      this._callbackCount = 0;
+      this._lastCallbackTime = now;
+    } 
+    // B. SLOW DRIFT CALIBRATION (Every 5 seconds)
+    else if (this._calibrationCount > 0 && now - this._lastCallbackTime >= 5000) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz = this._callbackCount / elapsed;
-
-      // Compute a new candidate baseRate from the stable window
-      // actualSampleRate = how many samples the TV actually consumed in this window
       const actualSampleRate = measuredHz * 128;
       const candidateRate = this._studioRate / actualSampleRate;
-
-      // Clamp candidate to safe band — never let it spiral outside ±40% of initial
       const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
-
-      if (this._calibrationCount === 0) {
-        // FIRST WINDOW: slam directly to the measured rate — no blending.
-        // This eliminates the multi-window convergence wobble entirely.
+      
+      const rateDiff = Math.abs(clampedRate - this._baseRate);
+      if (rateDiff > 0.15) {
+        // Slam if massive drift occurs
         this._baseRate = clampedRate;
-        this._playbackRate = clampedRate; // Also seed playbackRate to avoid LPF lag
+        this._playbackRate = clampedRate;
         this._smoothedError = 0;
-        this._integralError = 0;
       } else {
-        // Subsequent windows: gentle 70/30 blend for stability
+        // Gentle 70/30 blend
         this._baseRate = this._baseRate * 0.7 + clampedRate * 0.3;
       }
-      // Re-clamp after any update
       this._baseRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._baseRate));
       this._calibrationCount++;
-
-      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz (expected: ${(sampleRate / 128).toFixed(1)} Hz) | BaseRate: ${this._baseRate.toFixed(4)} (candidate: ${candidateRate.toFixed(4)})` });
+      
+      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | BaseRate: ${this._baseRate.toFixed(4)} (candidate: ${candidateRate.toFixed(4)}, count: ${this._calibrationCount})` });
       this._callbackCount = 0;
       this._lastCallbackTime = now;
     }
@@ -129,7 +140,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (this._readPtr < 0) this._readPtr += ringLen;
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
-      this._integralError = 0;
       this.port.postMessage({ type: 'LOG', msg: `⚠️ Ring Overrun: Recovered. Available reset to ${available}.` });
     }
 
@@ -141,8 +151,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       while (this._readPtr >= ringLen) this._readPtr -= ringLen;
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
-      this._integralError = 0;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess. Integral reset.` });
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess.` });
     }
 
     // PRE-BUFFER
@@ -150,7 +159,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (available >= this._PREBUFFER) {
         this._isBuffering = false;
         this._smoothedError = 0;
-        this._integralError = 0;
         // Trim excess above target on startup
         if (available > this._TARGET_BUFFER) {
           const excess = available - this._TARGET_BUFFER;
@@ -170,37 +178,30 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._stallCount++;
       this._isBuffering = true;
       this._fade = 0;
-      this._integralError = 0;
       return true;
     }
 
-    // PI CONTROLLER — continuous, active drift tracking [v13.9.380]
+    // 2. Short-Term Jitter Correction with Deadband (Proportional-Only)
     const rawError = available - this._TARGET_BUFFER;
-    // Moderate error smoothing to prevent reaction to micro-jitter
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    // Moderate smoothing to ignore instantaneous network packet jitter
+    this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
 
-    // Strict limits for high-fidelity audio: max 1.5% adjustment to prevent audible pitch shifts
+    let pAdj = 0;
+    const DEADBAND = 2000; // ±20ms @ 48kHz stereo to ensure pure pitch during stability
+    if (Math.abs(this._smoothedError) > DEADBAND) {
+      const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
+      // Proportional Gain: 1.0e-6
+      pAdj = overage * 0.000001;
+    }
+
+    // Tight clamp limit for rate adjustments to ensure high-fidelity pitch stability (max 1.5%)
     const MAX_ADJUST = 0.015;
-    
-    // P gain: 1.5e-6 (at 10,000 error, proportional correction is 0.015, which hits the clamp)
-    let pAdj = this._smoothedError * 0.0000015;
-    
-    // I gain: 1.5e-9 to integrate out steady-state clock drift
-    this._integralError += this._smoothedError * 0.0000000015;
-    
-    // Anti-windup leakage
-    this._integralError *= 0.9995;
-    
-    // Clamp component adjustments to MAX_ADJUST
-    this._integralError = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, this._integralError));
     pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
-    
-    const targetRate = this._baseRate + pAdj + this._integralError;
-    const clampedTargetRate = Math.max(this._baseRate - MAX_ADJUST, Math.min(this._baseRate + MAX_ADJUST, targetRate));
 
-    // Low-pass filter on playbackRate — fast enough to track calibration changes
-    // without audible pitch wobble (~50 callbacks / 0.3s convergence)
-    this._playbackRate = (this._playbackRate * 0.98) + (clampedTargetRate * 0.02);
+    const targetRate = this._baseRate + pAdj;
+
+    // Smooth rate adjustments to prevent any phase/pitch clicking (time constant ~100 callbacks / 0.6s)
+    this._playbackRate = (this._playbackRate * 0.99) + (targetRate * 0.01);
 
     // RENDER LOOP
     let readPtrFrames = this._readPtr / 2;
