@@ -215,7 +215,7 @@
                         g.connect(audioCtx.destination);
                         keepAlive.start();
 
-                        await audioCtx.audioWorklet.addModule(`pcm-player-worklet.js?v=13.9.400&cb=${Date.now()}`);
+                        await audioCtx.audioWorklet.addModule(`pcm-player-worklet-v13-9-400.js?cb=${Date.now()}`);
                         
                         // [v13.9.330] DYNAMIC RATE TRANSFORMATION
                         // Use audioCtx.sampleRate (the ACTUAL rate the browser gave us)
