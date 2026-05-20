@@ -1,6 +1,6 @@
 /* global AudioWorkletProcessor, registerProcessor, sampleRate */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.360]
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.400]
  * [v13.9.360] POINTER-BASED RING BUFFER — eliminates thread-race buffer drift.
  * Optimized render loop using division-free frame-based indexing.
  * Stable 5s-window base rate calibration — immune to per-callback jitter.
@@ -78,51 +78,27 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const ringLen = this._ringBuffer.length;
     const now = Date.now();
 
-    // 1. Callback Rate Telemetry & Stable-Window Calibration
+    // 1. Callback Rate Telemetry (Telemetry only, baseRate is hard-locked to nominal ratio)
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
     
-    // A. FAST STARTUP CALIBRATION (After 150 callbacks, ~1.0s)
+    // A. FAST STARTUP TELEMETRY (After 150 callbacks, ~1.0s)
     if (this._calibrationCount === 0 && this._callbackCount === 150) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       if (elapsed > 0.1) {
         const measuredHz = this._callbackCount / elapsed;
-        const actualSampleRate = measuredHz * 128;
-        const candidateRate = this._studioRate / actualSampleRate;
-        const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
-        
-        this._baseRate = clampedRate;
-        this._playbackRate = clampedRate;
-        this._smoothedError = 0;
         this._calibrationCount = 1;
-        
-        this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Calibration: ${measuredHz.toFixed(1)} Hz | BaseRate: ${this._baseRate.toFixed(4)}` });
+        this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Telemetry: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}` });
       }
       this._callbackCount = 0;
       this._lastCallbackTime = now;
     } 
-    // B. SLOW DRIFT CALIBRATION (Every 5 seconds)
+    // B. SLOW DRIFT TELEMETRY (Every 5 seconds)
     else if (this._calibrationCount > 0 && now - this._lastCallbackTime >= 5000) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz = this._callbackCount / elapsed;
-      const actualSampleRate = measuredHz * 128;
-      const candidateRate = this._studioRate / actualSampleRate;
-      const clampedRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, candidateRate));
-      
-      const rateDiff = Math.abs(clampedRate - this._baseRate);
-      if (rateDiff > 0.15) {
-        // Slam if massive drift occurs
-        this._baseRate = clampedRate;
-        this._playbackRate = clampedRate;
-        this._smoothedError = 0;
-      } else {
-        // Gentle 70/30 blend
-        this._baseRate = this._baseRate * 0.7 + clampedRate * 0.3;
-      }
-      this._baseRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._baseRate));
       this._calibrationCount++;
-      
-      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | BaseRate: ${this._baseRate.toFixed(4)} (candidate: ${candidateRate.toFixed(4)}, count: ${this._calibrationCount})` });
+      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}` });
       this._callbackCount = 0;
       this._lastCallbackTime = now;
     }
