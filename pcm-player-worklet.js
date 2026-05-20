@@ -1,10 +1,9 @@
 /* global AudioWorkletProcessor, registerProcessor, sampleRate */
 /**
- * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.330]
- * [v13.9.330] POINTER-BASED RING BUFFER — eliminates thread-race buffer drift.
- * The old separate _bufferSize counter drifted because onmessage (message thread)
- * and process() (audio thread) both mutated it without atomics.
- * Now we compute available data directly from (writePtr - readPtr) mod ringLen.
+ * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.340]
+ * [v13.9.340] POINTER-BASED RING BUFFER — eliminates thread-race buffer drift.
+ * Optimized render loop using division-free frame-based indexing.
+ * Added wall-clock callback rate telemetry.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -36,6 +35,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._smoothedError = 0;
     this._integralError = 0;
 
+    // Telemetry wall-clock trackers
+    this._callbackCount = 0;
+    this._lastCallbackTime = 0;
+
     this.port.onmessage = (e) => {
       try {
         const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
@@ -63,7 +66,22 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const output = outputs[0];
     const channel0 = output[0];
     const channel1 = output[1];
+
+    if (!channel0 || !channel1) return true;
+
     const ringLen = this._ringBuffer.length;
+
+    // Wall-clock Callback Rate Telemetry
+    this._callbackCount = (this._callbackCount || 0) + 1;
+    const now = Date.now();
+    if (!this._lastCallbackTime) this._lastCallbackTime = now;
+    if (now - this._lastCallbackTime >= 5000) {
+      const elapsed = (now - this._lastCallbackTime) / 1000;
+      const rate = this._callbackCount / elapsed;
+      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${rate.toFixed(1)} Hz (expected: ${(sampleRate / 128).toFixed(1)} Hz)` });
+      this._callbackCount = 0;
+      this._lastCallbackTime = now;
+    }
 
     // POINTER-BASED buffer size: immune to thread race conditions
     let available = this._totalWritten - this._totalRead;
@@ -151,35 +169,28 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._playbackRate = (this._playbackRate * 0.995) + (clampedTargetRate * 0.005);
 
     // RENDER LOOP
-    let readPtr = this._readPtr;
+    let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
     const playbackRate = this._playbackRate;
     let fade = this._fade;
-    // How many samples per output frame we consume (stereo pairs × rate)
-    const samplesPerFrame = 2 * playbackRate;
+    const ringLenFrames = ringLen / 2;
 
     for (let i = 0; i < channel0.length; i++) {
       if (available - samplesConsumed >= 4) {
-        // Linear Interpolation
-        const frameFloat = readPtr / 2;
-        const frameIndex = frameFloat | 0;
-        const frac = frameFloat - frameIndex;
+        const frameIndex = readPtrFrames | 0;
+        const frac = readPtrFrames - frameIndex;
         
-        const iL1 = frameIndex * 2;
-        const iR1 = iL1 + 1;
-        
-        let iL2 = iL1 + 2;
-        if (iL2 >= ringLen) iL2 -= ringLen;
-        const iR2 = iL2 + 1;
+        const idxL1 = frameIndex * 2;
+        let idxL2 = idxL1 + 2;
+        if (idxL2 >= ringLen) idxL2 -= ringLen;
 
-        const valL = this._ringBuffer[iL1] * (1 - frac) + this._ringBuffer[iL2] * frac;
-        const valR = this._ringBuffer[iR1] * (1 - frac) + this._ringBuffer[iR2] * frac;
+        const valL = this._ringBuffer[idxL1] * (1 - frac) + this._ringBuffer[idxL2] * frac;
+        const valR = this._ringBuffer[idxL1 + 1] * (1 - frac) + this._ringBuffer[idxL2 + 1] * frac;
 
-        // Advance read pointer by playbackRate frames (× 2 for stereo samples)
-        readPtr += samplesPerFrame;
-        if (readPtr >= ringLen) readPtr -= ringLen;
+        readPtrFrames += playbackRate;
+        if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
         
-        samplesConsumed += samplesPerFrame;
+        samplesConsumed += 2 * playbackRate;
 
         if (fade < 1.0) fade += 0.02;
         
@@ -198,7 +209,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
     }
 
-    this._readPtr = readPtr;
+    this._readPtr = readPtrFrames * 2;
     this._totalRead += samplesConsumed;
     this._fade = fade;
 
