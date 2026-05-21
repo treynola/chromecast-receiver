@@ -173,9 +173,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const DEADBAND = 8000;
     if (Math.abs(this._smoothedError) > DEADBAND) {
       const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      pAdj = overage * 0.0000001;
+      pAdj = overage * 0.00001;
     }
-    const MAX_ADJUST = 0.015;
+    const MAX_ADJUST = 0.35;
     pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     const targetRate = this._baseRate + pAdj;
     this._playbackRate = (this._playbackRate * 0.999) + (targetRate * 0.001);

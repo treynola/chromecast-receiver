@@ -194,7 +194,7 @@
                         // overhead, preventing callback starvation on Chromecast CPU.
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
                             sampleRate: HARDWARE_RATE,
-                            latencyHint: 'playback'
+                            latencyHint: 'balanced'
                         });
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
@@ -303,8 +303,16 @@
                 }
             }, 2000);
 
+            let lastHighFreqLogTime = 0;
             function relayLogToStudio(msg) {
                 const isHighFreq = msg.indexOf("Latency Catch-up") !== -1 || msg.indexOf("Callback Rate") !== -1;
+                if (isHighFreq) {
+                    const now = Date.now();
+                    if (now - lastHighFreqLogTime < 10000) {
+                        return; // Throttle: Skip both DOM rendering and WS broadcasting
+                    }
+                    lastHighFreqLogTime = now;
+                }
                 if (!isHighFreq) {
                     const inner = document.getElementById('tv-console-inner');
                     if (inner) {
@@ -552,7 +560,7 @@
     let hwRate = 48000;
     try {
         const probe = new (window.AudioContext || window.webkitAudioContext)({ 
-            latencyHint: 'playback' 
+            latencyHint: 'balanced' 
         });
         hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
         window._hwRate = hwRate;
