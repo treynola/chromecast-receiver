@@ -537,17 +537,19 @@
                 }
                 
                 binaryWS.onopen = () => {
-                    console.log('✅ Binary Bridge Connected');
-                    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
-                    const diagEl = document.getElementById('bridge-diag-text');
-                    if (diagEl) {
-                        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED|ERROR.*)/, 'WS: CONNECTED');
-                        diagEl.style.color = '#0f0';
-                        diagEl.style.borderColor = '#0f0';
-                    }
-                    const conn = document.getElementById('bridge-status-dot');
-                    if (conn) conn.style.backgroundColor = 'var(--green)';
-                };
+    console.log('✅ Binary Bridge Connected');
+    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
+    const diagEl = document.getElementById('bridge-diag-text');
+    if (diagEl) {
+        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED|ERROR.*)/, 'WS: CONNECTED');
+        diagEl.style.color = '#0f0';
+        diagEl.style.borderColor = '#0f0';
+    }
+    const conn = document.getElementById('bridge-status-dot');
+    if (conn) conn.style.backgroundColor = 'var(--green)';
+    // Handshake: send receiver capabilities (sampleRate and bitDepth)
+    binaryWS.send(JSON.stringify({ type: 'HANDSHAKE', config: { sampleRate: targetRate, bitDepth: 24 } }));
+};
                 
                 binaryWS.onmessage = async (event) => {
                     if (event.data instanceof ArrayBuffer) {
