@@ -304,12 +304,15 @@
             }, 2000);
 
             function relayLogToStudio(msg) {
-                const inner = document.getElementById('tv-console-inner');
-                if (inner) {
-                    const line = document.createElement('div');
-                    line.textContent = `> ${msg}`;
-                    inner.appendChild(line);
-                    if (inner.childNodes.length > 15) inner.removeChild(inner.firstChild);
+                const isHighFreq = msg.indexOf("Latency Catch-up") !== -1 || msg.indexOf("Callback Rate") !== -1;
+                if (!isHighFreq) {
+                    const inner = document.getElementById('tv-console-inner');
+                    if (inner) {
+                        const line = document.createElement('div');
+                        line.textContent = `> ${msg}`;
+                        inner.appendChild(line);
+                        if (inner.childNodes.length > 15) inner.removeChild(inner.firstChild);
+                    }
                 }
                 // Send over WebSocket if available (crucial for Samsung Tizen Browser / DIAL)
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {

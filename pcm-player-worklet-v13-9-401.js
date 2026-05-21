@@ -213,7 +213,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalRead += samplesConsumed;
     this._fade = fade;
     this._sampleCount += 128;
-    if (this._sampleCount >= 10000) {
+    if (this._sampleCount >= 96000) {
       const currentAvailable = this._totalWritten - this._totalRead;
       this.port.postMessage({ type: 'DIAG', available: Math.floor(currentAvailable), stalled: this._stallCount, peak: this._currentPeak, rate: this._playbackRate, locked: (Math.abs(this._smoothedError) < 12000) });
       this._currentPeak = 0;
