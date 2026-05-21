@@ -5,7 +5,8 @@
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this._ringBuffer = new Int16Array(48000 * 2 * 8);
+    this._ringLen = 48000 * 2 * 8;
+    this._ringBuffer = new Int16Array(this._ringLen + 4);
     this._writePtr = 0;
     this._readPtr = 0;
     this._totalWritten = 0;
@@ -39,12 +40,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             this._bitDepth = e.data.bitDepth;
             this.port.postMessage({ type: 'LOG', msg: `🔧 Worklet: Bit depth set to ${this._bitDepth}-bit` });
           }
+          if (e.data.baseRateRatio !== undefined) {
+            this._baseRate = e.data.baseRateRatio;
+            this._playbackRate = this._baseRate;
+            this._baseRateInitial = this._baseRate;
+            this._baseRateMin = this._baseRate * 0.60;
+            this._baseRateMax = this._baseRate * 1.40;
+            this.port.postMessage({ type: 'LOG', msg: `🔧 Worklet: Base rate ratio updated to ${this._baseRate.toFixed(4)}x` });
+          }
           return;
         }
         if (e.data && e.data.type === 'TEST_BEEP') return;
         const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
-        const ringLen = this._ringBuffer.length;
+        const ringLen = this._ringLen;
         let writePtr = this._writePtr;
         let samplesDecoded = 0;
 
@@ -81,6 +90,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
         this._writePtr = writePtr;
         this._totalWritten += samplesDecoded;
+        this._ringBuffer[ringLen] = this._ringBuffer[0];
+        this._ringBuffer[ringLen + 1] = this._ringBuffer[1];
+        this._ringBuffer[ringLen + 2] = this._ringBuffer[2];
+        this._ringBuffer[ringLen + 3] = this._ringBuffer[3];
       } catch (err) {
         this.port.postMessage({ type: 'LOG', msg: `❌ Worklet Error: ${err.message}` });
       }
@@ -91,7 +104,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
     if (!channel0 || !channel1) return true;
-    const ringLen = this._ringBuffer.length;
+    const ringLen = this._ringLen;
     const now = Date.now();
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
@@ -155,17 +168,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
+    this._smoothedError = (this._smoothedError * 0.998) + (rawError * 0.002);
     let pAdj = 0;
-    const DEADBAND = 2000;
+    const DEADBAND = 8000;
     if (Math.abs(this._smoothedError) > DEADBAND) {
       const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      pAdj = overage * 0.000001;
+      pAdj = overage * 0.0000001;
     }
     const MAX_ADJUST = 0.015;
     pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     const targetRate = this._baseRate + pAdj;
-    this._playbackRate = (this._playbackRate * 0.99) + (targetRate * 0.01);
+    this._playbackRate = (this._playbackRate * 0.999) + (targetRate * 0.001);
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
     const playbackRate = this._playbackRate;
@@ -177,8 +190,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const frameIndex = readPtrFrames | 0;
         const frac = readPtrFrames - frameIndex;
         const idxL1 = frameIndex * 2;
-        let idxL2 = idxL1 + 2;
-        if (idxL2 >= ringLen) idxL2 -= ringLen;
+        const idxL2 = idxL1 + 2;
         const valL = (this._ringBuffer[idxL1] * (1 - frac) + this._ringBuffer[idxL2] * frac) * INV_32768;
         const valR = (this._ringBuffer[idxL1 + 1] * (1 - frac) + this._ringBuffer[idxL2 + 1] * frac) * INV_32768;
         readPtrFrames += playbackRate;
