@@ -222,7 +222,7 @@
                         // NOT the hardcoded HARDWARE_RATE — Chromecast may silently override
                         const studioRate = targetRate || 48000;
                         const actualRate = audioCtx.sampleRate;
-                        const baseRateRatio = 2.0; // hard‑locked ratio (48kHz/24kHz)
+                        const baseRateRatio = actualRate ? (studioRate / actualRate) : 1.0;
                         
                         console.log(`📏 TV Clock: requested=${HARDWARE_RATE}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`);
                         relayLogToStudio(`📏 TV Clock: ${actualRate}Hz (req=${HARDWARE_RATE}) | Ratio: ${baseRateRatio.toFixed(4)}x`);
