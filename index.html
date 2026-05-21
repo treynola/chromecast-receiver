@@ -594,6 +594,7 @@
                                 if (ackRate) {
                                     window._hwRate = ackRate;
                                 }
+                                configReceived = true;
                                 initAudio();
                                 // Configure worklet bit depth after init
                                 setTimeout(() => {
@@ -605,6 +606,7 @@
                             } else if (d.type === 'BRIDGE_CONFIG') {
                                 if (d.config && d.config.sampleRate) {
                                     const newStudioRate = d.config.sampleRate;
+                                    configReceived = true;
                                     if (window._studioRate !== newStudioRate) {
                                         window._studioRate = newStudioRate;
                                         relayLogToStudio(`🔄 TV: Studio rate updated to ${newStudioRate}Hz`);
@@ -614,6 +616,8 @@
                                         } else {
                                             initAudio();
                                         }
+                                    } else {
+                                        initAudio();
                                     }
                                 }
                             }
@@ -654,6 +658,7 @@
                     // 1. Hardware Alignment
                     if (d.type === 'BRIDGE_CONFIG') {
                         const newRate = d.config ? d.config.sampleRate : null;
+                        configReceived = true;
                         if (newRate) {
                             if (window._studioRate !== newRate) {
                                 window._studioRate = newRate;
@@ -664,7 +669,11 @@
                                 } else {
                                     initAudio();
                                 }
+                            } else {
+                                initAudio();
                             }
+                        } else {
+                            initAudio();
                         }
                         if (d.ip) connectBinaryBridge(d.ip);
                         return;
