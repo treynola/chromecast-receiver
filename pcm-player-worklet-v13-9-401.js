@@ -5,7 +5,7 @@
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this._ringBuffer = new Float32Array(48000 * 2 * 8);
+    this._ringBuffer = new Int16Array(48000 * 2 * 8);
     this._writePtr = 0;
     this._readPtr = 0;
     this._totalWritten = 0;
@@ -52,27 +52,31 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           // [v13.9.402] 24-bit PCM: 3 bytes per sample, little-endian, signed
           const bytes = new Uint8Array(arrayBuffer);
           const numSamples = Math.floor(bytes.length / 3);
-          const INV_8388608 = 1.1920928955078125e-7; // 1 / 2^23
           for (let i = 0; i < numSamples; i++) {
             const offset = i * 3;
             // Read 3 bytes little-endian → sign-extend to 32-bit
             let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
             if (val & 0x800000) val |= 0xFF000000; // sign extension
-            this._ringBuffer[writePtr] = val * INV_8388608;
+            // Convert 24-bit to 16-bit signed integer by shifting right by 8 bits
+            this._ringBuffer[writePtr] = val >> 8;
             writePtr++;
             if (writePtr >= ringLen) writePtr = 0;
           }
           samplesDecoded = numSamples;
         } else {
-          // 16-bit PCM: 2 bytes per sample, native Int16
+          // 16-bit PCM: 2 bytes per sample, native Int16. Copy using fast native TypedArray set
           const pcm16 = new Int16Array(arrayBuffer);
-          const INV_32768 = 0.000030517578125;
-          for (let i = 0; i < pcm16.length; i++) {
-            this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
-            writePtr++;
-            if (writePtr >= ringLen) writePtr = 0;
+          const len = pcm16.length;
+          if (writePtr + len <= ringLen) {
+            this._ringBuffer.set(pcm16, writePtr);
+            writePtr += len;
+          } else {
+            const firstPart = ringLen - writePtr;
+            this._ringBuffer.set(pcm16.subarray(0, firstPart), writePtr);
+            this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+            writePtr = len - firstPart;
           }
-          samplesDecoded = pcm16.length;
+          samplesDecoded = len;
         }
 
         this._writePtr = writePtr;
@@ -167,6 +171,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const playbackRate = this._playbackRate;
     let fade = this._fade;
     const ringLenFrames = ringLen / 2;
+    const INV_32768 = 3.0517578125e-5;
     for (let i = 0; i < channel0.length; i++) {
       if (available - samplesConsumed >= 4) {
         const frameIndex = readPtrFrames | 0;
@@ -174,8 +179,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const idxL1 = frameIndex * 2;
         let idxL2 = idxL1 + 2;
         if (idxL2 >= ringLen) idxL2 -= ringLen;
-        const valL = this._ringBuffer[idxL1] * (1 - frac) + this._ringBuffer[idxL2] * frac;
-        const valR = this._ringBuffer[idxL1 + 1] * (1 - frac) + this._ringBuffer[idxL2 + 1] * frac;
+        const valL = (this._ringBuffer[idxL1] * (1 - frac) + this._ringBuffer[idxL2] * frac) * INV_32768;
+        const valR = (this._ringBuffer[idxL1 + 1] * (1 - frac) + this._ringBuffer[idxL2 + 1] * frac) * INV_32768;
         readPtrFrames += playbackRate;
         if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
         samplesConsumed += 2 * playbackRate;
