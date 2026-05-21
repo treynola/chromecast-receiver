@@ -193,10 +193,10 @@
                     }
                     
                     try {
-                        // [v13.9.340] NATIVE 24kHz — reduces callback frequency by half
-                        // and prevents callback starvation on Chromecast CPU.
+                        // [v13.9.340] Request native hardware rate to avoid browser software resampling
+                        // overhead, preventing callback starvation on Chromecast CPU.
                         // The pointer-based ring buffer in the worklet now prevents buffer drift.
-                        const HARDWARE_RATE = 24000;
+                        const HARDWARE_RATE = targetRate || 48000;
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
                             sampleRate: HARDWARE_RATE,
                             latencyHint: 'playback'
