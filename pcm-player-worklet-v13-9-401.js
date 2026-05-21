@@ -29,21 +29,54 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRateMin = this._baseRate * 0.60;
     this._baseRateMax = this._baseRate * 1.40;
     this._calibrationCount = 0;
+    // [v13.9.402] Bit depth config — 16 or 24, switchable via CONFIG message
+    this._bitDepth = options.processorOptions?.bitDepth || 16;
     this.port.onmessage = (e) => {
       try {
+        // Handle config messages (bit depth switching)
+        if (e.data && e.data.type === 'CONFIG') {
+          if (e.data.bitDepth) {
+            this._bitDepth = e.data.bitDepth;
+            this.port.postMessage({ type: 'LOG', msg: `🔧 Worklet: Bit depth set to ${this._bitDepth}-bit` });
+          }
+          return;
+        }
+        if (e.data && e.data.type === 'TEST_BEEP') return;
         const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
-        const pcm16 = new Int16Array(arrayBuffer);
         const ringLen = this._ringBuffer.length;
         let writePtr = this._writePtr;
-        const INV_32768 = 0.000030517578125;
-        for (let i = 0; i < pcm16.length; i++) {
-          this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
-          writePtr++;
-          if (writePtr >= ringLen) writePtr = 0;
+        let samplesDecoded = 0;
+
+        if (this._bitDepth === 24) {
+          // [v13.9.402] 24-bit PCM: 3 bytes per sample, little-endian, signed
+          const bytes = new Uint8Array(arrayBuffer);
+          const numSamples = Math.floor(bytes.length / 3);
+          const INV_8388608 = 1.1920928955078125e-7; // 1 / 2^23
+          for (let i = 0; i < numSamples; i++) {
+            const offset = i * 3;
+            // Read 3 bytes little-endian → sign-extend to 32-bit
+            let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+            if (val & 0x800000) val |= 0xFF000000; // sign extension
+            this._ringBuffer[writePtr] = val * INV_8388608;
+            writePtr++;
+            if (writePtr >= ringLen) writePtr = 0;
+          }
+          samplesDecoded = numSamples;
+        } else {
+          // 16-bit PCM: 2 bytes per sample, native Int16
+          const pcm16 = new Int16Array(arrayBuffer);
+          const INV_32768 = 0.000030517578125;
+          for (let i = 0; i < pcm16.length; i++) {
+            this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
+            writePtr++;
+            if (writePtr >= ringLen) writePtr = 0;
+          }
+          samplesDecoded = pcm16.length;
         }
+
         this._writePtr = writePtr;
-        this._totalWritten += pcm16.length;
+        this._totalWritten += samplesDecoded;
       } catch (err) {
         this.port.postMessage({ type: 'LOG', msg: `❌ Worklet Error: ${err.message}` });
       }

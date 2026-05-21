@@ -536,7 +536,7 @@
                     return;
                 }
                 
-                binaryWS.onopen = () => {
+                binaryWS.onopen = async () => {
     console.log('✅ Binary Bridge Connected');
     relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
     const diagEl = document.getElementById('bridge-diag-text');
@@ -547,8 +547,32 @@
     }
     const conn = document.getElementById('bridge-status-dot');
     if (conn) conn.style.backgroundColor = 'var(--green)';
-    // Handshake: send receiver capabilities (sampleRate and bitDepth)
-    binaryWS.send(JSON.stringify({ type: 'HANDSHAKE', config: { sampleRate: targetRate, bitDepth: 24 } }));
+    
+    // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate
+    let hwRate = 48000;
+    try {
+        const probe = new (window.AudioContext || window.webkitAudioContext)({ 
+            sampleRate: 48000, latencyHint: 'playback' 
+        });
+        hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
+        relayLogToStudio(`🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`);
+        probe.close();
+    } catch(e) {
+        relayLogToStudio(`⚠️ TV: Hardware probe failed, defaulting to ${hwRate}Hz`);
+    }
+    
+    // Send actual hardware capabilities
+    const handshake = {
+        type: 'HANDSHAKE',
+        config: {
+            sampleRate: hwRate,
+            bitDepth: 24,      // Request 24-bit HiFi pipeline
+            maxChannels: 2
+        }
+    };
+    binaryWS.send(JSON.stringify(handshake));
+    relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 24-bit`);
+    // Audio init is deferred until HANDSHAKE_ACK arrives
 };
                 
                 binaryWS.onmessage = async (event) => {
@@ -562,6 +586,20 @@
                             const d = JSON.parse(event.data);
                             if (d.type === 'STATE_UPDATE') {
                                 renderState(d.state);
+                            } else if (d.type === 'HANDSHAKE_ACK') {
+                                // [v13.9.402] Server confirmed handshake — init audio with negotiated config
+                                const ackRate = d.config ? d.config.sampleRate : 48000;
+                                const ackBitDepth = d.config ? d.config.bitDepth : 16;
+                                relayLogToStudio(`✅ TV: HANDSHAKE_ACK received → ${ackRate}Hz / ${ackBitDepth}-bit`);
+                                window._negotiatedBitDepth = ackBitDepth;
+                                initAudio(ackRate);
+                                // Configure worklet bit depth after init
+                                setTimeout(() => {
+                                    if (workletNode) {
+                                        workletNode.port.postMessage({ type: 'CONFIG', bitDepth: ackBitDepth });
+                                        relayLogToStudio(`🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`);
+                                    }
+                                }, 500);
                             } else if (d.type === 'BRIDGE_CONFIG') {
                                 if (d.config && d.config.sampleRate) {
                                     initAudio(d.config.sampleRate);
