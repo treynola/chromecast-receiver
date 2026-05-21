@@ -238,9 +238,11 @@
                         
                         // Force System Volume (TV Level)
                         try {
-                            const context = cast.framework.CastReceiverContext.getInstance();
-                            context.setSystemVolume(1.0);
-                            relayLogToStudio("✅ TV: System Volume Forced to 100%");
+                            if (typeof cast !== 'undefined' && cast.framework) {
+                                const context = cast.framework.CastReceiverContext.getInstance();
+                                context.setSystemVolume(1.0);
+                                relayLogToStudio("✅ TV: System Volume Forced to 100%");
+                            }
                         } catch(e) {}
 
                         relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${targetRate}Hz`);
@@ -323,11 +325,13 @@
                     } catch(e) {}
                 }
                 // Send over ChromeCast custom namespace if available
-                const context = cast.framework.CastReceiverContext.getInstance();
-                const senders = context.getSenders();
-                if (senders.length > 0) {
+                if (typeof cast !== 'undefined' && cast.framework) {
                     try {
-                        context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: msg });
+                        const context = cast.framework.CastReceiverContext.getInstance();
+                        const senders = context.getSenders();
+                        if (senders.length > 0) {
+                            context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: msg });
+                        }
                     } catch(e) {}
                 }
             }
@@ -698,22 +702,49 @@
                 console.log("🎬 TV: Startup sequence initiated.");
                 console.log("🔗 URL: " + window.location.href);
 
-                window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
-                const context = window.castReceiverContext;
-                
-                relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
+                if (typeof cast !== 'undefined' && cast.framework) {
+                    try {
+                        window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
+                        const context = window.castReceiverContext;
+                        
+                        relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
 
-                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
-                    console.log("📡 Sender connected - Waiting for config...");
-                });
+                        context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
+                            console.log("📡 Sender connected - Waiting for config...");
+                        });
 
-                context.addEventListener(cast.framework.events.EventType.SENDER_DISCONNECTED, () => {
-                    if (binaryWS) {
-                        binaryWS.close();
-                        binaryWS = null;
+                        context.addEventListener(cast.framework.events.EventType.SENDER_DISCONNECTED, () => {
+                            if (binaryWS) {
+                                binaryWS.close();
+                                binaryWS = null;
+                            }
+                            if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
+                        });
+
+                        context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+                            if (event.data) {
+                                let msgData = event.data;
+                                // Support both raw JSON and nested data object from SDK
+                                if (typeof msgData === 'string') {
+                                    try { msgData = JSON.parse(msgData); } catch(e) {}
+                                } else if (msgData && typeof msgData.data === 'string') {
+                                    try { msgData = JSON.parse(msgData.data); } catch(e) {}
+                                }
+                                handleInboundData(msgData);
+                            }
+                        }); 
+                        
+                        context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
+                            resumeAudio();
+                        });
+
+                        context.start({ disableIdleTimeout: true }); 
+                    } catch (e) {
+                        console.error("❌ TV: Cast framework start failed:", e);
                     }
-                    if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
-                });
+                } else {
+                    relayLogToStudio("🎬 TV: Startup - Running in standard browser (non-cast)");
+                }
 
                 // [v13.8.150] Auto-Discovery Fallback
                 setTimeout(() => {
@@ -728,23 +759,6 @@
                         }
                     }
                 }, 3000);
-
-                context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-                    if (event.data) {
-                        let msgData = event.data;
-                        // Support both raw JSON and nested data object from SDK
-                        if (typeof msgData === 'string') {
-                            try { msgData = JSON.parse(msgData); } catch(e) {}
-                        } else if (msgData && typeof msgData.data === 'string') {
-                            try { msgData = JSON.parse(msgData.data); } catch(e) {}
-                        }
-                        handleInboundData(msgData);
-                    }
-                }); 
-                
-                context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
-                    resumeAudio();
-                });
 
                 function playSineTest() {
                     if (!audioCtx) initAudio();
@@ -764,9 +778,7 @@
                         osc.stop(audioCtx.currentTime + 1);
                         relayLogToStudio("🔊 Sine Test Played on Native Context (Worklet Null)");
                     }
-                }
-
-                context.start({ disableIdleTimeout: true }); 
+                } 
 
                 // [V13.8.150] RECURSIVE AUTO-RESUME
                 const autoUnlock = setInterval(() => {
