@@ -617,7 +617,8 @@
                                 setTimeout(() => {
                                     if (workletNode) {
                                         workletNode.port.postMessage({ type: 'CONFIG', bitDepth: ackBitDepth });
-                                        relayLogToStudio(`🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`);
+                                        workletNode.port.postMessage({ type: 'RESET' });
+                                        relayLogToStudio(`🔧 TV: Worklet configured for ${ackBitDepth}-bit decode and RESET sent`);
                                     }
                                 }, 500);
                             } else if (d.type === 'BRIDGE_CONFIG') {
@@ -630,11 +631,15 @@
                                         if (workletNode && audioCtx) {
                                             const newBaseRateRatio = audioCtx.sampleRate ? (newStudioRate / audioCtx.sampleRate) : 1.0;
                                             workletNode.port.postMessage({ type: 'CONFIG', baseRateRatio: newBaseRateRatio });
+                                            workletNode.port.postMessage({ type: 'RESET' });
                                         } else {
                                             initAudio();
                                         }
                                     } else {
                                         initAudio();
+                                        if (workletNode) {
+                                            workletNode.port.postMessage({ type: 'RESET' });
+                                        }
                                     }
                                 }
                             }
@@ -683,14 +688,21 @@
                                 if (workletNode && audioCtx) {
                                     const newBaseRateRatio = audioCtx.sampleRate ? (newRate / audioCtx.sampleRate) : 1.0;
                                     workletNode.port.postMessage({ type: 'CONFIG', baseRateRatio: newBaseRateRatio });
+                                    workletNode.port.postMessage({ type: 'RESET' });
                                 } else {
                                     initAudio();
                                 }
                             } else {
                                 initAudio();
+                                if (workletNode) {
+                                    workletNode.port.postMessage({ type: 'RESET' });
+                                }
                             }
                         } else {
                             initAudio();
+                            if (workletNode) {
+                                workletNode.port.postMessage({ type: 'RESET' });
+                            }
                         }
                         if (d.ip) connectBinaryBridge(d.ip);
                         return;

@@ -30,10 +30,32 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRateMin = this._baseRate * 0.60;
     this._baseRateMax = this._baseRate * 1.40;
     this._calibrationCount = 0;
+    this._integral = 0;
     // [v13.9.402] Bit depth config — 16 or 24, switchable via CONFIG message
     this._bitDepth = options.processorOptions?.bitDepth || 16;
     this.port.onmessage = (e) => {
       try {
+        // Handle RESET command
+        if (e.data && e.data.type === 'RESET') {
+          this._ringBuffer.fill(0);
+          this._writePtr = 0;
+          this._readPtr = 0;
+          this._totalWritten = 0;
+          this._totalRead = 0;
+          this._playbackRate = this._baseRate;
+          this._isBuffering = true;
+          this._stallCount = 0;
+          this._sampleCount = 0;
+          this._currentPeak = 0;
+          this._fade = 1.0;
+          this._smoothedError = 0;
+          this._callbackCount = 0;
+          this._lastCallbackTime = 0;
+          this._calibrationCount = 0;
+          this._integral = 0;
+          this.port.postMessage({ type: 'LOG', msg: `🔄 Worklet: State reset complete.` });
+          return;
+        }
         // Handle config messages (bit depth switching)
         if (e.data && e.data.type === 'CONFIG') {
           if (e.data.bitDepth) {
@@ -168,17 +190,24 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.998) + (rawError * 0.002);
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    
+    // Accumulate integral slowly
+    this._integral += this._smoothedError * 0.000000002;
+    this._integral = Math.max(-0.3, Math.min(0.3, this._integral));
+    
     let pAdj = 0;
-    const DEADBAND = 8000;
+    const DEADBAND = 2000;
     if (Math.abs(this._smoothedError) > DEADBAND) {
       const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      pAdj = overage * 0.00001;
+      pAdj = overage * 0.00002;
     }
     const MAX_ADJUST = 0.35;
     pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
-    const targetRate = this._baseRate + pAdj;
-    this._playbackRate = (this._playbackRate * 0.999) + (targetRate * 0.001);
+    
+    const targetRate = this._baseRate + pAdj + this._integral;
+    this._playbackRate = (this._playbackRate * 0.99) + (targetRate * 0.01);
+    this._playbackRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._playbackRate));
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
     const playbackRate = this._playbackRate;
