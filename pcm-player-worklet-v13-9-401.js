@@ -190,7 +190,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    this._smoothedError = (this._smoothedError * 0.95) + (rawError * 0.05);
     
     // Accumulate integral slowly for drift correction
     this._integral += this._smoothedError * 0.0000000005;
@@ -206,7 +206,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     
     const targetRate = this._baseRate + pAdj + this._integral;
-    this._playbackRate = (this._playbackRate * 0.99) + (targetRate * 0.01);
+    this._playbackRate = (this._playbackRate * 0.95) + (targetRate * 0.05);
     this._playbackRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._playbackRate));
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;

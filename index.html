@@ -617,8 +617,7 @@
                                 setTimeout(() => {
                                     if (workletNode) {
                                         workletNode.port.postMessage({ type: 'CONFIG', bitDepth: ackBitDepth });
-                                        workletNode.port.postMessage({ type: 'RESET' });
-                                        relayLogToStudio(`🔧 TV: Worklet configured for ${ackBitDepth}-bit decode and RESET sent`);
+                                        relayLogToStudio(`🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`);
                                     }
                                 }, 500);
                             } else if (d.type === 'BRIDGE_CONFIG') {
@@ -631,7 +630,6 @@
                                         if (workletNode && audioCtx) {
                                             const newBaseRateRatio = audioCtx.sampleRate ? (newStudioRate / audioCtx.sampleRate) : 1.0;
                                             workletNode.port.postMessage({ type: 'CONFIG', baseRateRatio: newBaseRateRatio });
-                                            workletNode.port.postMessage({ type: 'RESET' });
                                         } else {
                                             initAudio();
                                         }
