@@ -636,9 +636,8 @@
                                             initAudio();
                                         }
                                     } else {
-                                        initAudio();
-                                        if (workletNode) {
-                                            workletNode.port.postMessage({ type: 'RESET' });
+                                        if (!audioCtx || !workletNode) {
+                                            initAudio();
                                         }
                                     }
                                 }
@@ -693,15 +692,13 @@
                                     initAudio();
                                 }
                             } else {
-                                initAudio();
-                                if (workletNode) {
-                                    workletNode.port.postMessage({ type: 'RESET' });
+                                if (!audioCtx || !workletNode) {
+                                    initAudio();
                                 }
                             }
                         } else {
-                            initAudio();
-                            if (workletNode) {
-                                workletNode.port.postMessage({ type: 'RESET' });
+                            if (!audioCtx || !workletNode) {
+                                initAudio();
                             }
                         }
                         if (d.ip) connectBinaryBridge(d.ip);
