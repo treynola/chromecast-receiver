@@ -156,6 +156,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (this._readPtr < 0) this._readPtr += ringLen;
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
+      this._integral = 0;
       this.port.postMessage({ type: 'LOG', msg: `⚠️ Ring Overrun: Recovered. Available reset to ${available}.` });
     }
     if (available > this._FLUSH_THRESHOLD) {
@@ -165,12 +166,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       while (this._readPtr >= ringLen) this._readPtr -= ringLen;
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
+      this._integral = 0;
       this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess.` });
     }
     if (this._isBuffering) {
       if (available >= this._PREBUFFER) {
         this._isBuffering = false;
         this._smoothedError = 0;
+        this._integral = 0;
         if (available > this._TARGET_BUFFER) {
           const excess = available - this._TARGET_BUFFER;
           this._totalRead += excess;
@@ -190,19 +193,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
     
     // Accumulate integral slowly for drift correction
-    this._integral += this._smoothedError * 0.0000000030;
+    this._integral += this._smoothedError * 0.0000000050;
     this._integral = Math.max(-0.12, Math.min(0.12, this._integral));
     
     // Proportional correction without deadband for smoother pitch lock
-    const pAdj = this._smoothedError * 0.000005;
+    const pAdj = this._smoothedError * 0.00001;
     const MAX_ADJUST = 0.15;
     const clampedPAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     
     const targetRate = this._baseRate + clampedPAdj + this._integral;
-    this._playbackRate = (this._playbackRate * 0.98) + (targetRate * 0.02);
+    this._playbackRate = (this._playbackRate * 0.95) + (targetRate * 0.05);
     this._playbackRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._playbackRate));
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
