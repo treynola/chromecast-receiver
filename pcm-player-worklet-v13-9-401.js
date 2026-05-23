@@ -156,6 +156,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (this._readPtr < 0) this._readPtr += ringLen;
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
+      this._integral = 0;
       this.port.postMessage({ type: 'LOG', msg: `⚠️ Ring Overrun: Recovered. Available reset to ${available}.` });
     }
     if (available > this._FLUSH_THRESHOLD) {
@@ -165,6 +166,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       while (this._readPtr >= ringLen) this._readPtr -= ringLen;
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
+      this._integral = 0;
       this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess.` });
     }
     if (this._isBuffering) {
@@ -192,9 +194,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const rawError = available - this._TARGET_BUFFER;
     this._smoothedError = (this._smoothedError * 0.95) + (rawError * 0.05);
     
-    // Accumulate integral slowly for drift correction
-    this._integral += this._smoothedError * 0.0000000025;
-    this._integral = Math.max(-0.15, Math.min(0.15, this._integral));
+    // Accumulate integral slowly for drift correction (Anti-Windup applied)
+    if (Math.abs(this._smoothedError) <= 20000) {
+      this._integral += this._smoothedError * 0.0000000025;
+    }
+    this._integral = Math.max(-0.095, Math.min(0.095, this._integral));
     
     let pAdj = 0;
     const DEADBAND = 2000;
