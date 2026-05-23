@@ -190,10 +190,9 @@
                     }
                     
                     try {
-                        // [v13.9.340] Request native hardware rate to avoid browser software resampling
-                        // overhead, preventing callback starvation on Chromecast CPU.
+                        // [v13.9.340] Omit sampleRate to run on TV's native hardware path,
+                        // avoiding buggy software resampler overhead and callback starvation.
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
-                            sampleRate: HARDWARE_RATE,
                             latencyHint: 'balanced'
                         });
 

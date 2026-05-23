@@ -214,26 +214,57 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     let fade = this._fade;
     const ringLenFrames = ringLen / 2;
     const INV_32768 = 3.0517578125e-5;
-    for (let i = 0; i < channel0.length; i++) {
-      if (available - samplesConsumed >= 4) {
+    
+    let i = 0;
+    const framesToProcess = Math.max(0, Math.min(channel0.length, Math.floor((available - 4) / (2 * playbackRate))));
+    if (fade >= 1.0) {
+      for (; i < framesToProcess; i++) {
         const frameIndex = readPtrFrames | 0;
         const frac = readPtrFrames - frameIndex;
         const idxL1 = frameIndex * 2;
         const idxL2 = idxL1 + 2;
-        const valL = (this._ringBuffer[idxL1] * (1 - frac) + this._ringBuffer[idxL2] * frac) * INV_32768;
-        const valR = (this._ringBuffer[idxL1 + 1] * (1 - frac) + this._ringBuffer[idxL2 + 1] * frac) * INV_32768;
+        const vL1 = this._ringBuffer[idxL1];
+        const vR1 = this._ringBuffer[idxL1 + 1];
+        const valL = (vL1 + (this._ringBuffer[idxL2] - vL1) * frac) * INV_32768;
+        const valR = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * INV_32768;
         readPtrFrames += playbackRate;
         if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
-        samplesConsumed += 2 * playbackRate;
-        if (fade < 1.0) fade += 0.02;
+        channel0[i] = valL;
+        channel1[i] = valR;
+        const absL = valL < 0 ? -valL : valL;
+        const absR = valR < 0 ? -valR : valR;
+        const peak = absL > absR ? absL : absR;
+        if (peak > this._currentPeak) this._currentPeak = peak;
+      }
+    } else {
+      for (; i < framesToProcess; i++) {
+        const frameIndex = readPtrFrames | 0;
+        const frac = readPtrFrames - frameIndex;
+        const idxL1 = frameIndex * 2;
+        const idxL2 = idxL1 + 2;
+        const vL1 = this._ringBuffer[idxL1];
+        const vR1 = this._ringBuffer[idxL1 + 1];
+        const valL = (vL1 + (this._ringBuffer[idxL2] - vL1) * frac) * INV_32768;
+        const valR = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * INV_32768;
+        readPtrFrames += playbackRate;
+        if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
+        fade += 0.02;
+        if (fade > 1.0) fade = 1.0;
         channel0[i] = valL * fade;
         channel1[i] = valR * fade;
         const absL = valL < 0 ? -valL : valL;
         const absR = valR < 0 ? -valR : valR;
         const peak = absL > absR ? absL : absR;
         if (peak > this._currentPeak) this._currentPeak = peak;
-      } else {
+      }
+    }
+    samplesConsumed = i * 2 * playbackRate;
+    
+    // Fill the rest with silence/fade-out
+    if (i < channel0.length) {
+      for (; i < channel0.length; i++) {
         if (fade > 0) fade -= 0.05;
+        if (fade < 0) fade = 0;
         channel0[i] = 0;
         channel1[i] = 0;
       }
