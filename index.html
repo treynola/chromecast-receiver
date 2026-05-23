@@ -685,7 +685,6 @@
                                 if (workletNode && audioCtx) {
                                     const newBaseRateRatio = audioCtx.sampleRate ? (newRate / audioCtx.sampleRate) : 1.0;
                                     workletNode.port.postMessage({ type: 'CONFIG', baseRateRatio: newBaseRateRatio });
-                                    workletNode.port.postMessage({ type: 'RESET' });
                                 } else {
                                     initAudio();
                                 }
