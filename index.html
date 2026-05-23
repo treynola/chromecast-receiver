@@ -175,12 +175,11 @@
                         relayLogToStudio(`📡 TV: Reseting AudioContext for Hardware Rate: ${HARDWARE_RATE}Hz`);
                         try { await audioCtx.close(); } catch(e) {}
                     }
-                    
                     try {
-                        // [v13.9.340] Omit sampleRate to run on TV's native hardware path,
-                        // avoiding buggy software resampler overhead and callback starvation.
+                        // [v13.9.340] Omit sampleRate and use 'playback' latencyHint to run on TV's native 
+                        // hardware path, avoiding buggy software resampler overhead and callback starvation.
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
-                            latencyHint: 'balanced'
+                            latencyHint: 'playback'
                         });
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
