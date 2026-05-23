@@ -193,8 +193,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
     
     // Accumulate integral slowly for drift correction
-    this._integral += this._smoothedError * 0.0000000015;
-    this._integral = Math.max(-0.10, Math.min(0.10, this._integral));
+    this._integral += this._smoothedError * 0.0000000060;
+    this._integral = Math.max(-0.12, Math.min(0.12, this._integral));
     
     let pAdj = 0;
     const DEADBAND = 2000;
