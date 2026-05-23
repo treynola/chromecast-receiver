@@ -190,23 +190,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
+    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
     
     // Accumulate integral slowly for drift correction
-    this._integral += this._smoothedError * 0.0000000060;
+    this._integral += this._smoothedError * 0.0000000030;
     this._integral = Math.max(-0.12, Math.min(0.12, this._integral));
     
-    let pAdj = 0;
-    const DEADBAND = 2000;
-    if (Math.abs(this._smoothedError) > DEADBAND) {
-      const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      pAdj = overage * 0.0000002;
-    }
+    // Proportional correction without deadband for smoother pitch lock
+    const pAdj = this._smoothedError * 0.000005;
     const MAX_ADJUST = 0.15;
-    pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
+    const clampedPAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     
-    const targetRate = this._baseRate + pAdj + this._integral;
-    this._playbackRate = (this._playbackRate * 0.99) + (targetRate * 0.01);
+    const targetRate = this._baseRate + clampedPAdj + this._integral;
+    this._playbackRate = (this._playbackRate * 0.98) + (targetRate * 0.02);
     this._playbackRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._playbackRate));
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
