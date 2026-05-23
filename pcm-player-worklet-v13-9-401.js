@@ -1,13 +1,13 @@
 /* global AudioWorkletProcessor, registerProcessor, sampleRate */
 /**
  * PCM Player AudioWorkletProcessor - Direct Handshake Engine [v13.9.401]
- * High-Performance Float32 resampler with dynamic hardware base-rate calibration.
+ * High-Performance Int16 resampler with fast native copy and adaptive hardware base-rate calibration.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this._ringLen = 48000 * 2 * 8;
-    this._ringBuffer = new Float32Array(this._ringLen + 4);
+    this._ringBuffer = new Int16Array(this._ringLen + 4);
     this._writePtr = 0;
     this._readPtr = 0;
     this._totalWritten = 0;
@@ -81,28 +81,30 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         let samplesDecoded = 0;
 
         if (this._bitDepth === 24) {
-          // 24-bit PCM: 3 bytes per sample, little-endian, signed. Decode & normalize directly to Float32
+          // 24-bit PCM: 3 bytes per sample, little-endian, signed
           const bytes = new Uint8Array(arrayBuffer);
           const numSamples = Math.floor(bytes.length / 3);
-          const INV_8388608 = 1.1920928955078125e-7; // 1 / 2^23
           for (let i = 0; i < numSamples; i++) {
             const offset = i * 3;
             let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
             if (val & 0x800000) val |= 0xFF000000; // sign extension
-            this._ringBuffer[writePtr] = val * INV_8388608;
+            this._ringBuffer[writePtr] = val >> 8;
             writePtr++;
             if (writePtr >= ringLen) writePtr = 0;
           }
           samplesDecoded = numSamples;
         } else {
-          // 16-bit PCM: 2 bytes per sample, native Int16. Decode & normalize directly to Float32
+          // 16-bit PCM: 2 bytes per sample, native Int16. Copy using fast native TypedArray set
           const pcm16 = new Int16Array(arrayBuffer);
           const len = pcm16.length;
-          const INV_32768 = 3.0517578125e-5;
-          for (let i = 0; i < len; i++) {
-            this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
-            writePtr++;
-            if (writePtr >= ringLen) writePtr = 0;
+          if (writePtr + len <= ringLen) {
+            this._ringBuffer.set(pcm16, writePtr);
+            writePtr += len;
+          } else {
+            const firstPart = ringLen - writePtr;
+            this._ringBuffer.set(pcm16.subarray(0, firstPart), writePtr);
+            this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+            writePtr = len - firstPart;
           }
           samplesDecoded = len;
         }
@@ -248,6 +250,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const playbackRate = this._playbackRate;
     let fade = this._fade;
     const ringLenFrames = ringLen / 2;
+    const INV_32768 = 3.0517578125e-5;
     
     let i = 0;
     let framesToProcess = Math.floor((available - 4) / (2 * playbackRate));
@@ -265,8 +268,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const idxL2 = idxL1 + 2;
         const vL1 = this._ringBuffer[idxL1];
         const vR1 = this._ringBuffer[idxL1 + 1];
-        channel0[i] = vL1 + (this._ringBuffer[idxL2] - vL1) * frac;
-        channel1[i] = vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac;
+        channel0[i] = (vL1 + (this._ringBuffer[idxL2] - vL1) * frac) * INV_32768;
+        channel1[i] = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * INV_32768;
         readPtrFrames += playbackRate;
         if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
       }
@@ -278,8 +281,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const idxL2 = idxL1 + 2;
         const vL1 = this._ringBuffer[idxL1];
         const vR1 = this._ringBuffer[idxL1 + 1];
-        const valL = vL1 + (this._ringBuffer[idxL2] - vL1) * frac;
-        const valR = vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac;
+        const valL = (vL1 + (this._ringBuffer[idxL2] - vL1) * frac) * INV_32768;
+        const valR = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * INV_32768;
         readPtrFrames += playbackRate;
         if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
         fade += 0.02;
