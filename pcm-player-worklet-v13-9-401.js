@@ -157,23 +157,36 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     } else if (this._calibrationCount > 0 && now - this._lastCallbackTime >= 5000) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz = this._callbackCount / elapsed;
-      this._calibrationCount++;
       
       // Slow Adaptive Fine-Tuning
       if (measuredHz > 250 && measuredHz < 450) {
         const physicalRate = measuredHz * 128;
         const targetBaseRate = this._studioRate / physicalRate;
-        this._baseRate = (this._baseRate * 0.90) + (targetBaseRate * 0.10);
+        
+        if (this._calibrationCount === 1) {
+          // First stable measurement: jump directly to the target base rate!
+          this._baseRate = targetBaseRate;
+          this._playbackRate = targetBaseRate;
+          this.port.postMessage({ 
+            type: 'LOG', 
+            msg: `📊 Initial Calibrated BaseRate: ${targetBaseRate.toFixed(4)}x | Callback Rate: ${measuredHz.toFixed(1)} Hz` 
+          });
+        } else {
+          // Subsequent measurements: adjust slowly to handle drift
+          this._baseRate = (this._baseRate * 0.95) + (targetBaseRate * 0.05);
+          this.port.postMessage({ 
+            type: 'LOG', 
+            msg: `📊 Calibrated BaseRate: ${targetBaseRate.toFixed(4)}x (smoothed: ${this._baseRate.toFixed(4)}x) | Callback Rate: ${measuredHz.toFixed(1)} Hz` 
+          });
+        }
+        
         this._baseRateMin = this._baseRate * 0.60;
         this._baseRateMax = this._baseRate * 1.40;
-        this.port.postMessage({ 
-          type: 'LOG', 
-          msg: `📊 Calibrated BaseRate: ${targetBaseRate.toFixed(4)}x (smoothed: ${this._baseRate.toFixed(4)}x) | Callback Rate: ${measuredHz.toFixed(1)} Hz` 
-        });
       } else {
         this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}` });
       }
       
+      this._calibrationCount++;
       this._callbackCount = 0;
       this._lastCallbackTime = now;
     }
