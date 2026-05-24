@@ -22,8 +22,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._sampleCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0;
-    this._callbackCount = 0;
-    this._lastCallbackTime = 0;
     this._bitDepth = options.processorOptions?.bitDepth || 16;
     
     this.port.onmessage = (e) => {
@@ -39,8 +37,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._sampleCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
-          this._callbackCount = 0;
-          this._lastCallbackTime = 0;
           this.port.postMessage({ type: 'LOG', msg: `🔄 Worklet: State reset complete.` });
           return;
         }
@@ -103,32 +99,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel1 = output[1];
     if (!channel0 || !channel1) return true;
     const ringLen = this._ringLen;
-    const now = Date.now();
-    
-    this._callbackCount++;
-    if (!this._lastCallbackTime) this._lastCallbackTime = now;
-    
-    // Telemetry and dynamic rate feedback loop (every 1000 callbacks, ~2.6-3.4s)
-    if (this._callbackCount >= 1000) {
-      const elapsed = (now - this._lastCallbackTime) / 1000;
-      if (elapsed > 0.5) {
-        const measuredHz = this._callbackCount / elapsed;
-        const estimatedRate = Math.round(measuredHz * 128);
-        
-        // Relay dynamic sample rate to index.html to forward to Rust backend
-        this.port.postMessage({ 
-          type: 'RATE_UPDATE', 
-          sampleRate: estimatedRate 
-        });
-        
-        this.port.postMessage({ 
-          type: 'LOG', 
-          msg: `📊 TV Callback Rate: ${measuredHz.toFixed(1)} Hz | Target Rate: ${estimatedRate} Hz | Buffer: ${Math.floor(this._totalWritten - this._totalRead)}` 
-        });
-      }
-      this._callbackCount = 0;
-      this._lastCallbackTime = now;
-    }
 
     let available = this._totalWritten - this._totalRead;
     
@@ -227,7 +197,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._fade = fade;
     this._sampleCount += 128;
     
-    if (this._sampleCount >= 96000) {
+    // Send DIAG every 48000 samples (1 second at 48000Hz)
+    if (this._sampleCount >= 48000) {
       const currentAvailable = this._totalWritten - this._totalRead;
       this.port.postMessage({ 
         type: 'DIAG', 

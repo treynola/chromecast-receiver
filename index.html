@@ -227,6 +227,13 @@
 
                         workletNode.port.onmessage = (e) => {
                             if (e.data.type === 'DIAG') {
+                                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                                    binaryWS.send(JSON.stringify({
+                                        type: 'DIAG',
+                                        available: e.data.available,
+                                        stalled: e.data.stalled
+                                    }));
+                                }
                                 const diagEl = document.getElementById('bridge-diag-text');
                                 if (diagEl) {
                                     const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
@@ -247,13 +254,6 @@
                                 }
                             } else if (e.data.type === 'LOG') {
                                 relayLogToStudio(e.data.msg);
-                            } else if (e.data.type === 'RATE_UPDATE') {
-                                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                                    binaryWS.send(JSON.stringify({ 
-                                        type: 'RATE_UPDATE', 
-                                        sampleRate: e.data.sampleRate 
-                                    }));
-                                }
                             }
                         };
                     } catch (e) {
