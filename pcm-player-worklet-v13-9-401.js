@@ -139,26 +139,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const measuredHz = this._callbackCount / elapsed;
         this._calibrationCount = 1;
         
-        if (measuredHz > 250 && measuredHz < 450) {
-          const physicalRate = measuredHz * 128;
-          let targetBaseRate = this._studioRate / physicalRate;
-          targetBaseRate = Math.max(0.90, Math.min(1.15, targetBaseRate));
-          
-          this._baseRate = targetBaseRate;
-          this._playbackRate = this._baseRate;
-          this._baseRateMin = this._baseRate - 0.015;
-          this._baseRateMax = this._baseRate + 0.015;
-          
-          this.port.postMessage({ 
-            type: 'LOG', 
-            msg: `📊 TV Clock Fast Calibrated at: ${this._baseRate.toFixed(4)}x | Cb Rate: ${measuredHz.toFixed(1)} Hz` 
-          });
+        // Robust Binary Classifier to identify physical hardware sample rate (44.1kHz vs 48kHz)
+        // despite any temporary startup CPU scheduling lag.
+        const physicalRate = measuredHz * 128;
+        if (physicalRate < 46000) {
+          // Classify as 44.1kHz physical output (or lower)
+          this._baseRate = 48000 / 44100; // ~1.0884
         } else {
-          this.port.postMessage({ 
-            type: 'LOG', 
-            msg: `📊 TV Clock Fast Telemetry unstable: ${measuredHz.toFixed(1)} Hz | Keeping Nominal BaseRate: ${this._baseRate.toFixed(4)}x` 
-          });
+          // Classify as 48kHz physical output
+          this._baseRate = 1.0000;
         }
+        
+        this._playbackRate = this._baseRate;
+        this._baseRateMin = this._baseRate - 0.015;
+        this._baseRateMax = this._baseRate + 0.015;
+        
+        this.port.postMessage({ 
+          type: 'LOG', 
+          msg: `📊 TV Clock Fast Calibrated at: ${this._baseRate.toFixed(4)}x (Probe: ${measuredHz.toFixed(1)} Hz | Est: ${physicalRate.toFixed(0)} Hz)` 
+        });
         
         // Reset controller error to prevent startup transient spike
         this._smoothedError = 0;
