@@ -247,6 +247,13 @@
                                 }
                             } else if (e.data.type === 'LOG') {
                                 relayLogToStudio(e.data.msg);
+                            } else if (e.data.type === 'RATE_UPDATE') {
+                                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                                    binaryWS.send(JSON.stringify({ 
+                                        type: 'RATE_UPDATE', 
+                                        sampleRate: e.data.sampleRate 
+                                    }));
+                                }
                             }
                         };
                     } catch (e) {
