@@ -18,7 +18,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 19200;
     this._MIN_BUFFER = 4800;
     this._PREBUFFER = 14400;
-    this._FLUSH_THRESHOLD = 57600;
+    this._FLUSH_THRESHOLD = 38400;
     this._isBuffering = true;
     this._stallCount = 0;
     this._sampleCount = 0;
@@ -28,8 +28,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._callbackCount = 0;
     this._lastCallbackTime = 0;
     this._baseRateInitial = this._baseRate;
-    this._baseRateMin = this._baseRate * 0.60;
-    this._baseRateMax = this._baseRate * 1.40;
+    this._baseRateMin = this._baseRate - 0.015;
+    this._baseRateMax = this._baseRate + 0.015;
     this._calibrationCount = 0;
     this._integral = 0;
     this._bitDepth = options.processorOptions?.bitDepth || 16;
@@ -67,8 +67,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             this._baseRate = e.data.baseRateRatio;
             this._playbackRate = this._baseRate;
             this._baseRateInitial = this._baseRate;
-            this._baseRateMin = this._baseRate * 0.60;
-            this._baseRateMax = this._baseRate * 1.40;
+            this._baseRateMin = this._baseRate - 0.015;
+            this._baseRateMax = this._baseRate + 0.015;
             this.port.postMessage({ type: 'LOG', msg: `🔧 Worklet: Base rate ratio updated to ${this._baseRate.toFixed(4)}x` });
           }
           return;
@@ -132,60 +132,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
     
-    // Telemetry and Adaptive Base Rate Calibration
+    // Telemetry - purely informational, does NOT modify _baseRate
     if (this._calibrationCount === 0 && this._callbackCount === 150) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       if (elapsed > 0.1) {
         const measuredHz = this._callbackCount / elapsed;
         this._calibrationCount = 1;
-        
-        // Fast Initial Base Rate Estimation
-        if (measuredHz > 250 && measuredHz < 450) {
-          const physicalRate = measuredHz * 128;
-          const targetBaseRate = this._studioRate / physicalRate;
-          this._baseRate = targetBaseRate;
-          this._baseRateMin = this._baseRate * 0.60;
-          this._baseRateMax = this._baseRate * 1.40;
-          this._playbackRate = this._baseRate;
-          this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Calibration: BaseRate set to ${this._baseRate.toFixed(4)}x | Callback Rate: ${measuredHz.toFixed(1)} Hz` });
-        } else {
-          this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Telemetry: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}` });
-        }
+        this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Telemetry: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}x` });
       }
       this._callbackCount = 0;
       this._lastCallbackTime = now;
     } else if (this._calibrationCount > 0 && now - this._lastCallbackTime >= 5000) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz = this._callbackCount / elapsed;
-      
-      // Slow Adaptive Fine-Tuning
-      if (measuredHz > 250 && measuredHz < 450) {
-        const physicalRate = measuredHz * 128;
-        const targetBaseRate = this._studioRate / physicalRate;
-        
-        if (this._calibrationCount === 1) {
-          // First stable measurement: jump directly to the target base rate!
-          this._baseRate = targetBaseRate;
-          this._playbackRate = targetBaseRate;
-          this.port.postMessage({ 
-            type: 'LOG', 
-            msg: `📊 Initial Calibrated BaseRate: ${targetBaseRate.toFixed(4)}x | Callback Rate: ${measuredHz.toFixed(1)} Hz` 
-          });
-        } else {
-          // Subsequent measurements: adjust slowly to handle drift
-          this._baseRate = (this._baseRate * 0.95) + (targetBaseRate * 0.05);
-          this.port.postMessage({ 
-            type: 'LOG', 
-            msg: `📊 Calibrated BaseRate: ${targetBaseRate.toFixed(4)}x (smoothed: ${this._baseRate.toFixed(4)}x) | Callback Rate: ${measuredHz.toFixed(1)} Hz` 
-          });
-        }
-        
-        this._baseRateMin = this._baseRate * 0.60;
-        this._baseRateMax = this._baseRate * 1.40;
-      } else {
-        this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}` });
-      }
-      
+      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}x` });
       this._calibrationCount++;
       this._callbackCount = 0;
       this._lastCallbackTime = now;
@@ -240,18 +200,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const rawError = available - this._TARGET_BUFFER;
     this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
     
-    // Accumulate integral slowly for drift correction
-    this._integral += this._smoothedError * 0.0000000005;
-    this._integral = Math.max(-0.12, Math.min(0.12, this._integral));
+    // Accumulate integral slowly for drift correction (tight limit of ±0.003)
+    this._integral += this._smoothedError * 0.0000000002;
+    this._integral = Math.max(-0.003, Math.min(0.003, this._integral));
     
-    // Proportional correction with deadband to ignore minor packet arrivals
+    // Proportional correction with deadband (tight limit of ±0.008)
     let pAdj = 0;
     const DEADBAND = 1000; // ±10ms at 48kHz stereo
     if (Math.abs(this._smoothedError) > DEADBAND) {
       const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      pAdj = overage * 0.000005;
+      pAdj = overage * 0.000002;
     }
-    const MAX_ADJUST = 0.15;
+    const MAX_ADJUST = 0.008;
     const clampedPAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     
     const targetRate = this._baseRate + clampedPAdj + this._integral;
@@ -273,7 +233,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       framesToProcess = channel0.length;
     }
 
-    if (fade >= 1.0) {
+    const isUnity = Math.abs(playbackRate - 1.0) < 0.0001;
+    
+    if (isUnity && fade >= 1.0) {
+      // Optimized direct copy (no interpolation, no fraction arithmetic)
+      for (; i < framesToProcess; i++) {
+        const frameIndex = readPtrFrames | 0;
+        const idx = frameIndex * 2;
+        channel0[i] = this._ringBuffer[idx] * INV_32768;
+        channel1[i] = this._ringBuffer[idx + 1] * INV_32768;
+        readPtrFrames++;
+        if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
+      }
+    } else if (fade >= 1.0) {
+      // Normal interpolation
       for (; i < framesToProcess; i++) {
         const frameIndex = readPtrFrames | 0;
         const frac = readPtrFrames - frameIndex;
@@ -287,6 +260,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
       }
     } else {
+      // Normal interpolation with fade-in
       for (; i < framesToProcess; i++) {
         const frameIndex = readPtrFrames | 0;
         const frac = readPtrFrames - frameIndex;
