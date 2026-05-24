@@ -132,21 +132,57 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
     
-    // Telemetry - purely informational, does NOT modify _baseRate
+    // Telemetry and Initial Calibration (at 150 callbacks, approx 0.4 seconds)
     if (this._calibrationCount === 0 && this._callbackCount === 150) {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       if (elapsed > 0.1) {
         const measuredHz = this._callbackCount / elapsed;
         this._calibrationCount = 1;
-        this.port.postMessage({ type: 'LOG', msg: `📊 Startup Fast Telemetry: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}x` });
+        
+        if (measuredHz > 250 && measuredHz < 450) {
+          const physicalRate = measuredHz * 128;
+          let targetBaseRate = this._studioRate / physicalRate;
+          targetBaseRate = Math.max(0.90, Math.min(1.15, targetBaseRate));
+          
+          this._baseRate = targetBaseRate;
+          this._playbackRate = this._baseRate;
+          this._baseRateMin = this._baseRate - 0.015;
+          this._baseRateMax = this._baseRate + 0.015;
+          
+          this.port.postMessage({ 
+            type: 'LOG', 
+            msg: `📊 TV Clock Fast Calibrated at: ${this._baseRate.toFixed(4)}x | Cb Rate: ${measuredHz.toFixed(1)} Hz` 
+          });
+        } else {
+          this.port.postMessage({ 
+            type: 'LOG', 
+            msg: `📊 TV Clock Fast Telemetry unstable: ${measuredHz.toFixed(1)} Hz | Keeping Nominal BaseRate: ${this._baseRate.toFixed(4)}x` 
+          });
+        }
+        
+        // Reset controller error to prevent startup transient spike
+        this._smoothedError = 0;
+        this._integral = 0;
+        
+        // Trim buffer to target to start fresh
+        let available = this._totalWritten - this._totalRead;
+        if (available > this._TARGET_BUFFER) {
+          const excess = available - this._TARGET_BUFFER;
+          this._totalRead += excess;
+          this._readPtr += excess;
+          while (this._readPtr >= ringLen) this._readPtr -= ringLen;
+        }
       }
       this._callbackCount = 0;
       this._lastCallbackTime = now;
-    } else if (this._calibrationCount > 0 && now - this._lastCallbackTime >= 5000) {
+    } else if (this._calibrationCount > 0 && now - this._lastCallbackTime >= 10000) {
+      // Periodic diagnostic telemetry (every 10s)
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz = this._callbackCount / elapsed;
-      this.port.postMessage({ type: 'LOG', msg: `📊 Callback Rate: ${measuredHz.toFixed(1)} Hz | Nominal BaseRate: ${this._baseRate.toFixed(4)}x` });
-      this._calibrationCount++;
+      this.port.postMessage({ 
+        type: 'LOG', 
+        msg: `📊 TV Clock Status: BaseRate=${this._baseRate.toFixed(4)}x | ResamplerRate=${this._playbackRate.toFixed(4)}x | Cb Rate: ${measuredHz.toFixed(1)} Hz | Buffer: ${Math.floor(this._totalWritten - this._totalRead)}` 
+      });
       this._callbackCount = 0;
       this._lastCallbackTime = now;
     }
@@ -171,7 +207,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       available = this._TARGET_BUFFER;
       this._smoothedError = 0;
       this._integral = 0;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Catch-up: Flushed ${excess} excess.` });
+      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Flush: Flushed ${excess} excess.` });
     }
     if (this._isBuffering) {
       if (available >= this._PREBUFFER) {
@@ -198,18 +234,23 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     }
 
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
+    this._smoothedError = (this._smoothedError * 0.99) + (rawError * 0.01);
     
-    // Proportional-only correction with a wide deadband (±4800 samples / 50ms)
-    // and extremely low gain (0.0005 / 0.05% speed adjustment) to prevent limit cycles.
-    let pAdj = 0;
-    const DEADBAND = 4800; // ±50ms at 48kHz stereo
-    if (Math.abs(this._smoothedError) > DEADBAND) {
-      pAdj = Math.sign(this._smoothedError) * 0.0005;
+    // Proportional correction with low gain
+    let pAdj = this._smoothedError * 0.000002;
+    pAdj = Math.max(-0.02, Math.min(0.02, pAdj));
+    
+    // Continuous base-rate adaptation (integral term)
+    if (this._calibrationCount > 0) {
+      this._baseRate += this._smoothedError * 0.0000000001;
+      this._baseRate = Math.max(0.90, Math.min(1.15, this._baseRate));
     }
     
-    this._playbackRate = this._baseRate + pAdj;
-    this._playbackRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._playbackRate));
+    const targetRate = this._baseRate + pAdj;
+    
+    // Filter the actual playback rate heavily to eliminate pitch flutter
+    this._playbackRate = (this._playbackRate * 0.998) + (targetRate * 0.002);
+    this._playbackRate = Math.max(0.90, Math.min(1.15, this._playbackRate));
     
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
