@@ -198,24 +198,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     }
 
     const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = (this._smoothedError * 0.98) + (rawError * 0.02);
+    this._smoothedError = (this._smoothedError * 0.995) + (rawError * 0.005);
     
-    // Accumulate integral slowly for drift correction (tight limit of ±0.003)
-    this._integral += this._smoothedError * 0.0000000002;
-    this._integral = Math.max(-0.003, Math.min(0.003, this._integral));
-    
-    // Proportional correction with deadband (tight limit of ±0.008)
+    // Proportional-only correction with a wide deadband (±4800 samples / 50ms)
+    // and extremely low gain (0.0005 / 0.05% speed adjustment) to prevent limit cycles.
     let pAdj = 0;
-    const DEADBAND = 1000; // ±10ms at 48kHz stereo
+    const DEADBAND = 4800; // ±50ms at 48kHz stereo
     if (Math.abs(this._smoothedError) > DEADBAND) {
-      const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      pAdj = overage * 0.000002;
+      pAdj = Math.sign(this._smoothedError) * 0.0005;
     }
-    const MAX_ADJUST = 0.008;
-    const clampedPAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
     
-    const targetRate = this._baseRate + clampedPAdj + this._integral;
-    this._playbackRate = (this._playbackRate * 0.98) + (targetRate * 0.02);
+    this._playbackRate = this._baseRate + pAdj;
     this._playbackRate = Math.max(this._baseRateMin, Math.min(this._baseRateMax, this._playbackRate));
     
     let readPtrFrames = this._readPtr / 2;
