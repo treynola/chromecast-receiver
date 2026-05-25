@@ -176,9 +176,9 @@
                         try { await audioCtx.close(); } catch(e) {}
                     }
                     try {
-                        // [v13.9.340] Use explicit sampleRate and 'balanced' latencyHint to run on TV's native 
-                        // hardware path with stable scheduling, avoiding throttling and callback starvation.
-                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        // [v13.9.402] Use default sampleRate with 'playback' latencyHint to allow the native
+                        // hardware path and prevent smart TV JS thread throttling.
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
                         const masterGain = audioCtx.createGain();
@@ -193,7 +193,7 @@
                         g.connect(audioCtx.destination);
                         keepAlive.start();
 
-                        await audioCtx.audioWorklet.addModule(`pcm-player-worklet-v13-9-401.js?cb=${Date.now()}`);
+                        await audioCtx.audioWorklet.addModule(`pcm-player-worklet-v13-9-402.js?cb=${Date.now()}`);
                         
                         // [v13.9.330] DYNAMIC RATE TRANSFORMATION
                         const studioRate = window._studioRate || 48000;
@@ -537,7 +537,7 @@
     // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate natively
     let hwRate = 48000;
     try {
-        const probe = new (window.AudioContext || window.webkitAudioContext)();
+        const probe = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
         hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
         window._hwRate = hwRate;
         relayLogToStudio(`🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`);
