@@ -230,7 +230,10 @@
                                         type: 'DIAG',
                                         available: e.data.available,
                                         stalled: e.data.stalled,
-                                        measuredHz: e.data.measuredHz
+                                        measuredHz: e.data.measuredHz,
+                                        rate: e.data.rate,
+                                        peak: e.data.peak,
+                                        locked: e.data.locked
                                     }));
                                 }
                                 const diagEl = document.getElementById('bridge-diag-text');

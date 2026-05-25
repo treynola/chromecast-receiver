@@ -184,12 +184,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const DEADBAND = 2000; // ±20ms @ 48kHz stereo
     if (Math.abs(this._smoothedError) > DEADBAND) {
       const overage = this._smoothedError > 0 ? this._smoothedError - DEADBAND : this._smoothedError + DEADBAND;
-      // Proportional Gain: 1.0e-5 (Stronger gain for faster local correction)
-      pAdj = overage * 0.00001;
+      // Proportional Gain: 3.0e-5 (Faster local correction matching the wide MAX_ADJUST)
+      pAdj = overage * 0.00003;
     }
 
-    // Clamping rate adjustments to up to 50% to handle severe TV OS throttling
-    const MAX_ADJUST = 0.50;
+    // Clamping rate adjustments to up to 120% to handle severe TV OS throttling
+    const MAX_ADJUST = 1.20;
     pAdj = Math.max(-MAX_ADJUST, Math.min(MAX_ADJUST, pAdj));
 
     const targetRate = this._baseRate + pAdj;
@@ -247,6 +247,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz = elapsed > 0 ? (this._callbackCount * 128 / elapsed) : 48000;
       
+      // Dynamic calibration: adapt _baseRate to match the slow TV browser clock ratio
+      if (measuredHz > 10000 && measuredHz < 100000) {
+        const measuredRatio = this._studioRate / measuredHz;
+        // Slow filter (90% old, 10% new) to establish long-term clock stability without audible pitch jump
+        this._baseRate = (this._baseRate * 0.90) + (measuredRatio * 0.10);
+      }
+
       this.port.postMessage({ 
         type: 'DIAG', 
         available: Math.floor(currentAvailable), 
