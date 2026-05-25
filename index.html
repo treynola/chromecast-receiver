@@ -178,10 +178,7 @@
                     try {
                         // [v13.9.340] Use explicit sampleRate and 'balanced' latencyHint to run on TV's native 
                         // hardware path with stable scheduling, avoiding throttling and callback starvation.
-                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
-                            sampleRate: HARDWARE_RATE,
-                            latencyHint: 'playback'
-                        });
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
                         const masterGain = audioCtx.createGain();
@@ -540,9 +537,7 @@
     // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate natively
     let hwRate = 48000;
     try {
-        const probe = new (window.AudioContext || window.webkitAudioContext)({ 
-            latencyHint: 'playback' 
-        });
+        const probe = new (window.AudioContext || window.webkitAudioContext)();
         hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
         window._hwRate = hwRate;
         relayLogToStudio(`🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`);
