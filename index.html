@@ -176,10 +176,11 @@
                         try { await audioCtx.close(); } catch(e) {}
                     }
                     try {
-                        // [v13.9.340] Omit sampleRate and use 'playback' latencyHint to run on TV's native 
-                        // hardware path, avoiding buggy software resampler overhead and callback starvation.
+                        // [v13.9.340] Use explicit sampleRate and 'balanced' latencyHint to run on TV's native 
+                        // hardware path with stable scheduling, avoiding throttling and callback starvation.
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
-                            latencyHint: 'playback'
+                            sampleRate: HARDWARE_RATE,
+                            latencyHint: 'balanced'
                         });
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
@@ -231,7 +232,8 @@
                                     binaryWS.send(JSON.stringify({
                                         type: 'DIAG',
                                         available: e.data.available,
-                                        stalled: e.data.stalled
+                                        stalled: e.data.stalled,
+                                        measuredHz: e.data.measuredHz
                                     }));
                                 }
                                 const diagEl = document.getElementById('bridge-diag-text');
@@ -241,7 +243,8 @@
                                     const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
                                     const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
                                     const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                                    const hzInfo = e.data.measuredHz ? ` | HZ: ${e.data.measuredHz}` : '';
+                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
                                 }
 
                                 // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
@@ -249,7 +252,8 @@
                                     const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
                                     const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
                                     const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    relayLogToStudio(`📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`);
+                                    const hzInfo = e.data.measuredHz ? ` | HZ: ${e.data.measuredHz}` : '';
+                                    relayLogToStudio(`📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`);
                                     window._lastDiagSent = Date.now();
                                 }
                             } else if (e.data.type === 'LOG') {

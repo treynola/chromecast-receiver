@@ -23,6 +23,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._currentPeak = 0;
     this._fade = 1.0;
     this._bitDepth = options.processorOptions?.bitDepth || 16;
+    this._callbackCount = 0;
+    this._lastCallbackTime = 0;
     
     this.port.onmessage = (e) => {
       try {
@@ -98,6 +100,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const channel0 = output[0];
     const channel1 = output[1];
     if (!channel0 || !channel1) return true;
+
+    this._callbackCount++;
+    const now = Date.now();
+    if (!this._lastCallbackTime) this._lastCallbackTime = now;
     const ringLen = this._ringLen;
 
     let available = this._totalWritten - this._totalRead;
@@ -200,16 +206,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // Send DIAG every 48000 samples (1 second at 48000Hz)
     if (this._sampleCount >= 48000) {
       const currentAvailable = this._totalWritten - this._totalRead;
+      const elapsed = (now - this._lastCallbackTime) / 1000;
+      const measuredHz = elapsed > 0 ? (this._callbackCount * 128 / elapsed) : 48000;
       this.port.postMessage({ 
         type: 'DIAG', 
         available: Math.floor(currentAvailable), 
         stalled: this._stallCount, 
         peak: this._currentPeak, 
         rate: 1.0, 
-        locked: true 
+        locked: true,
+        measuredHz: Math.round(measuredHz)
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
+      this._callbackCount = 0;
+      this._lastCallbackTime = now;
     }
     return true;
   }
