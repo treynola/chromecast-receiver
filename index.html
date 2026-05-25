@@ -180,7 +180,7 @@
                         // hardware path with stable scheduling, avoiding throttling and callback starvation.
                         audioCtx = new (window.AudioContext || window.webkitAudioContext)({ 
                             sampleRate: HARDWARE_RATE,
-                            latencyHint: 'balanced'
+                            latencyHint: 'interactive'
                         });
 
                         // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
@@ -541,7 +541,7 @@
     let hwRate = 48000;
     try {
         const probe = new (window.AudioContext || window.webkitAudioContext)({ 
-            latencyHint: 'balanced' 
+            latencyHint: 'interactive' 
         });
         hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
         window._hwRate = hwRate;
