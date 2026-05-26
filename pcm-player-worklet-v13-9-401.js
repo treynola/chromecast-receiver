@@ -25,10 +25,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._bitDepth = options.processorOptions?.bitDepth || 16;
     this._callbackCount = 0;
     this._lastCallbackTime = 0;
-    
+
     this.port.onmessage = (e) => {
       try {
-        if (e.data && e.data.type === 'RESET') {
+        if (e.data && e.data.type === "RESET") {
           this._ringBuffer.fill(0);
           this._writePtr = 0;
           this._readPtr = 0;
@@ -39,18 +39,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._sampleCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
-          this.port.postMessage({ type: 'LOG', msg: `🔄 Worklet: State reset complete.` });
+          this.port.postMessage({
+            type: "LOG",
+            msg: `🔄 Worklet: State reset complete.`,
+          });
           return;
         }
-        if (e.data && e.data.type === 'CONFIG') {
+        if (e.data && e.data.type === "CONFIG") {
           if (e.data.bitDepth) {
             this._bitDepth = e.data.bitDepth;
-            this.port.postMessage({ type: 'LOG', msg: `🔧 Worklet: Bit depth set to ${this._bitDepth}-bit` });
+            this.port.postMessage({
+              type: "LOG",
+              msg: `🔧 Worklet: Bit depth set to ${this._bitDepth}-bit`,
+            });
           }
           return;
         }
-        if (e.data && e.data.type === 'TEST_BEEP') return;
-        const arrayBuffer = (e.data instanceof ArrayBuffer) ? e.data : e.data.buffer;
+        if (e.data && e.data.type === "TEST_BEEP") return;
+        const arrayBuffer =
+          e.data instanceof ArrayBuffer ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
         const ringLen = this._ringLen;
         let writePtr = this._writePtr;
@@ -61,8 +68,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           const numSamples = Math.floor(bytes.length / 3);
           for (let i = 0; i < numSamples; i++) {
             const offset = i * 3;
-            let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
-            if (val & 0x800000) val |= 0xFF000000;
+            let val =
+              bytes[offset] |
+              (bytes[offset + 1] << 8) |
+              (bytes[offset + 2] << 16);
+            if (val & 0x800000) val |= 0xff000000;
             this._ringBuffer[writePtr] = val >> 8;
             writePtr++;
             if (writePtr >= ringLen) writePtr = 0;
@@ -90,11 +100,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._ringBuffer[ringLen + 2] = this._ringBuffer[2];
         this._ringBuffer[ringLen + 3] = this._ringBuffer[3];
       } catch (err) {
-        this.port.postMessage({ type: 'LOG', msg: `❌ Worklet Error: ${err.message}` });
+        this.port.postMessage({
+          type: "LOG",
+          msg: `❌ Worklet Error: ${err.message}`,
+        });
       }
     };
   }
-  
+
   process(inputs, outputs) {
     const output = outputs[0];
     const channel0 = output[0];
@@ -107,7 +120,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const ringLen = this._ringLen;
 
     let available = this._totalWritten - this._totalRead;
-    
+
     // Ring Buffer Overrun
     if (available > ringLen) {
       const skip = available - this._TARGET_BUFFER;
@@ -115,9 +128,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._readPtr = this._writePtr - this._TARGET_BUFFER;
       while (this._readPtr < 0) this._readPtr += ringLen;
       available = this._TARGET_BUFFER;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Ring Overrun: Recovered.` });
+      this.port.postMessage({
+        type: "LOG",
+        msg: `⚠️ Ring Overrun: Recovered.`,
+      });
     }
-    
+
     // Buffer Health / Latency Flush
     if (available > this._FLUSH_THRESHOLD) {
       const excess = available - this._TARGET_BUFFER;
@@ -125,9 +141,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._readPtr += excess;
       while (this._readPtr >= ringLen) this._readPtr -= ringLen;
       available = this._TARGET_BUFFER;
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ Latency Flush: Flushed ${excess} excess.` });
+      this.port.postMessage({
+        type: "LOG",
+        msg: `⚠️ Latency Flush: Flushed ${excess} excess.`,
+      });
     }
-    
+
     // Buffering State
     if (this._isBuffering) {
       if (available >= this._PREBUFFER) {
@@ -138,7 +157,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._readPtr += excess;
           while (this._readPtr >= ringLen) this._readPtr -= ringLen;
           available = this._TARGET_BUFFER;
-          this.port.postMessage({ type: 'LOG', msg: `⚡ Startup: Trimmed ${excess} samples.` });
+          this.port.postMessage({
+            type: "LOG",
+            msg: `⚡ Startup: Trimmed ${excess} samples.`,
+          });
         }
       } else {
         channel0.fill(0);
@@ -146,7 +168,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         return true;
       }
     }
-    
+
     // Buffer Starvation / Stall
     if (available < this._MIN_BUFFER) {
       this._stallCount++;
@@ -154,7 +176,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._fade = 0;
       channel0.fill(0);
       channel1.fill(0);
-      this.port.postMessage({ type: 'LOG', msg: `⚠️ TV Stall: Buffering started.` });
+      this.port.postMessage({
+        type: "LOG",
+        msg: `⚠️ TV Stall: Buffering started.`,
+      });
       return true;
     }
 
@@ -162,10 +187,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const ringLenFrames = ringLen / 2;
     const INV_32768 = 3.0517578125e-5;
     const framesToProcess = channel0.length; // 128
-    
+
     let i = 0;
     let fade = this._fade;
-    
+
     // Direct Copy (Zero interpolation overhead since playbackRate is locked to 1.0)
     if (fade >= 1.0) {
       for (; i < framesToProcess; i++) {
@@ -202,20 +227,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalRead += samplesConsumed;
     this._fade = fade;
     this._sampleCount += 128;
-    
+
     // Send DIAG every 48000 samples (1 second at 48000Hz)
     if (this._sampleCount >= 48000) {
       const currentAvailable = this._totalWritten - this._totalRead;
       const elapsed = (now - this._lastCallbackTime) / 1000;
-      const measuredHz = elapsed > 0 ? (this._callbackCount * 128 / elapsed) : 48000;
-      this.port.postMessage({ 
-        type: 'DIAG', 
-        available: Math.floor(currentAvailable), 
-        stalled: this._stallCount, 
-        peak: this._currentPeak, 
-        rate: 1.0, 
+      const measuredHz =
+        elapsed > 0 ? (this._callbackCount * 128) / elapsed : 48000;
+      this.port.postMessage({
+        type: "DIAG",
+        available: Math.floor(currentAvailable),
+        stalled: this._stallCount,
+        peak: this._currentPeak,
+        rate: 1.0,
         locked: true,
-        measuredHz: Math.round(measuredHz)
+        measuredHz: Math.round(measuredHz),
       });
       this._currentPeak = 0;
       this._sampleCount = 0;
@@ -225,4 +251,4 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('pcm-player-worklet', PCMPlayerProcessor);
+registerProcessor("pcm-player-worklet", PCMPlayerProcessor);

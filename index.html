@@ -1,148 +1,568 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>MXS-004 Studio Mirror v13.9.330</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="styles_main.css?v=13.9.330">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.330" />
     <style>
-        /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
-        html, body { background: #000 !important; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-        .app-loading { opacity: 1 !important; visibility: visible !important; }
-        .container {
-            position: absolute; top: 50%; left: 50%; 
-            transform: translate(-50%, -50%) scale(var(--scale, 1)); transform-origin: center;
-            opacity: 1 !important; visibility: visible !important; display: flex !important;
-            background-color: #000 !important; width: 1440px !important; height: 810px !important;
-        }
-        #cursor-mirror {
-            position: absolute; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.9); 
-            border-radius: 50%; pointer-events: none; z-index: 10000; border: 2px solid white; 
-            display: none; box-shadow: 0 0 8px rgba(0,0,0,0.5);
-            left: 0; top: 0; transform-origin: center;
-        }
-        cast-media-player { display: none; }
-        .main-content {
-            display: grid !important;
-            grid-template-columns: repeat(5, 1fr) !important;
-            gap: 6px !important;
-            width: 100% !important;
-            height: calc(100% - 40px) !important;
-        }
-        .track { 
-            background: rgba(20, 20, 20, 0.8) !important; 
-            border: 1px solid var(--green) !important; 
-        }
-        .master-column {
-            border: 1px solid var(--green) !important;
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 2px !important;
-        }
-        .sample-grid { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 5px !important; margin-top: 2px !important; }
-        .sample-btn { aspect-ratio: 1.0 !important; font-family: 'Cousine', monospace !important; font-size: 1.1em !important; font-weight: 720 !important; border-radius: 8px !important; border-width: 3px !important; display: flex !important; align-items: center !important; justify-content: center !important; text-transform: uppercase; }
-        .hidden { display: none !important; }
-        
-        .scrolling-text-wrapper { overflow: hidden; white-space: nowrap; width: 100%; position: relative; }
-        .scrolling-text { display: inline-block; font-size: 0.7em; }
-        .scrolling-text.active-scrolling { padding-left: 0; animation: none; }
+      /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
+      html,
+      body {
+        background: #000 !important;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      .app-loading {
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+      .container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(var(--scale, 1));
+        transform-origin: center;
+        opacity: 1 !important;
+        visibility: visible !important;
+        display: flex !important;
+        background-color: #000 !important;
+        width: 1440px !important;
+        height: 810px !important;
+      }
+      #cursor-mirror {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background: rgba(255, 0, 0, 0.9);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10000;
+        border: 2px solid white;
+        display: none;
+        box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+        left: 0;
+        top: 0;
+        transform-origin: center;
+      }
+      cast-media-player {
+        display: none;
+      }
+      .main-content {
+        display: grid !important;
+        grid-template-columns: repeat(5, 1fr) !important;
+        gap: 6px !important;
+        width: 100% !important;
+        height: calc(100% - 40px) !important;
+      }
+      .track {
+        background: rgba(20, 20, 20, 0.8) !important;
+        border: 1px solid var(--green) !important;
+      }
+      .master-column {
+        border: 1px solid var(--green) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 2px !important;
+      }
+      .sample-grid {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 5px !important;
+        margin-top: 2px !important;
+      }
+      .sample-btn {
+        aspect-ratio: 1 !important;
+        font-family: "Cousine", monospace !important;
+        font-size: 1.1em !important;
+        font-weight: 720 !important;
+        border-radius: 8px !important;
+        border-width: 3px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-transform: uppercase;
+      }
+      .hidden {
+        display: none !important;
+      }
 
-        @keyframes scroll-text {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-100%); }
+      .scrolling-text-wrapper {
+        overflow: hidden;
+        white-space: nowrap;
+        width: 100%;
+        position: relative;
+      }
+      .scrolling-text {
+        display: inline-block;
+        font-size: 0.7em;
+      }
+      .scrolling-text.active-scrolling {
+        padding-left: 0;
+        animation: none;
+      }
+
+      @keyframes scroll-text {
+        0% {
+          transform: translateX(0);
         }
- 
-        /* [v13.9.330] ORIGINAL .APP BUTTON STYLING */
-        .track-buttons { display: flex; justify-content: space-between; gap: 2px; margin: 5px 0; }
-        .track-buttons button { flex: 1; height: 24px; font-size: 0.75em; font-family: 'Cousine', monospace; font-weight: 720; cursor: pointer; text-transform: uppercase; border-radius: 4px; }
-        
-        /* PLAY Button */
-        .track-buttons button[id^="t-play-"] { background-color: var(--green) !important; color: var(--gold) !important; border: 1px solid var(--gold) !important; }
-        /* STOP Button */
-        .track-buttons button[id^="t-stop-"] { background-color: var(--gold) !important; color: var(--red) !important; border: 1px solid var(--red) !important; }
-        /* REC Button */
-        .track-buttons button[id^="t-rec-"] { background-color: var(--red) !important; color: var(--gold) !important; border: 1px solid var(--gold) !important; }
-        /* REV Button */
-        .track-buttons button[id^="t-rev-"] { background-color: var(--gold) !important; color: var(--green) !important; border: 1px solid var(--green) !important; }
-        
-        .track-buttons button.recording { animation: text-blink 0.5s infinite; }
-        @keyframes text-blink { 50% { color: var(--dark-gray); } }
+        100% {
+          transform: translateX(-100%);
+        }
+      }
+
+      /* [v13.9.330] ORIGINAL .APP BUTTON STYLING */
+      .track-buttons {
+        display: flex;
+        justify-content: space-between;
+        gap: 2px;
+        margin: 5px 0;
+      }
+      .track-buttons button {
+        flex: 1;
+        height: 24px;
+        font-size: 0.75em;
+        font-family: "Cousine", monospace;
+        font-weight: 720;
+        cursor: pointer;
+        text-transform: uppercase;
+        border-radius: 4px;
+      }
+
+      /* PLAY Button */
+      .track-buttons button[id^="t-play-"] {
+        background-color: var(--green) !important;
+        color: var(--gold) !important;
+        border: 1px solid var(--gold) !important;
+      }
+      /* STOP Button */
+      .track-buttons button[id^="t-stop-"] {
+        background-color: var(--gold) !important;
+        color: var(--red) !important;
+        border: 1px solid var(--red) !important;
+      }
+      /* REC Button */
+      .track-buttons button[id^="t-rec-"] {
+        background-color: var(--red) !important;
+        color: var(--gold) !important;
+        border: 1px solid var(--gold) !important;
+      }
+      /* REV Button */
+      .track-buttons button[id^="t-rev-"] {
+        background-color: var(--gold) !important;
+        color: var(--green) !important;
+        border: 1px solid var(--green) !important;
+      }
+
+      .track-buttons button.recording {
+        animation: text-blink 0.5s infinite;
+      }
+      @keyframes text-blink {
+        50% {
+          color: var(--dark-gray);
+        }
+      }
     </style>
-</head>
-<body class="app-loading">
+  </head>
+  <body class="app-loading">
     <div class="container" id="studio-root">
-    <div id="cursor-mirror"></div>
-        <div class="header">
-            <div class="header-left"><h1 style="font-size:1.5em; margin:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">NOWMULTIMEDIA MXS-004</h1></div>
-            <div class="header-right"><h2 style="font-size:0.85em; margin:0; padding:0; font-family: 'Mexcellent', sans-serif; color: var(--gold);">Mix N Studio 004 :: v13.9.330</h2></div>
+      <div id="cursor-mirror"></div>
+      <div class="header">
+        <div class="header-left">
+          <h1
+            style="
+              font-size: 1.5em;
+              margin: 0;
+              font-family: &quot;Mexcellent&quot;, sans-serif;
+              color: var(--gold);
+            "
+          >
+            NOWMULTIMEDIA MXS-004
+          </h1>
         </div>
-        <div class="main-content" id="main-grid">
-            <!-- Column 1: MASTER -->
-            <div class="master-column" id="master-column">
-                <div class="track-header">Master Recording:</div>
-                <div id="recording-time-display" class="track-time-display">00:00:00</div>
-                <div class="master-item master-volume-aligned" style="display: flex; align-items: center; gap: 4px;">
-                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Vol</label>
-                    <input type="range" id="master-volume" class="pa-mic-slider" min="-60" max="6" step="0.1" value="0">
-                    <span id="master-volume-value" class="pa-mic-value" style="font-size: 0.72em;">0.0 dB</span>
+        <div class="header-right">
+          <h2
+            style="
+              font-size: 0.85em;
+              margin: 0;
+              padding: 0;
+              font-family: &quot;Mexcellent&quot;, sans-serif;
+              color: var(--gold);
+            "
+          >
+            Mix N Studio 004 :: v13.9.330
+          </h2>
+        </div>
+      </div>
+      <div class="main-content" id="main-grid">
+        <!-- Column 1: MASTER -->
+        <div class="master-column" id="master-column">
+          <div class="track-header">Master Recording:</div>
+          <div id="recording-time-display" class="track-time-display">
+            00:00:00
+          </div>
+          <div
+            class="master-item master-volume-aligned"
+            style="display: flex; align-items: center; gap: 4px"
+          >
+            <label class="master-label" style="font-size: 0.72em; margin: 0"
+              >Vol</label
+            >
+            <input
+              type="range"
+              id="master-volume"
+              class="pa-mic-slider"
+              min="-60"
+              max="6"
+              step="0.1"
+              value="0"
+            />
+            <span
+              id="master-volume-value"
+              class="pa-mic-value"
+              style="font-size: 0.72em"
+              >0.0 dB</span
+            >
+          </div>
+          <div class="master-item master-waveform-item">
+            <div class="waveform-box master-waveform-box">
+              <div class="waveform-labels">
+                <div class="waveform-label-external" style="margin-top: 2px">
+                  L
                 </div>
-                <div class="master-item master-waveform-item">
-                    <div class="waveform-box master-waveform-box">
-                        <div class="waveform-labels"><div class="waveform-label-external" style="margin-top: 2px;">L</div><div class="waveform-label-external">R</div></div>
-                        <div id="master-waveform-container" class="waveform-canvas-container" style="flex:1;"><canvas id="master-waveform-L" class="waveform-canvas" width="242" height="24"></canvas><canvas id="master-waveform-R" class="waveform-canvas" width="242" height="24"></canvas></div>
-                    </div>
-                </div>
-                <div class="master-item master-row-layout" style="display: flex; align-items: center; gap: 4px;">
-                    <label class="master-label" style="font-size: 0.72em; margin: 0;">Loop Length</label>
-                    <input type="range" id="loop-length" class="pa-mic-slider" min="0.5" max="180" step="0.1" value="4">
-                    <span id="loop-length-value" class="pa-mic-value" style="font-size: 0.72em;">4.0s</span>
-                </div>
-                <div class="master-item master-bottom-item"><div class="master-rec-row" style="display:flex; flex-direction:row; gap:5px; margin-top:2px;"><button id="master-record-button" class="rec-btn">REC</button><select id="record-as-select"><option value="master">Stereo (WAV)</option></select></div></div>
-                <div class="lfo-side-by-side-container" style="display:flex; justify-content:space-between; margin-top:2px; margin-bottom:2px;">
-                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:1px;"><button id="lfo-toggle" style="height:22px; font-size:0.65em;">LFO 1</button></div><div class="master-item lfo-meter-item" style="padding:1px;"><div class="meter-container lfo-meter" style="height:3px;"><div id="lfo-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control" style="margin-top:0;"><label class="master-label" style="font-size:0.6em; margin:0;">Sweep 1</label><input type="range" id="lfo-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo-time-value" class="master-value" style="font-size:0.6em;">1.8s</span></div></div>
-                    <div class="lfo-separator" style="width:1px; background:var(--gold); margin:0 4px;"></div>
-                    <div class="lfo-column" style="flex:1;"><div class="master-item lfo-button-item" style="padding:1px;"><button id="lfo2-toggle" style="height:22px; font-size:0.65em;">LFO 2</button></div><div class="master-item lfo-meter-item" style="padding:1px;"><div class="meter-container lfo-meter" style="height:3px;"><div id="lfo2-meter-bar" class="meter-bar" style="width: 0%;"></div></div></div><div class="master-item lfo-sweep-control" style="margin-top:0;"><label class="master-label" style="font-size:0.6em; margin:0;">Sweep 2</label><input type="range" id="lfo2-time" min="0.1" max="20" step="0.1" value="1.8"><span id="lfo2-time-value" class="master-value" style="font-size:0.6em;">1.8s</span></div></div>
-                </div>
-                <div class="master-item sample-center-container" style="margin-top:0;"><div class="track-header" style="text-align:center; font-size:0.75em; margin:2px 0;">Sample Station</div><div class="sample-grid" id="sample-grid" style="margin-top:2px;"></div></div>
-                <div class="master-bottom-buttons" style="margin-top: 2px; display: flex; flex-direction: row; gap: 4px;"><button id="import-files-button">IMPORT</button><button id="show-docs-button">DOCS</button><button id="sample-station-button">MEDIA</button><button id="settings-button">SETTINGS</button></div>
-                <div class="meter-container" style="margin-top:auto; height:6px;"><div id="master-meter-bar" class="meter-bar" style="width: 0%;"></div></div>
-                <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
-                <div id="bridge-diag-text" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.9); color: #0f0; padding: 15px; font-family: 'Cousine', monospace; font-size: 1.4em; z-index: 1000000; border: 2px solid #0f0; border-radius: 8px; box-shadow: 0 0 20px rgba(0,255,0,0.5); min-width: 400px;">
-                    BUF: -- | STALLS: -- | WS: DISCONNECTED
-                </div>
-                <!-- [v13.8.150] Silent Video Hot-Wire (Unlocks Auto-Play) -->
-                <video id="audio-unlocker" playsinline muted autoplay loop style="position:fixed; top:0; left:0; width:1px; height:1px; opacity:0.01; pointer-events:none;">
-                    <source src="https://raw.githubusercontent.com/anars/blank-audio/master/silent-1sec.mp4" type="video/mp4">
-                </video>
-                <div id="tv-console" style="position: fixed; top: 120px; left: 10px; width: 400px; height: 200px; background: rgba(0,0,0,0.7); color: #aaa; font-family: monospace; font-size: 0.7em; padding: 10px; overflow: hidden; z-index: 999999; border-radius: 4px; border: 1px solid #333; pointer-events: none;">
-                    <div id="tv-console-inner"></div>
-                </div>
-                <div class="buffer-status" style="font-size:0.6em; color:var(--gold); margin-top:2px; display:flex; flex-direction:column; gap:2px;">
-                    <div style="display:flex; align-items:center; gap:5px;">
-                        <div id="bridge-status-dot" style="width:8px; height:8px; border-radius:50%; background:var(--red);"></div>
-                        BRIDGE: <div class="meter-container" style="flex:1; height:4px; background:#222;"><div id="buffer-health-bar" style="width:0; height:100%; background:var(--green); transition: width 0.1s;"></div></div>
-                    </div>
-                </div>
+                <div class="waveform-label-external">R</div>
+              </div>
+              <div
+                id="master-waveform-container"
+                class="waveform-canvas-container"
+                style="flex: 1"
+              >
+                <canvas
+                  id="master-waveform-L"
+                  class="waveform-canvas"
+                  width="242"
+                  height="24"
+                ></canvas
+                ><canvas
+                  id="master-waveform-R"
+                  class="waveform-canvas"
+                  width="242"
+                  height="24"
+                ></canvas>
+              </div>
             </div>
+          </div>
+          <div
+            class="master-item master-row-layout"
+            style="display: flex; align-items: center; gap: 4px"
+          >
+            <label class="master-label" style="font-size: 0.72em; margin: 0"
+              >Loop Length</label
+            >
+            <input
+              type="range"
+              id="loop-length"
+              class="pa-mic-slider"
+              min="0.5"
+              max="180"
+              step="0.1"
+              value="4"
+            />
+            <span
+              id="loop-length-value"
+              class="pa-mic-value"
+              style="font-size: 0.72em"
+              >4.0s</span
+            >
+          </div>
+          <div class="master-item master-bottom-item">
+            <div
+              class="master-rec-row"
+              style="
+                display: flex;
+                flex-direction: row;
+                gap: 5px;
+                margin-top: 2px;
+              "
+            >
+              <button id="master-record-button" class="rec-btn">REC</button
+              ><select id="record-as-select">
+                <option value="master">Stereo (WAV)</option>
+              </select>
+            </div>
+          </div>
+          <div
+            class="lfo-side-by-side-container"
+            style="
+              display: flex;
+              justify-content: space-between;
+              margin-top: 2px;
+              margin-bottom: 2px;
+            "
+          >
+            <div class="lfo-column" style="flex: 1">
+              <div class="master-item lfo-button-item" style="padding: 1px">
+                <button id="lfo-toggle" style="height: 22px; font-size: 0.65em">
+                  LFO 1
+                </button>
+              </div>
+              <div class="master-item lfo-meter-item" style="padding: 1px">
+                <div class="meter-container lfo-meter" style="height: 3px">
+                  <div
+                    id="lfo-meter-bar"
+                    class="meter-bar"
+                    style="width: 0%"
+                  ></div>
+                </div>
+              </div>
+              <div class="master-item lfo-sweep-control" style="margin-top: 0">
+                <label class="master-label" style="font-size: 0.6em; margin: 0"
+                  >Sweep 1</label
+                ><input
+                  type="range"
+                  id="lfo-time"
+                  min="0.1"
+                  max="20"
+                  step="0.1"
+                  value="1.8"
+                /><span
+                  id="lfo-time-value"
+                  class="master-value"
+                  style="font-size: 0.6em"
+                  >1.8s</span
+                >
+              </div>
+            </div>
+            <div
+              class="lfo-separator"
+              style="width: 1px; background: var(--gold); margin: 0 4px"
+            ></div>
+            <div class="lfo-column" style="flex: 1">
+              <div class="master-item lfo-button-item" style="padding: 1px">
+                <button
+                  id="lfo2-toggle"
+                  style="height: 22px; font-size: 0.65em"
+                >
+                  LFO 2
+                </button>
+              </div>
+              <div class="master-item lfo-meter-item" style="padding: 1px">
+                <div class="meter-container lfo-meter" style="height: 3px">
+                  <div
+                    id="lfo2-meter-bar"
+                    class="meter-bar"
+                    style="width: 0%"
+                  ></div>
+                </div>
+              </div>
+              <div class="master-item lfo-sweep-control" style="margin-top: 0">
+                <label class="master-label" style="font-size: 0.6em; margin: 0"
+                  >Sweep 2</label
+                ><input
+                  type="range"
+                  id="lfo2-time"
+                  min="0.1"
+                  max="20"
+                  step="0.1"
+                  value="1.8"
+                /><span
+                  id="lfo2-time-value"
+                  class="master-value"
+                  style="font-size: 0.6em"
+                  >1.8s</span
+                >
+              </div>
+            </div>
+          </div>
+          <div
+            class="master-item sample-center-container"
+            style="margin-top: 0"
+          >
+            <div
+              class="track-header"
+              style="text-align: center; font-size: 0.75em; margin: 2px 0"
+            >
+              Sample Station
+            </div>
+            <div
+              class="sample-grid"
+              id="sample-grid"
+              style="margin-top: 2px"
+            ></div>
+          </div>
+          <div
+            class="master-bottom-buttons"
+            style="
+              margin-top: 2px;
+              display: flex;
+              flex-direction: row;
+              gap: 4px;
+            "
+          >
+            <button id="import-files-button">IMPORT</button
+            ><button id="show-docs-button">DOCS</button
+            ><button id="sample-station-button">MEDIA</button
+            ><button id="settings-button">SETTINGS</button>
+          </div>
+          <div class="meter-container" style="margin-top: auto; height: 6px">
+            <div
+              id="master-meter-bar"
+              class="meter-bar"
+              style="width: 0%"
+            ></div>
+          </div>
+          <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
+          <div
+            id="bridge-diag-text"
+            style="
+              position: fixed;
+              top: 10px;
+              left: 10px;
+              background: rgba(0, 0, 0, 0.9);
+              color: #0f0;
+              padding: 15px;
+              font-family: &quot;Cousine&quot;, monospace;
+              font-size: 1.4em;
+              z-index: 1000000;
+              border: 2px solid #0f0;
+              border-radius: 8px;
+              box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+              min-width: 400px;
+            "
+          >
+            BUF: -- | STALLS: -- | WS: DISCONNECTED
+          </div>
+          <!-- [v13.8.150] Silent Video Hot-Wire (Unlocks Auto-Play) -->
+          <video
+            id="audio-unlocker"
+            playsinline
+            muted
+            autoplay
+            loop
+            style="
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 1px;
+              height: 1px;
+              opacity: 0.01;
+              pointer-events: none;
+            "
+          >
+            <source
+              src="https://raw.githubusercontent.com/anars/blank-audio/master/silent-1sec.mp4"
+              type="video/mp4"
+            />
+          </video>
+          <div
+            id="tv-console"
+            style="
+              position: fixed;
+              top: 120px;
+              left: 10px;
+              width: 400px;
+              height: 200px;
+              background: rgba(0, 0, 0, 0.7);
+              color: #aaa;
+              font-family: monospace;
+              font-size: 0.7em;
+              padding: 10px;
+              overflow: hidden;
+              z-index: 999999;
+              border-radius: 4px;
+              border: 1px solid #333;
+              pointer-events: none;
+            "
+          >
+            <div id="tv-console-inner"></div>
+          </div>
+          <div
+            class="buffer-status"
+            style="
+              font-size: 0.6em;
+              color: var(--gold);
+              margin-top: 2px;
+              display: flex;
+              flex-direction: column;
+              gap: 2px;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 5px">
+              <div
+                id="bridge-status-dot"
+                style="
+                  width: 8px;
+                  height: 8px;
+                  border-radius: 50%;
+                  background: var(--red);
+                "
+              ></div>
+              BRIDGE:
+              <div
+                class="meter-container"
+                style="flex: 1; height: 4px; background: #222"
+              >
+                <div
+                  id="buffer-health-bar"
+                  style="
+                    width: 0;
+                    height: 100%;
+                    background: var(--green);
+                    transition: width 0.1s;
+                  "
+                ></div>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
     </div>
 
     <script>
-        (function() {
-            var audioCtx = null; var workletNode = null; var targetRate = 48000;
-            window._studioRate = 48000; window._hwRate = 48000;
-            const CUSTOM_NAMESPACE = 'urn:x-cast:com.nowmultimedia.mxs004';
-            const KNOB_CONFIGS = [{ l: 'Pitch', p: 'pitch' }, { l: 'Volume', p: 'vol' }, { l: 'Pan', p: 'pan' }, { l: 'Treble', p: 'treble' }, { l: 'Mid Freq', p: 'mid_freq' }, { l: 'Mid Gain', p: 'mid_gain' }, { l: 'Bass', p: 'bass' }];
+      (function () {
+        var audioCtx = null;
+        var workletNode = null;
+        var targetRate = 48000;
+        window._studioRate = 48000;
+        window._hwRate = 48000;
+        const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
+        const KNOB_CONFIGS = [
+          { l: "Pitch", p: "pitch" },
+          { l: "Volume", p: "vol" },
+          { l: "Pan", p: "pan" },
+          { l: "Treble", p: "treble" },
+          { l: "Mid Freq", p: "mid_freq" },
+          { l: "Mid Gain", p: "mid_gain" },
+          { l: "Bass", p: "bass" },
+        ];
 
-            function buildGUI() {
-                var g = document.getElementById('sample-grid'); if (g) { g.innerHTML = ''; for (var p = 1; p <= 20; p++) { var b = document.createElement('button'); b.className = 'sample-btn'; b.id = 'sample-' + p; b.textContent = p; g.appendChild(b); } }
-                var grid = document.getElementById('main-grid');
-                for (var i = 0; i < 4; i++) {
-                    if (document.getElementById('track-'+i)) continue;
-                    var t = document.createElement('div'); t.className = 'track'; t.id = 'track-' + i;
-                    t.innerHTML = `
-                        <div class="track-header">TRACK ${i+1}</div>
+        function buildGUI() {
+          var g = document.getElementById("sample-grid");
+          if (g) {
+            g.innerHTML = "";
+            for (var p = 1; p <= 20; p++) {
+              var b = document.createElement("button");
+              b.className = "sample-btn";
+              b.id = "sample-" + p;
+              b.textContent = p;
+              g.appendChild(b);
+            }
+          }
+          var grid = document.getElementById("main-grid");
+          for (var i = 0; i < 4; i++) {
+            if (document.getElementById("track-" + i)) continue;
+            var t = document.createElement("div");
+            t.className = "track";
+            t.id = "track-" + i;
+            t.innerHTML = `
+                        <div class="track-header">TRACK ${i + 1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
                         <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div></div></div>
@@ -150,676 +570,872 @@
                         <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0,1,2,3,4,5,6].map(idx => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx+1}</label></div>`).join('')}<button class="fx-chain-arrow">&gt;</button></div></div>
+                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map(cfg => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join('')}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
-                    grid.appendChild(t);
-                }
-                updateScale();
-            }
-
-            function updateScale() { const winW = window.innerWidth; const winH = window.innerHeight; document.documentElement.style.setProperty('--scale', Math.min(winW/1440, winH/810) * 0.98); }
-
-            let configReceived = false;
-
-            async function initAudio() {
-                // [v13.9.27] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
-                if (!configReceived) {
-                    relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
-                    return;
-                }
-                const HARDWARE_RATE = window._hwRate || 48000;
-                if (!audioCtx || window._lastHwRate !== HARDWARE_RATE) {
-                    window._lastHwRate = HARDWARE_RATE;
-                    if (audioCtx) {
-                        relayLogToStudio(`📡 TV: Reseting AudioContext for Hardware Rate: ${HARDWARE_RATE}Hz`);
-                        try { await audioCtx.close(); } catch(e) {}
-                    }
-                    try {
-                        // [v13.9.402] Use default sampleRate with 'playback' latencyHint to allow the native
-                        // hardware path and prevent smart TV JS thread throttling.
-                        audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
-
-                        // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
-                        const masterGain = audioCtx.createGain();
-                        masterGain.gain.value = 1.5;
-                        masterGain.connect(audioCtx.destination);
-                        
-                        // Keep-Alive Dither (Prevents hardware suspension)
-                        const keepAlive = audioCtx.createOscillator();
-                        const g = audioCtx.createGain();
-                        g.gain.value = 0.000001; 
-                        keepAlive.connect(g);
-                        g.connect(audioCtx.destination);
-                        keepAlive.start();
-
-                        await audioCtx.audioWorklet.addModule(`pcm-player-worklet-v13-9-402.js?cb=${Date.now()}`);
-                        
-                        // [v13.9.330] DYNAMIC RATE TRANSFORMATION
-                        const studioRate = window._studioRate || 48000;
-                        const actualRate = audioCtx.sampleRate;
-                        const baseRateRatio = actualRate ? (studioRate / actualRate) : 1.0;
-                        
-                        console.log(`📏 TV Clock: requested=${HARDWARE_RATE}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`);
-                        relayLogToStudio(`📏 TV Clock: ${actualRate}Hz (req=${HARDWARE_RATE}) | Studio: ${studioRate}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`);
-
-                        workletNode = new AudioWorkletNode(audioCtx, 'pcm-player-worklet', {
-                            outputChannelCount: [2],
-                            processorOptions: {
-                                baseRateRatio: baseRateRatio,
-                                studioRate: studioRate
-                            }
-                        });
-                        workletNode.connect(masterGain);
-                        
-                        // Force System Volume (TV Level)
-                        try {
-                            if (typeof cast !== 'undefined' && cast.framework) {
-                                const context = cast.framework.CastReceiverContext.getInstance();
-                                context.setSystemVolume(1.0);
-                                relayLogToStudio("✅ TV: System Volume Forced to 100%");
-                            }
-                        } catch(e) {}
-
-                        relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${targetRate}Hz`);
-
-                        workletNode.port.onmessage = (e) => {
-                            if (e.data.type === 'DIAG') {
-                                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                                    binaryWS.send(JSON.stringify({
-                                        type: 'DIAG',
-                                        available: e.data.available,
-                                        stalled: e.data.stalled,
-                                        measuredHz: e.data.measuredHz,
-                                        rate: e.data.rate,
-                                        peak: e.data.peak,
-                                        locked: e.data.locked
-                                    }));
-                                }
-                                const diagEl = document.getElementById('bridge-diag-text');
-                                if (diagEl) {
-                                    const wsStatus = (binaryWS && binaryWS.readyState === WebSocket.OPEN) ? 'CONNECTED' : 'DISCONNECTED';
-                                    const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
-                                    const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
-                                    const relayInfo = (window._relayPkts > 0) ? `RELAY: ${window._relayPkts} | ` : '';
-                                    const hzInfo = e.data.measuredHz ? ` | HZ: ${e.data.measuredHz}` : '';
-                                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
-                                }
-
-                                // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
-                                if (!window._lastDiagSent || Date.now() - window._lastDiagSent > 10000) {
-                                    const lockStatus = e.data.locked ? 'LOCKED' : 'SYNCING';
-                                    const rate = e.data.rate ? e.data.rate.toFixed(4) : '1.0000';
-                                    const peakPercent = Math.round((e.data.peak || 0) * 100);
-                                    const hzInfo = e.data.measuredHz ? ` | HZ: ${e.data.measuredHz}` : '';
-                                    relayLogToStudio(`📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`);
-                                    window._lastDiagSent = Date.now();
-                                }
-                            } else if (e.data.type === 'LOG') {
-                                relayLogToStudio(e.data.msg);
-                            }
-                        };
-                    } catch (e) {
-                        relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
-                    }
-                }
-            }
-
-            async function resumeAudio() {
-                if (audioCtx && audioCtx.state === 'suspended') {
-                    try {
-                        await audioCtx.resume();
-                        if (audioCtx.state === 'running') {
-                            console.log("🔊 Receiver: AudioContext Resumed.");
-                            relayLogToStudio("✅ TV: AudioContext Resumed.");
-                        }
-                    } catch (e) { console.warn("⚠️ TV: Resume failed", e); }
-                }
-            }
-
-            let lastHighFreqLogTime = 0;
-            function relayLogToStudio(msg) {
-                const isHighFreq = msg.indexOf("Latency Catch-up") !== -1 || msg.indexOf("Callback Rate") !== -1;
-                if (isHighFreq) {
-                    const now = Date.now();
-                    if (now - lastHighFreqLogTime < 10000) {
-                        return; // Throttle: Skip both DOM rendering and WS broadcasting
-                    }
-                    lastHighFreqLogTime = now;
-                }
-                if (!isHighFreq) {
-                    const inner = document.getElementById('tv-console-inner');
-                    if (inner) {
-                        const line = document.createElement('div');
-                        line.textContent = `> ${msg}`;
-                        inner.appendChild(line);
-                        if (inner.childNodes.length > 15) inner.removeChild(inner.firstChild);
-                    }
-                }
-                // Send over WebSocket if available (crucial for Samsung Tizen Browser / DIAL)
-                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                    try {
-                        binaryWS.send(JSON.stringify({ type: 'LOG', msg: msg }));
-                    } catch(e) {}
-                }
-                // Send over ChromeCast custom namespace if available
-                if (typeof cast !== 'undefined' && cast.framework) {
-                    try {
-                        const context = cast.framework.CastReceiverContext.getInstance();
-                        const senders = context.getSenders();
-                        if (senders.length > 0) {
-                            context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, { type: 'LOG', msg: msg });
-                        }
-                    } catch(e) {}
-                }
-            }
-
-            const elCache = {};
-            const valCache = {};
-            function getEl(id) {
-                if (!elCache[id]) {
-                    elCache[id] = document.getElementById(id);
-                }
-                return elCache[id];
-            }
-            function updateText(id, text) {
-                const el = getEl(id);
-                if (el && valCache[id] !== text) {
-                    el.textContent = text;
-                    valCache[id] = text;
-                }
-            }
-            function updateValue(id, val) {
-                const el = getEl(id);
-                if (el && valCache[id] !== val) {
-                    el.value = val;
-                    valCache[id] = val;
-                }
-            }
-            function updateClass(id, className) {
-                const el = getEl(id);
-                if (el && valCache[id] !== className) {
-                    el.className = className;
-                    valCache[id] = className;
-                }
-            }
-            function updateStyleWidth(id, width) {
-                const el = getEl(id);
-                if (el && valCache[id] !== width) {
-                    el.style.width = width;
-                    valCache[id] = width;
-                }
-            }
-            function updateStyleLeft(id, left) {
-                const el = getEl(id);
-                if (el && valCache[id] !== left) {
-                    el.style.left = left;
-                    valCache[id] = left;
-                }
-            }
-
-            let lastRenderTime = 0;
-            const RENDER_THROTTLE_MS = 1000; // Throttle to 4 FPS to protect CPU for audio processing
-            
-            const _lastParamsCache = [];
-            const _lastFxCache = [];
-            let _lastSamplerCache = '';
-
-            function renderState(s) {
-                if (!s) return;
-                const now = Date.now();
-                if (now - lastRenderTime < RENDER_THROTTLE_MS) return;
-                lastRenderTime = now;
-                try {
-                    if (s.transport) { 
-                        updateText('recording-time-display', s.transport.position);
-                        for(var i=0; i<4; i++) { 
-                            updateText('t-time-'+i, s.transport.position);
-                        } 
-                    }
-                    if (s.cursor) { 
-                        var cur = getEl('cursor-mirror'); 
-                        if (cur) { 
-                            const curKey = `${s.cursor.x}_${s.cursor.y}_${s.cursor.isClicking}`;
-                            if (valCache['cursor'] !== curKey) {
-                                cur.style.display = 'block'; 
-                                var px = s.cursor.x * 1440;
-                                var py = (s.cursor.y * 810) + 13; 
-                                cur.style.transform = `translate3d(${px}px, ${py}px, 0) translate3d(-50%, -50%, 0)`; 
-                                cur.style.background = s.cursor.isClicking ? 'rgba(255, 255, 0, 0.9)' : 'rgba(255, 0, 0, 0.9)';
-                                valCache['cursor'] = curKey;
-                            }
-                        } 
-                    }
-                    if (s.master) {
-                        updateValue('master-volume', s.master.volume || 0);
-                        updateText('master-volume-value', (s.master.volume || 0).toFixed(1) + ' dB');
-                        updateStyleWidth('master-meter-bar', ((s.master.meters && s.master.meters.l) * 100 || 0) + '%');
-                        updateValue('loop-length', s.master.loopLength || 4);
-                        updateText('loop-length-value', (s.master.loopLength || 4).toFixed(1) + 's');
-                        updateClass('master-record-button', s.master.isRecording ? 'rec-btn recording' : 'rec-btn');
-                        updateClass('lfo-toggle', (s.master.lfo1 && s.master.lfo1.active) ? 'active' : '');
-                        updateStyleWidth('lfo-meter-bar', ((s.master.lfo1 && s.master.lfo1.value) * 100 || 0) + '%');
-                        updateValue('lfo-time', (s.master.lfo1 && s.master.lfo1.time) || 1.8);
-                        updateText('lfo-time-value', ((s.master.lfo1 && s.master.lfo1.time) || 1.8).toFixed(1) + 's');
-                        updateClass('lfo2-toggle', (s.master.lfo2 && s.master.lfo2.active) ? 'active' : '');
-                        updateStyleWidth('lfo2-meter-bar', ((s.master.lfo2 && s.master.lfo2.value) * 100 || 0) + '%');
-                        updateValue('lfo2-time', (s.master.lfo2 && s.master.lfo2.time) || 1.8);
-                        updateText('lfo2-time-value', ((s.master.lfo2 && s.master.lfo2.time) || 1.8).toFixed(1) + 's');
-                    }
-                    if (s.sampler) {
-                        const samplerStr = JSON.stringify(s.sampler);
-                        if (_lastSamplerCache !== samplerStr) {
-                            _lastSamplerCache = samplerStr;
-                            s.sampler.forEach((p,i) => { 
-                                const btnId = 'sample-'+(i+1);
-                                const cls = p.active ? 'sample-btn active' : (p.loaded ? 'sample-btn loaded' : 'sample-btn'); 
-                                updateClass(btnId, cls);
-                                if (p.loaded && p.name) {
-                                    updateText(btnId, p.name.substring(0,6));
-                                }
-                            });
-                        }
-                    }
-                    if (s.tracks) s.tracks.forEach((t,i) => {
-                        const trackName = t.fileName || 'Ready';
-                        updateText('t-scroll-'+i, trackName);
-                        updateClass('t-scroll-'+i, trackName.length > 15 ? 'scrolling-text active-scrolling' : 'scrolling-text');
-                        updateStyleWidth('t-mtr-'+i, ((t.meters && t.meters.l) * 100 || 0) + '%');
-                        updateClass('t-st-'+i, 'status-indicator ' + (t.isRecording ? 'status-recording' : (t.isPlaying ? 'status-playing' : 'status-ready')));
-                        updateStyleLeft('t-ls-m-'+i, (t.loopStart * 100) + '%');
-                        updateStyleLeft('t-le-m-'+i, (t.loopEnd * 100) + '%');
-                        
-                        if (t.params) {
-                            const paramsStr = JSON.stringify(t.params);
-                            const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
-                            const trackCacheKey = paramsStr + "_" + lfoAssignsStr;
-                            if (_lastParamsCache[i] !== trackCacheKey) {
-                                _lastParamsCache[i] = trackCacheKey;
-                                KNOB_CONFIGS.forEach(cfg => {
-                                    updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
-                                    updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
-                                    
-                                    const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
-                                    const l1Checked = !!(t.lfoAssigns && t.lfoAssigns[1] && t.lfoAssigns[1].includes(cfg.p));
-                                    if (l1 && l1.checked !== l1Checked) {
-                                        l1.checked = l1Checked;
-                                    }
-                                    const l2 = getEl(`t-lfo2-chk-${i}-${cfg.p}`);
-                                    const l2Checked = !!(t.lfoAssigns && t.lfoAssigns[2] && t.lfoAssigns[2].includes(cfg.p));
-                                    if (l2 && l2.checked !== l2Checked) {
-                                        l2.checked = l2Checked;
-                                    }
-                                });
-                                updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
-                                updateText(`t-gain-val-${i}`, (t.params.inputGain || 0).toFixed(1) + ' dB');
-                            }
-                        }
-                        if (t.fxSlots) {
-                            const fxStr = JSON.stringify(t.fxSlots) + "_" + (t.fxNames ? JSON.stringify(t.fxNames) : "");
-                            if (_lastFxCache[i] !== fxStr) {
-                                _lastFxCache[i] = fxStr;
-                                t.fxSlots.forEach((active, idx) => { 
-                                     const chk = getEl(`t-fx-chk-${i}-${idx}`);
-                                     if (chk && chk.checked !== active) {
-                                         chk.checked = active;
-                                     }
-                                     const lbl = getEl(`t-fx-lbl-${i}-${idx}`);
-                                     if (lbl && t.fxNames && t.fxNames[idx] !== undefined) {
-                                         const name = t.fxNames[idx];
-                                         if (lbl.textContent !== name) {
-                                             lbl.textContent = name;
-                                         }
-                                     }
-                                     const bg = active ? 'var(--gold)' : 'transparent';
-                                     const bgKey = `t-fx-lbl-bg-${i}-${idx}`;
-                                     if (lbl && valCache[bgKey] !== bg) {
-                                         lbl.style.backgroundColor = bg;
-                                         valCache[bgKey] = bg;
-                                     }
-                                 });
-                            }
-                        }
-                        updateClass(`t-rec-${i}`, t.isRecording ? 'recording' : '');
-                    });
-                } catch(e) {
-                    console.error("❌ TV Render Error:", e);
-                }
-            }
-
-            let currentBridgeIp = null;
-            let binaryWS = null;
-            let wsConnectTimeout = null;
-
-            function connectBinaryBridge(ip) {
-                if (binaryWS && binaryWS.readyState === WebSocket.OPEN && currentBridgeIp === ip) {
-                    // [v13.9.27] Already connected to this Studio IP. Ignore heartbeat redundancy.
-                    return;
-                }
-                // [v13.9.310] Guard against connecting while another connect is in progress
-                if (binaryWS && binaryWS.readyState === WebSocket.CONNECTING) {
-                    return;
-                }
-                
-                currentBridgeIp = ip;
-                if (binaryWS) {
-                    try {
-                        binaryWS.onopen = null;
-                        binaryWS.onmessage = null;
-                        binaryWS.onclose = null;
-                        binaryWS.onerror = null;
-                        binaryWS.close();
-                    } catch(e) {}
-                    binaryWS = null;
-                }
-                
-                const url = `ws://${ip}:8080/?role=receiver`;
-                try {
-                    relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
-                    binaryWS = new WebSocket(url);
-                    binaryWS.binaryType = 'arraybuffer';
-                } catch (err) {
-                    relayLogToStudio(`❌ TV: WebSocket Constructor Failed: ${err.message}`);
-                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
-                    return;
-                }
-                
-                binaryWS.onopen = async () => {
-    console.log('✅ Binary Bridge Connected');
-    relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
-    const diagEl = document.getElementById('bridge-diag-text');
-    if (diagEl) {
-        diagEl.textContent = diagEl.textContent.replace(/WS: (CONNECTED|DISCONNECTED|ERROR.*)/, 'WS: CONNECTED');
-        diagEl.style.color = '#0f0';
-        diagEl.style.borderColor = '#0f0';
-    }
-    const conn = document.getElementById('bridge-status-dot');
-    if (conn) conn.style.backgroundColor = 'var(--green)';
-    
-    // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate natively
-    let hwRate = 48000;
-    try {
-        const probe = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
-        hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
-        window._hwRate = hwRate;
-        relayLogToStudio(`🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`);
-        probe.close();
-    } catch(e) {
-        relayLogToStudio(`⚠️ TV: Hardware probe failed, defaulting to ${hwRate}Hz`);
-        window._hwRate = hwRate;
-    }
-    
-    // Send actual hardware capabilities
-    const handshake = {
-        type: 'HANDSHAKE',
-        config: {
-            sampleRate: hwRate,
-            bitDepth: 16,      // Request 16-bit pipeline for lower CPU overhead
-            maxChannels: 2
+                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
+            grid.appendChild(t);
+          }
+          updateScale();
         }
-    };
-    binaryWS.send(JSON.stringify(handshake));
-    relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 16-bit`);
-    // Audio init is deferred until HANDSHAKE_ACK arrives
-};
-                
-                binaryWS.onmessage = async (event) => {
-                    if (event.data instanceof ArrayBuffer) {
-                        if (workletNode) {
-                            if (audioCtx && audioCtx.state === 'suspended') resumeAudio();
-                            workletNode.port.postMessage(event.data, [event.data]);
-                        }
-                    } else if (typeof event.data === 'string') {
-                        try {
-                            const d = JSON.parse(event.data);
-                            if (d.type === 'STATE_UPDATE') {
-                                renderState(d.state);
-                            } else if (d.type === 'HANDSHAKE_ACK') {
-                                // [v13.9.402] Server confirmed handshake — init audio with negotiated config
-                                const ackRate = d.config ? d.config.sampleRate : 48000;
-                                const ackBitDepth = d.config ? d.config.bitDepth : 16;
-                                relayLogToStudio(`✅ TV: HANDSHAKE_ACK received → ${ackRate}Hz / ${ackBitDepth}-bit`);
-                                window._negotiatedBitDepth = ackBitDepth;
-                                if (ackRate) {
-                                    window._hwRate = ackRate;
-                                }
-                                configReceived = true;
-                                initAudio();
-                                // Configure worklet bit depth after init
-                                setTimeout(() => {
-                                    if (workletNode) {
-                                        workletNode.port.postMessage({ type: 'CONFIG', bitDepth: ackBitDepth });
-                                        relayLogToStudio(`🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`);
-                                    }
-                                }, 500);
-                            } else if (d.type === 'BRIDGE_CONFIG') {
-                                if (d.config && d.config.sampleRate) {
-                                    const newStudioRate = d.config.sampleRate;
-                                    configReceived = true;
-                                    if (window._studioRate !== newStudioRate) {
-                                        window._studioRate = newStudioRate;
-                                        relayLogToStudio(`🔄 TV: Studio rate updated to ${newStudioRate}Hz`);
-                                        if (workletNode && audioCtx) {
-                                            const newBaseRateRatio = audioCtx.sampleRate ? (newStudioRate / audioCtx.sampleRate) : 1.0;
-                                            workletNode.port.postMessage({ type: 'CONFIG', baseRateRatio: newBaseRateRatio });
-                                        } else {
-                                            initAudio();
-                                        }
-                                    } else {
-                                        if (!audioCtx || !workletNode) {
-                                            initAudio();
-                                        }
-                                    }
-                                }
-                            }
-                        } catch(e) {}
-                    }
-                };
-                
-                binaryWS.onclose = () => {
-                    console.log('🛑 Binary Bridge Closed. Retrying in 5s...');
-                    const conn = document.getElementById('bridge-status-dot');
-                    if (conn) conn.style.backgroundColor = 'var(--red)';
-                    wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
-                };
-                
-                binaryWS.onerror = (e) => {
-                    console.error('❌ Binary Bridge Error:', e);
-                    relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
-                    const diagEl = document.getElementById('bridge-diag-text');
-                    if (diagEl) {
-                        diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
-                        diagEl.style.color = 'var(--red)';
-                        diagEl.style.borderColor = 'var(--red)';
-                    }
-                    // [V13.8.150] Retry loop
-                    if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
-                    wsConnectTimeout = setTimeout(() => {
-                        console.log("📡 TV: Retrying Binary Bridge...");
-                        connectBinaryBridge(ip);
-                    }, 5000);
-                };
+
+        function updateScale() {
+          const winW = window.innerWidth;
+          const winH = window.innerHeight;
+          document.documentElement.style.setProperty(
+            "--scale",
+            Math.min(winW / 1440, winH / 810) * 0.98,
+          );
+        }
+
+        let configReceived = false;
+
+        async function initAudio() {
+          // [v13.9.27] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
+          if (!configReceived) {
+            relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
+            return;
+          }
+          const HARDWARE_RATE = window._hwRate || 48000;
+          if (!audioCtx || window._lastHwRate !== HARDWARE_RATE) {
+            window._lastHwRate = HARDWARE_RATE;
+            if (audioCtx) {
+              relayLogToStudio(
+                `📡 TV: Reseting AudioContext for Hardware Rate: ${HARDWARE_RATE}Hz`,
+              );
+              try {
+                await audioCtx.close();
+              } catch (e) {}
             }
+            try {
+              // [v13.9.402] Use default sampleRate with 'playback' latencyHint to allow the native
+              // hardware path and prevent smart TV JS thread throttling.
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)(
+                { latencyHint: "playback" },
+              );
 
-            function handleInboundData(data) {
-                try {
-                    const d = typeof data === 'string' ? JSON.parse(data) : data;
-                    if (!d) return;
+              // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
+              const masterGain = audioCtx.createGain();
+              masterGain.gain.value = 1.5;
+              masterGain.connect(audioCtx.destination);
 
-                    // 1. Hardware Alignment
-                    if (d.type === 'BRIDGE_CONFIG') {
-                        const newRate = d.config ? d.config.sampleRate : null;
-                        configReceived = true;
-                        if (newRate) {
-                            if (window._studioRate !== newRate) {
-                                window._studioRate = newRate;
-                                relayLogToStudio(`🔄 TV: Studio rate updated via signaling to ${newRate}Hz`);
-                                if (workletNode && audioCtx) {
-                                    const newBaseRateRatio = audioCtx.sampleRate ? (newRate / audioCtx.sampleRate) : 1.0;
-                                    workletNode.port.postMessage({ type: 'CONFIG', baseRateRatio: newBaseRateRatio });
-                                } else {
-                                    initAudio();
-                                }
-                            } else {
-                                if (!audioCtx || !workletNode) {
-                                    initAudio();
-                                }
-                            }
-                        } else {
-                            if (!audioCtx || !workletNode) {
-                                initAudio();
-                            }
-                        }
-                        if (d.ip) connectBinaryBridge(d.ip);
-                        return;
-                    }
+              // Keep-Alive Dither (Prevents hardware suspension)
+              const keepAlive = audioCtx.createOscillator();
+              const g = audioCtx.createGain();
+              g.gain.value = 0.000001;
+              keepAlive.connect(g);
+              g.connect(audioCtx.destination);
+              keepAlive.start();
 
-                    // 2. High-Fidelity Audio Relay (Fallback Path)
-                    if (d.type === 'PCM_RELAY') {
-                        // If Binary WS is active, IGNORE Relay to prevent doubling/echo
-                        if (binaryWS && binaryWS.readyState === WebSocket.OPEN) return;
+              await audioCtx.audioWorklet.addModule(
+                `pcm-player-worklet-v13-9-402.js?cb=${Date.now()}`,
+              );
 
-                        let buffer = d.binary || d.data;
-                        if (buffer && typeof buffer === 'string') {
-                            try {
-                                const binary = window.atob(buffer);
-                                const len = binary.length;
-                                const bytes = new Uint8Array(len);
-                                for (let i = 0; i < len; i++) { bytes[i] = binary.charCodeAt(i); }
-                                buffer = bytes.buffer;
-                            } catch (e) { return; }
-                        }
+              // [v13.9.330] DYNAMIC RATE TRANSFORMATION
+              const studioRate = window._studioRate || 48000;
+              const actualRate = audioCtx.sampleRate;
+              const baseRateRatio = actualRate ? studioRate / actualRate : 1.0;
 
-                        if (buffer && workletNode) {
-                            if (audioCtx && audioCtx.state === 'suspended') resumeAudio();
-                            try {
-                                workletNode.port.postMessage(buffer, [buffer]);
-                            } catch(e) {
-                                workletNode.port.postMessage(buffer);
-                            }
-                            window._relayPkts = (window._relayPkts || 0) + 1;
-                        }
-                    }
+              console.log(
+                `📏 TV Clock: requested=${HARDWARE_RATE}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`,
+              );
+              relayLogToStudio(
+                `📏 TV Clock: ${actualRate}Hz (req=${HARDWARE_RATE}) | Studio: ${studioRate}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`,
+              );
 
-                    // 3. Diagnostics & Testing
-                    if (d.type === 'SINE_TEST') {
-                        playSineTest();
-                    }
+              workletNode = new AudioWorkletNode(
+                audioCtx,
+                "pcm-player-worklet",
+                {
+                  outputChannelCount: [2],
+                  processorOptions: {
+                    baseRateRatio: baseRateRatio,
+                    studioRate: studioRate,
+                  },
+                },
+              );
+              workletNode.connect(masterGain);
 
-                    // 4. GUI Mirroring
-                    if (d.type === 'STATE_UPDATE') {
-                        if (binaryWS && binaryWS.readyState === WebSocket.OPEN) return;
-                        renderState(d.state);
-                    }
-                } catch(e) {}
-            }
-
-            window.onload = function() { 
-                buildGUI(); 
-                
-                // [V13.9.40] Aggressive Startup Trace
-                console.log("🎬 TV: Startup sequence initiated.");
-                console.log("🔗 URL: " + window.location.href);
-
-                if (typeof cast !== 'undefined' && cast.framework) {
-                    try {
-                        window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
-                        const context = window.castReceiverContext;
-                        
-                        relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
-
-                        context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, (event) => {
-                            console.log("📡 Sender connected - Waiting for config...");
-                        });
-
-                        context.addEventListener(cast.framework.events.EventType.SENDER_DISCONNECTED, () => {
-                            if (binaryWS) {
-                                binaryWS.close();
-                                binaryWS = null;
-                            }
-                            if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
-                        });
-
-                        context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-                            if (event.data) {
-                                let msgData = event.data;
-                                // Support both raw JSON and nested data object from SDK
-                                if (typeof msgData === 'string') {
-                                    try { msgData = JSON.parse(msgData); } catch(e) {}
-                                } else if (msgData && typeof msgData.data === 'string') {
-                                    try { msgData = JSON.parse(msgData.data); } catch(e) {}
-                                }
-                                handleInboundData(msgData);
-                            }
-                        }); 
-                        
-                        context.addEventListener(cast.framework.events.EventType.SENDER_CONNECTED, () => {
-                            resumeAudio();
-                        });
-
-                        context.start({ disableIdleTimeout: true }); 
-                    } catch (e) {
-                        console.error("❌ TV: Cast framework start failed:", e);
-                    }
-                } else {
-                    relayLogToStudio("🎬 TV: Startup - Running in standard browser (non-cast)");
+              // Force System Volume (TV Level)
+              try {
+                if (typeof cast !== "undefined" && cast.framework) {
+                  const context =
+                    cast.framework.CastReceiverContext.getInstance();
+                  context.setSystemVolume(1.0);
+                  relayLogToStudio("✅ TV: System Volume Forced to 100%");
                 }
+              } catch (e) {}
 
-                // [v13.8.150] Auto-Discovery Fallback
-                setTimeout(() => {
-                    if (!binaryWS || (binaryWS.readyState !== WebSocket.OPEN && binaryWS.readyState !== WebSocket.CONNECTING)) {
-                        console.log("📡 TV: Auto-Discovery Fallback triggered...");
-                        const hostname = window.location.hostname;
-                        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
-                        if (isLocal) {
-                            connectBinaryBridge(hostname);
-                        } else {
-                            console.log("📡 TV: Public hosting detected. Staying silent until BRIDGE_CONFIG.");
+              relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${targetRate}Hz`);
+
+              workletNode.port.onmessage = (e) => {
+                if (e.data.type === "DIAG") {
+                  if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                    binaryWS.send(
+                      JSON.stringify({
+                        type: "DIAG",
+                        available: e.data.available,
+                        stalled: e.data.stalled,
+                        measuredHz: e.data.measuredHz,
+                        rate: e.data.rate,
+                        peak: e.data.peak,
+                        locked: e.data.locked,
+                      }),
+                    );
+                  }
+                  const diagEl = document.getElementById("bridge-diag-text");
+                  if (diagEl) {
+                    const wsStatus =
+                      binaryWS && binaryWS.readyState === WebSocket.OPEN
+                        ? "CONNECTED"
+                        : "DISCONNECTED";
+                    const peakPercent = Math.round((e.data.peak || 0) * 100);
+                    const rate = e.data.rate
+                      ? e.data.rate.toFixed(4)
+                      : "1.0000";
+                    const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
+                    const relayInfo =
+                      window._relayPkts > 0
+                        ? `RELAY: ${window._relayPkts} | `
+                        : "";
+                    const hzInfo = e.data.measuredHz
+                      ? ` | HZ: ${e.data.measuredHz}`
+                      : "";
+                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                  }
+
+                  // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
+                  if (
+                    !window._lastDiagSent ||
+                    Date.now() - window._lastDiagSent > 10000
+                  ) {
+                    const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
+                    const rate = e.data.rate
+                      ? e.data.rate.toFixed(4)
+                      : "1.0000";
+                    const peakPercent = Math.round((e.data.peak || 0) * 100);
+                    const hzInfo = e.data.measuredHz
+                      ? ` | HZ: ${e.data.measuredHz}`
+                      : "";
+                    relayLogToStudio(
+                      `📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`,
+                    );
+                    window._lastDiagSent = Date.now();
+                  }
+                } else if (e.data.type === "LOG") {
+                  relayLogToStudio(e.data.msg);
+                }
+              };
+            } catch (e) {
+              relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+            }
+          }
+        }
+
+        async function resumeAudio() {
+          if (audioCtx && audioCtx.state === "suspended") {
+            try {
+              await audioCtx.resume();
+              if (audioCtx.state === "running") {
+                console.log("🔊 Receiver: AudioContext Resumed.");
+                relayLogToStudio("✅ TV: AudioContext Resumed.");
+              }
+            } catch (e) {
+              console.warn("⚠️ TV: Resume failed", e);
+            }
+          }
+        }
+
+        let lastHighFreqLogTime = 0;
+        function relayLogToStudio(msg) {
+          const isHighFreq =
+            msg.indexOf("Latency Catch-up") !== -1 ||
+            msg.indexOf("Callback Rate") !== -1;
+          if (isHighFreq) {
+            const now = Date.now();
+            if (now - lastHighFreqLogTime < 10000) {
+              return; // Throttle: Skip both DOM rendering and WS broadcasting
+            }
+            lastHighFreqLogTime = now;
+          }
+          if (!isHighFreq) {
+            const inner = document.getElementById("tv-console-inner");
+            if (inner) {
+              const line = document.createElement("div");
+              line.textContent = `> ${msg}`;
+              inner.appendChild(line);
+              if (inner.childNodes.length > 15)
+                inner.removeChild(inner.firstChild);
+            }
+          }
+          // Send over WebSocket if available (crucial for Samsung Tizen Browser / DIAL)
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify({ type: "LOG", msg: msg }));
+            } catch (e) {}
+          }
+          // Send over ChromeCast custom namespace if available
+          if (typeof cast !== "undefined" && cast.framework) {
+            try {
+              const context = cast.framework.CastReceiverContext.getInstance();
+              const senders = context.getSenders();
+              if (senders.length > 0) {
+                context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, {
+                  type: "LOG",
+                  msg: msg,
+                });
+              }
+            } catch (e) {}
+          }
+        }
+
+        const elCache = {};
+        const valCache = {};
+        function getEl(id) {
+          if (!elCache[id]) {
+            elCache[id] = document.getElementById(id);
+          }
+          return elCache[id];
+        }
+        function updateText(id, text) {
+          const el = getEl(id);
+          if (el && valCache[id] !== text) {
+            el.textContent = text;
+            valCache[id] = text;
+          }
+        }
+        function updateValue(id, val) {
+          const el = getEl(id);
+          if (el && valCache[id] !== val) {
+            el.value = val;
+            valCache[id] = val;
+          }
+        }
+        function updateClass(id, className) {
+          const el = getEl(id);
+          if (el && valCache[id] !== className) {
+            el.className = className;
+            valCache[id] = className;
+          }
+        }
+        function updateStyleWidth(id, width) {
+          const el = getEl(id);
+          if (el && valCache[id] !== width) {
+            el.style.width = width;
+            valCache[id] = width;
+          }
+        }
+        function updateStyleLeft(id, left) {
+          const el = getEl(id);
+          if (el && valCache[id] !== left) {
+            el.style.left = left;
+            valCache[id] = left;
+          }
+        }
+
+        let lastRenderTime = 0;
+        const RENDER_THROTTLE_MS = 1000; // Throttle to 4 FPS to protect CPU for audio processing
+
+        const _lastParamsCache = [];
+        const _lastFxCache = [];
+        let _lastSamplerCache = "";
+
+        function renderState(s) {
+          if (!s) return;
+          const now = Date.now();
+          if (now - lastRenderTime < RENDER_THROTTLE_MS) return;
+          lastRenderTime = now;
+          try {
+            if (s.transport) {
+              updateText("recording-time-display", s.transport.position);
+              for (var i = 0; i < 4; i++) {
+                updateText("t-time-" + i, s.transport.position);
+              }
+            }
+            if (s.cursor) {
+              var cur = getEl("cursor-mirror");
+              if (cur) {
+                const curKey = `${s.cursor.x}_${s.cursor.y}_${s.cursor.isClicking}`;
+                if (valCache["cursor"] !== curKey) {
+                  cur.style.display = "block";
+                  var px = s.cursor.x * 1440;
+                  var py = s.cursor.y * 810 + 13;
+                  cur.style.transform = `translate3d(${px}px, ${py}px, 0) translate3d(-50%, -50%, 0)`;
+                  cur.style.background = s.cursor.isClicking
+                    ? "rgba(255, 255, 0, 0.9)"
+                    : "rgba(255, 0, 0, 0.9)";
+                  valCache["cursor"] = curKey;
+                }
+              }
+            }
+            if (s.master) {
+              updateValue("master-volume", s.master.volume || 0);
+              updateText(
+                "master-volume-value",
+                (s.master.volume || 0).toFixed(1) + " dB",
+              );
+              updateStyleWidth(
+                "master-meter-bar",
+                ((s.master.meters && s.master.meters.l) * 100 || 0) + "%",
+              );
+              updateValue("loop-length", s.master.loopLength || 4);
+              updateText(
+                "loop-length-value",
+                (s.master.loopLength || 4).toFixed(1) + "s",
+              );
+              updateClass(
+                "master-record-button",
+                s.master.isRecording ? "rec-btn recording" : "rec-btn",
+              );
+              updateClass(
+                "lfo-toggle",
+                s.master.lfo1 && s.master.lfo1.active ? "active" : "",
+              );
+              updateStyleWidth(
+                "lfo-meter-bar",
+                ((s.master.lfo1 && s.master.lfo1.value) * 100 || 0) + "%",
+              );
+              updateValue(
+                "lfo-time",
+                (s.master.lfo1 && s.master.lfo1.time) || 1.8,
+              );
+              updateText(
+                "lfo-time-value",
+                ((s.master.lfo1 && s.master.lfo1.time) || 1.8).toFixed(1) + "s",
+              );
+              updateClass(
+                "lfo2-toggle",
+                s.master.lfo2 && s.master.lfo2.active ? "active" : "",
+              );
+              updateStyleWidth(
+                "lfo2-meter-bar",
+                ((s.master.lfo2 && s.master.lfo2.value) * 100 || 0) + "%",
+              );
+              updateValue(
+                "lfo2-time",
+                (s.master.lfo2 && s.master.lfo2.time) || 1.8,
+              );
+              updateText(
+                "lfo2-time-value",
+                ((s.master.lfo2 && s.master.lfo2.time) || 1.8).toFixed(1) + "s",
+              );
+            }
+            if (s.sampler) {
+              const samplerStr = JSON.stringify(s.sampler);
+              if (_lastSamplerCache !== samplerStr) {
+                _lastSamplerCache = samplerStr;
+                s.sampler.forEach((p, i) => {
+                  const btnId = "sample-" + (i + 1);
+                  const cls = p.active
+                    ? "sample-btn active"
+                    : p.loaded
+                      ? "sample-btn loaded"
+                      : "sample-btn";
+                  updateClass(btnId, cls);
+                  if (p.loaded && p.name) {
+                    updateText(btnId, p.name.substring(0, 6));
+                  }
+                });
+              }
+            }
+            if (s.tracks)
+              s.tracks.forEach((t, i) => {
+                const trackName = t.fileName || "Ready";
+                updateText("t-scroll-" + i, trackName);
+                updateClass(
+                  "t-scroll-" + i,
+                  trackName.length > 15
+                    ? "scrolling-text active-scrolling"
+                    : "scrolling-text",
+                );
+                updateStyleWidth(
+                  "t-mtr-" + i,
+                  ((t.meters && t.meters.l) * 100 || 0) + "%",
+                );
+                updateClass(
+                  "t-st-" + i,
+                  "status-indicator " +
+                    (t.isRecording
+                      ? "status-recording"
+                      : t.isPlaying
+                        ? "status-playing"
+                        : "status-ready"),
+                );
+                updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
+                updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
+
+                if (t.params) {
+                  const paramsStr = JSON.stringify(t.params);
+                  const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
+                  const trackCacheKey = paramsStr + "_" + lfoAssignsStr;
+                  if (_lastParamsCache[i] !== trackCacheKey) {
+                    _lastParamsCache[i] = trackCacheKey;
+                    KNOB_CONFIGS.forEach((cfg) => {
+                      updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
+                      updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
+
+                      const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
+                      const l1Checked = !!(
+                        t.lfoAssigns &&
+                        t.lfoAssigns[1] &&
+                        t.lfoAssigns[1].includes(cfg.p)
+                      );
+                      if (l1 && l1.checked !== l1Checked) {
+                        l1.checked = l1Checked;
+                      }
+                      const l2 = getEl(`t-lfo2-chk-${i}-${cfg.p}`);
+                      const l2Checked = !!(
+                        t.lfoAssigns &&
+                        t.lfoAssigns[2] &&
+                        t.lfoAssigns[2].includes(cfg.p)
+                      );
+                      if (l2 && l2.checked !== l2Checked) {
+                        l2.checked = l2Checked;
+                      }
+                    });
+                    updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
+                    updateText(
+                      `t-gain-val-${i}`,
+                      (t.params.inputGain || 0).toFixed(1) + " dB",
+                    );
+                  }
+                }
+                if (t.fxSlots) {
+                  const fxStr =
+                    JSON.stringify(t.fxSlots) +
+                    "_" +
+                    (t.fxNames ? JSON.stringify(t.fxNames) : "");
+                  if (_lastFxCache[i] !== fxStr) {
+                    _lastFxCache[i] = fxStr;
+                    t.fxSlots.forEach((active, idx) => {
+                      const chk = getEl(`t-fx-chk-${i}-${idx}`);
+                      if (chk && chk.checked !== active) {
+                        chk.checked = active;
+                      }
+                      const lbl = getEl(`t-fx-lbl-${i}-${idx}`);
+                      if (lbl && t.fxNames && t.fxNames[idx] !== undefined) {
+                        const name = t.fxNames[idx];
+                        if (lbl.textContent !== name) {
+                          lbl.textContent = name;
                         }
-                    }
-                }, 3000);
+                      }
+                      const bg = active ? "var(--gold)" : "transparent";
+                      const bgKey = `t-fx-lbl-bg-${i}-${idx}`;
+                      if (lbl && valCache[bgKey] !== bg) {
+                        lbl.style.backgroundColor = bg;
+                        valCache[bgKey] = bg;
+                      }
+                    });
+                  }
+                }
+                updateClass(`t-rec-${i}`, t.isRecording ? "recording" : "");
+              });
+          } catch (e) {
+            console.error("❌ TV Render Error:", e);
+          }
+        }
 
-                function playSineTest() {
-                    if (!audioCtx) initAudio();
-                    resumeAudio();
-                    if (workletNode) {
-                        workletNode.port.postMessage({ type: 'TEST_BEEP' });
-                        relayLogToStudio("🔊 Sine Test Sent to Worklet");
-                    } else {
-                        // Fallback to native if worklet not loaded
-                        const osc = audioCtx.createOscillator();
-                        const g = audioCtx.createGain();
-                        osc.connect(g);
-                        g.connect(audioCtx.destination);
-                        g.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1);
-                        osc.start();
-                        osc.stop(audioCtx.currentTime + 1);
-                        relayLogToStudio("🔊 Sine Test Played on Native Context (Worklet Null)");
-                    }
-                } 
+        let currentBridgeIp = null;
+        let binaryWS = null;
+        let wsConnectTimeout = null;
 
-                // [V13.8.150] RECURSIVE AUTO-RESUME
-                const autoUnlock = setInterval(() => {
-                    if (audioCtx) {
-                        if (audioCtx.state === 'suspended') {
-                            audioCtx.resume().then(() => {
-                                if (audioCtx.state === 'running') {
-                                    relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
-                                }
-                            });
-                        }
-                    } else {
-                        // Only auto-init if we already have the config
-                        if (configReceived) initAudio(); 
-                    }
-                }, 1000); // 1s interval to be less aggressive
+        function connectBinaryBridge(ip) {
+          if (
+            binaryWS &&
+            binaryWS.readyState === WebSocket.OPEN &&
+            currentBridgeIp === ip
+          ) {
+            // [v13.9.27] Already connected to this Studio IP. Ignore heartbeat redundancy.
+            return;
+          }
+          // [v13.9.310] Guard against connecting while another connect is in progress
+          if (binaryWS && binaryWS.readyState === WebSocket.CONNECTING) {
+            return;
+          }
 
-                window.addEventListener('resize', updateScale); 
-                relayLogToStudio("🎬 TV: Startup Complete.");
+          currentBridgeIp = ip;
+          if (binaryWS) {
+            try {
+              binaryWS.onopen = null;
+              binaryWS.onmessage = null;
+              binaryWS.onclose = null;
+              binaryWS.onerror = null;
+              binaryWS.close();
+            } catch (e) {}
+            binaryWS = null;
+          }
+
+          const url = `ws://${ip}:8080/?role=receiver`;
+          try {
+            relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
+            binaryWS = new WebSocket(url);
+            binaryWS.binaryType = "arraybuffer";
+          } catch (err) {
+            relayLogToStudio(
+              `❌ TV: WebSocket Constructor Failed: ${err.message}`,
+            );
+            wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+            return;
+          }
+
+          binaryWS.onopen = async () => {
+            console.log("✅ Binary Bridge Connected");
+            relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
+            const diagEl = document.getElementById("bridge-diag-text");
+            if (diagEl) {
+              diagEl.textContent = diagEl.textContent.replace(
+                /WS: (CONNECTED|DISCONNECTED|ERROR.*)/,
+                "WS: CONNECTED",
+              );
+              diagEl.style.color = "#0f0";
+              diagEl.style.borderColor = "#0f0";
+            }
+            const conn = document.getElementById("bridge-status-dot");
+            if (conn) conn.style.backgroundColor = "var(--green)";
+
+            // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate natively
+            let hwRate = 48000;
+            try {
+              const probe = new (
+                window.AudioContext || window.webkitAudioContext
+              )({ latencyHint: "playback" });
+              hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
+              window._hwRate = hwRate;
+              relayLogToStudio(
+                `🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`,
+              );
+              probe.close();
+            } catch (e) {
+              relayLogToStudio(
+                `⚠️ TV: Hardware probe failed, defaulting to ${hwRate}Hz`,
+              );
+              window._hwRate = hwRate;
+            }
+
+            // Send actual hardware capabilities
+            const handshake = {
+              type: "HANDSHAKE",
+              config: {
+                sampleRate: hwRate,
+                bitDepth: 16, // Request 16-bit pipeline for lower CPU overhead
+                maxChannels: 2,
+              },
             };
-        })();
+            binaryWS.send(JSON.stringify(handshake));
+            relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 16-bit`);
+            // Audio init is deferred until HANDSHAKE_ACK arrives
+          };
+
+          binaryWS.onmessage = async (event) => {
+            if (event.data instanceof ArrayBuffer) {
+              if (workletNode) {
+                if (audioCtx && audioCtx.state === "suspended") resumeAudio();
+                workletNode.port.postMessage(event.data, [event.data]);
+              }
+            } else if (typeof event.data === "string") {
+              try {
+                const d = JSON.parse(event.data);
+                if (d.type === "STATE_UPDATE") {
+                  renderState(d.state);
+                } else if (d.type === "HANDSHAKE_ACK") {
+                  // [v13.9.402] Server confirmed handshake — init audio with negotiated config
+                  const ackRate = d.config ? d.config.sampleRate : 48000;
+                  const ackBitDepth = d.config ? d.config.bitDepth : 16;
+                  relayLogToStudio(
+                    `✅ TV: HANDSHAKE_ACK received → ${ackRate}Hz / ${ackBitDepth}-bit`,
+                  );
+                  window._negotiatedBitDepth = ackBitDepth;
+                  if (ackRate) {
+                    window._hwRate = ackRate;
+                  }
+                  configReceived = true;
+                  initAudio();
+                  // Configure worklet bit depth after init
+                  setTimeout(() => {
+                    if (workletNode) {
+                      workletNode.port.postMessage({
+                        type: "CONFIG",
+                        bitDepth: ackBitDepth,
+                      });
+                      relayLogToStudio(
+                        `🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`,
+                      );
+                    }
+                  }, 500);
+                } else if (d.type === "BRIDGE_CONFIG") {
+                  if (d.config && d.config.sampleRate) {
+                    const newStudioRate = d.config.sampleRate;
+                    configReceived = true;
+                    if (window._studioRate !== newStudioRate) {
+                      window._studioRate = newStudioRate;
+                      relayLogToStudio(
+                        `🔄 TV: Studio rate updated to ${newStudioRate}Hz`,
+                      );
+                      if (workletNode && audioCtx) {
+                        const newBaseRateRatio = audioCtx.sampleRate
+                          ? newStudioRate / audioCtx.sampleRate
+                          : 1.0;
+                        workletNode.port.postMessage({
+                          type: "CONFIG",
+                          baseRateRatio: newBaseRateRatio,
+                        });
+                      } else {
+                        initAudio();
+                      }
+                    } else {
+                      if (!audioCtx || !workletNode) {
+                        initAudio();
+                      }
+                    }
+                  }
+                }
+              } catch (e) {}
+            }
+          };
+
+          binaryWS.onclose = () => {
+            console.log("🛑 Binary Bridge Closed. Retrying in 5s...");
+            const conn = document.getElementById("bridge-status-dot");
+            if (conn) conn.style.backgroundColor = "var(--red)";
+            wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+          };
+
+          binaryWS.onerror = (e) => {
+            console.error("❌ Binary Bridge Error:", e);
+            relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
+            const diagEl = document.getElementById("bridge-diag-text");
+            if (diagEl) {
+              diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
+              diagEl.style.color = "var(--red)";
+              diagEl.style.borderColor = "var(--red)";
+            }
+            // [V13.8.150] Retry loop
+            if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
+            wsConnectTimeout = setTimeout(() => {
+              console.log("📡 TV: Retrying Binary Bridge...");
+              connectBinaryBridge(ip);
+            }, 5000);
+          };
+        }
+
+        function handleInboundData(data) {
+          try {
+            const d = typeof data === "string" ? JSON.parse(data) : data;
+            if (!d) return;
+
+            // 1. Hardware Alignment
+            if (d.type === "BRIDGE_CONFIG") {
+              const newRate = d.config ? d.config.sampleRate : null;
+              configReceived = true;
+              if (newRate) {
+                if (window._studioRate !== newRate) {
+                  window._studioRate = newRate;
+                  relayLogToStudio(
+                    `🔄 TV: Studio rate updated via signaling to ${newRate}Hz`,
+                  );
+                  if (workletNode && audioCtx) {
+                    const newBaseRateRatio = audioCtx.sampleRate
+                      ? newRate / audioCtx.sampleRate
+                      : 1.0;
+                    workletNode.port.postMessage({
+                      type: "CONFIG",
+                      baseRateRatio: newBaseRateRatio,
+                    });
+                  } else {
+                    initAudio();
+                  }
+                } else {
+                  if (!audioCtx || !workletNode) {
+                    initAudio();
+                  }
+                }
+              } else {
+                if (!audioCtx || !workletNode) {
+                  initAudio();
+                }
+              }
+              if (d.ip) connectBinaryBridge(d.ip);
+              return;
+            }
+
+            // 2. High-Fidelity Audio Relay (Fallback Path)
+            if (d.type === "PCM_RELAY") {
+              // If Binary WS is active, IGNORE Relay to prevent doubling/echo
+              if (binaryWS && binaryWS.readyState === WebSocket.OPEN) return;
+
+              let buffer = d.binary || d.data;
+              if (buffer && typeof buffer === "string") {
+                try {
+                  const binary = window.atob(buffer);
+                  const len = binary.length;
+                  const bytes = new Uint8Array(len);
+                  for (let i = 0; i < len; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                  }
+                  buffer = bytes.buffer;
+                } catch (e) {
+                  return;
+                }
+              }
+
+              if (buffer && workletNode) {
+                if (audioCtx && audioCtx.state === "suspended") resumeAudio();
+                try {
+                  workletNode.port.postMessage(buffer, [buffer]);
+                } catch (e) {
+                  workletNode.port.postMessage(buffer);
+                }
+                window._relayPkts = (window._relayPkts || 0) + 1;
+              }
+            }
+
+            // 3. Diagnostics & Testing
+            if (d.type === "SINE_TEST") {
+              playSineTest();
+            }
+
+            // 4. GUI Mirroring
+            if (d.type === "STATE_UPDATE") {
+              if (binaryWS && binaryWS.readyState === WebSocket.OPEN) return;
+              renderState(d.state);
+            }
+          } catch (e) {}
+        }
+
+        window.onload = function () {
+          buildGUI();
+
+          // [V13.9.40] Aggressive Startup Trace
+          console.log("🎬 TV: Startup sequence initiated.");
+          console.log("🔗 URL: " + window.location.href);
+
+          if (typeof cast !== "undefined" && cast.framework) {
+            try {
+              window.castReceiverContext =
+                cast.framework.CastReceiverContext.getInstance();
+              const context = window.castReceiverContext;
+
+              relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
+
+              context.addEventListener(
+                cast.framework.events.EventType.SENDER_CONNECTED,
+                (event) => {
+                  console.log("📡 Sender connected - Waiting for config...");
+                },
+              );
+
+              context.addEventListener(
+                cast.framework.events.EventType.SENDER_DISCONNECTED,
+                () => {
+                  if (binaryWS) {
+                    binaryWS.close();
+                    binaryWS = null;
+                  }
+                  if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
+                },
+              );
+
+              context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+                if (event.data) {
+                  let msgData = event.data;
+                  // Support both raw JSON and nested data object from SDK
+                  if (typeof msgData === "string") {
+                    try {
+                      msgData = JSON.parse(msgData);
+                    } catch (e) {}
+                  } else if (msgData && typeof msgData.data === "string") {
+                    try {
+                      msgData = JSON.parse(msgData.data);
+                    } catch (e) {}
+                  }
+                  handleInboundData(msgData);
+                }
+              });
+
+              context.addEventListener(
+                cast.framework.events.EventType.SENDER_CONNECTED,
+                () => {
+                  resumeAudio();
+                },
+              );
+
+              context.start({ disableIdleTimeout: true });
+            } catch (e) {
+              console.error("❌ TV: Cast framework start failed:", e);
+            }
+          } else {
+            relayLogToStudio(
+              "🎬 TV: Startup - Running in standard browser (non-cast)",
+            );
+          }
+
+          // [v13.8.150] Auto-Discovery Fallback
+          setTimeout(() => {
+            if (
+              !binaryWS ||
+              (binaryWS.readyState !== WebSocket.OPEN &&
+                binaryWS.readyState !== WebSocket.CONNECTING)
+            ) {
+              console.log("📡 TV: Auto-Discovery Fallback triggered...");
+              const hostname = window.location.hostname;
+              const isLocal =
+                hostname === "localhost" ||
+                hostname === "127.0.0.1" ||
+                /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+              if (isLocal) {
+                connectBinaryBridge(hostname);
+              } else {
+                console.log(
+                  "📡 TV: Public hosting detected. Staying silent until BRIDGE_CONFIG.",
+                );
+              }
+            }
+          }, 3000);
+
+          function playSineTest() {
+            if (!audioCtx) initAudio();
+            resumeAudio();
+            if (workletNode) {
+              workletNode.port.postMessage({ type: "TEST_BEEP" });
+              relayLogToStudio("🔊 Sine Test Sent to Worklet");
+            } else {
+              // Fallback to native if worklet not loaded
+              const osc = audioCtx.createOscillator();
+              const g = audioCtx.createGain();
+              osc.connect(g);
+              g.connect(audioCtx.destination);
+              g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+              g.gain.exponentialRampToValueAtTime(
+                0.0001,
+                audioCtx.currentTime + 1,
+              );
+              osc.start();
+              osc.stop(audioCtx.currentTime + 1);
+              relayLogToStudio(
+                "🔊 Sine Test Played on Native Context (Worklet Null)",
+              );
+            }
+          }
+
+          // [V13.8.150] RECURSIVE AUTO-RESUME
+          const autoUnlock = setInterval(() => {
+            if (audioCtx) {
+              if (audioCtx.state === "suspended") {
+                audioCtx.resume().then(() => {
+                  if (audioCtx.state === "running") {
+                    relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
+                  }
+                });
+              }
+            } else {
+              // Only auto-init if we already have the config
+              if (configReceived) initAudio();
+            }
+          }, 1000); // 1s interval to be less aggressive
+
+          window.addEventListener("resize", updateScale);
+          relayLogToStudio("🎬 TV: Startup Complete.");
+        };
+      })();
     </script>
-</body>
+  </body>
 </html>
