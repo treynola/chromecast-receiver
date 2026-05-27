@@ -20,10 +20,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._playbackRate = this._baseRate;
 
     // Jitter-Buffer Targets (sample counts, 48kHz stereo)
-    this._TARGET_BUFFER = 19200; // 200ms operating target
+    this._TARGET_BUFFER = 28800; // 300ms operating target
     this._MIN_BUFFER = 4800; // 50ms stall threshold
-    this._PREBUFFER = 14400; // 150ms warm-up before first play
-    this._FLUSH_THRESHOLD = 57600; // 600ms — hard flush ceiling
+    this._PREBUFFER = 24000; // 250ms warm-up before first play
+    this._FLUSH_THRESHOLD = 76800; // 800ms — hard flush ceiling
 
     this._isBuffering = true;
     this._stallCount = 0;
