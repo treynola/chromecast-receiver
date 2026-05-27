@@ -607,11 +607,9 @@
               } catch (e) {}
             }
             try {
-              // [v13.9.402] Use default sampleRate with 'playback' latencyHint to allow the native
-              // hardware path and prevent smart TV JS thread throttling.
-              audioCtx = new (window.AudioContext || window.webkitAudioContext)(
-                { latencyHint: "playback" },
-              );
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 48000,
+              });
 
               // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
               const masterGain = audioCtx.createGain();
@@ -627,7 +625,7 @@
               keepAlive.start();
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-403.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-408.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1097,7 +1095,7 @@
             try {
               const probe = new (
                 window.AudioContext || window.webkitAudioContext
-              )({ latencyHint: "playback" });
+              )({ sampleRate: 48000 });
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
