@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.410</title>
+    <title>MXS-004 Studio Mirror v13.9.411</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
@@ -200,7 +200,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.410
+            Mix N Studio 004 :: v13.9.411
           </h2>
         </div>
       </div>
@@ -610,10 +610,8 @@
               } catch (e) {}
             }
             try {
-              // [v13.9.410] Use 'interactive' latencyHint to prevent smart TV audio thread throttling.
-              audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                latencyHint: "interactive",
-              });
+              // [v13.9.411] Rely on standard default latencyHint to allow optimal scheduling on TV.
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
               // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
               const masterGain = audioCtx.createGain();
@@ -629,7 +627,7 @@
               keepAlive.start();
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-410.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-411.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1099,7 +1097,7 @@
             try {
               const probe = new (
                 window.AudioContext || window.webkitAudioContext
-              )({ latencyHint: "interactive" });
+              )();
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
@@ -1128,7 +1126,7 @@
           };
 
           binaryWS.onmessage = (event) => {
-            // [v13.9.410] PRIORITY: Binary audio data gets the fastest path — no parsing or async promise overhead
+            // [v13.9.411] PRIORITY: Binary audio data gets the fastest path — no parsing or async promise overhead
             if (event.data instanceof ArrayBuffer) {
               if (workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
@@ -1441,7 +1439,7 @@
             }
           }, 1000); // 1s interval to be less aggressive
 
-          // [v13.9.410] Keep-Alive animation loop to prevent TV Chrome engine throttling
+          // [v13.9.411] Keep-Alive animation loop to prevent TV Chrome engine throttling
           function keepAliveLoop() {
             const dot = document.getElementById("bridge-status-dot");
             if (dot) {
