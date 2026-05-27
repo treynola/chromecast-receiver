@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.404</title>
+    <title>MXS-004 Studio Mirror v13.9.410</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
@@ -610,10 +610,9 @@
               } catch (e) {}
             }
             try {
-              // [v13.9.402] Use default sampleRate with 'playback' latencyHint to allow the native
-              // hardware path and prevent smart TV JS thread throttling.
+              // [v13.9.410] Use 'interactive' latencyHint to prevent smart TV audio thread throttling.
               audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                latencyHint: "playback",
+                latencyHint: "interactive",
               });
 
               // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
@@ -630,7 +629,7 @@
               keepAlive.start();
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-409.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-410.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1100,7 +1099,7 @@
             try {
               const probe = new (
                 window.AudioContext || window.webkitAudioContext
-              )({ latencyHint: "playback" });
+              )({ latencyHint: "interactive" });
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
@@ -1128,8 +1127,8 @@
             // Audio init is deferred until HANDSHAKE_ACK arrives
           };
 
-          binaryWS.onmessage = async (event) => {
-            // [v13.9.404] PRIORITY: Binary audio data gets the fastest path — no parsing overhead
+          binaryWS.onmessage = (event) => {
+            // [v13.9.410] PRIORITY: Binary audio data gets the fastest path — no parsing or async promise overhead
             if (event.data instanceof ArrayBuffer) {
               if (workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
@@ -1441,6 +1440,17 @@
               if (configReceived) initAudio();
             }
           }, 1000); // 1s interval to be less aggressive
+
+          // [v13.9.410] Keep-Alive animation loop to prevent TV Chrome engine throttling
+          function keepAliveLoop() {
+            const dot = document.getElementById("bridge-status-dot");
+            if (dot) {
+              const shadow = dot.style.boxShadow;
+              dot.style.boxShadow = shadow.includes("0.2") ? "0 0 10px rgba(0,255,0,0.1)" : "0 0 10px rgba(0,255,0,0.2)";
+            }
+            requestAnimationFrame(keepAliveLoop);
+          }
+          requestAnimationFrame(keepAliveLoop);
 
           window.addEventListener("resize", updateScale);
           relayLogToStudio("🎬 TV: Startup Complete.");
