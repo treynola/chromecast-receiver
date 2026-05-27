@@ -208,85 +208,45 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.404] High-Fidelity Clock-Drift PI Controller — Tuned for Chromecast CPU constraints
-    const rawError = available - this._TARGET_BUFFER;
-    // [v13.9.404] Faster error filter (99% old, 1% new) to respond to buffer changes more quickly
-    this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
+    // [v13.9.410] ROBUST RESAMPLING ENGINE: Use a low-pass filter (0.95/0.05) on the
+    // measuredHz telemetry to prevent transient spikes from causing the 'yo-yo' pitch effect.
+    const rawHz = this._framesProcessed / ((now - this._lastCallbackTime) / 1000);
+    this._measuredHzFilter = (this._measuredHzFilter || 48000) * 0.95 + rawHz * 0.05;
+    
+    // Recalculate playbackRate based on the smoothed Hz
+    const effectiveHz = Math.max(10000, Math.min(100000, this._measuredHzFilter));
+    const targetPlaybackRate = this._studioRate / effectiveHz;
+    
+    // Very slow adaptation to maintain pitch stability
+    this._playbackRate = this._playbackRate * 0.999 + targetPlaybackRate * 0.001;
 
-    let pAdj = 0;
-    let iAdj = 0;
-
-    const DEADBAND = 480; // [v13.9.404] ±5ms deadband @ 48kHz stereo (narrowed from ±10ms)
-    if (Math.abs(this._smoothedError) > DEADBAND) {
-      const overage =
-        this._smoothedError > 0
-          ? this._smoothedError - DEADBAND
-          : this._smoothedError + DEADBAND;
-
-      // [v13.9.404] Doubled Proportional Gain (3e-7, up from 1.5e-7)
-      pAdj = overage * 0.0000003;
-
-      // [v13.9.404] Tripled Integral accumulation for faster long-term drift tracking
-      this._integral += overage * 0.0000000003;
-    } else {
-      // Decay integral slowly inside deadband to prevent drift buildup
-      this._integral *= 0.99;
-    }
-
-    // [v13.9.404] Wider bounds to give the controller more correction room
-    const MAX_I_ADJ = 0.003; // Max 0.3% pitch correction from long-term drift (was 0.15%)
-    const MAX_P_ADJ = 0.003; // Max 0.3% pitch correction from short-term errors (was 0.15%)
-    this._integral = Math.max(-MAX_I_ADJ, Math.min(MAX_I_ADJ, this._integral));
-    pAdj = Math.max(-MAX_P_ADJ, Math.min(MAX_P_ADJ, pAdj));
-    iAdj = this._integral;
-
-    // targetRate is baseRate plus PI adjustments
-    const targetRate = this._baseRate + pAdj + iAdj;
-
-    // [v13.9.404] Hard ceiling: ±0.8% (inaudible ~14 cents threshold, was ±0.5%)
-    const absoluteMinRate = this._baseRate * 0.992;
-    const absoluteMaxRate = this._baseRate * 1.008;
-    const safeTargetRate = Math.max(absoluteMinRate, Math.min(absoluteMaxRate, targetRate));
-
-    // [v13.9.404] Faster rate transition (0.98 smoothing, was 0.99) so corrections take effect sooner
-    this._playbackRate = this._playbackRate * 0.98 + safeTargetRate * 0.02;
-
-    // RENDER LOOP (Linear Interpolation)
+    // RENDER LOOP (Nearest-Neighbor interpolation for maximum performance)
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
     const playbackRate = this._playbackRate;
     let fade = this._fade;
     const ringLenFrames = ringLen / 2;
+    const INV_32768 = 3.0517578125e-5;
 
     for (let i = 0; i < channel0.length; i++) {
       if (available - samplesConsumed >= 4) {
-        const frameIndex = readPtrFrames | 0;
-        const frac = readPtrFrames - frameIndex;
+        // Nearest-Neighbor interpolation
+        const frameIndex = Math.round(readPtrFrames) | 0;
+        const idxL1 = (frameIndex * 2) % ringLen;
 
-        const idxL1 = frameIndex * 2;
-        let idxL2 = idxL1 + 2;
-        if (idxL2 >= ringLen) idxL2 -= ringLen;
-
-        const valL =
-          this._ringBuffer[idxL1] * (1 - frac) + this._ringBuffer[idxL2] * frac;
-        const valR =
-          this._ringBuffer[idxL1 + 1] * (1 - frac) +
-          this._ringBuffer[idxL2 + 1] * frac;
+        channel0[i] = this._ringBuffer[idxL1] * INV_32768 * fade;
+        channel1[i] = this._ringBuffer[idxL1 + 1] * INV_32768 * fade;
 
         readPtrFrames += playbackRate;
         if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
-
         samplesConsumed += 2 * playbackRate;
 
         if (fade < 1.0) fade += 0.02;
 
-        channel0[i] = valL * fade;
-        channel1[i] = valR * fade;
-
-        const absL = valL < 0 ? -valL : valL;
-        const absR = valR < 0 ? -valR : valR;
-        const peak = absL > absR ? absL : absR;
-        if (peak > this._currentPeak) this._currentPeak = peak;
+        if (i === 0) {
+           const peak = Math.abs(channel0[i]);
+           if (peak > this._currentPeak) this._currentPeak = peak;
+        }
       } else {
         if (fade > 0) fade -= 0.05;
         channel0[i] = 0;
@@ -297,31 +257,23 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._readPtr = readPtrFrames * 2;
     this._totalRead += samplesConsumed;
     this._fade = fade;
+    this._framesProcessed = (this._framesProcessed || 0) + channel0.length;
 
-    this._sampleCount += 128;
-    if (this._sampleCount >= 48000) {
+    // Reporting and Diag-Timer
+    if (this._framesProcessed >= 24000) {
       const currentAvailable = this._totalWritten - this._totalRead;
-      const elapsed = (now - this._lastCallbackTime) / 1000;
-      const measuredHz =
-        elapsed > 0 ? (this._callbackCount * 128) / elapsed : 48000;
-
       this.port.postMessage({
         type: "DIAG",
         available: Math.floor(currentAvailable),
         stalled: this._stallCount,
         peak: this._currentPeak,
         rate: this._playbackRate,
-        locked: Math.abs(this._smoothedError) < 12000,
-        measuredHz: Math.round(measuredHz),
+        locked: Math.abs(currentAvailable - this._TARGET_BUFFER) < 5000,
+        measuredHz: Math.round(this._measuredHzFilter),
       });
       this._currentPeak = 0;
-      this._sampleCount = 0;
-      this._callbackCount = 0;
+      this._framesProcessed = 0;
       this._lastCallbackTime = now;
     }
 
     return true;
-  }
-}
-
-registerProcessor("pcm-player-worklet", PCMPlayerProcessor);
