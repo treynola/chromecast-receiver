@@ -607,8 +607,10 @@
               } catch (e) {}
             }
             try {
+              // [v13.9.402] Use default sampleRate with 'playback' latencyHint to allow the native
+              // hardware path and prevent smart TV JS thread throttling.
               audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 48000,
+                latencyHint: "playback",
               });
 
               // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
@@ -625,7 +627,7 @@
               keepAlive.start();
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-408.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-409.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1095,7 +1097,7 @@
             try {
               const probe = new (
                 window.AudioContext || window.webkitAudioContext
-              )({ sampleRate: 48000 });
+              )({ latencyHint: "playback" });
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
@@ -1136,6 +1138,11 @@
                 const d = JSON.parse(event.data);
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
+                } else if (d.type === "RELOAD") {
+                  relayLogToStudio("🔄 TV: RELOAD command received. Reloading page...");
+                  setTimeout(() => {
+                    window.location.reload(true);
+                  }, 500);
                 } else if (d.type === "HANDSHAKE_ACK") {
                   // [v13.9.402] Server confirmed handshake — init audio with negotiated config
                   const ackRate = d.config ? d.config.sampleRate : 48000;
