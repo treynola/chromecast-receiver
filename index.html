@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>MXS-004 Studio Mirror v13.9.330</title>
+    <title>MXS-004 Studio Mirror v13.9.404</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
@@ -833,7 +833,7 @@
         }
 
         let lastRenderTime = 0;
-        const RENDER_THROTTLE_MS = 1000; // Throttle to 4 FPS to protect CPU for audio processing
+        const RENDER_THROTTLE_MS = 2000; // [v13.9.404] Throttle to 0.5 FPS — UI is decorative, audio is critical
 
         const _lastParamsCache = [];
         const _lastFxCache = [];
@@ -1126,11 +1126,13 @@
           };
 
           binaryWS.onmessage = async (event) => {
+            // [v13.9.404] PRIORITY: Binary audio data gets the fastest path — no parsing overhead
             if (event.data instanceof ArrayBuffer) {
               if (workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
                 workletNode.port.postMessage(event.data, [event.data]);
               }
+              return; // [v13.9.404] Early exit — don't touch the string parsing path for binary data
             } else if (typeof event.data === "string") {
               try {
                 const d = JSON.parse(event.data);

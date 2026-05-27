@@ -1,8 +1,9 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.403]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.404]
  * High-Performance direct-copy ring buffer with dynamic local playbackRate adjustment.
  * High-Fidelity Proportional-Integral (PI) clock synchronization loop with strict bounds.
+ * [v13.9.404] Tuned for Chromecast: reduced flush threshold, more aggressive PI controller.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -23,7 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 28800; // 300ms operating target
     this._MIN_BUFFER = 4800; // 50ms stall threshold
     this._PREBUFFER = 24000; // 250ms warm-up before first play
-    this._FLUSH_THRESHOLD = 76800; // 800ms — hard flush ceiling
+    this._FLUSH_THRESHOLD = 57600; // [v13.9.404] 600ms — reduced from 800ms to catch overruns earlier
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -155,13 +156,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       });
     }
 
-    // LATENCY CATCH-UP
+    // LATENCY CATCH-UP [v13.9.404] Flush to TARGET + 25% headroom, not exactly TARGET
     if (available > this._FLUSH_THRESHOLD) {
-      const excess = available - this._TARGET_BUFFER;
+      const flushTarget = Math.floor(this._TARGET_BUFFER * 1.25);
+      const excess = available - flushTarget;
       this._totalRead += excess;
       this._readPtr += excess;
       while (this._readPtr >= ringLen) this._readPtr -= ringLen;
-      available = this._TARGET_BUFFER;
+      available = flushTarget;
       this._smoothedError = 0;
       this.port.postMessage({
         type: "LOG",
@@ -206,34 +208,34 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // High-Fidelity Clock-Drift PI Controller with Strict Safety Bounds
+    // [v13.9.404] High-Fidelity Clock-Drift PI Controller — Tuned for Chromecast CPU constraints
     const rawError = available - this._TARGET_BUFFER;
-    // Slow error filter (99.5% old, 0.5% new) to eliminate short-term network jitter from rate adjustments
-    this._smoothedError = this._smoothedError * 0.995 + rawError * 0.005;
+    // [v13.9.404] Faster error filter (99% old, 1% new) to respond to buffer changes more quickly
+    this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
 
     let pAdj = 0;
     let iAdj = 0;
 
-    const DEADBAND = 960; // ±10ms deadband @ 48kHz stereo to prevent micro-adjustments
+    const DEADBAND = 480; // [v13.9.404] ±5ms deadband @ 48kHz stereo (narrowed from ±10ms)
     if (Math.abs(this._smoothedError) > DEADBAND) {
       const overage =
         this._smoothedError > 0
           ? this._smoothedError - DEADBAND
           : this._smoothedError + DEADBAND;
 
-      // Conservative Proportional Gain (1.5e-7)
-      pAdj = overage * 0.00000015;
+      // [v13.9.404] Doubled Proportional Gain (3e-7, up from 1.5e-7)
+      pAdj = overage * 0.0000003;
 
-      // Gentle Integral accumulation
-      this._integral += overage * 0.0000000001; // extremely slow drift tracking
+      // [v13.9.404] Tripled Integral accumulation for faster long-term drift tracking
+      this._integral += overage * 0.0000000003;
     } else {
       // Decay integral slowly inside deadband to prevent drift buildup
       this._integral *= 0.99;
     }
 
-    // Clamp integral and proportional terms to prevent audible pitch offsets
-    const MAX_I_ADJ = 0.0015; // Max 0.15% pitch correction from long-term drift
-    const MAX_P_ADJ = 0.0015; // Max 0.15% pitch correction from short-term errors
+    // [v13.9.404] Wider bounds to give the controller more correction room
+    const MAX_I_ADJ = 0.003; // Max 0.3% pitch correction from long-term drift (was 0.15%)
+    const MAX_P_ADJ = 0.003; // Max 0.3% pitch correction from short-term errors (was 0.15%)
     this._integral = Math.max(-MAX_I_ADJ, Math.min(MAX_I_ADJ, this._integral));
     pAdj = Math.max(-MAX_P_ADJ, Math.min(MAX_P_ADJ, pAdj));
     iAdj = this._integral;
@@ -241,13 +243,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // targetRate is baseRate plus PI adjustments
     const targetRate = this._baseRate + pAdj + iAdj;
 
-    // Tight hard ceiling: Never allow rate to swing beyond ±0.5% (inaudible 8 cents threshold)
-    const absoluteMinRate = this._baseRate * 0.995;
-    const absoluteMaxRate = this._baseRate * 1.005;
+    // [v13.9.404] Hard ceiling: ±0.8% (inaudible ~14 cents threshold, was ±0.5%)
+    const absoluteMinRate = this._baseRate * 0.992;
+    const absoluteMaxRate = this._baseRate * 1.008;
     const safeTargetRate = Math.max(absoluteMinRate, Math.min(absoluteMaxRate, targetRate));
 
-    // Smooth playback rate transition to prevent phase shifts or audio clicking
-    this._playbackRate = this._playbackRate * 0.99 + safeTargetRate * 0.01;
+    // [v13.9.404] Faster rate transition (0.98 smoothing, was 0.99) so corrections take effect sooner
+    this._playbackRate = this._playbackRate * 0.98 + safeTargetRate * 0.02;
 
     // RENDER LOOP (Linear Interpolation)
     let readPtrFrames = this._readPtr / 2;
