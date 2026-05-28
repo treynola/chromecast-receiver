@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.414</title>
+    <title>MXS-004 Studio Mirror v13.9.415</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.414" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.415" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.414
+            Mix N Studio 004 :: v13.9.415
           </h2>
         </div>
       </div>
@@ -668,7 +668,7 @@
               }
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-414.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-415.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1413,6 +1413,26 @@
               );
 
               context.start({ disableIdleTimeout: true });
+
+              // [v13.9.415] Programmatically load a dummy silent WAV media session
+              // to officially transition the PlayerManager to the PLAYING state.
+              // This tells the Cast OS that active media playback is occurring,
+              // locking the TV OS CPU in high-performance mode and disabling throttling.
+              const playerManager = context.getPlayerManager();
+              const loadRequestData = new cast.framework.messages.LoadRequestData();
+              loadRequestData.media = new cast.framework.messages.MediaInformation();
+              loadRequestData.media.contentId = createSilentWavUrl();
+              loadRequestData.media.contentType = 'audio/wav';
+              loadRequestData.media.streamType = cast.framework.messages.StreamType.BUFFERED;
+              loadRequestData.autoplay = true;
+
+              playerManager.load(loadRequestData)
+                .then(() => {
+                  relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
+                })
+                .catch((e) => {
+                  relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + e.message);
+                });
             } catch (e) {
               console.error("❌ TV: Cast framework start failed:", e);
             }
@@ -1485,14 +1505,24 @@
               if (configReceived) initAudio();
             }
 
-            // [v13.9.414] Maintain TV media wake-lock to prevent CPU throttling
-            const audioUnlocker = document.getElementById("audio-unlocker");
-            if (audioUnlocker) {
-              if (!audioUnlocker.src) {
-                audioUnlocker.src = createSilentWavUrl();
-              }
-              if (audioUnlocker.paused) {
-                audioUnlocker.play().catch(function() {});
+            // [v13.9.415] Maintain TV media wake-lock via PlayerManager or fallback HTML5
+            if (typeof cast !== "undefined" && cast.framework) {
+              try {
+                const ctx = cast.framework.CastReceiverContext.getInstance();
+                const pm = ctx.getPlayerManager();
+                if (pm && pm.getPlayerState() !== cast.framework.messages.PlayerState.PLAYING) {
+                  pm.play();
+                }
+              } catch (e) {}
+            } else {
+              const audioUnlocker = document.getElementById("audio-unlocker");
+              if (audioUnlocker) {
+                if (!audioUnlocker.src) {
+                  audioUnlocker.src = createSilentWavUrl();
+                }
+                if (audioUnlocker.paused) {
+                  audioUnlocker.play().catch(function() {});
+                }
               }
             }
           }, 1000); // 1s interval to be less aggressive
