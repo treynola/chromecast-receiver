@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.418</title>
+    <title>MXS-004 Studio Mirror v13.9.419</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.418" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.419" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.418
+            Mix N Studio 004 :: v13.9.419
           </h2>
         </div>
       </div>
@@ -668,7 +668,7 @@
               }
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-418.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-419.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1085,14 +1085,94 @@
         }
 
         let currentBridgeIp = null;
+        let currentBridgePort = null;
+        let currentBridgeToken = null;
         let binaryWS = null;
         let wsConnectTimeout = null;
+        let isSenderConnected = false;
+        let wakeLockLoadingOrLoaded = false;
 
-        function connectBinaryBridge(ip) {
+        function triggerWakeLockLoad() {
+          if (typeof cast === "undefined" || !cast.framework) return;
+          const context = cast.framework.CastReceiverContext.getInstance();
+          if (!context) return;
+
+          // Check if there are active senders
+          const senders = context.getSenders();
+          const hasSender = senders && senders.length > 0;
+          if (!hasSender && !isSenderConnected) {
+            return;
+          }
+          isSenderConnected = true;
+
+          if (wakeLockLoadingOrLoaded) {
+            return;
+          }
+
+          try {
+            const pm = context.getPlayerManager();
+            const state = pm.getPlayerState();
+            if (
+              state === cast.framework.messages.PlayerState.PLAYING ||
+              state === cast.framework.messages.PlayerState.BUFFERING
+            ) {
+              relayLogToStudio("✅ TV: PlayerManager already in " + state + " state.");
+              wakeLockLoadingOrLoaded = true;
+              return;
+            }
+
+            // Build the silence URL from the bridge IP (Tauri server)
+            let silenceUrl = null;
+            if (currentBridgeIp) {
+              const port = currentBridgePort || (window.SERVER_PORT && window.SERVER_PORT !== "{{SERVER_PORT}}" ? window.SERVER_PORT : "8080");
+              silenceUrl = "http://" + currentBridgeIp + ":" + port + "/silence.wav";
+            } else {
+              // Fallback: try to extract IP from current WebSocket URL
+              const wsUrl = binaryWS ? binaryWS.url : null;
+              if (wsUrl) {
+                const match = wsUrl.match(/ws:\/\/([^:]+):(\d+)/);
+                if (match) {
+                  silenceUrl = "http://" + match[1] + ":" + match[2] + "/silence.wav";
+                }
+              }
+            }
+
+            if (!silenceUrl) {
+              return;
+            }
+
+            wakeLockLoadingOrLoaded = true;
+            relayLogToStudio("📡 TV: Loading wake-lock media from " + silenceUrl);
+
+            const loadRequestData = new cast.framework.messages.LoadRequestData();
+            loadRequestData.media = new cast.framework.messages.MediaInformation();
+            loadRequestData.media.contentId = silenceUrl;
+            loadRequestData.media.contentType = "audio/wav";
+            loadRequestData.media.streamType = cast.framework.messages.StreamType.BUFFERED;
+            loadRequestData.autoplay = true;
+            loadRequestData.queueData = new cast.framework.messages.QueueData();
+            loadRequestData.queueData.repeatMode = cast.framework.messages.RepeatMode.REPEAT_SINGLE;
+
+            pm.load(loadRequestData)
+              .then(function() {
+                relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
+              })
+              .catch(function(e) {
+                wakeLockLoadingOrLoaded = false; // Allow retrying
+                relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
+              });
+          } catch (err) {
+            wakeLockLoadingOrLoaded = false;
+            relayLogToStudio("❌ TV: Wake-lock load setup failed: " + err.message);
+          }
+        }
+
+        function connectBinaryBridge(ip, customPort, customToken) {
           if (
             binaryWS &&
             binaryWS.readyState === WebSocket.OPEN &&
-            currentBridgeIp === ip
+            currentBridgeIp === ip &&
+            currentBridgePort === customPort
           ) {
             // [v13.9.27] Already connected to this Studio IP. Ignore heartbeat redundancy.
             return;
@@ -1103,6 +1183,8 @@
           }
 
           currentBridgeIp = ip;
+          currentBridgePort = customPort;
+          currentBridgeToken = customToken;
           if (binaryWS) {
             try {
               binaryWS.onopen = null;
@@ -1114,7 +1196,9 @@
             binaryWS = null;
           }
 
-          const url = `ws://${ip}:8080/?role=receiver`;
+          const targetPort = customPort || window.SERVER_PORT || "8080";
+          const targetToken = customToken || window.SECURITY_TOKEN || "";
+          const url = `ws://${ip}:${targetPort}/?role=receiver&token=${targetToken}`;
           try {
             relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
             binaryWS = new WebSocket(url);
@@ -1181,6 +1265,7 @@
             binaryWS.send(JSON.stringify(handshake));
             relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 16-bit`);
             // Audio init is deferred until HANDSHAKE_ACK arrives
+            triggerWakeLockLoad();
           };
 
           binaryWS.onmessage = (event) => {
@@ -1325,7 +1410,10 @@
                   initAudio();
                 }
               }
-              if (d.ip) connectBinaryBridge(d.ip);
+              if (d.ip) {
+                connectBinaryBridge(d.ip, d.port, d.token);
+                triggerWakeLockLoad();
+              }
               return;
             }
 
@@ -1388,72 +1476,23 @@
 
               relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
 
-              // [v13.9.418] Single SENDER_CONNECTED listener — defers wake-lock load until
+              // [v13.9.419] Single SENDER_CONNECTED listener — defers wake-lock load until
               // a sender is active and we have the bridge IP for a network-accessible silence URL.
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_CONNECTED,
                 () => {
                   console.log("📡 Sender connected.");
+                  isSenderConnected = true;
                   resumeAudio();
-
-                  // [v13.9.418] Programmatically load silence.wav from the Tauri HTTP server
-                  // to transition PlayerManager to PLAYING state and prevent CPU throttling.
-                  // blob: URLs are NOT accessible to the Cast framework's internal media player,
-                  // so we MUST use a network-accessible http:// URL.
-                  try {
-                    const pm = context.getPlayerManager();
-                    const state = pm.getPlayerState();
-                    if (state === cast.framework.messages.PlayerState.PLAYING ||
-                        state === cast.framework.messages.PlayerState.BUFFERING) {
-                      relayLogToStudio("✅ TV: PlayerManager already in " + state + " state.");
-                      return;
-                    }
-
-                    // Build the silence URL from the bridge IP (Tauri server)
-                    let silenceUrl;
-                    if (currentBridgeIp) {
-                      silenceUrl = "http://" + currentBridgeIp + ":8080/silence.wav";
-                    } else {
-                      // Fallback: try to extract IP from current WebSocket URL
-                      const wsUrl = binaryWS ? binaryWS.url : null;
-                      if (wsUrl) {
-                        const match = wsUrl.match(/ws:\/\/([^:]+):/);
-                        if (match) silenceUrl = "http://" + match[1] + ":8080/silence.wav";
-                      }
-                    }
-
-                    if (!silenceUrl) {
-                      relayLogToStudio("⚠️ TV: No bridge IP available yet for wake-lock load. Will retry on next connect.");
-                      return;
-                    }
-
-                    relayLogToStudio("📡 TV: Loading wake-lock media from " + silenceUrl);
-
-                    const loadRequestData = new cast.framework.messages.LoadRequestData();
-                    loadRequestData.media = new cast.framework.messages.MediaInformation();
-                    loadRequestData.media.contentId = silenceUrl;
-                    loadRequestData.media.contentType = 'audio/wav';
-                    loadRequestData.media.streamType = cast.framework.messages.StreamType.BUFFERED;
-                    loadRequestData.autoplay = true;
-                    loadRequestData.queueData = new cast.framework.messages.QueueData();
-                    loadRequestData.queueData.repeatMode = cast.framework.messages.RepeatMode.REPEAT_SINGLE;
-
-                    pm.load(loadRequestData)
-                      .then(function() {
-                        relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
-                      })
-                      .catch(function(e) {
-                        relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
-                      });
-                  } catch (err) {
-                    relayLogToStudio("❌ TV: Wake-lock load setup failed: " + err.message);
-                  }
+                  triggerWakeLockLoad();
                 },
               );
 
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_DISCONNECTED,
                 () => {
+                  isSenderConnected = false;
+                  wakeLockLoadingOrLoaded = false;
                   if (binaryWS) {
                     binaryWS.close();
                     binaryWS = null;
