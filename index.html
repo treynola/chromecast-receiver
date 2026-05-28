@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.417</title>
+    <title>MXS-004 Studio Mirror v13.9.418</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.417" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.418" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.417
+            Mix N Studio 004 :: v13.9.418
           </h2>
         </div>
       </div>
@@ -668,7 +668,7 @@
               }
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-417.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-418.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -799,7 +799,8 @@
             }
             lastHighFreqLogTime = now;
           }
-          if (!isHighFreq) {
+          // [v13.9.418] Suppress DOM updates during active streaming to reduce TV CPU overhead
+          if (!isHighFreq && !workletNode) {
             const inner = document.getElementById("tv-console-inner");
             if (inner) {
               const line = document.createElement("div");
@@ -1387,10 +1388,66 @@
 
               relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
 
+              // [v13.9.418] Single SENDER_CONNECTED listener — defers wake-lock load until
+              // a sender is active and we have the bridge IP for a network-accessible silence URL.
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_CONNECTED,
-                (event) => {
-                  console.log("📡 Sender connected - Waiting for config...");
+                () => {
+                  console.log("📡 Sender connected.");
+                  resumeAudio();
+
+                  // [v13.9.418] Programmatically load silence.wav from the Tauri HTTP server
+                  // to transition PlayerManager to PLAYING state and prevent CPU throttling.
+                  // blob: URLs are NOT accessible to the Cast framework's internal media player,
+                  // so we MUST use a network-accessible http:// URL.
+                  try {
+                    const pm = context.getPlayerManager();
+                    const state = pm.getPlayerState();
+                    if (state === cast.framework.messages.PlayerState.PLAYING ||
+                        state === cast.framework.messages.PlayerState.BUFFERING) {
+                      relayLogToStudio("✅ TV: PlayerManager already in " + state + " state.");
+                      return;
+                    }
+
+                    // Build the silence URL from the bridge IP (Tauri server)
+                    let silenceUrl;
+                    if (currentBridgeIp) {
+                      silenceUrl = "http://" + currentBridgeIp + ":8080/silence.wav";
+                    } else {
+                      // Fallback: try to extract IP from current WebSocket URL
+                      const wsUrl = binaryWS ? binaryWS.url : null;
+                      if (wsUrl) {
+                        const match = wsUrl.match(/ws:\/\/([^:]+):/);
+                        if (match) silenceUrl = "http://" + match[1] + ":8080/silence.wav";
+                      }
+                    }
+
+                    if (!silenceUrl) {
+                      relayLogToStudio("⚠️ TV: No bridge IP available yet for wake-lock load. Will retry on next connect.");
+                      return;
+                    }
+
+                    relayLogToStudio("📡 TV: Loading wake-lock media from " + silenceUrl);
+
+                    const loadRequestData = new cast.framework.messages.LoadRequestData();
+                    loadRequestData.media = new cast.framework.messages.MediaInformation();
+                    loadRequestData.media.contentId = silenceUrl;
+                    loadRequestData.media.contentType = 'audio/wav';
+                    loadRequestData.media.streamType = cast.framework.messages.StreamType.BUFFERED;
+                    loadRequestData.autoplay = true;
+                    loadRequestData.queueData = new cast.framework.messages.QueueData();
+                    loadRequestData.queueData.repeatMode = cast.framework.messages.RepeatMode.REPEAT_SINGLE;
+
+                    pm.load(loadRequestData)
+                      .then(function() {
+                        relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
+                      })
+                      .catch(function(e) {
+                        relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
+                      });
+                  } catch (err) {
+                    relayLogToStudio("❌ TV: Wake-lock load setup failed: " + err.message);
+                  }
                 },
               );
 
@@ -1422,39 +1479,7 @@
                 }
               });
 
-              context.addEventListener(
-                cast.framework.events.EventType.SENDER_CONNECTED,
-                () => {
-                  resumeAudio();
-                },
-              );
-
               context.start({ disableIdleTimeout: true });
-
-              // [v13.9.415] Programmatically load a dummy silent WAV media session
-              // to officially transition the PlayerManager to the PLAYING state.
-              // This tells the Cast OS that active media playback is occurring,
-              // locking the TV OS CPU in high-performance mode and disabling throttling.
-              try {
-                const playerManager = context.getPlayerManager();
-                const loadRequestData = new cast.framework.messages.LoadRequestData();
-                loadRequestData.media = {
-                  contentId: createSilentWavUrl(),
-                  contentType: 'audio/wav',
-                  streamType: cast.framework.messages.StreamType.BUFFERED
-                };
-                loadRequestData.autoplay = true;
-
-                playerManager.load(loadRequestData)
-                  .then(() => {
-                    relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
-                  })
-                  .catch((e) => {
-                    relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + e.message);
-                  });
-              } catch (err) {
-                relayLogToStudio("❌ TV: Programmatic load setup failed: " + err.message);
-              }
             } catch (e) {
               relayLogToStudio("❌ TV: Cast framework start failed: " + e.message);
               console.error("❌ TV: Cast framework start failed:", e);
@@ -1528,16 +1553,10 @@
               if (configReceived) initAudio();
             }
 
-            // [v13.9.415] Maintain TV media wake-lock via PlayerManager or fallback HTML5
-            if (typeof cast !== "undefined" && cast.framework) {
-              try {
-                const ctx = cast.framework.CastReceiverContext.getInstance();
-                const pm = ctx.getPlayerManager();
-                if (pm && pm.getPlayerState() !== cast.framework.messages.PlayerState.PLAYING) {
-                  pm.play();
-                }
-              } catch (e) {}
-            } else {
+            // [v13.9.418] Non-Cast fallback only — keep HTML5 audio element alive
+            // In Cast mode, the PlayerManager wake-lock with REPEAT_SINGLE handles this.
+            // Removed pm.play() spam which generated constant Cast SDK exceptions.
+            if (typeof cast === "undefined" || !cast.framework) {
               const audioUnlocker = document.getElementById("audio-unlocker");
               if (audioUnlocker) {
                 if (!audioUnlocker.src) {
@@ -1548,7 +1567,7 @@
                 }
               }
             }
-          }, 1000); // 1s interval to be less aggressive
+          }, 2000); // [v13.9.418] Relaxed to 2s — wake-lock is handled by PlayerManager in Cast mode
 
 
 
