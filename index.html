@@ -5,7 +5,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.411</title>
+    <title>MXS-004 Studio Mirror v13.9.413</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
@@ -167,10 +167,13 @@
       .track-buttons button.recording {
         animation: text-blink 0.5s infinite;
       }
-      @keyframes text-blink {
-        50% {
-          color: var(--dark-gray);
-        }
+      @keyframes pulse-dot {
+        0% { box-shadow: 0 0 8px rgba(0, 255, 0, 0.2); }
+        50% { box-shadow: 0 0 16px rgba(0, 255, 0, 0.6); }
+        100% { box-shadow: 0 0 8px rgba(0, 255, 0, 0.2); }
+      }
+      .bridge-connected-pulse {
+        animation: pulse-dot 2s infinite !important;
       }
     </style>
   </head>
@@ -200,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.411
+            Mix N Studio 004 :: v13.9.413
           </h2>
         </div>
       </div>
@@ -442,13 +445,14 @@
           >
             BUF: -- | STALLS: -- | WS: DISCONNECTED
           </div>
-          <!-- [v13.8.150] Silent Video Hot-Wire (Unlocks Auto-Play) -->
-          <video
+          <!-- [v13.9.413] TV Playout Wake-Lock Audio element -->
+          <audio
             id="audio-unlocker"
+            class="castMediaElement"
             playsinline
-            muted
             autoplay
             loop
+            src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
             style="
               position: fixed;
               top: 0;
@@ -458,12 +462,7 @@
               opacity: 0.01;
               pointer-events: none;
             "
-          >
-            <source
-              src="https://raw.githubusercontent.com/anars/blank-audio/master/silent-1sec.mp4"
-              type="video/mp4"
-            />
-          </video>
+          ></audio>
           <div
             id="tv-console"
             style="
@@ -610,8 +609,9 @@
               } catch (e) {}
             }
             try {
-              // [v13.9.411] Rely on standard default latencyHint to allow optimal scheduling on TV.
-              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+              // [v13.9.413] Use default sampleRate with 'playback' latencyHint to allow native hardware path
+              // and prevent smart TV background thread throttling.
+              audioCtx = new window.AudioContext({ latencyHint: "playback" });
 
               // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
               const masterGain = audioCtx.createGain();
@@ -627,7 +627,7 @@
               keepAlive.start();
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-411.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-413.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1090,14 +1090,15 @@
               diagEl.style.borderColor = "#0f0";
             }
             const conn = document.getElementById("bridge-status-dot");
-            if (conn) conn.style.backgroundColor = "var(--green)";
+            if (conn) {
+              conn.style.backgroundColor = "var(--green)";
+              conn.classList.add("bridge-connected-pulse");
+            }
 
             // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate natively
             let hwRate = 48000;
             try {
-              const probe = new (
-                window.AudioContext || window.webkitAudioContext
-              )();
+              const probe = new window.AudioContext();
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
@@ -1200,10 +1201,15 @@
           };
 
           binaryWS.onclose = () => {
-            console.log("🛑 Binary Bridge Closed. Retrying in 5s...");
+            relayLogToStudio("🛑 TV: Connection closed. Reloading page in 1s to fetch latest build...");
             const conn = document.getElementById("bridge-status-dot");
-            if (conn) conn.style.backgroundColor = "var(--red)";
-            wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
+            if (conn) {
+              conn.style.backgroundColor = "var(--red)";
+              conn.classList.remove("bridge-connected-pulse");
+            }
+            setTimeout(() => {
+              window.location.reload(true);
+            }, 1000);
           };
 
           binaryWS.onerror = (e) => {
@@ -1439,16 +1445,7 @@
             }
           }, 1000); // 1s interval to be less aggressive
 
-          // [v13.9.411] Keep-Alive animation loop to prevent TV Chrome engine throttling
-          function keepAliveLoop() {
-            const dot = document.getElementById("bridge-status-dot");
-            if (dot) {
-              const shadow = dot.style.boxShadow;
-              dot.style.boxShadow = shadow.includes("0.2") ? "0 0 10px rgba(0,255,0,0.1)" : "0 0 10px rgba(0,255,0,0.2)";
-            }
-            requestAnimationFrame(keepAliveLoop);
-          }
-          requestAnimationFrame(keepAliveLoop);
+
 
           window.addEventListener("resize", updateScale);
           relayLogToStudio("🎬 TV: Startup Complete.");

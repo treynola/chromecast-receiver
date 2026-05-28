@@ -1,16 +1,17 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.404]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.413]
  * High-Performance direct-copy ring buffer with dynamic local playbackRate adjustment.
- * High-Fidelity Proportional-Integral (PI) clock synchronization loop with strict bounds.
- * [v13.9.404] Tuned for Chromecast: reduced flush threshold, more aggressive PI controller.
+ * High-Fidelity Proportional (P) clock synchronization loop with strict bounds.
+ * [v13.9.413] Removed dynamic calibration (relying on 1.0 base rate ratio) and 
+ * replaced the PI controller with a pure P-controller to prevent integral windup/oscillations.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     // 8 seconds of stereo @ 48kHz = 768,000 samples — generous ring buffer
     this._ringLen = 48000 * 2 * 8;
-    this._ringBuffer = new Float32Array(this._ringLen);
+    this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
     this._readPtr = 0;
     this._totalWritten = 0;
@@ -24,7 +25,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 28800; // 300ms operating target
     this._MIN_BUFFER = 4800; // 50ms stall threshold
     this._PREBUFFER = 24000; // 250ms warm-up before first play
-    this._FLUSH_THRESHOLD = 57600; // [v13.9.404] 600ms — reduced from 800ms to catch overruns earlier
+    this._FLUSH_THRESHOLD = 86400; // 900ms — safety margin to prevent flushes
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -33,9 +34,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._fade = 1.0;
     this._bitDepth = options.processorOptions?.bitDepth || 16;
 
-    // Jitter-Buffer error tracking and PI Loop
+    // Jitter-Buffer error tracking (P-only)
     this._smoothedError = 0;
-    this._integral = 0;
 
     // Telemetry trackers
     this._callbackCount = 0;
@@ -55,7 +55,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._currentPeak = 0;
           this._fade = 1.0;
           this._smoothedError = 0;
-          this._integral = 0;
           this.port.postMessage({
             type: "LOG",
             msg: `🔄 Worklet: State reset complete.`,
@@ -88,7 +87,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const ringLen = this._ringLen;
         let writePtr = this._writePtr;
         let samplesDecoded = 0;
-        const INV_32768 = 3.0517578125e-5;
 
         if (this._bitDepth === 24) {
           const bytes = new Uint8Array(arrayBuffer);
@@ -100,7 +98,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
               (bytes[offset + 1] << 8) |
               (bytes[offset + 2] << 16);
             if (val & 0x800000) val |= 0xff000000;
-            this._ringBuffer[writePtr] = (val >> 8) * INV_32768;
+            this._ringBuffer[writePtr] = val >> 8;
             writePtr++;
             if (writePtr >= ringLen) writePtr = 0;
           }
@@ -108,10 +106,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         } else {
           const pcm16 = new Int16Array(arrayBuffer);
           const len = pcm16.length;
-          for (let i = 0; i < len; i++) {
-            this._ringBuffer[writePtr] = pcm16[i] * INV_32768;
-            writePtr++;
-            if (writePtr >= ringLen) writePtr = 0;
+          if (writePtr + len <= ringLen) {
+            this._ringBuffer.set(pcm16, writePtr);
+            writePtr += len;
+          } else {
+            const firstPart = ringLen - writePtr;
+            this._ringBuffer.set(pcm16.subarray(0, firstPart), writePtr);
+            this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+            writePtr = len - firstPart;
           }
           samplesDecoded = len;
         }
@@ -139,6 +141,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
 
+    this._framesProcessed = (this._framesProcessed || 0) + channel0.length;
+
     // POINTER-BASED buffer size
     let available = this._totalWritten - this._totalRead;
 
@@ -156,7 +160,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       });
     }
 
-    // LATENCY CATCH-UP [v13.9.404] Flush to TARGET + 25% headroom, not exactly TARGET
+    // LATENCY CATCH-UP - Flush to TARGET + 25% headroom, not exactly TARGET
     if (available > this._FLUSH_THRESHOLD) {
       const flushTarget = Math.floor(this._TARGET_BUFFER * 1.25);
       const excess = available - flushTarget;
@@ -208,19 +212,36 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.410] ROBUST RESAMPLING ENGINE: Use a low-pass filter (0.95/0.05) on the
-    // measuredHz telemetry to prevent transient spikes from causing the 'yo-yo' pitch effect.
-    const rawHz = this._framesProcessed / ((now - this._lastCallbackTime) / 1000);
-    this._measuredHzFilter = (this._measuredHzFilter || 48000) * 0.95 + rawHz * 0.05;
-    
-    // Recalculate playbackRate based on the smoothed Hz
-    const effectiveHz = Math.max(10000, Math.min(100000, this._measuredHzFilter));
-    const targetPlaybackRate = this._studioRate / effectiveHz;
-    
-    // Very slow adaptation to maintain pitch stability
-    this._playbackRate = this._playbackRate * 0.999 + targetPlaybackRate * 0.001;
+    // High-Fidelity Clock-Drift P Controller — Tuned for Chromecast stability
+    const rawError = available - this._TARGET_BUFFER;
+    this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
 
-    // RENDER LOOP (Nearest-Neighbor interpolation for maximum performance)
+    let pAdj = 0;
+    const DEADBAND = 480; // ±5ms deadband @ 48kHz stereo
+    if (Math.abs(this._smoothedError) > DEADBAND) {
+      const overage =
+        this._smoothedError > 0
+          ? this._smoothedError - DEADBAND
+          : this._smoothedError + DEADBAND;
+
+      // Pure P-controller adjustment to match sender clock without windup oscillations
+      pAdj = overage * 0.000001; 
+    }
+
+    const MAX_P_ADJ = 0.012; // Max 1.2% pitch correction from target error
+    pAdj = Math.max(-MAX_P_ADJ, Math.min(MAX_P_ADJ, pAdj));
+
+    // targetRate is baseRate plus P adjustment
+    const targetRate = this._baseRate + pAdj;
+
+    // Hard ceiling: ±2.0% to dynamically absorb network bursts without flushing
+    const absoluteMinRate = this._baseRate * 0.98;
+    const absoluteMaxRate = this._baseRate * 1.02;
+    const safeTargetRate = Math.max(absoluteMinRate, Math.min(absoluteMaxRate, targetRate));
+
+    this._playbackRate = this._playbackRate * 0.98 + safeTargetRate * 0.02;
+
+    // RENDER LOOP (Linear Interpolation)
     let readPtrFrames = this._readPtr / 2;
     let samplesConsumed = 0;
     const playbackRate = this._playbackRate;
@@ -228,24 +249,48 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const ringLenFrames = ringLen / 2;
     const INV_32768 = 3.0517578125e-5;
 
+    const is1x = Math.abs(playbackRate - 1.0) < 0.0001;
+
     for (let i = 0; i < channel0.length; i++) {
       if (available - samplesConsumed >= 4) {
-        // Nearest-Neighbor interpolation
-        const frameIndex = Math.round(readPtrFrames) | 0;
-        const idxL1 = (frameIndex * 2) % ringLen;
+        if (is1x) {
+          const frameIndex = readPtrFrames | 0;
+          const idxL1 = frameIndex * 2;
+          
+          channel0[i] = this._ringBuffer[idxL1] * INV_32768 * fade;
+          channel1[i] = this._ringBuffer[idxL1 + 1] * INV_32768 * fade;
 
-        channel0[i] = this._ringBuffer[idxL1] * INV_32768 * fade;
-        channel1[i] = this._ringBuffer[idxL1 + 1] * INV_32768 * fade;
+          readPtrFrames += 1.0;
+          if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
+          samplesConsumed += 2;
+        } else {
+          // Optimized Linear Interpolation for high-fidelity sound quality with minimum CPU overhead
+          const frameIndex = readPtrFrames | 0;
+          const frac = readPtrFrames - frameIndex;
+          const idxL1 = frameIndex * 2;
+          let idxL2 = idxL1 + 2;
+          if (idxL2 >= ringLen) idxL2 -= ringLen;
 
-        readPtrFrames += playbackRate;
-        if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
-        samplesConsumed += 2 * playbackRate;
+          const scale = INV_32768 * fade;
+          const vL1 = this._ringBuffer[idxL1];
+          const vR1 = this._ringBuffer[idxL1 + 1];
+          
+          const valL = vL1 + (this._ringBuffer[idxL2] - vL1) * frac;
+          const valR = vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac;
+
+          channel0[i] = valL * scale;
+          channel1[i] = valR * scale;
+
+          readPtrFrames += playbackRate;
+          if (readPtrFrames >= ringLenFrames) readPtrFrames -= ringLenFrames;
+          samplesConsumed += 2 * playbackRate;
+        }
 
         if (fade < 1.0) fade += 0.02;
 
         if (i === 0) {
-           const peak = Math.abs(channel0[i]);
-           if (peak > this._currentPeak) this._currentPeak = peak;
+          const p = Math.abs(channel0[i]);
+          if (p > this._currentPeak) this._currentPeak = p;
         }
       } else {
         if (fade > 0) fade -= 0.05;
@@ -257,23 +302,30 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._readPtr = readPtrFrames * 2;
     this._totalRead += samplesConsumed;
     this._fade = fade;
-    this._framesProcessed = (this._framesProcessed || 0) + channel0.length;
 
-    // Reporting and Diag-Timer
-    if (this._framesProcessed >= 24000) {
+    if (this._framesProcessed >= 48000) {
       const currentAvailable = this._totalWritten - this._totalRead;
+      const elapsed = (now - this._lastCallbackTime) / 1000;
+      const measuredHz =
+        elapsed > 0 ? this._framesProcessed / elapsed : 48000;
+
       this.port.postMessage({
         type: "DIAG",
         available: Math.floor(currentAvailable),
         stalled: this._stallCount,
         peak: this._currentPeak,
         rate: this._playbackRate,
-        locked: Math.abs(currentAvailable - this._TARGET_BUFFER) < 5000,
-        measuredHz: Math.round(this._measuredHzFilter),
+        locked: Math.abs(this._smoothedError) < 12000,
+        measuredHz: Math.round(measuredHz),
       });
       this._currentPeak = 0;
       this._framesProcessed = 0;
+      this._callbackCount = 0;
       this._lastCallbackTime = now;
     }
 
     return true;
+  }
+}
+
+registerProcessor("pcm-player-worklet", PCMPlayerProcessor);
