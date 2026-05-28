@@ -1,9 +1,9 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.413]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.414]
  * High-Performance direct-copy ring buffer with dynamic local playbackRate adjustment.
  * High-Fidelity Proportional (P) clock synchronization loop with strict bounds.
- * [v13.9.413] Removed dynamic calibration (relying on 1.0 base rate ratio) and 
+ * [v13.9.414] Removed dynamic calibration (relying on 1.0 base rate ratio) and 
  * replaced the PI controller with a pure P-controller to prevent integral windup/oscillations.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
@@ -307,7 +307,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const currentAvailable = this._totalWritten - this._totalRead;
       const elapsed = (now - this._lastCallbackTime) / 1000;
       const measuredHz =
-        elapsed > 0 ? this._framesProcessed / elapsed : 48000;
+        elapsed > 0 ? this._callbackCount / elapsed : 375;
 
       this.port.postMessage({
         type: "DIAG",

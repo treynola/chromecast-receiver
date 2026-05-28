@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.413</title>
+    <title>MXS-004 Studio Mirror v13.9.414</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.413" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.414" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.413
+            Mix N Studio 004 :: v13.9.414
           </h2>
         </div>
       </div>
@@ -445,14 +445,13 @@
           >
             BUF: -- | STALLS: -- | WS: DISCONNECTED
           </div>
-          <!-- [v13.9.413] TV Playout Wake-Lock Audio element -->
+          <!-- [v13.9.414] TV Playout Wake-Lock Audio element -->
           <audio
             id="audio-unlocker"
             class="castMediaElement"
             playsinline
             autoplay
             loop
-            src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
             style="
               position: fixed;
               top: 0;
@@ -535,6 +534,37 @@
         window._studioRate = 48000;
         window._hwRate = 48000;
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
+
+        // [v13.9.414] Dynamically build a valid 2-second silent WAV loop for TV OS media wake-lock
+        function createSilentWavUrl() {
+          const sampleRate = 8000;
+          const numSamples = sampleRate * 2; // 2 seconds
+          const blockAlign = 2; // 16-bit Mono
+          const byteRate = sampleRate * blockAlign;
+          const subChunk2Size = numSamples * blockAlign;
+          const chunkSize = 36 + subChunk2Size;
+          
+          const buffer = new ArrayBuffer(44 + subChunk2Size);
+          const view = new DataView(buffer);
+          
+          // RIFF identifier
+          view.setUint32(0, 0x52494646, false); // "RIFF"
+          view.setUint32(4, chunkSize, true);
+          view.setUint32(8, 0x57415645, false); // "WAVE"
+          view.setUint32(12, 0x666d7420, false); // "fmt "
+          view.setUint32(16, 16, true);
+          view.setUint16(20, 1, true);
+          view.setUint16(22, 1, true);
+          view.setUint32(24, sampleRate, true);
+          view.setUint32(28, byteRate, true);
+          view.setUint16(32, blockAlign, true);
+          view.setUint16(34, 16, true);
+          view.setUint32(36, 0x64617461, false); // "data"
+          view.setUint32(40, subChunk2Size, true);
+          
+          const blob = new Blob([buffer], { type: 'audio/wav' });
+          return URL.createObjectURL(blob);
+        }
         const KNOB_CONFIGS = [
           { l: "Pitch", p: "pitch" },
           { l: "Volume", p: "vol" },
@@ -626,8 +656,19 @@
               g.connect(audioCtx.destination);
               keepAlive.start();
 
+              // [v13.9.414] TV Playout Wake-Lock Audio element setup
+              const audioUnlocker = document.getElementById("audio-unlocker");
+              if (audioUnlocker) {
+                if (!audioUnlocker.src) {
+                  audioUnlocker.src = createSilentWavUrl();
+                }
+                audioUnlocker.play().catch(function(e) {
+                  relayLogToStudio("⚠️ TV: play silent WAV failed during initAudio - " + e.message);
+                });
+              }
+
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-413.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-414.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1442,6 +1483,17 @@
             } else {
               // Only auto-init if we already have the config
               if (configReceived) initAudio();
+            }
+
+            // [v13.9.414] Maintain TV media wake-lock to prevent CPU throttling
+            const audioUnlocker = document.getElementById("audio-unlocker");
+            if (audioUnlocker) {
+              if (!audioUnlocker.src) {
+                audioUnlocker.src = createSilentWavUrl();
+              }
+              if (audioUnlocker.paused) {
+                audioUnlocker.play().catch(function() {});
+              }
             }
           }, 1000); // 1s interval to be less aggressive
 
