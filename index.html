@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.421</title>
+    <title>MXS-004 Studio Mirror v13.9.422</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.421" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.422" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.421
+            Mix N Studio 004 :: v13.9.422
           </h2>
         </div>
       </div>
@@ -656,19 +656,25 @@
               g.connect(audioCtx.destination);
               keepAlive.start();
 
-              // [v13.9.414] TV Playout Wake-Lock Audio element setup
+              // [v13.9.422] TV Playout Wake-Lock Audio element routed to AudioContext
               const audioUnlocker = document.getElementById("audio-unlocker");
               if (audioUnlocker) {
                 if (!audioUnlocker.src) {
                   audioUnlocker.src = createSilentWavUrl();
                 }
-                audioUnlocker.play().catch(function(e) {
-                  relayLogToStudio("⚠️ TV: play silent WAV failed during initAudio - " + e.message);
-                });
+                try {
+                  const mediaSource = audioCtx.createMediaElementSource(audioUnlocker);
+                  mediaSource.connect(masterGain);
+                  audioUnlocker.play().catch(function(e) {
+                    relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
+                  });
+                } catch (e) {
+                  relayLogToStudio("⚠️ TV: MediaElementSource failed: " + e.message);
+                }
               }
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-421.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-422.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1089,83 +1095,6 @@
         let currentBridgeToken = null;
         let binaryWS = null;
         let wsConnectTimeout = null;
-        let isSenderConnected = false;
-        let wakeLockLoadingOrLoaded = false;
-
-        function triggerWakeLockLoad() {
-          if (typeof cast === "undefined" || !cast.framework) return;
-          const context = cast.framework.CastReceiverContext.getInstance();
-          if (!context) return;
-
-          // Check if there are active senders
-          const senders = context.getSenders();
-          const hasSender = senders && senders.length > 0;
-          if (!hasSender && !isSenderConnected) {
-            return;
-          }
-          isSenderConnected = true;
-
-          if (wakeLockLoadingOrLoaded) {
-            return;
-          }
-
-          try {
-            const pm = context.getPlayerManager();
-            const state = pm.getPlayerState();
-            if (
-              state === cast.framework.messages.PlayerState.PLAYING ||
-              state === cast.framework.messages.PlayerState.BUFFERING
-            ) {
-              relayLogToStudio("✅ TV: PlayerManager already in " + state + " state.");
-              wakeLockLoadingOrLoaded = true;
-              return;
-            }
-
-            // Build the silence URL from the bridge IP (Tauri server)
-            let silenceUrl = null;
-            if (currentBridgeIp) {
-              const port = currentBridgePort || (window.SERVER_PORT && window.SERVER_PORT !== "{{SERVER_PORT}}" ? window.SERVER_PORT : "8080");
-              silenceUrl = "http://" + currentBridgeIp + ":" + port + "/silence.wav";
-            } else {
-              // Fallback: try to extract IP from current WebSocket URL
-              const wsUrl = binaryWS ? binaryWS.url : null;
-              if (wsUrl) {
-                const match = wsUrl.match(/ws:\/\/([^:]+):(\d+)/);
-                if (match) {
-                  silenceUrl = "http://" + match[1] + ":" + match[2] + "/silence.wav";
-                }
-              }
-            }
-
-            if (!silenceUrl) {
-              return;
-            }
-
-            wakeLockLoadingOrLoaded = true;
-            relayLogToStudio("📡 TV: Loading wake-lock media from " + silenceUrl);
-
-            const loadRequestData = new cast.framework.messages.LoadRequestData();
-            loadRequestData.media = new cast.framework.messages.MediaInformation();
-            loadRequestData.media.contentId = silenceUrl;
-            loadRequestData.media.contentType = "audio/wav";
-            loadRequestData.media.streamType = cast.framework.messages.StreamType.BUFFERED;
-            loadRequestData.autoplay = true;
-            loadRequestData.queueData = new cast.framework.messages.QueueData();
-            loadRequestData.queueData.repeatMode = cast.framework.messages.RepeatMode.REPEAT_SINGLE;
-
-            pm.load(loadRequestData)
-              .then(function() {
-                relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
-              })
-              .catch(function(e) {
-                wakeLockLoadingOrLoaded = false; // Allow retrying
-                relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
-              });
-          } catch (err) {
-            wakeLockLoadingOrLoaded = false;
-            relayLogToStudio("❌ TV: Wake-lock load setup failed: " + err.message);
-          }
-        }
 
         function connectBinaryBridge(ip, customPort, customToken) {
           if (
@@ -1265,7 +1194,6 @@
             binaryWS.send(JSON.stringify(handshake));
             relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 16-bit`);
             // Audio init is deferred until HANDSHAKE_ACK arrives
-            triggerWakeLockLoad();
           };
 
           binaryWS.onmessage = (event) => {
@@ -1412,7 +1340,6 @@
               }
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
-                triggerWakeLockLoad();
               }
               return;
             }
@@ -1476,23 +1403,18 @@
 
               relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
 
-              // [v13.9.419] Single SENDER_CONNECTED listener — defers wake-lock load until
-              // a sender is active and we have the bridge IP for a network-accessible silence URL.
+              // [v13.9.422] SENDER_CONNECTED listener
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_CONNECTED,
                 () => {
                   console.log("📡 Sender connected.");
-                  isSenderConnected = true;
                   resumeAudio();
-                  triggerWakeLockLoad();
                 },
               );
 
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_DISCONNECTED,
                 () => {
-                  isSenderConnected = false;
-                  wakeLockLoadingOrLoaded = false;
                   if (binaryWS) {
                     binaryWS.close();
                     binaryWS = null;
@@ -1592,21 +1514,17 @@
               if (configReceived) initAudio();
             }
 
-            // [v13.9.418] Non-Cast fallback only — keep HTML5 audio element alive
-            // In Cast mode, the PlayerManager wake-lock with REPEAT_SINGLE handles this.
-            // Removed pm.play() spam which generated constant Cast SDK exceptions.
-            if (typeof cast === "undefined" || !cast.framework) {
-              const audioUnlocker = document.getElementById("audio-unlocker");
-              if (audioUnlocker) {
-                if (!audioUnlocker.src) {
-                  audioUnlocker.src = createSilentWavUrl();
-                }
-                if (audioUnlocker.paused) {
-                  audioUnlocker.play().catch(function() {});
-                }
+            // [v13.9.422] Keep HTML5 audio element alive in all modes to act as wake-lock
+            const audioUnlocker = document.getElementById("audio-unlocker");
+            if (audioUnlocker) {
+              if (!audioUnlocker.src) {
+                audioUnlocker.src = createSilentWavUrl();
+              }
+              if (audioUnlocker.paused) {
+                audioUnlocker.play().catch(function() {});
               }
             }
-          }, 2000); // [v13.9.418] Relaxed to 2s — wake-lock is handled by PlayerManager in Cast mode
+          }, 2000);
 
 
 
