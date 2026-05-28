@@ -1,9 +1,9 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.424]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.425]
  * High-Performance direct-copy ring buffer with dynamic local playbackRate adjustment.
  * High-Fidelity Proportional (P) clock synchronization loop with strict bounds.
- * [v13.9.424] Removed dynamic calibration (relying on 1.0 base rate ratio) and 
+ * [v13.9.425] Removed dynamic calibration (relying on 1.0 base rate ratio) and 
  * replaced the PI controller with a pure P-controller to prevent integral windup/oscillations.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
@@ -136,7 +136,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     if (!channel0 || !channel1) return true;
 
     const ringLen = this._ringLen;
-    const now = Date.now();
+    const now = performance.now();
 
     this._callbackCount++;
     if (!this._lastCallbackTime) this._lastCallbackTime = now;
@@ -212,12 +212,24 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    // [v13.9.424] Keep tracking error for diagnostics/telemetry
+    // [v13.9.425] Smooth P-controller for micro-adjusting playbackRate to correct clock drift
+    // without causing audible pitch wobble (max deviation +/-0.05% of baseRate)
     const rawError = available - this._TARGET_BUFFER;
     this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
 
-    // Lock playback rate to baseRate to eliminate pitch wobble (wavy sound)
-    this._playbackRate = this._baseRate;
+    // Proportional Gain: extremely low to ensure very slow, smooth drift correction
+    const kp = 0.00000002;
+    const targetAdjustment = rawError * kp;
+    
+    // Clamp the target adjustment to +/- 0.0005 (0.05%)
+    const clampedAdjustment = Math.max(-0.0005, Math.min(0.0005, targetAdjustment));
+    
+    // Slowly morph current playbackRate toward target to avoid abrupt pitch changes
+    const targetRate = this._baseRate * (1.0 + clampedAdjustment);
+    this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
+    
+    // Keep playbackRate strictly within [0.9995 * baseRate, 1.0005 * baseRate]
+    this._playbackRate = Math.max(this._baseRate * 0.9995, Math.min(this._baseRate * 1.0005, this._playbackRate));
 
     // RENDER LOOP (Linear Interpolation)
     let readPtrFrames = this._readPtr / 2;
@@ -281,7 +293,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalRead += samplesConsumed;
     this._fade = fade;
 
-    // [v13.9.424] Reduced from 48000 (1s) to 144000 (3s) to cut TV CPU overhead by 67%
+    // [v13.9.425] Reduced from 48000 (1s) to 144000 (3s) to cut TV CPU overhead by 67%
     if (this._framesProcessed >= 144000) {
       const currentAvailable = this._totalWritten - this._totalRead;
       const elapsed = (now - this._lastCallbackTime) / 1000;
