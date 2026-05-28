@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.430</title>
+    <title>MXS-004 Studio Mirror v13.9.431</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.430" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.431" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.430
+            Mix N Studio 004 :: v13.9.431
           </h2>
         </div>
       </div>
@@ -528,6 +528,7 @@
     <script>
       (function () {
         var audioCtx = null;
+        var masterGain = null;
         var workletNode = null;
         var targetRate = 48000;
         window._studioRate = 48000;
@@ -627,12 +628,7 @@
 
         let configReceived = false;
 
-        async function initAudio() {
-          // [v13.9.27] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
-          if (!configReceived) {
-            relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
-            return;
-          }
+        function preInitAudioContext() {
           const HARDWARE_RATE = window._hwRate || 48000;
           if (!audioCtx || window._lastHwRate !== HARDWARE_RATE) {
             window._lastHwRate = HARDWARE_RATE;
@@ -641,8 +637,11 @@
                 `📡 TV: Reseting AudioContext for Hardware Rate: ${HARDWARE_RATE}Hz`,
               );
               try {
-                await audioCtx.close();
+                audioCtx.close();
               } catch (e) {}
+              audioCtx = null;
+              masterGain = null;
+              workletNode = null;
             }
             try {
               // [v13.9.413] Use default sampleRate with 'playback' latencyHint to allow native hardware path
@@ -650,7 +649,7 @@
               audioCtx = new window.AudioContext({ latencyHint: "playback" });
 
               // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
-              const masterGain = audioCtx.createGain();
+              masterGain = audioCtx.createGain();
               masterGain.gain.value = 1.5;
               masterGain.connect(audioCtx.destination);
 
@@ -671,6 +670,7 @@
                 try {
                   const mediaSource = audioCtx.createMediaElementSource(audioUnlocker);
                   mediaSource.connect(masterGain);
+                  relayLogToStudio("✅ TV: MediaElementSource connected to AudioContext early.");
                 } catch (e) {
                   relayLogToStudio("⚠️ TV: MediaElementSource failed: " + e.message);
                 }
@@ -684,110 +684,135 @@
                   });
                 }
               }
-
-              await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-430.js?cb=${Date.now()}`,
-              );
-
-              // [v13.9.330] DYNAMIC RATE TRANSFORMATION
-              const studioRate = window._studioRate || 48000;
-              const actualRate = audioCtx.sampleRate;
-              const baseRateRatio = actualRate ? studioRate / actualRate : 1.0;
-
-              console.log(
-                `📏 TV Clock: requested=${HARDWARE_RATE}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`,
-              );
-              relayLogToStudio(
-                `📏 TV Clock: ${actualRate}Hz (req=${HARDWARE_RATE}) | Studio: ${studioRate}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`,
-              );
-
-              workletNode = new AudioWorkletNode(
-                audioCtx,
-                "pcm-player-worklet",
-                {
-                  outputChannelCount: [2],
-                  processorOptions: {
-                    baseRateRatio: baseRateRatio,
-                    studioRate: studioRate,
-                  },
-                },
-              );
-              workletNode.connect(masterGain);
-
-              // Force System Volume (TV Level)
-              try {
-                if (typeof cast !== "undefined" && cast.framework) {
-                  const context =
-                    cast.framework.CastReceiverContext.getInstance();
-                  context.setSystemVolume(1.0);
-                  relayLogToStudio("✅ TV: System Volume Forced to 100%");
-                }
-              } catch (e) {}
-
-              relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${actualRate}Hz`);
-
-              workletNode.port.onmessage = (e) => {
-                if (e.data.type === "DIAG") {
-                  if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                    binaryWS.send(
-                      JSON.stringify({
-                        type: "DIAG",
-                        available: e.data.available,
-                        stalled: e.data.stalled,
-                        measuredHz: e.data.measuredHz,
-                        rate: e.data.rate,
-                        peak: e.data.peak,
-                        locked: e.data.locked,
-                      }),
-                    );
-                  }
-                  const diagEl = document.getElementById("bridge-diag-text");
-                  if (diagEl) {
-                    const wsStatus =
-                      binaryWS && binaryWS.readyState === WebSocket.OPEN
-                        ? "CONNECTED"
-                        : "DISCONNECTED";
-                    const peakPercent = Math.round((e.data.peak || 0) * 100);
-                    const rate = e.data.rate
-                      ? e.data.rate.toFixed(4)
-                      : "1.0000";
-                    const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
-                    const relayInfo =
-                      window._relayPkts > 0
-                        ? `RELAY: ${window._relayPkts} | `
-                        : "";
-                    const hzInfo = e.data.measuredHz
-                      ? ` | HZ: ${e.data.measuredHz}`
-                      : "";
-                    diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
-                  }
-
-                  // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
-                  if (
-                    !window._lastDiagSent ||
-                    Date.now() - window._lastDiagSent > 10000
-                  ) {
-                    const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
-                    const rate = e.data.rate
-                      ? e.data.rate.toFixed(4)
-                      : "1.0000";
-                    const peakPercent = Math.round((e.data.peak || 0) * 100);
-                    const hzInfo = e.data.measuredHz
-                      ? ` | HZ: ${e.data.measuredHz}`
-                      : "";
-                    relayLogToStudio(
-                      `📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`,
-                    );
-                    window._lastDiagSent = Date.now();
-                  }
-                } else if (e.data.type === "LOG") {
-                  relayLogToStudio(e.data.msg);
-                }
-              };
+              
               resumeAudio();
             } catch (e) {
-              relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+              relayLogToStudio(`❌ TV ERROR: preInitAudioContext failed - ${e.message}`);
             }
+          }
+        }
+
+        async function initAudio() {
+          // [v13.9.27] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
+          if (!configReceived) {
+            relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
+            return;
+          }
+          
+          preInitAudioContext();
+
+          if (!audioCtx) {
+            relayLogToStudio("❌ TV ERROR: initAudio failed - audioCtx is null");
+            return;
+          }
+
+          if (workletNode) {
+            return;
+          }
+
+          try {
+            await audioCtx.audioWorklet.addModule(
+              `pcm-player-worklet-v13-9-431.js?cb=${Date.now()}`,
+            );
+
+            // [v13.9.330] DYNAMIC RATE TRANSFORMATION
+            const studioRate = window._studioRate || 48000;
+            const actualRate = audioCtx.sampleRate;
+            const baseRateRatio = actualRate ? studioRate / actualRate : 1.0;
+
+            console.log(
+              `📏 TV Clock: requested=${window._hwRate || 48000}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`,
+            );
+            relayLogToStudio(
+              `📏 TV Clock: ${actualRate}Hz (req=${window._hwRate || 48000}) | Studio: ${studioRate}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`,
+            );
+
+            workletNode = new AudioWorkletNode(
+              audioCtx,
+              "pcm-player-worklet",
+              {
+                outputChannelCount: [2],
+                processorOptions: {
+                  baseRateRatio: baseRateRatio,
+                  studioRate: studioRate,
+                },
+              },
+            );
+            workletNode.connect(masterGain);
+
+            // Force System Volume (TV Level)
+            try {
+              if (typeof cast !== "undefined" && cast.framework) {
+                const context =
+                  cast.framework.CastReceiverContext.getInstance();
+                context.setSystemVolume(1.0);
+                relayLogToStudio("✅ TV: System Volume Forced to 100%");
+              }
+            } catch (e) {}
+
+            relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${actualRate}Hz`);
+
+            workletNode.port.onmessage = (e) => {
+              if (e.data.type === "DIAG") {
+                if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                  binaryWS.send(
+                    JSON.stringify({
+                      type: "DIAG",
+                      available: e.data.available,
+                      stalled: e.data.stalled,
+                      measuredHz: e.data.measuredHz,
+                      rate: e.data.rate,
+                      peak: e.data.peak,
+                      locked: e.data.locked,
+                    }),
+                  );
+                }
+                const diagEl = document.getElementById("bridge-diag-text");
+                if (diagEl) {
+                  const wsStatus =
+                    binaryWS && binaryWS.readyState === WebSocket.OPEN
+                      ? "CONNECTED"
+                      : "DISCONNECTED";
+                  const peakPercent = Math.round((e.data.peak || 0) * 100);
+                  const rate = e.data.rate
+                    ? e.data.rate.toFixed(4)
+                    : "1.0000";
+                  const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
+                  const relayInfo =
+                    window._relayPkts > 0
+                      ? `RELAY: ${window._relayPkts} | `
+                      : "";
+                  const hzInfo = e.data.measuredHz
+                    ? ` | HZ: ${e.data.measuredHz}`
+                    : "";
+                  diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                }
+
+                // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
+                if (
+                  !window._lastDiagSent ||
+                  Date.now() - window._lastDiagSent > 10000
+                ) {
+                  const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
+                  const rate = e.data.rate
+                    ? e.data.rate.toFixed(4)
+                    : "1.0000";
+                  const peakPercent = Math.round((e.data.peak || 0) * 100);
+                  const hzInfo = e.data.measuredHz
+                    ? ` | HZ: ${e.data.measuredHz}`
+                    : "";
+                  relayLogToStudio(
+                    `📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`,
+                  );
+                  window._lastDiagSent = Date.now();
+                }
+              } else if (e.data.type === "LOG") {
+                relayLogToStudio(e.data.msg);
+              }
+            };
+            resumeAudio();
+          } catch (e) {
+            relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
           }
         }
 
@@ -1310,6 +1335,7 @@
             }
 
             // Send actual hardware capabilities
+            preInitAudioContext();
             const handshake = {
               type: "HANDSHAKE",
               config: {
@@ -1538,6 +1564,7 @@
                 () => {
                   console.log("📡 Sender connected.");
                   isSenderConnected = true;
+                  preInitAudioContext();
                   resumeAudio();
                   triggerWakeLockLoad();
                 },
