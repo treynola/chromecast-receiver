@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.429</title>
+    <title>MXS-004 Studio Mirror v13.9.430</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.429" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.430" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -203,7 +203,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.429
+            Mix N Studio 004 :: v13.9.430
           </h2>
         </div>
       </div>
@@ -674,16 +674,19 @@
                 } catch (e) {
                   relayLogToStudio("⚠️ TV: MediaElementSource failed: " + e.message);
                 }
-                if (!audioUnlocker.src) {
-                  audioUnlocker.src = createSilentWavUrl();
+                // Only configure/play the programmatic Blob URL fallback if not in Cast mode
+                if (typeof cast === "undefined" || !cast.framework) {
+                  if (!audioUnlocker.src) {
+                    audioUnlocker.src = createSilentWavUrl();
+                  }
+                  audioUnlocker.play().catch(function(e) {
+                    relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
+                  });
                 }
-                audioUnlocker.play().catch(function(e) {
-                  relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
-                });
               }
 
               await audioCtx.audioWorklet.addModule(
-                `pcm-player-worklet-v13-9-429.js?cb=${Date.now()}`,
+                `pcm-player-worklet-v13-9-430.js?cb=${Date.now()}`,
               );
 
               // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -781,6 +784,7 @@
                   relayLogToStudio(e.data.msg);
                 }
               };
+              resumeAudio();
             } catch (e) {
               relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
             }
@@ -1206,6 +1210,7 @@
             pm.load(loadRequestData)
               .then(function() {
                 relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
+                resumeAudio();
               })
               .catch(function(e) {
                 wakeLockLoadingOrLoaded = false; // Allow retrying
