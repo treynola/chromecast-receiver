@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.432</title>
+    <title>MXS-004 Studio Mirror v13.9.433</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.432" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.433" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -175,6 +175,89 @@
       .bridge-connected-pulse {
         animation: pulse-dot 2s infinite !important;
       }
+
+      /* [v13.9.433] Premium Glassmorphic Audio Unlock Overlay */
+      #audio-unlock-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000000;
+        transition: opacity 0.5s ease, visibility 0.5s ease;
+        opacity: 0;
+        visibility: hidden;
+      }
+      #audio-unlock-overlay.visible {
+        opacity: 1;
+        visibility: visible;
+      }
+      .unlock-card {
+        background: rgba(20, 20, 20, 0.7);
+        border: 2px solid #d4af37;
+        border-radius: 16px;
+        padding: 40px;
+        text-align: center;
+        max-width: 600px;
+        box-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+        animation: pulse-border 2s infinite alternate;
+      }
+      .unlock-icon {
+        font-size: 4em;
+        color: #d4af37;
+        margin-bottom: 20px;
+        animation: float-icon 3s ease-in-out infinite alternate;
+      }
+      .unlock-title {
+        font-family: "Mexcellent", sans-serif;
+        color: #d4af37;
+        font-size: 2em;
+        margin: 0 0 15px 0;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+      }
+      .unlock-text {
+        font-family: "Cousine", monospace;
+        color: #fff;
+        font-size: 1.1em;
+        margin: 0 0 25px 0;
+        line-height: 1.5;
+      }
+      .unlock-button {
+        font-family: "Cousine", monospace;
+        font-size: 1.2em;
+        font-weight: 700;
+        color: #000;
+        background: #d4af37;
+        border: 2px solid #d4af37;
+        padding: 12px 30px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      }
+      .unlock-button:hover, .unlock-button:focus {
+        background: #fff;
+        border-color: #fff;
+        box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        outline: none;
+      }
+      @keyframes pulse-border {
+        0% { box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.6); }
+        100% { box-shadow: 0 0 35px rgba(212, 175, 55, 0.6); border-color: rgba(212, 175, 55, 1); }
+      }
+      @keyframes float-icon {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-10px); }
+      }
     </style>
   </head>
   <body class="app-loading">
@@ -203,7 +286,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.432
+            Mix N Studio 004 :: v13.9.433
           </h2>
         </div>
       </div>
@@ -523,6 +606,19 @@
           </div>
         </div>
       </div>
+    <!-- [v13.9.433] Premium Glassmorphic Audio Unlock Overlay -->
+    <div id="audio-unlock-overlay">
+      <div class="unlock-card">
+        <div class="unlock-icon">
+          <i class="fa-solid fa-volume-xmark"></i>
+        </div>
+        <div class="unlock-title">Audio Suspended</div>
+        <div class="unlock-text">
+          Chromecast autoplay rules block web audio playout.<br>
+          Press <strong>ANY BUTTON</strong> on your TV remote or click below to start audio.
+        </div>
+        <button class="unlock-button" id="btn-unlock-audio">Unlock Audio</button>
+      </div>
     </div>
 
     <script>
@@ -725,7 +821,7 @@
 
           try {
             await audioCtx.audioWorklet.addModule(
-              `pcm-player-worklet-v13-9-432.js?cb=${Date.now()}`,
+              `pcm-player-worklet-v13-9-433.js?cb=${Date.now()}`,
             );
 
             // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -829,16 +925,46 @@
           }
         }
 
+        function showUnlockOverlay() {
+          const overlay = document.getElementById("audio-unlock-overlay");
+          if (overlay && !overlay.classList.contains("visible")) {
+            overlay.classList.add("visible");
+            const btn = document.getElementById("btn-unlock-audio");
+            if (btn) {
+              btn.focus();
+            }
+            relayLogToStudio("🖥️ TV: Audio Unlock Overlay shown.");
+          }
+        }
+
+        function hideUnlockOverlay() {
+          const overlay = document.getElementById("audio-unlock-overlay");
+          if (overlay && overlay.classList.contains("visible")) {
+            overlay.classList.remove("visible");
+            relayLogToStudio("🖥️ TV: Audio Unlock Overlay hidden.");
+          }
+        }
+
         async function resumeAudio() {
-          if (audioCtx && audioCtx.state === "suspended") {
-            try {
-              await audioCtx.resume();
-              if (audioCtx.state === "running") {
-                console.log("🔊 Receiver: AudioContext Resumed.");
-                relayLogToStudio("✅ TV: AudioContext Resumed.");
+          if (audioCtx) {
+            if (audioCtx.state === "suspended") {
+              try {
+                await audioCtx.resume();
+                if (audioCtx.state === "running") {
+                  console.log("🔊 Receiver: AudioContext Resumed.");
+                  relayLogToStudio("✅ TV: AudioContext Resumed.");
+                  hideUnlockOverlay();
+                } else {
+                  relayLogToStudio("⚠️ TV: resumeAudio() called but state is still: " + audioCtx.state);
+                  showUnlockOverlay();
+                }
+              } catch (e) {
+                console.warn("⚠️ TV: Resume failed", e);
+                relayLogToStudio("⚠️ TV: resumeAudio() failed: " + e.message);
+                showUnlockOverlay();
               }
-            } catch (e) {
-              console.warn("⚠️ TV: Resume failed", e);
+            } else if (audioCtx.state === "running") {
+              hideUnlockOverlay();
             }
           }
         }
@@ -1664,11 +1790,15 @@
           const autoUnlock = setInterval(() => {
             if (audioCtx) {
               if (audioCtx.state === "suspended") {
+                showUnlockOverlay();
                 audioCtx.resume().then(() => {
                   if (audioCtx.state === "running") {
                     relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
+                    hideUnlockOverlay();
                   }
                 });
+              } else if (audioCtx.state === "running") {
+                hideUnlockOverlay();
               }
             } else {
               // Only auto-init if we already have the config
@@ -1689,6 +1819,31 @@
               }
             }
           }, 2000);
+
+          // [v13.9.433] Global interaction listeners to catch TV remote keys and clicks for AudioContext unlock
+          window.addEventListener("keydown", function(e) {
+            relayLogToStudio("🎹 TV: keydown event: " + e.key + " (code: " + e.keyCode + ")");
+            resumeAudio();
+          });
+
+          window.addEventListener("click", function() {
+            relayLogToStudio("🖱️ TV: click event detected.");
+            resumeAudio();
+          });
+
+          window.addEventListener("pointerdown", function() {
+            relayLogToStudio("🖱️ TV: pointerdown event detected.");
+            resumeAudio();
+          });
+
+          const btnUnlock = document.getElementById("btn-unlock-audio");
+          if (btnUnlock) {
+            btnUnlock.addEventListener("click", function(e) {
+              e.stopPropagation();
+              relayLogToStudio("🖱️ TV: Unlock button clicked.");
+              resumeAudio();
+            });
+          }
 
 
 
