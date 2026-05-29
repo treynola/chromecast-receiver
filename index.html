@@ -729,8 +729,6 @@
           );
         }
 
-        let configReceived = false;
-
         function preInitAudioContext() {
           const HARDWARE_RATE = window._hwRate || 48000;
           relayLogToStudio("🛠️ TV: preInitAudioContext called. audioCtx=" + !!audioCtx);
