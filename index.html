@@ -1680,6 +1680,21 @@
               return;
             }
 
+            // 3. Command Relay
+            if (d.type === "RELOAD") {
+              relayLogToStudio("🔄 TV: RELOAD command received via Cast SDK. Reloading page...");
+              setTimeout(() => {
+                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                window.location.href = cleanUrl + "?cb=" + Date.now();
+              }, 500);
+              return;
+            }
+
+            if (d.type === "SINE_TEST") {
+              playSineTest();
+              return;
+            }
+
             // 2. High-Fidelity Audio Relay (Fallback Path)
             if (d.type === "PCM_RELAY") {
               // If Binary WS is active, IGNORE Relay to prevent doubling/echo
