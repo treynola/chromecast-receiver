@@ -145,10 +145,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
   process(inputs, outputs) {
     const output = outputs[0];
+    if (!output || output.length === 0) return true;
     const channel0 = output[0];
-    const channel1 = output[1];
+    const channel1 = output[1] || channel0;
 
-    if (!channel0 || !channel1) return true;
+    if (!channel0) return true;
 
     const ringLen = this._ringLen;
     const ringLenFrames = ringLen >> 1; // divide by 2 (each frame = L+R)
