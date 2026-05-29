@@ -627,6 +627,7 @@
         var audioCtx = null;
         var masterGain = null;
         var workletNode = null;
+        var peerConnection = null;
         var targetRate = 48000;
         window._studioRate = 48000;
         window._hwRate = 48000;
@@ -1586,6 +1587,14 @@
                       }
                     }
                   }
+                } else if (d.type === "WEBRTC_OFFER") {
+                  handleWebRTCOffer(d.sdp);
+                } else if (d.type === "WEBRTC_CANDIDATE") {
+                  if (peerConnection && d.candidate) {
+                    peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
+                      relayLogToStudio("⚠️ TV WebRTC: Failed to add ICE candidate - " + e.message);
+                    });
+                  }
                 }
               } catch (e) {}
             }
@@ -1635,6 +1644,60 @@
               connectBinaryBridge(ip, customPort, customToken);
             }, 5000);
           };
+        }
+
+        async function handleWebRTCOffer(sdp) {
+          try {
+            relayLogToStudio("📡 TV WebRTC: Received Offer. Initializing...");
+            
+            if (peerConnection) {
+              peerConnection.close();
+            }
+
+            const config = {
+              iceServers: [
+                { urls: "stun:stun.l.google.com:19302" },
+                { urls: "stun:stun1.l.google.com:19302" }
+              ]
+            };
+
+            peerConnection = new RTCPeerConnection(config);
+
+            peerConnection.onicecandidate = (event) => {
+              if (event.candidate && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+                binaryWS.send(JSON.stringify({
+                  type: "WEBRTC_CANDIDATE",
+                  candidate: event.candidate
+                }));
+              }
+            };
+
+            peerConnection.ontrack = (event) => {
+              relayLogToStudio("✅ TV WebRTC: Track received! Kind: " + event.track.kind);
+              const audioUnlocker = document.getElementById("audio-unlocker");
+              if (audioUnlocker) {
+                audioUnlocker.srcObject = event.streams[0];
+                audioUnlocker.play().catch(e => {
+                  relayLogToStudio("⚠️ TV WebRTC: Play failed - " + e.message);
+                });
+                resumeAudio();
+              }
+            };
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+              binaryWS.send(JSON.stringify({
+                type: "WEBRTC_ANSWER",
+                sdp: answer
+              }));
+              relayLogToStudio("📡 TV WebRTC: Answer sent to Studio.");
+            }
+          } catch (e) {
+            relayLogToStudio("❌ TV WebRTC Error: " + e.message);
+          }
         }
 
         function handleInboundData(data) {
@@ -1692,6 +1755,20 @@
 
             if (d.type === "SINE_TEST") {
               playSineTest();
+              return;
+            }
+
+            if (d.type === "WEBRTC_OFFER") {
+              handleWebRTCOffer(d.sdp);
+              return;
+            }
+
+            if (d.type === "WEBRTC_CANDIDATE") {
+              if (peerConnection && d.candidate) {
+                peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
+                  relayLogToStudio("⚠️ TV WebRTC: Failed to add ICE candidate (SDK) - " + e.message);
+                });
+              }
               return;
             }
 
