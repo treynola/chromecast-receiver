@@ -624,18 +624,21 @@
     </div>
 
     <script>
+
       (function () {
         var audioCtx = null;
         var masterGain = null;
         var workletNode = null;
         var peerConnection = null;
-        window._useWebRTC = true;
+        window._useWebRTC = false; // [v13.9.463] APOR V2 Primary (LOCK)
+        var configReceived = false;
         var targetRate = 48000;
         window._studioRate = 48000;
         window._hwRate = 48000;
+        const VERSION_TAG = "v13.9.463-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
 
-        // [v13.9.414] Dynamically build a valid 2-second silent WAV loop for TV OS media wake-lock
+        // [v13.9.463] Dynamically build a valid 2-second silent WAV loop for TV OS media wake-lock
         function createSilentWavUrl() {
           const sampleRate = 8000;
           const numSamples = sampleRate * 2; // 2 seconds
@@ -662,7 +665,7 @@
           view.setUint32(36, 0x64617461, false); // "data"
           view.setUint32(40, subChunk2Size, true);
           
-          // [v13.9.425] Write alternating 1 and -1 to render an inaudible dither signal (-90.3 dBFS)
+          // [v13.9.463] Write alternating 1 and -1 to render an inaudible dither signal (-90.3 dBFS)
           // to bypass Chromium background tab silence optimization.
           for (let i = 0; i < numSamples; i++) {
             const val = (i % 2 === 0) ? 1 : -1;
@@ -754,29 +757,14 @@
               masterGain.connect(audioCtx.destination);
               relayLogToStudio("🛠️ TV: masterGain connected.");
 
-              // [v13.9.462] FIX: Replace 20kHz oscillator with silent buffer-source loop.
-              // The oscillator at 20kHz / gain 0.002 was classified as "inactive" by Cast's
-              // Chromium runtime and allowed the AudioContext to be suspended. A looped
-              // AudioBufferSourceNode with near-zero samples is a more reliable keep-alive.
-              (function startKeepAlive(ctx) {
-                try {
-                  const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-                  const data = buf.getChannelData(0);
-                  // Write alternating ±1e-6 (inaudible, ~-120 dBFS) to signal pipeline activity
-                  for (let i = 0; i < data.length; i++) data[i] = (i % 2 === 0) ? 1e-6 : -1e-6;
-                  const src = ctx.createBufferSource();
-                  src.buffer = buf;
-                  src.loop = true;
-                  const g = ctx.createGain();
-                  g.gain.value = 1.0;
-                  src.connect(g);
-                  g.connect(ctx.destination);
-                  src.start();
-                  relayLogToStudio("🛠️ TV: Silent buffer keep-alive started.");
-                } catch(e) {
-                  relayLogToStudio("⚠️ TV: Keep-alive failed: " + e.message);
-                }
-              })(audioCtx);
+              const keepAlive = audioCtx.createOscillator();
+              keepAlive.frequency.value = 20000;
+              const g = audioCtx.createGain();
+              g.gain.value = 0.002;
+              keepAlive.connect(g);
+              g.connect(audioCtx.destination);
+              keepAlive.start();
+              relayLogToStudio("🛠️ TV: keepAlive oscillator started.");
 
               const audioUnlocker = document.getElementById("audio-unlocker");
               relayLogToStudio("🛠️ TV: audioUnlocker found: " + !!audioUnlocker);
@@ -801,16 +789,15 @@
                   });
                 }
 
-                // [v13.9.462] FIX: Always play the silent WAV dither wake-lock — even in Cast mode.
-                // Previously this was skipped in Cast mode, which removed the only reliable mechanism
-                // keeping Chromium's audio pipeline awake on the receiver. The ±1 sample dither at
-                // -90.3 dBFS is below audible threshold but prevents the runtime from suspending audio.
-                if (!audioUnlocker.src && !audioUnlocker.srcObject) {
-                  audioUnlocker.src = createSilentWavUrl();
+                // Only configure/play the programmatic Blob URL fallback if not in Cast mode
+                if (typeof cast === "undefined" || !cast.framework) {
+                  if (!audioUnlocker.src) {
+                    audioUnlocker.src = createSilentWavUrl();
+                  }
+                  audioUnlocker.play().catch(function(e) {
+                    relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
+                  });
                 }
-                audioUnlocker.play().catch(function(e) {
-                  relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
-                });
               }
               
               resumeAudio();
@@ -821,14 +808,14 @@
         }
 
         async function initAudio() {
-          // [v13.9.461] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
+          // [v13.9.463] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
             relayLogToStudio("📡 TV: initAudio (Legacy) skipped because WebRTC is primary.");
             preInitAudioContext(); // Still ensure native context is warmed up
             return;
           }
 
-          // [v13.9.27] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
+          // [v13.9.463] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
             relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
             return;
@@ -850,16 +837,18 @@
               `pcm-player-worklet-v13-9-463.js?cb=${Date.now()}`,
             );
 
-            // [v13.9.330] DYNAMIC RATE TRANSFORMATION
+            // [v13.9.463] DYNAMIC RATE TRANSFORMATION
+            // Since the Rust backend now handles authoritative resampling (Studio -> TV),
+            // the receiver worklet should operate at unity rate (1.0).
             const studioRate = window._studioRate || 48000;
             const actualRate = audioCtx.sampleRate;
-            const baseRateRatio = actualRate ? studioRate / actualRate : 1.0;
+            const baseRateRatio = 1.0; // Backend Resampled Alignment
 
             console.log(
-              `📏 TV Clock: requested=${window._hwRate || 48000}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Base Ratio: ${baseRateRatio.toFixed(4)}x`,
+              `📏 TV Clock: requested=${window._hwRate || 48000}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
             );
             relayLogToStudio(
-              `📏 TV Clock: ${actualRate}Hz (req=${window._hwRate || 48000}) | Studio: ${studioRate}Hz | Ratio: ${baseRateRatio.toFixed(4)}x`,
+              `📏 TV Clock: ${actualRate}Hz | Studio: ${studioRate}Hz | Sync: APORv2 Unity`,
             );
 
             workletNode = new AudioWorkletNode(
@@ -923,7 +912,7 @@
                   diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
                 }
 
-                // [v13.9.27] TRIPLE CHECK: Relay lock status to Studio every ~10s
+                // [v13.9.463] TRIPLE CHECK: Relay lock status to Studio every ~10s
                 if (
                   !window._lastDiagSent ||
                   Date.now() - window._lastDiagSent > 10000
@@ -1033,7 +1022,7 @@
             }
             lastHighFreqLogTime = now;
           }
-          // [v13.9.418] Suppress DOM updates during active streaming to reduce TV CPU overhead
+          // [v13.9.463] Suppress DOM updates during active streaming to reduce TV CPU overhead
           if (!isHighFreq && !workletNode) {
             const inner = document.getElementById("tv-console-inner");
             if (inner) {
@@ -1127,7 +1116,7 @@
         }
 
         let lastRenderTime = 0;
-        const RENDER_THROTTLE_MS = 2000; // [v13.9.404] Throttle to 0.5 FPS — UI is decorative, audio is critical
+        const RENDER_THROTTLE_MS = 2000; // [v13.9.463] Throttle to 0.5 FPS — UI is decorative, audio is critical
 
         const _lastParamsCache = [];
         const _lastFxCache = [];
@@ -1439,10 +1428,10 @@
             currentBridgeIp === ip &&
             currentBridgePort === customPort
           ) {
-            // [v13.9.27] Already connected to this Studio IP. Ignore heartbeat redundancy.
+            // [v13.9.463] Already connected to this Studio IP. Ignore heartbeat redundancy.
             return;
           }
-          // [v13.9.310] Guard against connecting while another connect is in progress
+          // [v13.9.463] Guard against connecting while another connect is in progress
           if (binaryWS && binaryWS.readyState === WebSocket.CONNECTING) {
             return;
           }
@@ -1479,7 +1468,7 @@
           binaryWS.onopen = async () => {
             console.log("✅ Binary Bridge Connected");
             relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
-            // [v13.9.450] Reset reconnect backoff counter on success
+            // [v13.9.463] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
             // Flush buffered logs
             while (logQueue.length > 0) {
@@ -1503,7 +1492,7 @@
               conn.classList.add("bridge-connected-pulse");
             }
 
-            // [v13.9.402] HARDWARE PROBE: Detect actual device sample rate natively
+            // [v13.9.463] HARDWARE PROBE: Detect actual device sample rate natively
             let hwRate = 48000;
             try {
               const probe = new window.AudioContext();
@@ -1537,22 +1526,15 @@
           };
 
           binaryWS.onmessage = (event) => {
-            // [v13.9.411] PRIORITY: Binary audio data gets the fastest path — no parsing or async promise overhead
+            // [v13.9.463] PRIORITY: Binary audio data gets the fastest path — no parsing or async promise overhead
             if (event.data instanceof ArrayBuffer) {
               if (workletNode) {
-                // [v13.9.462] APOR-WebRTC INTERLOCK FIX: Disconnect WebRTC source node from
-                // the graph instead of muting srcObject, since WebRTC is now routed via
-                // createMediaStreamSource into the AudioContext graph.
-                if (window._webRtcSourceNode) {
-                  try { window._webRtcSourceNode.disconnect(); } catch(e) {}
-                  relayLogToStudio("🛡️ TV: APOR V2 Active. Disconnected WebRTC graph node to prevent phasing.");
-                } else {
-                  // Legacy path if WebRTC was set via srcObject
-                  const audioUnlocker = document.getElementById("audio-unlocker");
-                  if (audioUnlocker && audioUnlocker.srcObject && !audioUnlocker.muted) {
-                    audioUnlocker.muted = true;
-                    relayLogToStudio("🛡️ TV: APOR V2 Active. Muted WebRTC fallback to prevent phasing.");
-                  }
+                // [v13.9.463] APOR-WebRTC INTERLOCK
+                // If we have a WebRTC stream active, mute it while receiving high-fidelity binary PCM to prevent phasing/echo.
+                const audioUnlocker = document.getElementById("audio-unlocker");
+                if (audioUnlocker && audioUnlocker.srcObject && !audioUnlocker.muted) {
+                   audioUnlocker.muted = true;
+                   relayLogToStudio("🛡️ TV: APOR V2 Active. Muted WebRTC fallback to prevent phasing.");
                 }
                 window._lastBinaryTime = Date.now();
 
@@ -1561,7 +1543,7 @@
               }
               return;
             } else if (event.data instanceof Blob) {
-              // [v13.9.449] Fallback: TV browser ignored binaryType="arraybuffer"
+              // [v13.9.463] Fallback: TV browser ignored binaryType="arraybuffer"
               if (workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
                 var reader = new FileReader();
@@ -1588,7 +1570,7 @@
                     window.location.href = cleanUrl + "?cb=" + Date.now();
                   }, 500);
                 } else if (d.type === "HANDSHAKE_ACK") {
-                  // [v13.9.402] Server confirmed handshake — init audio with negotiated config
+                  // [v13.9.463] Server confirmed handshake — init audio with negotiated config
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
@@ -1657,7 +1639,7 @@
               conn.style.backgroundColor = "var(--red)";
               conn.classList.remove("bridge-connected-pulse");
             }
-            // [v13.9.450] Reconnect with exponential backoff instead of full page reload
+            // [v13.9.463] Reconnect with exponential backoff instead of full page reload
             // Preserves AudioContext, ring buffer, and worklet state across reconnections
             if (!window._wsReconnectAttempts) window._wsReconnectAttempts = 0;
             window._wsReconnectAttempts++;
@@ -1688,7 +1670,7 @@
               diagEl.style.color = "var(--red)";
               diagEl.style.borderColor = "var(--red)";
             }
-            // [v13.9.450] Retry with full connection params (port + token preserved)
+            // [v13.9.463] Retry with full connection params (port + token preserved)
             if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
             wsConnectTimeout = setTimeout(() => {
               console.log("📡 TV: Retrying Binary Bridge...");
@@ -1727,28 +1709,11 @@
               relayLogToStudio("✅ TV WebRTC: Track received! Kind: " + event.track.kind);
               const audioUnlocker = document.getElementById("audio-unlocker");
               if (audioUnlocker) {
-                // [v13.9.462] FIX: Route WebRTC stream through AudioContext via MediaStreamSource
-                // so it benefits from masterGain, stays in-graph, and respects AudioContext state.
-                // Previously srcObject was set directly, bypassing the whole audio graph and
-                // causing the stream to play independently regardless of AudioContext state.
-                try {
-                  if (!audioCtx) preInitAudioContext();
-                  if (window._webRtcSourceNode) {
-                    try { window._webRtcSourceNode.disconnect(); } catch(e) {}
-                  }
-                  window._webRtcSourceNode = audioCtx.createMediaStreamSource(event.streams[0]);
-                  window._webRtcSourceNode.connect(masterGain);
-                  relayLogToStudio("✅ TV WebRTC: Stream routed through AudioContext graph.");
-                  resumeAudio();
-                } catch(e) {
-                  // Fallback: direct srcObject if AudioContext routing fails
-                  relayLogToStudio("⚠️ TV WebRTC: AudioContext routing failed (" + e.message + "), falling back to srcObject.");
-                  audioUnlocker.srcObject = event.streams[0];
-                  audioUnlocker.play().catch(e2 => {
-                    relayLogToStudio("⚠️ TV WebRTC: Play failed - " + e2.message);
-                  });
-                  resumeAudio();
-                }
+                audioUnlocker.srcObject = event.streams[0];
+                audioUnlocker.play().catch(e => {
+                  relayLogToStudio("⚠️ TV WebRTC: Play failed - " + e.message);
+                });
+                resumeAudio();
               }
             };
 
@@ -1899,19 +1864,7 @@
 
               relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
 
-              // [v13.9.462] FIX: Warm up AudioContext on Cast READY event — fires before any
-              // sender connects and is the earliest reliable point to create AudioContext
-              // on the Cast receiver's Chromium environment.
-              context.addEventListener(
-                cast.framework.system.EventType.READY,
-                async function() {
-                  relayLogToStudio("✅ TV: CAST READY — pre-initializing AudioContext.");
-                  preInitAudioContext();
-                  await resumeAudio();
-                }
-              );
-
-              // [v13.9.424] SENDER_CONNECTED/DISCONNECTED listeners
+              // [v13.9.463] SENDER_CONNECTED/DISCONNECTED listeners
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_CONNECTED,
                 () => {
@@ -2006,28 +1959,22 @@
               if (configReceived) initAudio();
             }
 
-            // [v13.9.462] APOR-WebRTC FAILOVER
-            // If binary PCM has stopped for > 2s, reconnect WebRTC source node as a fallback.
+            // [v13.9.463] APOR-WebRTC FAILOVER
+            // If binary PCM has stopped for > 2s, un-mute WebRTC track as a fallback.
             if (window._lastBinaryTime && Date.now() - window._lastBinaryTime > 2000) {
-               relayLogToStudio("⚠️ TV: APOR V2 Timed out. Reconnecting WebRTC fallback audio.");
-               if (window._webRtcSourceNode && masterGain) {
-                 try { window._webRtcSourceNode.connect(masterGain); } catch(e) {}
-               } else {
-                 // Legacy path: unmute srcObject if graph node not available
-                 const audioUnlocker = document.getElementById("audio-unlocker");
-                 if (audioUnlocker && audioUnlocker.srcObject && audioUnlocker.muted) {
-                   audioUnlocker.muted = false;
-                 }
+               const audioUnlocker = document.getElementById("audio-unlocker");
+               if (audioUnlocker && audioUnlocker.srcObject && audioUnlocker.muted) {
+                  audioUnlocker.muted = false;
+                  relayLogToStudio("⚠️ TV: APOR V2 Timed out. Restoring WebRTC fallback audio.");
+                  window._lastBinaryTime = 0; // Prevent loop
                }
-               window._lastBinaryTime = 0; // Prevent loop
             }
 
-            // [v13.9.462] FIX: Keep HTML5 audio wake-lock alive in ALL modes (Cast and non-Cast).
-            // Previously only ran outside Cast mode — removing the guard ensures the receiver
-            // stays awake even when the Cast PlayerManager wake-lock path fails.
-            (function() {
+            // [v13.9.463] Non-Cast fallback only — keep HTML5 audio element alive
+            // In Cast mode, the PlayerManager wake-lock with REPEAT_SINGLE handles this.
+            if (typeof cast === "undefined" || !cast.framework) {
               const audioUnlocker = document.getElementById("audio-unlocker");
-              if (audioUnlocker && !audioUnlocker.srcObject) {
+              if (audioUnlocker) {
                 if (!audioUnlocker.src) {
                   audioUnlocker.src = createSilentWavUrl();
                 }
@@ -2035,10 +1982,10 @@
                   audioUnlocker.play().catch(function() {});
                 }
               }
-            })();
+            }
           }, 2000);
 
-          // [v13.9.433] Global interaction listeners to catch TV remote keys and clicks for AudioContext unlock
+          // [v13.9.463] Global interaction listeners to catch TV remote keys and clicks for AudioContext unlock
           window.addEventListener("keydown", function(e) {
             relayLogToStudio("🎹 TV: keydown event: " + e.key + " (code: " + e.keyCode + ")");
             resumeAudio();
@@ -2066,9 +2013,10 @@
 
 
           window.addEventListener("resize", updateScale);
-          relayLogToStudio("🎬 TV: Startup Complete [v13.9.462-WebRTC].");
+          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
         };
       })();
-    </script>
+    
+</script>
   </body>
 </html>
