@@ -1336,10 +1336,6 @@
                 relayLogToStudio("📱 TV: PLAYER_STATE_CHANGED event detected: " + e.value);
                 resumeAudio();
               });
-              pm.addEventListener(cast.framework.events.EventType.PLAYING, function() {
-                relayLogToStudio("📱 TV: PlayerManager PLAYING event detected.");
-                resumeAudio();
-              });
             }
 
             const state = pm.getPlayerState();
@@ -1516,11 +1512,16 @@
               // [v13.9.449] Fallback: TV browser ignored binaryType="arraybuffer"
               if (workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                event.data.arrayBuffer().then((ab) => {
-                  workletNode.port.postMessage(ab, [ab]);
-                }).catch(e => {
-                  relayLogToStudio("⚠️ TV: Blob to ArrayBuffer conversion failed - " + e.message);
-                });
+                var reader = new FileReader();
+                reader.onload = function() {
+                  if (workletNode) {
+                    workletNode.port.postMessage(this.result, [this.result]);
+                  }
+                };
+                reader.onerror = function() {
+                  relayLogToStudio("⚠️ TV: FileReader failed to read Blob.");
+                };
+                reader.readAsArrayBuffer(event.data);
               }
               return;
             } else if (typeof event.data === "string") {
