@@ -5,13 +5,13 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.448</title>
+    <title>MXS-004 Studio Mirror v13.9.460</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.448" />
+    <link rel="stylesheet" href="styles_main.css?v=13.9.460" />
     <style>
       /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
       html,
@@ -286,7 +286,7 @@
               color: var(--gold);
             "
           >
-            Mix N Studio 004 :: v13.9.448
+            Mix N Studio 004 :: v13.9.460
           </h2>
         </div>
       </div>
@@ -822,7 +822,7 @@
 
           try {
             await audioCtx.audioWorklet.addModule(
-              `pcm-player-worklet-v13-9-448.js?cb=${Date.now()}`,
+              `pcm-player-worklet-v13-9-460.js?cb=${Date.now()}`,
             );
 
             // [v13.9.330] DYNAMIC RATE TRANSFORMATION
@@ -1515,6 +1515,15 @@
             // [v13.9.411] PRIORITY: Binary audio data gets the fastest path — no parsing or async promise overhead
             if (event.data instanceof ArrayBuffer) {
               if (workletNode) {
+                // [v13.9.452] APOR-WebRTC INTERLOCK
+                // If we have a WebRTC stream active, mute it while receiving high-fidelity binary PCM to prevent phasing/echo.
+                const audioUnlocker = document.getElementById("audio-unlocker");
+                if (audioUnlocker && audioUnlocker.srcObject && !audioUnlocker.muted) {
+                   audioUnlocker.muted = true;
+                   relayLogToStudio("🛡️ TV: APOR V2 Active. Muted WebRTC fallback to prevent phasing.");
+                }
+                window._lastBinaryTime = Date.now();
+
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
                 workletNode.port.postMessage(event.data, [event.data]);
               }
@@ -1934,6 +1943,17 @@
             } else {
               // Only auto-init if we already have the config
               if (configReceived) initAudio();
+            }
+
+            // [v13.9.452] APOR-WebRTC FAILOVER
+            // If binary PCM has stopped for > 2s, un-mute WebRTC track as a fallback.
+            if (window._lastBinaryTime && Date.now() - window._lastBinaryTime > 2000) {
+               const audioUnlocker = document.getElementById("audio-unlocker");
+               if (audioUnlocker && audioUnlocker.srcObject && audioUnlocker.muted) {
+                  audioUnlocker.muted = false;
+                  relayLogToStudio("⚠️ TV: APOR V2 Timed out. Restoring WebRTC fallback audio.");
+                  window._lastBinaryTime = 0; // Prevent loop
+               }
             }
 
             // [v13.9.427] Non-Cast fallback only — keep HTML5 audio element alive
