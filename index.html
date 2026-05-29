@@ -1333,14 +1333,19 @@
 
             if (pm && !pm._hasAudioListeners) {
               pm._hasAudioListeners = true;
-              const eventType = (cast && cast.framework && cast.framework.events) ? cast.framework.events.EventType : null;
-              if (eventType && eventType.PLAYER_STATE_CHANGED) {
-                pm.addEventListener(eventType.PLAYER_STATE_CHANGED, function(e) {
-                  relayLogToStudio("📱 TV: PLAYER_STATE_CHANGED event detected: " + e.value);
-                  resumeAudio();
-                });
-              } else {
-                relayLogToStudio("⚠️ TV: PlayerManager event types missing.");
+              try {
+                const evType = (cast && cast.framework && cast.framework.events && cast.framework.events.EventType) 
+                               ? cast.framework.events.EventType.PLAYER_STATE_CHANGED 
+                               : "PLAYER_STATE_CHANGED";
+                
+                if (evType) {
+                  pm.addEventListener(evType, function(e) {
+                    relayLogToStudio("📱 TV: PLAYER_STATE_CHANGED event detected: " + (e ? e.value : "unknown"));
+                    resumeAudio();
+                  });
+                }
+              } catch (e) {
+                relayLogToStudio("⚠️ TV: Failed to add PlayerManager listener: " + e.message);
               }
             }
 
