@@ -144,201 +144,208 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs, outputs) {
-    const output = outputs[0];
-    if (!output || output.length === 0) return true;
-    const channel0 = output[0];
-    const channel1 = output[1] || channel0;
+    try {
+      const output = outputs[0];
+      if (!output || output.length === 0) return true;
+      const channel0 = output[0];
+      const channel1 = output[1] || channel0;
 
-    if (!channel0) return true;
+      if (!channel0) return true;
 
-    const ringLen = this._ringLen;
-    const ringLenFrames = ringLen >> 1; // divide by 2 (each frame = L+R)
-    const now = performance.now();
+      const ringLen = this._ringLen;
+      const ringLenFrames = ringLen >> 1; // divide by 2 (each frame = L+R)
+      const now = currentTime;
 
-    this._callbackCount++;
-    if (!this._lastCallbackTime) this._lastCallbackTime = now;
-    this._framesProcessed += channel0.length;
+      this._callbackCount++;
+      if (!this._lastCallbackTime) this._lastCallbackTime = now;
+      this._framesProcessed += channel0.length;
 
-    // [v13-9-463] TEST_BEEP: Render a 1kHz sine wave to verify the audio path is working
-    if (this._testBeepActive) {
-      const freq = 1000;
-      const phaseInc = (2 * Math.PI * freq) / 48000;
-      for (let i = 0; i < channel0.length; i++) {
-        const s = Math.sin(this._testBeepPhase) * 0.25;
-        channel0[i] = s;
-        channel1[i] = s;
-        this._testBeepPhase += phaseInc;
-        if (this._testBeepPhase > 2 * Math.PI) this._testBeepPhase -= 2 * Math.PI;
-        this._testBeepFramesLeft--;
-        if (this._testBeepFramesLeft <= 0) {
-          this._testBeepActive = false;
-          this.port.postMessage({ type: "LOG", msg: "🔊 Worklet: TEST_BEEP complete." });
-          // Zero remaining frames
-          for (let j = i + 1; j < channel0.length; j++) { channel0[j] = 0; channel1[j] = 0; }
-          break;
+      // [v13-9-463] TEST_BEEP: Render a 1kHz sine wave to verify the audio path is working
+      if (this._testBeepActive) {
+        const freq = 1000;
+        const phaseInc = (2 * Math.PI * freq) / 48000;
+        for (let i = 0; i < channel0.length; i++) {
+          const s = Math.sin(this._testBeepPhase) * 0.25;
+          channel0[i] = s;
+          channel1[i] = s;
+          this._testBeepPhase += phaseInc;
+          if (this._testBeepPhase > 2 * Math.PI) this._testBeepPhase -= 2 * Math.PI;
+          this._testBeepFramesLeft--;
+          if (this._testBeepFramesLeft <= 0) {
+            this._testBeepActive = false;
+            this.port.postMessage({ type: "LOG", msg: "🔊 Worklet: TEST_BEEP complete." });
+            // Zero remaining frames
+            for (let j = i + 1; j < channel0.length; j++) { channel0[j] = 0; channel1[j] = 0; }
+            break;
+          }
         }
-      }
-      return true;
-    }
-
-    // [v13-9-463] FIX: Use Math.round() so available is always an integer,
-    // preventing fractional values from confusing the P-controller comparisons.
-    let available = Math.round(this._totalWritten - this._totalRead);
-
-    // RING OVERRUN: snap read pointer back to TARGET behind write
-    if (available > ringLen) {
-      const skip = available - this._TARGET_BUFFER;
-      this._totalRead += skip;
-      this._readFrameIdx = ((this._writePtr >> 1) - (this._TARGET_BUFFER >> 1) + ringLenFrames) % ringLenFrames;
-      this._readFrac = 0;
-      available = this._TARGET_BUFFER;
-      this._smoothedError = 0;
-      this.port.postMessage({ type: "LOG", msg: "⚠️ Ring Overrun: Recovered." });
-    }
-
-    // LATENCY CATCH-UP: flush excess above FLUSH_THRESHOLD
-    if (available > this._FLUSH_THRESHOLD) {
-      const flushTarget = Math.floor(this._TARGET_BUFFER * 1.25);
-      const excess = available - flushTarget;
-      this._totalRead += excess;
-      const excessFrames = excess >> 1;
-      this._readFrameIdx = (this._readFrameIdx + excessFrames) % ringLenFrames;
-      this._readFrac = 0;
-      available = flushTarget;
-      this._smoothedError = 0;
-      this.port.postMessage({ type: "LOG", msg: `⚠️ Latency Catch-up: Flushed ${excess} excess.` });
-    }
-
-    // PRE-BUFFER: hold until we have enough to start clean
-    if (this._isBuffering) {
-      if (available >= this._PREBUFFER) {
-        this._isBuffering = false;
-        this._smoothedError = 0;
-        if (available > this._TARGET_BUFFER) {
-          const excess = available - this._TARGET_BUFFER;
-          this._totalRead += excess;
-          const excessFrames = excess >> 1;
-          this._readFrameIdx = (this._readFrameIdx + excessFrames) % ringLenFrames;
-          this._readFrac = 0;
-          available = this._TARGET_BUFFER;
-          this.port.postMessage({ type: "LOG", msg: `⚡ Startup: Trimmed ${excess} samples.` });
-        }
-      } else {
-        channel0.fill(0);
-        channel1.fill(0);
         return true;
       }
-    }
 
-    // STALL DETECTION
-    if (available < this._MIN_BUFFER) {
-      this._stallCount++;
-      this._isBuffering = true;
-      // [v13-9-463] FIX: Reset smoothedError on stall so P-controller doesn't
-      // immediately over-speed the moment buffering ends.
-      this._smoothedError = 0;
-      this._fade = 0;
-      channel0.fill(0);
-      channel1.fill(0);
-      this.port.postMessage({ type: "LOG", msg: "⚠️ TV Stall: Buffering started." });
-      return true;
-    }
+      // [v13-9-463] FIX: Use Math.round() so available is always an integer,
+      // preventing fractional values from confusing the P-controller comparisons.
+      let available = Math.round(this._totalWritten - this._totalRead);
 
-    // P-CONTROLLER: micro-adjust playbackRate to correct clock drift
-    const rawError = available - this._TARGET_BUFFER;
-    this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
-    const kp = 0.00000002;
-    const clampedAdjustment = Math.max(-0.0005, Math.min(0.0005, rawError * kp));
-    const targetRate = this._baseRate * (1.0 + clampedAdjustment);
-    this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
-    this._playbackRate = Math.max(this._baseRate * 0.9995, Math.min(this._baseRate * 1.0005, this._playbackRate));
-
-    // RENDER LOOP (Linear Interpolation)
-    // [v13-9-463] FIX: Use integer frame index + separate fraction to eliminate
-    // accumulated float drift. Previously readPtrFrames was written back as a float
-    // each callback and accumulated sub-sample error across thousands of callbacks.
-    let frameIdx = this._readFrameIdx;
-    let frac = this._readFrac;
-    const playbackRate = this._playbackRate;
-    let fade = this._fade;
-    const INV_32768 = 3.0517578125e-5;
-    const is1x = Math.abs(playbackRate - 1.0) < 0.0001;
-
-    // [v13-9-463] FIX: Track exact integer samples consumed for totalRead accuracy
-    let samplesConsumedExact = 0;
-
-    for (let i = 0; i < channel0.length; i++) {
-      if (available - (samplesConsumedExact >> 1) * 2 >= 4) {
-        const idxL1 = frameIdx * 2;
-
-        if (is1x) {
-          channel0[i] = this._ringBuffer[idxL1]     * INV_32768 * fade;
-          channel1[i] = this._ringBuffer[idxL1 + 1] * INV_32768 * fade;
-          frac += 1.0;
-        } else {
-          let idxL2 = idxL1 + 2;
-          if (idxL2 >= ringLen) idxL2 -= ringLen;
-
-          const vL1 = this._ringBuffer[idxL1];
-          const vR1 = this._ringBuffer[idxL1 + 1];
-          const scale = INV_32768 * fade;
-
-          channel0[i] = (vL1 + (this._ringBuffer[idxL2]     - vL1) * frac) * scale;
-          channel1[i] = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * scale;
-          frac += playbackRate;
-        }
-
-        // Advance integer frame index when frac crosses a whole frame
-        const wholeFrac = frac | 0;
-        if (wholeFrac > 0) {
-          frameIdx = (frameIdx + wholeFrac) % ringLenFrames;
-          frac -= wholeFrac;
-          samplesConsumedExact += wholeFrac * 2;
-        }
-
-        if (fade < 1.0) fade = Math.min(1.0, fade + 0.02);
-
-        if (i === 0) {
-          const p = Math.abs(channel0[i]);
-          if (p > this._currentPeak) this._currentPeak = p;
-        }
-      } else {
-        if (fade > 0) fade = Math.max(0, fade - 0.05);
-        channel0[i] = 0;
-        channel1[i] = 0;
+      // RING OVERRUN: snap read pointer back to TARGET behind write
+      if (available > ringLen) {
+        const skip = available - this._TARGET_BUFFER;
+        this._totalRead += skip;
+        this._readFrameIdx = ((this._writePtr >> 1) - (this._TARGET_BUFFER >> 1) + ringLenFrames) % ringLenFrames;
+        this._readFrac = 0;
+        available = this._TARGET_BUFFER;
+        this._smoothedError = 0;
+        this.port.postMessage({ type: "LOG", msg: "⚠️ Ring Overrun: Recovered." });
       }
-    }
 
-    this._readFrameIdx = frameIdx;
-    this._readFrac = frac;
-    this._totalRead += samplesConsumedExact;
-    this._fade = fade;
+      // LATENCY CATCH-UP: flush excess above FLUSH_THRESHOLD
+      if (available > this._FLUSH_THRESHOLD) {
+        const flushTarget = Math.floor(this._TARGET_BUFFER * 1.25);
+        const excess = available - flushTarget;
+        this._totalRead += excess;
+        const excessFrames = excess >> 1;
+        this._readFrameIdx = (this._readFrameIdx + excessFrames) % ringLenFrames;
+        this._readFrac = 0;
+        available = flushTarget;
+        this._smoothedError = 0;
+        this.port.postMessage({ type: "LOG", msg: `⚠️ Latency Catch-up: Flushed ${excess} excess.` });
+      }
 
-    // TELEMETRY: report every ~3 seconds
-    if (this._framesProcessed >= 144000) {
-      const currentAvailable = Math.round(this._totalWritten - this._totalRead);
-      const elapsed = (now - this._lastCallbackTime) / 1000;
-      const measuredHz = elapsed > 0 ? this._callbackCount / elapsed : 375;
-      // [v13-9-463] Also report deviation from baseRate for easier Studio diagnosis
-      const rateDev = ((this._playbackRate / this._baseRate) - 1.0) * 100;
+      // PRE-BUFFER: hold until we have enough to start clean
+      if (this._isBuffering) {
+        if (available >= this._PREBUFFER) {
+          this._isBuffering = false;
+          this._smoothedError = 0;
+          if (available > this._TARGET_BUFFER) {
+            const excess = available - this._TARGET_BUFFER;
+            this._totalRead += excess;
+            const excessFrames = excess >> 1;
+            this._readFrameIdx = (this._readFrameIdx + excessFrames) % ringLenFrames;
+            this._readFrac = 0;
+            available = this._TARGET_BUFFER;
+            this.port.postMessage({ type: "LOG", msg: `⚡ Startup: Trimmed ${excess} samples.` });
+          }
+        } else {
+          channel0.fill(0);
+          channel1.fill(0);
+          return true;
+        }
+      }
 
+      // STALL DETECTION
+      if (available < this._MIN_BUFFER) {
+        this._stallCount++;
+        this._isBuffering = true;
+        // [v13-9-463] FIX: Reset smoothedError on stall so P-controller doesn't
+        // immediately over-speed the moment buffering ends.
+        this._smoothedError = 0;
+        this._fade = 0;
+        channel0.fill(0);
+        channel1.fill(0);
+        this.port.postMessage({ type: "LOG", msg: "⚠️ TV Stall: Buffering started." });
+        return true;
+      }
+
+      // P-CONTROLLER: micro-adjust playbackRate to correct clock drift
+      const rawError = available - this._TARGET_BUFFER;
+      this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
+      const kp = 0.00000002;
+      const clampedAdjustment = Math.max(-0.0005, Math.min(0.0005, rawError * kp));
+      const targetRate = this._baseRate * (1.0 + clampedAdjustment);
+      this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
+      this._playbackRate = Math.max(this._baseRate * 0.9995, Math.min(this._baseRate * 1.0005, this._playbackRate));
+
+      // RENDER LOOP (Linear Interpolation)
+      // [v13-9-463] FIX: Use integer frame index + separate fraction to eliminate
+      // accumulated float drift. Previously readPtrFrames was written back as a float
+      // each callback and accumulated sub-sample error across thousands of callbacks.
+      let frameIdx = this._readFrameIdx;
+      let frac = this._readFrac;
+      const playbackRate = this._playbackRate;
+      let fade = this._fade;
+      const INV_32768 = 3.0517578125e-5;
+      const is1x = Math.abs(playbackRate - 1.0) < 0.0001;
+
+      // [v13-9-463] FIX: Track exact integer samples consumed for totalRead accuracy
+      let samplesConsumedExact = 0;
+
+      for (let i = 0; i < channel0.length; i++) {
+        if (available - (samplesConsumedExact >> 1) * 2 >= 4) {
+          const idxL1 = frameIdx * 2;
+
+          if (is1x) {
+            channel0[i] = this._ringBuffer[idxL1]     * INV_32768 * fade;
+            channel1[i] = this._ringBuffer[idxL1 + 1] * INV_32768 * fade;
+            frac += 1.0;
+          } else {
+            let idxL2 = idxL1 + 2;
+            if (idxL2 >= ringLen) idxL2 -= ringLen;
+
+            const vL1 = this._ringBuffer[idxL1];
+            const vR1 = this._ringBuffer[idxL1 + 1];
+            const scale = INV_32768 * fade;
+
+            channel0[i] = (vL1 + (this._ringBuffer[idxL2]     - vL1) * frac) * scale;
+            channel1[i] = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * scale;
+            frac += playbackRate;
+          }
+
+          // Advance integer frame index when frac crosses a whole frame
+          const wholeFrac = frac | 0;
+          if (wholeFrac > 0) {
+            frameIdx = (frameIdx + wholeFrac) % ringLenFrames;
+            frac -= wholeFrac;
+            samplesConsumedExact += wholeFrac * 2;
+          }
+
+          if (fade < 1.0) fade = Math.min(1.0, fade + 0.02);
+
+          if (i === 0) {
+            const p = Math.abs(channel0[i]);
+            if (p > this._currentPeak) this._currentPeak = p;
+          }
+        } else {
+          if (fade > 0) fade = Math.max(0, fade - 0.05);
+          channel0[i] = 0;
+          channel1[i] = 0;
+        }
+      }
+
+      this._readFrameIdx = frameIdx;
+      this._readFrac = frac;
+      this._totalRead += samplesConsumedExact;
+      this._fade = fade;
+
+      // TELEMETRY: report every ~3 seconds
+      if (this._framesProcessed >= 144000) {
+        const currentAvailable = Math.round(this._totalWritten - this._totalRead);
+        const elapsed = now - this._lastCallbackTime;
+        const measuredHz = elapsed > 0 ? this._callbackCount / elapsed : 375;
+        // [v13-9-463] Also report deviation from baseRate for easier Studio diagnosis
+        const rateDev = ((this._playbackRate / this._baseRate) - 1.0) * 100;
+
+        this.port.postMessage({
+          type: "DIAG",
+          available: currentAvailable,
+          stalled: this._stallCount,
+          peak: this._currentPeak,
+          rate: this._playbackRate,
+          rateDev: parseFloat(rateDev.toFixed(4)), // % deviation from baseRate
+          locked: Math.abs(this._smoothedError) < 12000,
+          measuredHz: Math.round(measuredHz),
+        });
+        this._currentPeak = 0;
+        this._framesProcessed = 0;
+        this._callbackCount = 0;
+        this._lastCallbackTime = now;
+      }
+
+      return true;
+    } catch (err) {
       this.port.postMessage({
-        type: "DIAG",
-        available: currentAvailable,
-        stalled: this._stallCount,
-        peak: this._currentPeak,
-        rate: this._playbackRate,
-        rateDev: parseFloat(rateDev.toFixed(4)), // % deviation from baseRate
-        locked: Math.abs(this._smoothedError) < 12000,
-        measuredHz: Math.round(measuredHz),
+        type: "LOG",
+        msg: `❌ Worklet process() Exception: ${err.message} \n ${err.stack}`
       });
-      this._currentPeak = 0;
-      this._framesProcessed = 0;
-      this._callbackCount = 0;
-      this._lastCallbackTime = now;
-    }
-
-    return true;
+      return false; // Stop the processor on fatal crash
   }
 }
 
