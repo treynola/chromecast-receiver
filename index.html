@@ -531,6 +531,7 @@
           <audio
             class="castMediaElement"
             id="audio-unlocker"
+            crossorigin="anonymous"
             playsinline
             autoplay
             loop
@@ -726,6 +727,7 @@
 
         function preInitAudioContext() {
           const HARDWARE_RATE = window._hwRate || 48000;
+          relayLogToStudio("🛠️ TV: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx || window._lastHwRate !== HARDWARE_RATE) {
             window._lastHwRate = HARDWARE_RATE;
             if (audioCtx) {
@@ -740,17 +742,15 @@
               workletNode = null;
             }
             try {
-              // [v13.9.413] Use default sampleRate with 'playback' latencyHint to allow native hardware path
-              // and prevent smart TV background thread throttling.
+              relayLogToStudio("🛠️ TV: Creating new AudioContext...");
               audioCtx = new window.AudioContext({ latencyHint: "playback" });
+              relayLogToStudio("🛠️ TV: AudioContext created. State: " + audioCtx.state);
 
-              // Master Gain (Final Stage) [v13.9.60] Bumping default to 1.5 for TV Speakers
               masterGain = audioCtx.createGain();
               masterGain.gain.value = 1.5;
               masterGain.connect(audioCtx.destination);
+              relayLogToStudio("🛠️ TV: masterGain connected.");
 
-              // Keep-Alive Dither (Prevents hardware suspension and background throttling)
-              // [v13.9.425] Set frequency to inaudible 20kHz and gain to 0.002 (-54 dB) so Chrome registers audible signal
               const keepAlive = audioCtx.createOscillator();
               keepAlive.frequency.value = 20000;
               const g = audioCtx.createGain();
@@ -758,10 +758,10 @@
               keepAlive.connect(g);
               g.connect(audioCtx.destination);
               keepAlive.start();
+              relayLogToStudio("🛠️ TV: keepAlive oscillator started.");
 
-              // [v13.9.426] Play silent WAV routed to AudioContext via createMediaElementSource
-              // to resume AudioContext and keep HTML5 audio element playing to prevent CPU throttling.
               const audioUnlocker = document.getElementById("audio-unlocker");
+              relayLogToStudio("🛠️ TV: audioUnlocker found: " + !!audioUnlocker);
               if (audioUnlocker) {
                 try {
                   const mediaSource = audioCtx.createMediaElementSource(audioUnlocker);
@@ -1511,7 +1511,18 @@
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
                 workletNode.port.postMessage(event.data, [event.data]);
               }
-              return; // [v13.9.404] Early exit — don't touch the string parsing path for binary data
+              return;
+            } else if (event.data instanceof Blob) {
+              // [v13.9.449] Fallback: TV browser ignored binaryType="arraybuffer"
+              if (workletNode) {
+                if (audioCtx && audioCtx.state === "suspended") resumeAudio();
+                event.data.arrayBuffer().then((ab) => {
+                  workletNode.port.postMessage(ab, [ab]);
+                }).catch(e => {
+                  relayLogToStudio("⚠️ TV: Blob to ArrayBuffer conversion failed - " + e.message);
+                });
+              }
+              return;
             } else if (typeof event.data === "string") {
               try {
                 const d = JSON.parse(event.data);
