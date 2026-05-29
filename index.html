@@ -1333,10 +1333,15 @@
 
             if (pm && !pm._hasAudioListeners) {
               pm._hasAudioListeners = true;
-              pm.addEventListener(cast.framework.events.EventType.PLAYER_STATE_CHANGED, function(e) {
-                relayLogToStudio("📱 TV: PLAYER_STATE_CHANGED event detected: " + e.value);
-                resumeAudio();
-              });
+              const eventType = (cast && cast.framework && cast.framework.events) ? cast.framework.events.EventType : null;
+              if (eventType && eventType.PLAYER_STATE_CHANGED) {
+                pm.addEventListener(eventType.PLAYER_STATE_CHANGED, function(e) {
+                  relayLogToStudio("📱 TV: PLAYER_STATE_CHANGED event detected: " + e.value);
+                  resumeAudio();
+                });
+              } else {
+                relayLogToStudio("⚠️ TV: PlayerManager event types missing.");
+              }
             }
 
             const state = pm.getPlayerState();
