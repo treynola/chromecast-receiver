@@ -250,15 +250,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._smoothedError = this._smoothedError * 0.98 + rawError * 0.02;
       
       // [v13-9-464] STABILITY FIX: Use smoothedError for adjustment to filter out network jitter.
-      // Increase kp to 5e-7 (from 2e-8) for more assertive correction.
-      const kp = 0.0000005;
+      // Increase kp to 1e-6 (from 5e-7) for more assertive correction.
+      const kp = 0.000001;
       const adjustment = this._smoothedError * kp;
-      const targetRate = this._baseRate * (1.0 + Math.max(-0.002, Math.min(0.002, adjustment)));
+      const targetRate = this._baseRate * (1.0 + Math.max(-0.04, Math.min(0.04, adjustment)));
       
-      // [v13-9-464] RESPONSIVENESS FIX: Increase smoothing weight to 0.05 (from 0.001)
+      // [v13-9-464] RESPONSIVENESS FIX: Increase smoothing weight to 0.1 (from 0.05)
       // to reduce phase-lag in the control loop and prevent oscillation (hunting).
-      this._playbackRate = this._playbackRate * 0.95 + targetRate * 0.05;
-      this._playbackRate = Math.max(this._baseRate * 0.998, Math.min(this._baseRate * 1.002, this._playbackRate));
+      this._playbackRate = this._playbackRate * 0.90 + targetRate * 0.10;
+      this._playbackRate = Math.max(this._baseRate * 0.96, Math.min(this._baseRate * 1.04, this._playbackRate));
 
       // RENDER LOOP (Linear Interpolation)
       // [v13-9-464] FIX: Use integer frame index + separate fraction to eliminate

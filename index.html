@@ -769,6 +769,7 @@
               if (audioUnlocker) {
                 try {
                   const mediaSource = audioCtx.createMediaElementSource(audioUnlocker);
+                  window._mediaSourceNode = mediaSource;
                   mediaSource.connect(masterGain);
                   relayLogToStudio("✅ TV: MediaElementSource connected to AudioContext early.");
                 } catch (e) {
@@ -2020,6 +2021,31 @@
             btnUnlock.addEventListener("click", function(e) {
               e.stopPropagation();
               relayLogToStudio("🖱️ TV: Unlock button clicked.");
+              resumeAudio();
+            });
+          }
+
+
+
+          window.addEventListener("resize", updateScale);
+          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
+        };
+      })();
+    �� TV: Unlock button clicked.");
+              resumeAudio();
+            });
+          }
+
+
+
+          window.addEventListener("resize", updateScale);
+          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
+        };
+      })();
+    
+</script>
+  </body>
+</html>.");
               resumeAudio();
             });
           }
