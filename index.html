@@ -1045,15 +1045,16 @@
             }
           }
           let sent = false;
-          // Send over WebSocket if available (crucial for Samsung Tizen Browser / DIAL)
+          // [v13.9.464] PREFER BINARY WS: Fastest and most reliable path
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
               binaryWS.send(JSON.stringify({ type: "LOG", msg: msg }));
               sent = true;
             } catch (e) {}
           }
-          // Send over ChromeCast custom namespace if available
-          if (typeof cast !== "undefined" && cast.framework) {
+          
+          // [v13.9.464] FALLBACK: Google Cast SDK Namespace
+          if (!sent && typeof cast !== "undefined" && cast.framework) {
             try {
               const context = cast.framework.CastReceiverContext.getInstance();
               const senders = context.getSenders();
@@ -1066,6 +1067,8 @@
               }
             } catch (e) {}
           }
+          
+          // [v13.9.464] ULTIMATE FALLBACK: HTTP Beacon (Log Server)
           if (!sent && !isHighFreq) {
             logQueue.push(msg);
             if (logQueue.length > 100) logQueue.shift();
@@ -2017,20 +2020,6 @@
             btnUnlock.addEventListener("click", function(e) {
               e.stopPropagation();
               relayLogToStudio("🖱️ TV: Unlock button clicked.");
-              resumeAudio();
-            });
-          }
-
-
-
-          window.addEventListener("resize", updateScale);
-          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
-        };
-      })();
-    
-</script>
-  </body>
-</html>cked.");
               resumeAudio();
             });
           }

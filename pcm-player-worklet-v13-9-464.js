@@ -247,12 +247,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       // P-CONTROLLER: micro-adjust playbackRate to correct clock drift
       const rawError = available - this._TARGET_BUFFER;
-      this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
-      const kp = 0.00000002;
-      const clampedAdjustment = Math.max(-0.0005, Math.min(0.0005, rawError * kp));
-      const targetRate = this._baseRate * (1.0 + clampedAdjustment);
-      this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
-      this._playbackRate = Math.max(this._baseRate * 0.9995, Math.min(this._baseRate * 1.0005, this._playbackRate));
+      this._smoothedError = this._smoothedError * 0.98 + rawError * 0.02;
+      
+      // [v13-9-464] STABILITY FIX: Use smoothedError for adjustment to filter out network jitter.
+      // Increase kp to 5e-7 (from 2e-8) for more assertive correction.
+      const kp = 0.0000005;
+      const adjustment = this._smoothedError * kp;
+      const targetRate = this._baseRate * (1.0 + Math.max(-0.002, Math.min(0.002, adjustment)));
+      
+      // [v13-9-464] RESPONSIVENESS FIX: Increase smoothing weight to 0.05 (from 0.001)
+      // to reduce phase-lag in the control loop and prevent oscillation (hunting).
+      this._playbackRate = this._playbackRate * 0.95 + targetRate * 0.05;
+      this._playbackRate = Math.max(this._baseRate * 0.998, Math.min(this._baseRate * 1.002, this._playbackRate));
 
       // RENDER LOOP (Linear Interpolation)
       // [v13-9-464] FIX: Use integer frame index + separate fraction to eliminate
