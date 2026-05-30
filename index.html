@@ -805,6 +805,7 @@
           }
         }
 
+        let lastInitAttempt = 0;
         async function initAudio() {
           // [v13.9.464] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
@@ -812,6 +813,11 @@
             preInitAudioContext(); // Still ensure native context is warmed up
             return;
           }
+
+          // [v13.9.464] THROTTLE: Prevent tight-loop retries if init fails (e.g. 404 or SyntaxError)
+          const now = Date.now();
+          if (now - lastInitAttempt < 5000) return;
+          lastInitAttempt = now;
 
           // [v13.9.464] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
@@ -831,9 +837,14 @@
           }
 
           try {
-            await audioCtx.audioWorklet.addModule(
-              `pcm-player-worklet-v13-9-464.js?cb=${Date.now()}`,
-            );
+            let workletUrl = `pcm-player-worklet-v13-9-464.js?cb=${Date.now()}`;
+            if (currentBridgeIp && currentBridgePort) {
+              const port = currentBridgePort || "8080";
+              workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
+              relayLogToStudio(`📡 TV: Loading Worklet from Studio: ${workletUrl}`);
+            }
+
+            await audioCtx.audioWorklet.addModule(workletUrl);
 
             // [v13.9.464] DYNAMIC RATE TRANSFORMATION
             // Since the Rust backend now handles authoritative resampling (Studio -> TV),
@@ -2006,6 +2017,20 @@
             btnUnlock.addEventListener("click", function(e) {
               e.stopPropagation();
               relayLogToStudio("🖱️ TV: Unlock button clicked.");
+              resumeAudio();
+            });
+          }
+
+
+
+          window.addEventListener("resize", updateScale);
+          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
+        };
+      })();
+    
+</script>
+  </body>
+</html>cked.");
               resumeAudio();
             });
           }

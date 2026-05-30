@@ -346,6 +346,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         msg: `❌ Worklet process() Exception: ${err.message} \n ${err.stack}`
       });
       return false; // Stop the processor on fatal crash
+    }
   }
 }
 
