@@ -608,6 +608,7 @@
           </div>
         </div>
       </div>
+    </div>
     <!-- [v13.9.433] Premium Glassmorphic Audio Unlock Overlay -->
     <div id="audio-unlock-overlay">
       <div class="unlock-card">
@@ -624,6 +625,9 @@
     </div>
 
     <script>
+
+      window.SERVER_PORT = "{{SERVER_PORT}}";
+      window.SECURITY_TOKEN = "{{SECURITY_TOKEN}}";
 
       (function () {
         var audioCtx = null;
@@ -712,9 +716,9 @@
                         <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button class="fx-chain-arrow">&gt;</button></div></div>
+                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>\${[0, 1, 2, 3, 4, 5, 6].map((idx) => \`<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-\${i}-\${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-\${i}-\${idx}">\${idx + 1}</label></div>\`).join("")}<button class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
+                        <div class="main-controls">\${KNOB_CONFIGS.map((cfg) => \`<div class="knob-container"><div class="knob-label-group"><label>\${cfg.l}</label><span class="param-value" id="t-\${cfg.p}-val-\${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-\${i}-\${cfg.p}" data-lfo-assign="\${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-\${i}-\${cfg.p}" data-lfo-assign="\${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-\${cfg.p}-sl-\${i}" class="pa-mic-slider"></div></div>\`).join("")}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-\${i}" class="meter-bar"></div></div>\`;
             grid.appendChild(t);
           }
           updateScale();
@@ -736,7 +740,7 @@
             window._lastHwRate = HARDWARE_RATE;
             if (audioCtx) {
               relayLogToStudio(
-                `📡 TV: Reseting AudioContext for Hardware Rate: ${HARDWARE_RATE}Hz`,
+                \`📡 TV: Reseting AudioContext for Hardware Rate: \${HARDWARE_RATE}Hz\`,
               );
               try {
                 audioCtx.close();
@@ -801,7 +805,7 @@
               
               resumeAudio();
             } catch (e) {
-              relayLogToStudio(`❌ TV ERROR: preInitAudioContext failed - ${e.message}`);
+              relayLogToStudio(\`❌ TV ERROR: preInitAudioContext failed - \${e.message}\`);
             }
           }
         }
@@ -838,11 +842,11 @@
           }
 
           try {
-            let workletUrl = `pcm-player-worklet-v13-9-464.js?cb=${Date.now()}`;
+            let workletUrl = \`pcm-player-worklet-v13-9-464.js?cb=\${Date.now()}\`;
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
-              workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
-              relayLogToStudio(`📡 TV: Loading Worklet from Studio: ${workletUrl}`);
+              workletUrl = \`http://\${currentBridgeIp}:\${port}/receiver/\${workletUrl}\`;
+              relayLogToStudio(\`📡 TV: Loading Worklet from Studio: \${workletUrl}\`);
             }
 
             await audioCtx.audioWorklet.addModule(workletUrl);
@@ -855,10 +859,10 @@
             const baseRateRatio = 1.0; // Backend Resampled Alignment
 
             console.log(
-              `📏 TV Clock: requested=${window._hwRate || 48000}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
+              \`📏 TV Clock: requested=\${window._hwRate || 48000}Hz actual=\${actualRate}Hz | Studio: \${studioRate}Hz | Unity Sync Active\`,
             );
             relayLogToStudio(
-              `📏 TV Clock: ${actualRate}Hz | Studio: ${studioRate}Hz | Sync: APORv2 Unity`,
+              \`📏 TV Clock: \${actualRate}Hz | Studio: \${studioRate}Hz | Sync: APORv2 Unity\`,
             );
 
             workletNode = new AudioWorkletNode(
@@ -886,7 +890,7 @@
               }
             } catch (e) {}
 
-            relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${actualRate}Hz`);
+            relayLogToStudio(\`✅ TV: APOR V2 Sink Active @ \${actualRate}Hz\`);
 
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
@@ -916,12 +920,12 @@
                   const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
                   const relayInfo =
                     window._relayPkts > 0
-                      ? `RELAY: ${window._relayPkts} | `
+                      ? \`RELAY: \${window._relayPkts} | \`
                       : "";
                   const hzInfo = e.data.measuredHz
-                    ? ` | HZ: ${e.data.measuredHz}`
+                    ? \` | HZ: \${e.data.measuredHz}\`
                     : "";
-                  diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
+                  diagEl.textContent = \`\${relayInfo}BUF: \${e.data.available}\${hzInfo} | RATE: \${rate}x | \${lockStatus} | WS: \${wsStatus} [DIRECT BRIDGE]\`;
                 }
 
                 // [v13.9.464] TRIPLE CHECK: Relay lock status to Studio every ~10s
@@ -935,10 +939,10 @@
                     : "1.0000";
                   const peakPercent = Math.round((e.data.peak || 0) * 100);
                   const hzInfo = e.data.measuredHz
-                    ? ` | HZ: ${e.data.measuredHz}`
+                    ? \` | HZ: \${e.data.measuredHz}\`
                     : "";
                   relayLogToStudio(
-                    `📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`,
+                    \`📊 TV STATUS: \${lockStatus} @ \${rate}x (BUF: \${e.data.available}\${hzInfo} | PEAK: \${peakPercent}% | STALLS: \${e.data.stalled})\`,
                   );
                   window._lastDiagSent = Date.now();
                 }
@@ -948,7 +952,7 @@
             };
             resumeAudio();
           } catch (e) {
-            relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+            relayLogToStudio(\`❌ TV ERROR: initAudio failed - \${e.message}\`);
           }
         }
 
@@ -1075,7 +1079,7 @@
             if (logQueue.length > 100) logQueue.shift();
             const targetIp = currentBridgeIp || (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" && window.location.hostname !== "" ? window.location.hostname : null);
             if (targetIp) {
-              const port = currentBridgePort || (window.SERVER_PORT && window.SERVER_PORT !== "{{SERVER_PORT}}" ? window.SERVER_PORT : "8080");
+              const port = currentBridgePort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
               const url = "http://" + targetIp + ":" + port + "/log?m=" + encodeURIComponent(msg);
               if (navigator.sendBeacon) {
                 navigator.sendBeacon(url);
@@ -1152,12 +1156,12 @@
             if (s.cursor) {
               var cur = getEl("cursor-mirror");
               if (cur) {
-                const curKey = `${s.cursor.x}_${s.cursor.y}_${s.cursor.isClicking}`;
+                const curKey = \`\${s.cursor.x}_\${s.cursor.y}_\${s.cursor.isClicking}\`;
                 if (valCache["cursor"] !== curKey) {
                   cur.style.display = "block";
                   var px = s.cursor.x * 1440;
                   var py = s.cursor.y * 810 + 13;
-                  cur.style.transform = `translate3d(${px}px, ${py}px, 0) translate3d(-50%, -50%, 0)`;
+                  cur.style.transform = \`translate3d(\${px}px, \${py}px, 0) translate3d(-50%, -50%, 0)\`;
                   cur.style.background = s.cursor.isClicking
                     ? "rgba(255, 255, 0, 0.9)"
                     : "rgba(255, 0, 0, 0.9)";
@@ -1268,10 +1272,10 @@
                   if (_lastParamsCache[i] !== trackCacheKey) {
                     _lastParamsCache[i] = trackCacheKey;
                     KNOB_CONFIGS.forEach((cfg) => {
-                      updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
-                      updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
+                      updateValue(\`t-\${cfg.p}-sl-\${i}\`, t.params[cfg.p] || 0);
+                      updateText(\`t-\${cfg.p}-val-\${i}\`, t.params[cfg.p] || 0);
 
-                      const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
+                      const l1 = getEl(\`t-lfo1-chk-\${i}-\${cfg.p}\`);
                       const l1Checked = !!(
                         t.lfoAssigns &&
                         t.lfoAssigns[1] &&
@@ -1280,7 +1284,7 @@
                       if (l1 && l1.checked !== l1Checked) {
                         l1.checked = l1Checked;
                       }
-                      const l2 = getEl(`t-lfo2-chk-${i}-${cfg.p}`);
+                      const l2 = getEl(\`t-lfo2-chk-\${i}-\${cfg.p}\`);
                       const l2Checked = !!(
                         t.lfoAssigns &&
                         t.lfoAssigns[2] &&
@@ -1290,9 +1294,9 @@
                         l2.checked = l2Checked;
                       }
                     });
-                    updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
+                    updateValue(\`t-gain-sl-\${i}\`, t.params.inputGain || 0);
                     updateText(
-                      `t-gain-val-${i}`,
+                      \`t-gain-val-\${i}\`,
                       (t.params.inputGain || 0).toFixed(1) + " dB",
                     );
                   }
@@ -1305,11 +1309,11 @@
                   if (_lastFxCache[i] !== fxStr) {
                     _lastFxCache[i] = fxStr;
                     t.fxSlots.forEach((active, idx) => {
-                      const chk = getEl(`t-fx-chk-${i}-${idx}`);
+                      const chk = getEl(\`t-fx-chk-\${i}-\${idx}\`);
                       if (chk && chk.checked !== active) {
                         chk.checked = active;
                       }
-                      const lbl = getEl(`t-fx-lbl-${i}-${idx}`);
+                      const lbl = getEl(\`t-fx-lbl-\${i}-\${idx}\`);
                       if (lbl && t.fxNames && t.fxNames[idx] !== undefined) {
                         const name = t.fxNames[idx];
                         if (lbl.textContent !== name) {
@@ -1317,7 +1321,7 @@
                         }
                       }
                       const bg = active ? "var(--gold)" : "transparent";
-                      const bgKey = `t-fx-lbl-bg-${i}-${idx}`;
+                      const bgKey = \`t-fx-lbl-bg-\${i}-\${idx}\`;
                       if (lbl && valCache[bgKey] !== bg) {
                         lbl.style.backgroundColor = bg;
                         valCache[bgKey] = bg;
@@ -1325,7 +1329,7 @@
                     });
                   }
                 }
-                updateClass(`t-rec-${i}`, t.isRecording ? "recording" : "");
+                updateClass(\`t-rec-\${i}\`, t.isRecording ? "recording" : "");
               });
           } catch (e) {
             console.error("❌ TV Render Error:", e);
@@ -1391,7 +1395,7 @@
             // Build the silence URL from the bridge IP (Tauri server)
             let silenceUrl = null;
             if (currentBridgeIp) {
-              const port = currentBridgePort || (window.SERVER_PORT && window.SERVER_PORT !== "{{SERVER_PORT}}" ? window.SERVER_PORT : "8080");
+              const port = currentBridgePort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
               silenceUrl = "http://" + currentBridgeIp + ":" + port + "/silence.wav";
             } else {
               // Fallback: try to extract IP from current WebSocket URL
@@ -1465,16 +1469,16 @@
             binaryWS = null;
           }
 
-          const targetPort = customPort || window.SERVER_PORT || "8080";
-          const targetToken = customToken || window.SECURITY_TOKEN || "";
-          const url = `ws://${ip}:${targetPort}/?role=receiver&token=${targetToken}`;
+          const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
+          const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
+          const url = `ws://\${ip}:\${targetPort}/?role=receiver&token=\${targetToken}\`;
           try {
-            relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
+            relayLogToStudio(\`📡 TV: Attempting to connect to \${url}\`);
             binaryWS = new WebSocket(url);
             binaryWS.binaryType = "arraybuffer";
           } catch (err) {
             relayLogToStudio(
-              `❌ TV: WebSocket Constructor Failed: ${err.message}`,
+              \`❌ TV: WebSocket Constructor Failed: \${err.message}\`,
             );
             wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip), 5000);
             return;
@@ -1482,7 +1486,7 @@
 
           binaryWS.onopen = async () => {
             console.log("✅ Binary Bridge Connected");
-            relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
+            relayLogToStudio(\`✅ TV: WebSocket Connected to \${url}\`);
             // [v13.9.464] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
             // Flush buffered logs
@@ -1514,12 +1518,12 @@
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
-                `🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`,
+                \`🔍 TV: Hardware probe → actual rate = \${hwRate}Hz\`,
               );
               probe.close();
             } catch (e) {
               relayLogToStudio(
-                `⚠️ TV: Hardware probe failed, defaulting to ${hwRate}Hz`,
+                \`⚠️ TV: Hardware probe failed, defaulting to \${hwRate}Hz\`,
               );
               window._hwRate = hwRate;
             }
@@ -1535,7 +1539,7 @@
               },
             };
             binaryWS.send(JSON.stringify(handshake));
-            relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 16-bit`);
+            relayLogToStudio(\`🤝 TV: Handshake sent → \${hwRate}Hz / 16-bit\`);
             // Audio init is deferred until HANDSHAKE_ACK arrives
             triggerWakeLockLoad();
           };
@@ -1589,7 +1593,7 @@
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
-                    `✅ TV: HANDSHAKE_ACK received → ${ackRate}Hz / ${ackBitDepth}-bit`,
+                    \`✅ TV: HANDSHAKE_ACK received → \${ackRate}Hz / \${ackBitDepth}-bit\`,
                   );
                   window._negotiatedBitDepth = ackBitDepth;
                   if (ackRate) {
@@ -1605,7 +1609,7 @@
                         bitDepth: ackBitDepth,
                       });
                       relayLogToStudio(
-                        `🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`,
+                        \`🔧 TV: Worklet configured for \${ackBitDepth}-bit decode\`,
                       );
                     }
                   }, 500);
@@ -1616,7 +1620,7 @@
                     if (window._studioRate !== newStudioRate) {
                       window._studioRate = newStudioRate;
                       relayLogToStudio(
-                        `🔄 TV: Studio rate updated to ${newStudioRate}Hz`,
+                        \`🔄 TV: Studio rate updated to \${newStudioRate}Hz\`,
                       );
                       if (workletNode && audioCtx) {
                         const newBaseRateRatio = audioCtx.sampleRate
@@ -1661,7 +1665,7 @@
             const maxRetries = 5;
             if (window._wsReconnectAttempts <= maxRetries) {
               const delay = Math.min(1000 * Math.pow(2, window._wsReconnectAttempts - 1), 16000);
-              relayLogToStudio(`🔄 TV: WS closed. Reconnect attempt ${window._wsReconnectAttempts}/${maxRetries} in ${delay}ms...`);
+              relayLogToStudio(\`🔄 TV: WS closed. Reconnect attempt \${window._wsReconnectAttempts}/\${maxRetries} in \${delay}ms...\`);
               if (wsConnectTimeout) clearTimeout(wsConnectTimeout);
               wsConnectTimeout = setTimeout(() => {
                 connectBinaryBridge(currentBridgeIp, currentBridgePort, currentBridgeToken);
@@ -1678,10 +1682,10 @@
 
           binaryWS.onerror = (e) => {
             console.error("❌ Binary Bridge Error:", e);
-            relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
+            relayLogToStudio(\`❌ TV: WebSocket Error on \${url}\`);
             const diagEl = document.getElementById("bridge-diag-text");
             if (diagEl) {
-              diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
+              diagEl.textContent = \`BUF: 0 | STALLS: 0 | WS: ERROR [\${url}]\`;
               diagEl.style.color = "var(--red)";
               diagEl.style.borderColor = "var(--red)";
             }
@@ -1761,7 +1765,7 @@
                 if (window._studioRate !== newRate) {
                   window._studioRate = newRate;
                   relayLogToStudio(
-                    `🔄 TV: Studio rate updated via signaling to ${newRate}Hz`,
+                    \`🔄 TV: Studio rate updated via signaling to \${newRate}Hz\`,
                   );
                   if (workletNode && audioCtx) {
                     const newBaseRateRatio = audioCtx.sampleRate
@@ -1944,7 +1948,7 @@
               const isLocal =
                 hostname === "localhost" ||
                 hostname === "127.0.0.1" ||
-                /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+                /^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(hostname);
               if (isLocal) {
                 connectBinaryBridge(hostname);
               } else {
@@ -2024,33 +2028,6 @@
               resumeAudio();
             });
           }
-
-
-
-          window.addEventListener("resize", updateScale);
-          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
-        };
-      })();
-    �� TV: Unlock button clicked.");
-              resumeAudio();
-            });
-          }
-
-
-
-          window.addEventListener("resize", updateScale);
-          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
-        };
-      })();
-    
-</script>
-  </body>
-</html>.");
-              resumeAudio();
-            });
-          }
-
-
 
           window.addEventListener("resize", updateScale);
           relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
