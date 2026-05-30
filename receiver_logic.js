@@ -1405,8 +1405,5 @@
 
           window.addEventListener("resize", updateScale);
           relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
-        };
-      })();
-    
- })();
-    
+          };
+          })();
