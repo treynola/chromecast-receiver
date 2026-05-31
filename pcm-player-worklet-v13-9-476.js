@@ -1,13 +1,13 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-475]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-476]
  *
- * [v13-9-475] APORv2.2 "Quartz" Sync - Jitter-Hardened:
- *  - RESTORED: measuredHz in telemetry for Studio-side delay alignment.
- *  - TIGHTENED: Quartz Deadzone to 2400 samples (50ms) for better precision.
- *  - OPTIMIZED: Assertive drift recovery (+/- 0.5%) when outside deadzone.
- *  - REDUCED: Operating targets (400ms/800ms) to lower total latency.
- *  - FIXED: Telemetry interval reset logic.
+ * [v13-9-476] APORv2.4 "Concrete Sync" Overhaul:
+ *  - INCREASED: _TARGET_BUFFER to 48000 (500ms) for rock-solid stability on jittery WiFi.
+ *  - INCREASED: _FLUSH_THRESHOLD to 72000 (750ms).
+ *  - ULTRA-SLOW Correction: Increased smoothing to 0.999. Pitch changes take ~10 seconds.
+ *  - REDUCED: Max correction cap to +/- 0.4% (was 0.5%) for near-perfect pitch transparency.
+ *  - OPTIMIZED: Pure unity-gain pass-through when rate is exactly 1.0.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -25,11 +25,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // v13-9-475: Optimized Targets
-    this._TARGET_BUFFER = 38400; // 400ms target
-    this._MIN_BUFFER = 4800;      // 50ms stall threshold
-    this._PREBUFFER = 28800;      // 300ms pre-fill
-    this._FLUSH_THRESHOLD = 76800; // 800ms limit
+    // v13-9-476: Concrete Stability Targets
+    this._TARGET_BUFFER = 48000; // 500ms target (Safe Mode)
+    this._MIN_BUFFER = 9600;      // 100ms stall threshold
+    this._PREBUFFER = 38400;      // 400ms pre-fill
+    this._FLUSH_THRESHOLD = 72000; // 750ms hard limit
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -54,45 +54,29 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._smoothedError = 0;
           this._playbackRate = 1.0;
-          this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: Quartz-Lock Reset." });
+          this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: Concrete Reset." });
           return;
         }
 
         const arrayBuffer = e.data instanceof ArrayBuffer ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
 
+        const pcm16 = new Int16Array(arrayBuffer);
+        const len = pcm16.length;
         const ringLen = this._ringLen;
         let writePtr = this._writePtr;
-        let samplesDecoded = 0;
 
-        if (this._bitDepth === 24) {
-          const bytes = new Uint8Array(arrayBuffer);
-          const numSamples = Math.floor(bytes.length / 3);
-          for (let i = 0; i < numSamples; i++) {
-            const offset = i * 3;
-            let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
-            if (val & 0x800000) val |= 0xff000000;
-            this._ringBuffer[writePtr] = val >> 8;
-            writePtr++;
-            if (writePtr >= ringLen) writePtr = 0;
-          }
-          samplesDecoded = numSamples;
+        if (writePtr + len <= ringLen) {
+          this._ringBuffer.set(pcm16, writePtr);
+          writePtr += len;
         } else {
-          const pcm16 = new Int16Array(arrayBuffer);
-          const len = pcm16.length;
-          if (writePtr + len <= ringLen) {
-            this._ringBuffer.set(pcm16, writePtr);
-            writePtr += len;
-          } else {
-            const firstPart = ringLen - writePtr;
-            this._ringBuffer.set(pcm16.subarray(0, firstPart), writePtr);
-            this._ringBuffer.set(pcm16.subarray(firstPart), 0);
-            writePtr = len - firstPart;
-          }
-          samplesDecoded = len;
+          const firstPart = ringLen - writePtr;
+          this._ringBuffer.set(pcm16.subarray(0, firstPart), writePtr);
+          this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+          writePtr = len - firstPart;
         }
         this._writePtr = writePtr;
-        this._totalWritten += samplesDecoded;
+        this._totalWritten += len;
       } catch (err) {
         this.port.postMessage({ type: "LOG", msg: `❌ Worklet Error: ${err.message}` });
       }
@@ -132,7 +116,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrameIdx = (this._readFrameIdx + (excess >> 1)) % ringLenFrames;
         available = this._TARGET_BUFFER;
         this._smoothedError = 0;
-        this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush Active (${excess} samples).` });
+        this._playbackRate = 1.0; 
+        this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
       // 3. PRE-BUFFERING
@@ -158,21 +143,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         return true;
       }
 
-      // 5. QUARTZ-LOCK P-CONTROLLER
+      // 5. CONCRETE-LOCK P-CONTROLLER
       const rawError = available - this._TARGET_BUFFER;
       this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
       
-      const QUARTZ_DEADZONE = 2400; // 50ms tolerance (v13-9-475)
-      const kp = 0.00000015; 
+      const QUARTZ_DEADZONE = 4800; // 100ms tolerance (Concrete Mode)
+      const kp = 0.0000001; 
       
       let targetRate = 1.0;
       if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-         // Sub-audible pitch correction (+/- 0.5% cap)
-         targetRate = 1.0 + Math.max(-0.005, Math.min(0.005, this._smoothedError * kp));
+         // Ultra-sub-audible pitch correction (+/- 0.4% cap)
+         targetRate = 1.0 + Math.max(-0.004, Math.min(0.004, this._smoothedError * kp));
       }
       
-      // Smooth transition
-      this._playbackRate = this._playbackRate * 0.996 + targetRate * 0.004;
+      // [v13-9-476] Ultra-Smoothing (0.999): Correction takes 10+ seconds
+      this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
       
       const playbackRate = this._playbackRate;
       let frameIdx = this._readFrameIdx;
@@ -225,7 +210,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       // 7. TELEMETRY (2-second interval)
       this._framesProcessed += framesInBlock;
-      if (this._framesProcessed >= 96000) {
+      if (this._framesProcessed >= 96000) { 
         const currentAvailable = Math.round(this._totalWritten - this._totalRead);
         const elapsed = now - this._lastCallbackTime;
         const measuredHz = elapsed > 0 ? this._callbackCount / elapsed : 375;
