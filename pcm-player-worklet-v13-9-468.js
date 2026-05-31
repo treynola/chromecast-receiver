@@ -1,8 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-467]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-468]
  *
- * Fixes vs v13-9-467:
+ * Fixes vs v13-9-468:
  *  1. TEST_BEEP handler — index.html calls workletNode.port.postMessage({type:"TEST_BEEP"})
  *     but the worklet never handled it, causing a silent no-op with no feedback.
  *  2. _readPtr float drift — readPtrFrames was written back as a float each process() call.
@@ -24,7 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._ringLen = 48000 * 2 * 8;
     this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
-    // [v13-9-467] FIX: Store read pointer as integer frame index + separate fraction
+    // [v13-9-468] FIX: Store read pointer as integer frame index + separate fraction
     // to eliminate accumulated float drift that caused stereo de-interleave over time.
     this._readFrameIdx = 0;  // integer frame index (each frame = 2 Int16 samples: L+R)
     this._readFrac = 0;      // sub-frame interpolation fraction [0, 1)
@@ -54,7 +54,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastCallbackTime = 0;
     this._framesProcessed = 0;
 
-    // [v13-9-467] TEST_BEEP state
+    // [v13-9-468] TEST_BEEP state
     this._testBeepActive = false;
     this._testBeepPhase = 0;
 
@@ -79,7 +79,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           return;
         }
 
-        // [v13-9-467] FIX: TEST_BEEP was called from index.html but never handled here.
+        // [v13-9-468] FIX: TEST_BEEP was called from index.html but never handled here.
         // Generates a 1kHz sine for 0.5s to confirm AudioContext + worklet are alive.
         if (e.data && e.data.type === "TEST_BEEP") {
           this._testBeepActive = true;
@@ -160,7 +160,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (!this._lastCallbackTime) this._lastCallbackTime = now;
       this._framesProcessed += channel0.length;
 
-      // [v13-9-467] TEST_BEEP: Render a 1kHz sine wave to verify the audio path is working
+      // [v13-9-468] TEST_BEEP: Render a 1kHz sine wave to verify the audio path is working
       if (this._testBeepActive) {
         const freq = 1000;
         const phaseInc = (2 * Math.PI * freq) / 48000;
@@ -182,7 +182,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         return true;
       }
 
-      // [v13-9-467] FIX: Use Math.round() so available is always an integer,
+      // [v13-9-468] FIX: Use Math.round() so available is always an integer,
       // preventing fractional values from confusing the P-controller comparisons.
       let available = Math.round(this._totalWritten - this._totalRead);
 
@@ -235,7 +235,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (available < this._MIN_BUFFER) {
         this._stallCount++;
         this._isBuffering = true;
-        // [v13-9-467] FIX: Reset smoothedError on stall so P-controller doesn't
+        // [v13-9-468] FIX: Reset smoothedError on stall so P-controller doesn't
         // immediately over-speed the moment buffering ends.
         this._smoothedError = 0;
         this._fade = 0;
@@ -249,19 +249,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const rawError = available - this._TARGET_BUFFER;
       this._smoothedError = this._smoothedError * 0.98 + rawError * 0.02;
       
-      // [v13-9-467] STABILITY FIX: Use smoothedError for adjustment to filter out network jitter.
+      // [v13-9-468] STABILITY FIX: Use smoothedError for adjustment to filter out network jitter.
       // Increase kp to 1e-6 (from 5e-7) for more assertive correction.
       const kp = 0.000001;
       const adjustment = this._smoothedError * kp;
       const targetRate = this._baseRate * (1.0 + Math.max(-0.04, Math.min(0.04, adjustment)));
       
-      // [v13-9-467] RESPONSIVENESS FIX: Increase smoothing weight to 0.1 (from 0.05)
+      // [v13-9-468] RESPONSIVENESS FIX: Increase smoothing weight to 0.1 (from 0.05)
       // to reduce phase-lag in the control loop and prevent oscillation (hunting).
       this._playbackRate = this._playbackRate * 0.90 + targetRate * 0.10;
       this._playbackRate = Math.max(this._baseRate * 0.96, Math.min(this._baseRate * 1.04, this._playbackRate));
 
       // RENDER LOOP (Linear Interpolation)
-      // [v13-9-467] FIX: Use integer frame index + separate fraction to eliminate
+      // [v13-9-468] FIX: Use integer frame index + separate fraction to eliminate
       // accumulated float drift. Previously readPtrFrames was written back as a float
       // each callback and accumulated sub-sample error across thousands of callbacks.
       let frameIdx = this._readFrameIdx;
@@ -271,7 +271,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const INV_32768 = 3.0517578125e-5;
       const is1x = Math.abs(playbackRate - 1.0) < 0.0001;
 
-      // [v13-9-467] FIX: Track exact integer samples consumed for totalRead accuracy
+      // [v13-9-468] FIX: Track exact integer samples consumed for totalRead accuracy
       let samplesConsumedExact = 0;
 
       for (let i = 0; i < channel0.length; i++) {
@@ -326,7 +326,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const currentAvailable = Math.round(this._totalWritten - this._totalRead);
         const elapsed = now - this._lastCallbackTime;
         const measuredHz = elapsed > 0 ? this._callbackCount / elapsed : 375;
-        // [v13-9-467] Also report deviation from baseRate for easier Studio diagnosis
+        // [v13-9-468] Also report deviation from baseRate for easier Studio diagnosis
         const rateDev = ((this._playbackRate / this._baseRate) - 1.0) * 100;
 
         this.port.postMessage({
