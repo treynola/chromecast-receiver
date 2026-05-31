@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime, sampleRate */
 /**
  * pcm-player-worklet.js
- * [v13.9.494] CONCRETE SYNC - High-Stability PCM Playout
+ * [v13.9.495] CONCRETE SYNC - High-Stability PCM Playout
  */
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
@@ -19,12 +19,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // [v13.9.494] CONCRETE SYNC: Massive Buffer Hardening
-    // Increases latency by 150ms but guarantees glitch-free audio on jittery TVs.
-    this._TARGET_BUFFER = 48000; // 500ms target
+    // [v13.9.495] CONCRETE SYNC: Jitter-Resilient Targets
+    this._TARGET_BUFFER = 38400; // 400ms target
     this._MIN_BUFFER = 9600;      // 100ms stall threshold
-    this._PREBUFFER = 38400;      // 400ms pre-fill
-    this._FLUSH_THRESHOLD = 86400; // 900ms limit
+    this._PREBUFFER = 28800;      // 300ms pre-fill
+    this._FLUSH_THRESHOLD = 67200; // 700ms limit
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -35,7 +34,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._framesProcessed = 0;
     this._callbackCount = 0;
-    this._lastCallbackTime = 0;
+    this._startTime = 0; // [v13.9.495] Local worklet timer for accurate Hz reporting
 
     this.port.onmessage = (e) => {
       try {
@@ -49,6 +48,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._smoothedError = 0;
           this._playbackRate = 1.0;
+          this._framesProcessed = 0;
+          this._startTime = 0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -98,7 +99,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const framesInBlock = channel0.length;
       const now = currentTime;
 
-      if (!this._lastCallbackTime) this._lastCallbackTime = now;
+      if (this._startTime === 0) this._startTime = now;
       this._callbackCount++;
 
       let available = Math.round(this._totalWritten - this._totalRead);
@@ -146,20 +147,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         return true;
       }
 
-      // 5. QUARTZ-LOCK P-CONTROLLER (Ultra-Smooth 13.9.494)
+      // 5. QUARTZ-LOCK P-CONTROLLER (Aggressive Sync 13.9.495)
       const rawError = available - this._TARGET_BUFFER;
-      this._smoothedError = this._smoothedError * 0.999 + rawError * 0.001;
+      this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
       
       const QUARTZ_DEADZONE = 4800; // 100ms tolerance
-      const kp = 0.0000002; // Very gentle correction
+      const kp = 0.000005; // [v13.9.495] 25x stronger gain than v494
       
       let targetRate = 1.0;
       if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-         targetRate = 1.0 + Math.max(-0.005, Math.min(0.005, this._smoothedError * kp));
+         // Sub-audible pitch correction (+/- 1.0% cap)
+         targetRate = 1.0 + Math.max(-0.01, Math.min(0.01, this._smoothedError * kp));
       }
       
-      // Extremely smooth transition to prevent audible pitch shifts
-      this._playbackRate = this._playbackRate * 0.9995 + (targetRate * this._baseRate) * 0.0005;
+      // Smooth transition
+      this._playbackRate = this._playbackRate * 0.995 + (targetRate * this._baseRate) * 0.005;
       
       const playbackRate = this._playbackRate;
       let frameIdx = this._readFrameIdx;
@@ -212,12 +214,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._framesProcessed += framesInBlock;
 
       if (this._callbackCount % 120 === 0) {
+        const elapsed = Math.max(0.1, now - this._startTime);
         this.port.postMessage({
           type: "DIAG",
           available: available,
           stalled: this._stallCount,
           rate: playbackRate,
-          measuredHz: Math.round(this._framesProcessed / now),
+          measuredHz: Math.round(this._framesProcessed / elapsed), // [v13.9.495] Real clock tracking
           peak: this._currentPeak,
           locked: Math.abs(this._smoothedError) < QUARTZ_DEADZONE
         });
