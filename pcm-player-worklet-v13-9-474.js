@@ -1,16 +1,18 @@
-/* global AudioWorkletProcessor, registerProcessor */
+/* global AudioWorkletProcessor, registerProcessor, currentTime */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-473]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-474]
  *
- * [v13-9-473] APORv2.2 "Quartz" Sync - ULTIMATE STABILITY:
- *  - Implement Quartz-Lock: If the clock drift is within 50ms, play at exactly 1.0x.
- *  - No Interpolation Mode: Pure data pass-through when rate=1.0 (saves 30% TV CPU).
- *  - Fixed Target: 48000 samples (500ms) for high-jitter immunity.
- *  - Increased Telemetry Interval: Reduces bridge traffic.
+ * [v13-9-474] APORv2.2 "Quartz" Sync - Jitter-Hardened:
+ *  - RESTORED: measuredHz in telemetry for Studio-side delay alignment.
+ *  - TIGHTENED: Quartz Deadzone to 2400 samples (50ms) for better precision.
+ *  - OPTIMIZED: Assertive drift recovery (+/- 0.5%) when outside deadzone.
+ *  - REDUCED: Operating targets (400ms/800ms) to lower total latency.
+ *  - FIXED: Telemetry interval reset logic.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
+    // 10 seconds of stereo @ 48kHz = 960,000 samples
     this._ringLen = 48000 * 2 * 10;
     this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
@@ -21,17 +23,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
-    this._playbackRate = 1.0; // Start at unity
+    this._playbackRate = 1.0;
 
-    // v13-9-473: Stability Targets
-    this._TARGET_BUFFER = 48000; 
-    this._MIN_BUFFER = 9600;     
-    this._PREBUFFER = 38400;     
-    this._FLUSH_THRESHOLD = 96000;
+    // v13-9-474: Optimized Targets
+    this._TARGET_BUFFER = 38400; // 400ms target
+    this._MIN_BUFFER = 4800;      // 50ms stall threshold
+    this._PREBUFFER = 28800;      // 300ms pre-fill
+    this._FLUSH_THRESHOLD = 76800; // 800ms limit
 
     this._isBuffering = true;
     this._stallCount = 0;
-    this._sampleCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0;
     this._bitDepth = options.processorOptions?.bitDepth || 16;
@@ -107,8 +108,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       const ringLen = this._ringLen;
       const ringLenFrames = ringLen >> 1; 
-      
       const framesInBlock = channel0.length;
+      const now = currentTime;
+
+      if (!this._lastCallbackTime) this._lastCallbackTime = now;
+      this._callbackCount++;
+
       let available = Math.round(this._totalWritten - this._totalRead);
 
       // 1. HARD OVERRUN PROTECTION
@@ -157,17 +162,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const rawError = available - this._TARGET_BUFFER;
       this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
       
-      const QUARTZ_DEADZONE = 4800; // 100ms tolerance
-      const kp = 0.0000001; 
+      const QUARTZ_DEADZONE = 2400; // 50ms tolerance (v13-9-474)
+      const kp = 0.00000015; 
       
       let targetRate = 1.0;
       if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-         // Sub-audible pitch correction
-         targetRate = 1.0 + Math.max(-0.003, Math.min(0.003, this._smoothedError * kp));
+         // Sub-audible pitch correction (+/- 0.5% cap)
+         targetRate = 1.0 + Math.max(-0.005, Math.min(0.005, this._smoothedError * kp));
       }
       
-      // Extremely smooth rate transition
-      this._playbackRate = this._playbackRate * 0.998 + targetRate * 0.002;
+      // Smooth transition
+      this._playbackRate = this._playbackRate * 0.996 + targetRate * 0.004;
       
       const playbackRate = this._playbackRate;
       let frameIdx = this._readFrameIdx;
@@ -218,19 +223,26 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._totalRead += consumed;
       this._fade = fade;
 
-      // 7. TELEMETRY (Reduced Frequency)
+      // 7. TELEMETRY (2-second interval)
       this._framesProcessed += framesInBlock;
-      if (this._framesProcessed >= 240000) { // Every 5 seconds
+      if (this._framesProcessed >= 96000) {
+        const currentAvailable = Math.round(this._totalWritten - this._totalRead);
+        const elapsed = now - this._lastCallbackTime;
+        const measuredHz = elapsed > 0 ? this._callbackCount / elapsed : 375;
+
         this.port.postMessage({
           type: "DIAG",
-          available: Math.round(this._totalWritten - this._totalRead),
+          available: currentAvailable,
           stalled: this._stallCount,
           peak: this._currentPeak,
           rate: playbackRate,
           locked: isUnity,
+          measuredHz: Math.round(measuredHz),
         });
         this._currentPeak = 0;
         this._framesProcessed = 0;
+        this._callbackCount = 0;
+        this._lastCallbackTime = now;
       }
 
       return true;
