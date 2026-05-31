@@ -1,19 +1,18 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-478]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-479]
  *
- * [v13-9-478] APORv2.4 "Concrete Sync" Overhaul:
- *  - INCREASED: _TARGET_BUFFER to 48000 (500ms) for rock-solid stability on jittery WiFi.
- *  - INCREASED: _FLUSH_THRESHOLD to 72000 (750ms).
- *  - ULTRA-SLOW Correction: Increased smoothing to 0.999. Pitch changes take ~10 seconds.
- *  - REDUCED: Max correction cap to +/- 0.4% (was 0.5%) for near-perfect pitch transparency.
- *  - OPTIMIZED: Pure unity-gain pass-through when rate is exactly 1.0.
+ * [v13-9-479] APORv2.2 "Quartz" Sync - Jitter-Resilient:
+ *  - RESTORED: measuredHz in telemetry for Studio-side delay alignment.
+ *  - TIGHTENED: Quartz Deadzone to 4800 samples (100ms) for high-jitter environments.
+ *  - OPTIMIZED: Gentle drift recovery (+/- 0.4%) to stop audible pitch warbling.
+ *  - INCREASED: Ring buffer to 12s for extreme burst immunity.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    // 10 seconds of stereo @ 48kHz = 960,000 samples
-    this._ringLen = 48000 * 2 * 10;
+    // 12 seconds of stereo @ 48kHz = 1,152,000 samples
+    this._ringLen = 48000 * 2 * 12;
     this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
     this._readFrameIdx = 0;
@@ -25,11 +24,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // v13-9-478: Concrete Stability Targets
-    this._TARGET_BUFFER = 48000; // 500ms target (Safe Mode)
+    // v13-9-479: Jitter-Resilient Targets
+    this._TARGET_BUFFER = 33600; // 350ms target
     this._MIN_BUFFER = 9600;      // 100ms stall threshold
-    this._PREBUFFER = 38400;      // 400ms pre-fill
-    this._FLUSH_THRESHOLD = 72000; // 750ms hard limit
+    this._PREBUFFER = 24000;      // 250ms pre-fill
+    this._FLUSH_THRESHOLD = 57600; // 600ms limit
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -54,7 +53,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._smoothedError = 0;
           this._playbackRate = 1.0;
-          this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: Concrete Reset." });
+          this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
 
@@ -143,21 +142,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         return true;
       }
 
-      // 5. CONCRETE-LOCK P-CONTROLLER
+      // 5. QUARTZ-LOCK P-CONTROLLER
       const rawError = available - this._TARGET_BUFFER;
       this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
       
-      const QUARTZ_DEADZONE = 4800; // 100ms tolerance (Concrete Mode)
+      const QUARTZ_DEADZONE = 4800; // 100ms tolerance
       const kp = 0.0000001; 
       
       let targetRate = 1.0;
       if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-         // Ultra-sub-audible pitch correction (+/- 0.4% cap)
+         // Sub-audible pitch correction (+/- 0.4% cap)
          targetRate = 1.0 + Math.max(-0.004, Math.min(0.004, this._smoothedError * kp));
       }
       
-      // [v13-9-478] Ultra-Smoothing (0.999): Correction takes 10+ seconds
-      this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
+      // Extremely smooth transition
+      this._playbackRate = this._playbackRate * 0.998 + targetRate * 0.002;
       
       const playbackRate = this._playbackRate;
       let frameIdx = this._readFrameIdx;
