@@ -157,11 +157,11 @@
                 if (!audioUnlocker._hasUnlockListeners) {
                   audioUnlocker._hasUnlockListeners = true;
                   audioUnlocker.addEventListener("play", function() {
-                    relayLogToStudio("🎵 TV: audio-unlocker 'play' event detected.");
+                    // relayLogToStudio("🎵 TV: audio-unlocker 'play' event detected.");
                     resumeAudio();
                   });
                   audioUnlocker.addEventListener("playing", function() {
-                    relayLogToStudio("🎵 TV: audio-unlocker 'playing' event detected.");
+                    // relayLogToStudio("🎵 TV: audio-unlocker 'playing' event detected.");
                     resumeAudio();
                   });
                 }
@@ -923,7 +923,7 @@
             if (event.data instanceof ArrayBuffer) {
               if (workletNode) {
                 // [v13.9.474] BINARY SUPERIORITY LOCK
-                // We have a direct high-fidelity bridge. Kill all fallback paths to save CPU.
+                // We have a direct high-fidelity bridge. Kill all fallback paths to save TV CPU.
                 window._lastBinaryTime = Date.now();
                 window._binaryActive = true;
 
@@ -932,7 +932,7 @@
                 if (audioUnlocker && audioUnlocker.srcObject) {
                   audioUnlocker.srcObject = null;
                   relayLogToStudio(
-                    "🛡️ TV: Binary Bridge Active. Terminating WebRTC decoder.",
+                    "🛡️ TV: Binary Bridge Active. Terminated redundant WebRTC decoder.",
                   );
                 }
 
@@ -947,6 +947,7 @@
                 var reader = new FileReader();
                 reader.onload = function() {
                   if (workletNode) {
+                    window._binaryActive = true; 
                     workletNode.port.postMessage(this.result, [this.result]);
                   }
                 };
@@ -961,6 +962,33 @@
                 const d = JSON.parse(event.data);
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
+                } else if (d.type === "PCM_RELAY") {
+                   // [v13.9.474] Binary Superiority: Ignore relay if binary is active
+                   if (window._binaryActive) return;
+
+                   let buffer = d.binary || d.data;
+                   if (buffer && typeof buffer === "string") {
+                     try {
+                       const binary = window.atob(buffer);
+                       const len = binary.length;
+                       const bytes = new Uint8Array(len);
+                       for (let i = 0; i < len; i++) {
+                         bytes[i] = binary.charCodeAt(i);
+                       }
+                       buffer = bytes.buffer;
+                     } catch (e) {
+                       return;
+                     }
+                   }
+
+                   if (buffer && workletNode) {
+                     if (audioCtx && audioCtx.state === "suspended") resumeAudio();
+                     try {
+                       workletNode.port.postMessage(buffer, [buffer]);
+                     } catch (e) {
+                       workletNode.port.postMessage(buffer);
+                     }
+                   }
                 } else if (d.type === "RELOAD") {
                   relayLogToStudio("🔄 TV: RELOAD command received. Reloading page with cache-buster...");
                   setTimeout(() => {
@@ -1206,7 +1234,7 @@
             // 2. High-Fidelity Audio Relay (Fallback Path)
             if (d.type === "PCM_RELAY") {
               // If Binary WS is active, IGNORE Relay to prevent doubling/echo
-              if (binaryWS && binaryWS.readyState === WebSocket.OPEN) return;
+              if (window._binaryActive) return;
 
               let buffer = d.binary || d.data;
               if (buffer && typeof buffer === "string") {
@@ -1241,7 +1269,7 @@
 
             // 4. GUI Mirroring
             if (d.type === "STATE_UPDATE") {
-              if (binaryWS && binaryWS.readyState === WebSocket.OPEN) return;
+              if (window._binaryActive) return;
               renderState(d.state);
             }
           } catch (e) {}
@@ -1279,6 +1307,7 @@
                 () => {
                   isSenderConnected = false;
                   wakeLockLoadingOrLoaded = false;
+                  window._binaryActive = false; 
                   if (binaryWS) {
                     binaryWS.close();
                     binaryWS = null;
@@ -1385,17 +1414,17 @@
 
           // [v13.9.474] Global interaction listeners to catch TV remote keys and clicks for AudioContext unlock
           window.addEventListener("keydown", function(e) {
-            relayLogToStudio("🎹 TV: keydown event: " + e.key + " (code: " + e.keyCode + ")");
+            // relayLogToStudio("🎹 TV: keydown event: " + e.key + " (code: " + e.keyCode + ")");
             resumeAudio();
           });
 
           window.addEventListener("click", function() {
-            relayLogToStudio("🖱️ TV: click event detected.");
+            // relayLogToStudio("🖱️ TV: click event detected.");
             resumeAudio();
           });
 
           window.addEventListener("pointerdown", function() {
-            relayLogToStudio("🖱️ TV: pointerdown event detected.");
+            // relayLogToStudio("🖱️ TV: pointerdown event detected.");
             resumeAudio();
           });
 
