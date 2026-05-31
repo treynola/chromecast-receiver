@@ -1,8 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-476]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-477]
  *
- * [v13-9-476] APORv2.4 "Concrete Sync" Overhaul:
+ * [v13-9-477] APORv2.4 "Concrete Sync" Overhaul:
  *  - INCREASED: _TARGET_BUFFER to 48000 (500ms) for rock-solid stability on jittery WiFi.
  *  - INCREASED: _FLUSH_THRESHOLD to 72000 (750ms).
  *  - ULTRA-SLOW Correction: Increased smoothing to 0.999. Pitch changes take ~10 seconds.
@@ -25,7 +25,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // v13-9-476: Concrete Stability Targets
+    // v13-9-477: Concrete Stability Targets
     this._TARGET_BUFFER = 48000; // 500ms target (Safe Mode)
     this._MIN_BUFFER = 9600;      // 100ms stall threshold
     this._PREBUFFER = 38400;      // 400ms pre-fill
@@ -156,7 +156,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
          targetRate = 1.0 + Math.max(-0.004, Math.min(0.004, this._smoothedError * kp));
       }
       
-      // [v13-9-476] Ultra-Smoothing (0.999): Correction takes 10+ seconds
+      // [v13-9-477] Ultra-Smoothing (0.999): Correction takes 10+ seconds
       this._playbackRate = this._playbackRate * 0.999 + targetRate * 0.001;
       
       const playbackRate = this._playbackRate;
