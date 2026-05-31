@@ -1,8 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-488]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-489]
  *
- * [v13-9-488] APORv2.2 "Quartz" Sync - Jitter-Resilient:
+ * [v13-9-489] APORv2.2 "Quartz" Sync - Jitter-Resilient:
  *  - RESTORED: measuredHz in telemetry for Studio-side delay alignment.
  *  - TIGHTENED: Quartz Deadzone to 4800 samples (100ms) for high-jitter environments.
  *  - OPTIMIZED: Gentle drift recovery (+/- 0.4%) to stop audible pitch warbling.
@@ -24,7 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // v13-9-488: Jitter-Resilient Targets
+    // v13-9-489: Jitter-Resilient Targets
     this._TARGET_BUFFER = 33600; // 350ms target
     this._MIN_BUFFER = 9600;      // 100ms stall threshold
     this._PREBUFFER = 24000;      // 250ms pre-fill
