@@ -1,13 +1,14 @@
 /* global AudioWorkletProcessor, registerProcessor */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-470]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-471]
  *
- * [v13-9-470] APORv2 Stability Overhaul:
- *  - Reduced _TARGET_BUFFER to 24000 (250ms) for lower perceptible lag.
- *  - Reduced _FLUSH_THRESHOLD to 48000 (500ms) to aggressively prevent lag buildup.
- *  - Reduced P-controller gain (kp) to 5e-7 for smoother, non-warbling pitch correction.
- *  - Capped rate adjustment to +/- 0.8% (was 4%) to make clock-sync inaudible.
- *  - Increased rate smoothing (0.98/0.02) to eliminate "drunk" pitch hunting.
+ * [v13-9-471] APORv2 "Solid-State" Sync Overhaul:
+ *  - Lowered _TARGET_BUFFER to 17280 (180ms) for snappy, real-time response.
+ *  - Lowered _FLUSH_THRESHOLD to 38400 (400ms) to keep lag tightly bounded.
+ *  - Added DEADZONE (1200 samples / 25ms): ignore minor jitter to stop pitch "hunting".
+ *  - RESET Control Loop on Flush: Prevents the "pendulum" oscillation after catch-up.
+ *  - Capped rate adjustment at +/- 0.6% (was 0.8%) for extreme pitch transparency.
+ *  - Increased smoothing (0.99) for "analog-feel" clock recovery.
  */
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -26,11 +27,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._playbackRate = this._baseRate;
 
     // Jitter-Buffer Targets (sample counts, stereo pairs = frames*2)
-    // [v13-9-470] Tightened for lower latency
-    this._TARGET_BUFFER = 24000; // 250ms operating target
-    this._MIN_BUFFER = 4800;     // 50ms stall threshold
-    this._PREBUFFER = 19200;     // 200ms warm-up before first play
-    this._FLUSH_THRESHOLD = 48000; // 500ms — aggressive safety flush
+    // [v13-9-471] Hardened for lowest latency vs stability
+    this._TARGET_BUFFER = 17280; // 180ms operating target
+    this._MIN_BUFFER = 3840;     // 40ms stall threshold
+    this._PREBUFFER = 14400;     // 150ms warm-up before first play
+    this._FLUSH_THRESHOLD = 38400; // 400ms — aggressive safety flush
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -63,6 +64,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._currentPeak = 0;
           this._fade = 1.0;
           this._smoothedError = 0;
+          this._playbackRate = this._baseRate;
           this._testBeepActive = false;
           this._testBeepPhase = 0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
@@ -85,6 +87,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           if (e.data.baseRateRatio) {
             this._baseRate = e.data.baseRateRatio;
             this._playbackRate = this._baseRate;
+            this._smoothedError = 0;
             this.port.postMessage({ type: "LOG", msg: `🔄 Worklet: Base rate ratio set to ${this._baseRate.toFixed(4)}` });
           }
           return;
@@ -179,11 +182,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrac = 0;
         available = this._TARGET_BUFFER;
         this._smoothedError = 0;
+        this._playbackRate = this._baseRate; // Hard reset on overrun
         this.port.postMessage({ type: "LOG", msg: "⚠️ Ring Overrun: Recovered." });
       }
 
       // LATENCY CATCH-UP: flush excess above FLUSH_THRESHOLD
-      // [v13-9-470] Flush threshold lowered to 500ms to aggressively prevent lag.
+      // [v13-9-471] Aggressive 400ms flush
       if (available > this._FLUSH_THRESHOLD) {
         const flushTarget = this._TARGET_BUFFER;
         const excess = available - flushTarget;
@@ -193,6 +197,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrac = 0;
         available = flushTarget;
         this._smoothedError = 0;
+        this._playbackRate = this._baseRate; // Hard reset to stop pitch pendulum
         this.port.postMessage({ type: "LOG", msg: `⚠️ Latency Catch-up: Flushed ${excess} excess samples.` });
       }
 
@@ -201,6 +206,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
           this._smoothedError = 0;
+          this._playbackRate = this._baseRate;
           if (available > this._TARGET_BUFFER) {
             const excess = available - this._TARGET_BUFFER;
             this._totalRead += excess;
@@ -222,6 +228,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._stallCount++;
         this._isBuffering = true;
         this._smoothedError = 0;
+        this._playbackRate = this._baseRate;
         this._fade = 0;
         channel0.fill(0);
         channel1.fill(0);
@@ -230,17 +237,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
 
       // P-CONTROLLER
-      // [v13-9-470] kp reduced to 5e-7 for gentler, non-warbling pitch adjustment.
+      // [v13-9-471] deadzone implemented to stop hunting for tiny jitters
+      const DEADZONE = 1200; // ~25ms
       const rawError = available - this._TARGET_BUFFER;
       this._smoothedError = this._smoothedError * 0.98 + rawError * 0.02;
       
-      const kp = 0.0000005;
-      const adjustment = this._smoothedError * kp;
-      // [v13-9-470] Adjustment cap reduced to 0.8% (from 4%) to make shifts sub-audible.
-      const targetRate = this._baseRate * (1.0 + Math.max(-0.008, Math.min(0.008, adjustment)));
+      let error = this._smoothedError;
+      if (Math.abs(error) < DEADZONE) error = 0;
+
+      const kp = 0.000001; // Restored to 1e-6 for assertive recovery
+      const adjustment = error * kp;
+      // [v13-9-471] Adjustment cap lowered to 0.6% for pitch transparency
+      const targetRate = this._baseRate * (1.0 + Math.max(-0.006, Math.min(0.006, adjustment)));
       
-      // [v13-9-470] Smoothing increased to 0.98 to eliminate pitch hunting ("drunk" sound).
-      this._playbackRate = this._playbackRate * 0.98 + targetRate * 0.02;
+      // [v13-9-471] Smoothing increased to 0.99 for "Solid-State" pitch feel
+      this._playbackRate = this._playbackRate * 0.99 + targetRate * 0.01;
       this._playbackRate = Math.max(this._baseRate * 0.99, Math.min(this._baseRate * 1.01, this._playbackRate));
 
       // RENDER LOOP
