@@ -1,19 +1,14 @@
-/* global AudioWorkletProcessor, registerProcessor, currentTime */
+/* global AudioWorkletProcessor, registerProcessor, currentTime, sampleRate */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13.9.493]
- *
- * [v13.9.493] APORv2.2 "Quartz" Sync - Jitter-Resilient:
- *  - RESTORED: measuredHz in telemetry for Studio-side delay alignment.
- *  - TIGHTENED: Quartz Deadzone to 4800 samples (100ms) for high-jitter environments.
- *  - OPTIMIZED: Gentle drift recovery (+/- 0.4%) to stop audible pitch warbling.
- *  - INCREASED: Ring buffer to 12s for extreme burst immunity.
+ * pcm-player-worklet.js
+ * [v13.9.494] CONCRETE SYNC - High-Stability PCM Playout
  */
+
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    // 12 seconds of stereo @ 48kHz = 1,152,000 samples
-    this._ringLen = 48000 * 2 * 12;
-    this._ringBuffer = new Int16Array(this._ringLen);
+    this._ringLen = 192000; // 2 seconds of stereo 48kHz
+    this._ringBuffer = new Float32Array(this._ringLen);
     this._writePtr = 0;
     this._readFrameIdx = 0;
     this._readFrac = 0;
@@ -24,11 +19,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // v13.9.493: Jitter-Resilient Targets
-    this._TARGET_BUFFER = 33600; // 350ms target
+    // [v13.9.494] CONCRETE SYNC: Massive Buffer Hardening
+    // Increases latency by 150ms but guarantees glitch-free audio on jittery TVs.
+    this._TARGET_BUFFER = 48000; // 500ms target
     this._MIN_BUFFER = 9600;      // 100ms stall threshold
-    this._PREBUFFER = 24000;      // 250ms pre-fill
-    this._FLUSH_THRESHOLD = 57600; // 600ms limit
+    this._PREBUFFER = 38400;      // 400ms pre-fill
+    this._FLUSH_THRESHOLD = 86400; // 900ms limit
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -56,26 +52,34 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
+        if (e.data && e.data.type === "CONFIG") {
+          if (e.data.bitDepth) this._bitDepth = e.data.bitDepth;
+          if (e.data.baseRateRatio) this._baseRate = e.data.baseRateRatio;
+          return;
+        }
 
         const arrayBuffer = e.data instanceof ArrayBuffer ? e.data : e.data.buffer;
         if (!arrayBuffer) return;
 
-        const pcm16 = new Int16Array(arrayBuffer);
-        const len = pcm16.length;
-        const ringLen = this._ringLen;
-        let writePtr = this._writePtr;
-
-        if (writePtr + len <= ringLen) {
-          this._ringBuffer.set(pcm16, writePtr);
-          writePtr += len;
+        if (this._bitDepth === 24) {
+          const bytes = new Uint8Array(arrayBuffer);
+          const numSamples = Math.floor(bytes.length / 3);
+          for (let i = 0; i < numSamples; i++) {
+            const offset = i * 3;
+            let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+            if (val & 0x800000) val |= 0xFF000000;
+            this._ringBuffer[this._writePtr] = val;
+            this._writePtr = (this._writePtr + 1) % this._ringLen;
+            this._totalWritten++;
+          }
         } else {
-          const firstPart = ringLen - writePtr;
-          this._ringBuffer.set(pcm16.subarray(0, firstPart), writePtr);
-          this._ringBuffer.set(pcm16.subarray(firstPart), 0);
-          writePtr = len - firstPart;
+          const pcm16 = new Int16Array(arrayBuffer);
+          for (let i = 0; i < pcm16.length; i++) {
+            this._ringBuffer[this._writePtr] = pcm16[i];
+            this._writePtr = (this._writePtr + 1) % this._ringLen;
+            this._totalWritten++;
+          }
         }
-        this._writePtr = writePtr;
-        this._totalWritten += len;
       } catch (err) {
         this.port.postMessage({ type: "LOG", msg: `❌ Worklet Error: ${err.message}` });
       }
@@ -142,21 +146,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         return true;
       }
 
-      // 5. QUARTZ-LOCK P-CONTROLLER
+      // 5. QUARTZ-LOCK P-CONTROLLER (Ultra-Smooth 13.9.494)
       const rawError = available - this._TARGET_BUFFER;
-      this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
+      this._smoothedError = this._smoothedError * 0.999 + rawError * 0.001;
       
-      const QUARTZ_DEADZONE = 2400; // 50ms tolerance
-      const kp = 0.00001; // [v13.9.493] 100x stronger gain for drift tracking
+      const QUARTZ_DEADZONE = 4800; // 100ms tolerance
+      const kp = 0.0000002; // Very gentle correction
       
       let targetRate = 1.0;
       if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-         // Sub-audible pitch correction (+/- 1.5% cap)
-         targetRate = 1.0 + Math.max(-0.015, Math.min(0.015, this._smoothedError * kp));
+         targetRate = 1.0 + Math.max(-0.005, Math.min(0.005, this._smoothedError * kp));
       }
       
-      // Faster adaptation to network conditions
-      this._playbackRate = this._playbackRate * 0.99 + targetRate * 0.01;
+      // Extremely smooth transition to prevent audible pitch shifts
+      this._playbackRate = this._playbackRate * 0.9995 + (targetRate * this._baseRate) * 0.0005;
       
       const playbackRate = this._playbackRate;
       let frameIdx = this._readFrameIdx;
@@ -206,34 +209,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._readFrac = frac;
       this._totalRead += consumed;
       this._fade = fade;
-
-      // 7. TELEMETRY (2-second interval)
       this._framesProcessed += framesInBlock;
-      if (this._framesProcessed >= 96000) { 
-        const currentAvailable = Math.round(this._totalWritten - this._totalRead);
-        const elapsed = now - this._lastCallbackTime;
-        const measuredHz = elapsed > 0 ? this._callbackCount / elapsed : 375;
 
+      if (this._callbackCount % 120 === 0) {
         this.port.postMessage({
           type: "DIAG",
-          available: currentAvailable,
+          available: available,
           stalled: this._stallCount,
-          peak: this._currentPeak,
           rate: playbackRate,
-          locked: isUnity,
-          measuredHz: Math.round(measuredHz),
+          measuredHz: Math.round(this._framesProcessed / now),
+          peak: this._currentPeak,
+          locked: Math.abs(this._smoothedError) < QUARTZ_DEADZONE
         });
         this._currentPeak = 0;
-        this._framesProcessed = 0;
-        this._callbackCount = 0;
-        this._lastCallbackTime = now;
       }
-
-      return true;
     } catch (err) {
-      this.port.postMessage({ type: "LOG", msg: `❌ Worklet Exception: ${err.message}` });
-      return false; 
+      this.port.postMessage({ type: "LOG", msg: `❌ Process Error: ${err.message}` });
     }
+    return true;
   }
 }
+
 registerProcessor("pcm-player-worklet", PCMPlayerProcessor);
