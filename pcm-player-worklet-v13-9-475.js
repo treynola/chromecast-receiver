@@ -1,8 +1,8 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime */
 /**
- * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-474]
+ * PCM Player AudioWorkletProcessor - TV-Side Resampling [v13-9-475]
  *
- * [v13-9-474] APORv2.2 "Quartz" Sync - Jitter-Hardened:
+ * [v13-9-475] APORv2.2 "Quartz" Sync - Jitter-Hardened:
  *  - RESTORED: measuredHz in telemetry for Studio-side delay alignment.
  *  - TIGHTENED: Quartz Deadzone to 2400 samples (50ms) for better precision.
  *  - OPTIMIZED: Assertive drift recovery (+/- 0.5%) when outside deadzone.
@@ -25,7 +25,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // v13-9-474: Optimized Targets
+    // v13-9-475: Optimized Targets
     this._TARGET_BUFFER = 38400; // 400ms target
     this._MIN_BUFFER = 4800;      // 50ms stall threshold
     this._PREBUFFER = 28800;      // 300ms pre-fill
@@ -162,7 +162,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const rawError = available - this._TARGET_BUFFER;
       this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
       
-      const QUARTZ_DEADZONE = 2400; // 50ms tolerance (v13-9-474)
+      const QUARTZ_DEADZONE = 2400; // 50ms tolerance (v13-9-475)
       const kp = 0.00000015; 
       
       let targetRate = 1.0;
