@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime, sampleRate */
 /**
  * pcm-player-worklet.js
- * [v13.9.497] CONCRETE SYNC - High-Stability PCM Playout
+ * [v13.9.498] CONCRETE SYNC - High-Stability PCM Playout
  */
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
@@ -19,7 +19,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
     this._playbackRate = 1.0;
 
-    // [v13.9.497] CONCRETE SYNC: Jitter-Resilient Targets
+    // [v13.9.498] CONCRETE SYNC: Jitter-Resilient Targets
     this._TARGET_BUFFER = 38400; // 400ms target
     this._MIN_BUFFER = 9600;      // 100ms stall threshold
     this._PREBUFFER = 28800;      // 300ms pre-fill
@@ -34,7 +34,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._framesProcessed = 0;
     this._callbackCount = 0;
-    this._startTime = 0; // [v13.9.497] Local worklet timer for accurate Hz reporting
+    this._startTime = 0; // [v13.9.498] Local worklet timer for accurate Hz reporting
 
     this.port.onmessage = (e) => {
       try {
@@ -152,7 +152,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
       
       const QUARTZ_DEADZONE = 4800; // 100ms tolerance
-      const kp = 0.000005; // [v13.9.497] 25x stronger gain than v494
+      const kp = 0.000005; // [v13.9.498] 25x stronger gain than v494
       
       let targetRate = 1.0;
       if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
@@ -220,7 +220,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           available: available,
           stalled: this._stallCount,
           rate: playbackRate,
-          measuredHz: Math.round(this._framesProcessed / elapsed), // [v13.9.497] Real clock tracking
+          measuredHz: Math.round(this._framesProcessed / elapsed), // [v13.9.498] Real clock tracking
           peak: this._currentPeak,
           locked: Math.abs(this._smoothedError) < QUARTZ_DEADZONE
         });

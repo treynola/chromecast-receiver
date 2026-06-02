@@ -632,9 +632,12 @@ img {
 
 /* Tighter spacing for bottom section items */
 .master-bottom-item {
-  flex: 0 0 auto !important;
-  min-height: auto;
-  padding: 2px 0;
+  flex: 0 0 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
 }
 
 /* Hide old master-controls if any remain */
@@ -648,16 +651,6 @@ img {
   display: none;
 }
 
-.master-rec-row select {
-  flex: 1.5;
-  background-color: var(--dark-gray);
-  color: var(--gold);
-  border: 1px solid var(--mid-gray);
-  border-radius: 4px;
-  padding: 2px;
-  font-family: inherit;
-  font-size: 0.75em;
-}
 
 /* Master Bottom Buttons Grouping */
 .master-bottom-buttons {
@@ -754,13 +747,61 @@ img {
 }
 
 .master-bottom-item {
+  width: 100% !important;
+  align-self: stretch !important;
   padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 0 0 24px !important;
+  height: 24px !important;
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
 }
 
 .master-rec-row {
-  margin: 25px 0 0 0 !important;
-  /* Push DOWN to align with Track Buttons (QA fix) */
-  max-height: 24px;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  flex-wrap: nowrap !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+.master-rec-col-left {
+  flex: 0 0 60px !important;
+  width: 60px !important;
+  display: block !important;
+}
+
+.master-rec-col-right {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: block !important;
+}
+
+.master-rec-col-left #master-record-button {
+  width: 100% !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: static !important;
+}
+
+.master-rec-col-right select {
+  width: 100% !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  display: block !important;
+  position: static !important;
 }
 
 .master-row-layout input[type="range"] {
@@ -805,6 +846,8 @@ img {
   padding: 2px 0;
   margin: 5px 0 2px 0;
   background-color: rgba(0, 0, 0, 0.2);
+  position: relative !important;
+  z-index: 1 !important;
 }
 
 .lfo-column {
@@ -1455,7 +1498,6 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 #record-as-select {
-  width: 90% !important;
   margin: 0;
   flex: 2 !important;
   font-family: "Cousine", monospace !important;
@@ -4291,7 +4333,244 @@ select option {
   top: 0;
   bottom: 0;
   width: 1.5px !important;
-  background-color: #00ff00 !important;
+  background-color: var(--green) !important;
   pointer-events: none;
   z-index: 12 !important;
 }
+
+/* --- [V13.9.497] RECEIVER MODE OVERRIDES --- */
+body.receiver-mode {
+  background: #000 !important;
+}
+body.receiver-mode .app-loading {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+body.receiver-mode .container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(var(--scale, 1));
+  transform-origin: center;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: flex !important;
+  background-color: #000 !important;
+  width: 1440px !important;
+  height: 810px !important;
+}
+body.receiver-mode #cursor-mirror {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: rgba(255, 0, 0, 0.9);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 10000;
+  border: 2px solid white;
+  display: none;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  left: 0;
+  top: 0;
+  transform-origin: center;
+}
+body.receiver-mode cast-media-player {
+  display: none;
+}
+body.receiver-mode .main-content {
+  display: grid !important;
+  grid-template-columns: repeat(5, 1fr) !important;
+  gap: 6px !important;
+  width: 100% !important;
+  height: calc(100% - 40px) !important;
+}
+body.receiver-mode .track {
+  background: rgba(20, 20, 20, 0.8) !important;
+  border: 1px solid var(--green) !important;
+}
+body.receiver-mode .master-column {
+  border: 1px solid var(--green) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+body.receiver-mode .sample-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 5px !important;
+  margin-top: 2px !important;
+}
+body.receiver-mode .sample-btn {
+  aspect-ratio: 1 !important;
+  font-family: "Cousine", monospace !important;
+  font-size: 1.1em !important;
+  font-weight: 720 !important;
+  border-radius: 8px !important;
+  border-width: 3px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-transform: uppercase;
+}
+body.receiver-mode .hidden {
+  display: none !important;
+}
+body.receiver-mode .scrolling-text-wrapper {
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+  position: relative;
+}
+body.receiver-mode .scrolling-text {
+  display: inline-block;
+  font-size: 0.7em;
+}
+body.receiver-mode .scrolling-text.active-scrolling {
+  padding-left: 0;
+  animation: none;
+}
+body.receiver-mode .track-buttons {
+  display: flex;
+  justify-content: space-between;
+  gap: 2px;
+  margin: 5px 0;
+}
+body.receiver-mode .track-buttons button {
+  flex: 1;
+  height: 24px;
+  font-size: 0.75em;
+  font-family: "Cousine", monospace;
+  font-weight: 720;
+  cursor: pointer;
+  text-transform: uppercase;
+  border-radius: 4px;
+}
+body.receiver-mode .track-buttons button[id^="t-play-"] {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-stop-"] {
+  background-color: var(--gold) !important;
+  color: var(--red) !important;
+  border: 1px solid var(--red) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rec-"] {
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"] {
+  background-color: var(--gold) !important;
+  color: var(--green) !important;
+  border: 1px solid var(--green) !important;
+}
+body.receiver-mode .track-buttons button.recording {
+  animation: text-blink 0.5s infinite;
+}
+body.receiver-mode .bridge-connected-pulse {
+  animation: pulse-dot 2s infinite !important;
+}
+body.receiver-mode #audio-unlock-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000000;
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+  opacity: 0;
+  visibility: hidden;
+}
+body.receiver-mode #audio-unlock-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+body.receiver-mode .unlock-card {
+  background: rgba(20, 20, 20, 0.7);
+  border: 2px solid #d4af37;
+  border-radius: 16px;
+  padding: 40px;
+  text-align: center;
+  max-width: 600px;
+  box-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
+  animation: pulse-border 2s infinite alternate;
+}
+body.receiver-mode .unlock-icon {
+  font-size: 4em;
+  color: #d4af37;
+  margin-bottom: 20px;
+  animation: float-icon 3s ease-in-out infinite alternate;
+}
+body.receiver-mode .unlock-title {
+  font-family: "Mexcellent", sans-serif;
+  color: #d4af37;
+  font-size: 2em;
+  margin: 0 0 15px 0;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+body.receiver-mode .unlock-text {
+  font-family: "Cousine", monospace;
+  color: #fff;
+  font-size: 1.1em;
+  margin: 0 0 25px 0;
+  line-height: 1.5;
+}
+body.receiver-mode .unlock-button {
+  font-family: "Cousine", monospace;
+  font-size: 1.2em;
+  font-weight: 700;
+  color: #000;
+  background: #d4af37;
+  border: 2px solid #d4af37;
+  padding: 12px 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+body.receiver-mode .unlock-button:hover, 
+body.receiver-mode .unlock-button:focus {
+  background: #fff;
+  border-color: #fff;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+  outline: none;
+}
+
+@keyframes scroll-text {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+@keyframes pulse-dot {
+  0% { box-shadow: 0 0 8px rgba(0, 255, 0, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(0, 255, 0, 0.6); }
+  100% { box-shadow: 0 0 8px rgba(0, 255, 0, 0.2); }
+}
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.6); }
+  100% { box-shadow: 0 0 35px rgba(212, 175, 55, 0.6); border-color: rgba(212, 175, 55, 1); }
+}
+@keyframes float-icon {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-10px); }
+}
+
+/* --- Extracted Inline Styles from index.html --- */
+body.app-loading { background-color: #000000; }
+.header { height: 32px; min-height: 32px; padding: 2px 8px; margin-bottom: 4px; }
+.dialog-control-group { padding: 10px; }
+.dialog-control-group-mt { padding: 10px; margin-top: 10px; }
+.dialog-label { color: var(--gold); display: block; margin-bottom: 5px; }
+.dialog-select { width: 100%; background: #333; color: var(--gold); border: 1px solid var(--gold); padding: 5px; }
+.dialog-help-text { font-size: 0.8em; color: #888; margin-top: 5px; }
+.dialog-range { width: 100%; }
+.dialog-gain-label { text-align: right; font-size: 0.8em; color: white; }

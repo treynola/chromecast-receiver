@@ -5,288 +5,30 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.497</title>
+    <title>MXS-004 Studio Mirror v13.9.498</title>
     <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="styles_main.css?v=13.9.497" />
-    <style>
-      /* [v13.9.330] Studio Perfection - Hardened UI & Audio */
-      html,
-      body {
-        background: #000 !important;
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
-      }
-      .app-loading {
-        opacity: 1 !important;
-        visibility: visible !important;
-      }
-      .container {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) scale(var(--scale, 1));
-        transform-origin: center;
-        opacity: 1 !important;
-        visibility: visible !important;
-        display: flex !important;
-        background-color: #000 !important;
-        width: 1440px !important;
-        height: 810px !important;
-      }
-      #cursor-mirror {
-        position: absolute;
-        width: 14px;
-        height: 14px;
-        background: rgba(255, 0, 0, 0.9);
-        border-radius: 50%;
-        pointer-events: none;
-        z-index: 10000;
-        border: 2px solid white;
-        display: none;
-        box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
-        left: 0;
-        top: 0;
-        transform-origin: center;
-      }
-      cast-media-player {
-        display: none;
-      }
-      .main-content {
-        display: grid !important;
-        grid-template-columns: repeat(5, 1fr) !important;
-        gap: 6px !important;
-        width: 100% !important;
-        height: calc(100% - 40px) !important;
-      }
-      .track {
-        background: rgba(20, 20, 20, 0.8) !important;
-        border: 1px solid var(--green) !important;
-      }
-      .master-column {
-        border: 1px solid var(--green) !important;
-        display: flex !important;
-        flex-direction: column !important;
-        gap: 2px !important;
-      }
-      .sample-grid {
-        display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
-        gap: 5px !important;
-        margin-top: 2px !important;
-      }
-      .sample-btn {
-        aspect-ratio: 1 !important;
-        font-family: "Cousine", monospace !important;
-        font-size: 1.1em !important;
-        font-weight: 720 !important;
-        border-radius: 8px !important;
-        border-width: 3px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        text-transform: uppercase;
-      }
-      .hidden {
-        display: none !important;
-      }
-
-      .scrolling-text-wrapper {
-        overflow: hidden;
-        white-space: nowrap;
-        width: 100%;
-        position: relative;
-      }
-      .scrolling-text {
-        display: inline-block;
-        font-size: 0.7em;
-      }
-      .scrolling-text.active-scrolling {
-        padding-left: 0;
-        animation: none;
-      }
-
-      @keyframes scroll-text {
-        0% {
-          transform: translateX(0);
-        }
-        100% {
-          transform: translateX(-100%);
-        }
-      }
-
-      /* [v13.9.330] ORIGINAL .APP BUTTON STYLING */
-      .track-buttons {
-        display: flex;
-        justify-content: space-between;
-        gap: 2px;
-        margin: 5px 0;
-      }
-      .track-buttons button {
-        flex: 1;
-        height: 24px;
-        font-size: 0.75em;
-        font-family: "Cousine", monospace;
-        font-weight: 720;
-        cursor: pointer;
-        text-transform: uppercase;
-        border-radius: 4px;
-      }
-
-      /* PLAY Button */
-      .track-buttons button[id^="t-play-"] {
-        background-color: var(--green) !important;
-        color: var(--gold) !important;
-        border: 1px solid var(--gold) !important;
-      }
-      /* STOP Button */
-      .track-buttons button[id^="t-stop-"] {
-        background-color: var(--gold) !important;
-        color: var(--red) !important;
-        border: 1px solid var(--red) !important;
-      }
-      /* REC Button */
-      .track-buttons button[id^="t-rec-"] {
-        background-color: var(--red) !important;
-        color: var(--gold) !important;
-        border: 1px solid var(--gold) !important;
-      }
-      /* REV Button */
-      .track-buttons button[id^="t-rev-"] {
-        background-color: var(--gold) !important;
-        color: var(--green) !important;
-        border: 1px solid var(--green) !important;
-      }
-
-      .track-buttons button.recording {
-        animation: text-blink 0.5s infinite;
-      }
-      @keyframes pulse-dot {
-        0% { box-shadow: 0 0 8px rgba(0, 255, 0, 0.2); }
-        50% { box-shadow: 0 0 16px rgba(0, 255, 0, 0.6); }
-        100% { box-shadow: 0 0 8px rgba(0, 255, 0, 0.2); }
-      }
-      .bridge-connected-pulse {
-        animation: pulse-dot 2s infinite !important;
-      }
-
-      /* [v13.9.433] Premium Glassmorphic Audio Unlock Overlay */
-      #audio-unlock-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 2000000;
-        transition: opacity 0.5s ease, visibility 0.5s ease;
-        opacity: 0;
-        visibility: hidden;
-      }
-      #audio-unlock-overlay.visible {
-        opacity: 1;
-        visibility: visible;
-      }
-      .unlock-card {
-        background: rgba(20, 20, 20, 0.7);
-        border: 2px solid #d4af37;
-        border-radius: 16px;
-        padding: 40px;
-        text-align: center;
-        max-width: 600px;
-        box-shadow: 0 0 30px rgba(212, 175, 55, 0.3);
-        animation: pulse-border 2s infinite alternate;
-      }
-      .unlock-icon {
-        font-size: 4em;
-        color: #d4af37;
-        margin-bottom: 20px;
-        animation: float-icon 3s ease-in-out infinite alternate;
-      }
-      .unlock-title {
-        font-family: "Mexcellent", sans-serif;
-        color: #d4af37;
-        font-size: 2em;
-        margin: 0 0 15px 0;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-      }
-      .unlock-text {
-        font-family: "Cousine", monospace;
-        color: #fff;
-        font-size: 1.1em;
-        margin: 0 0 25px 0;
-        line-height: 1.5;
-      }
-      .unlock-button {
-        font-family: "Cousine", monospace;
-        font-size: 1.2em;
-        font-weight: 700;
-        color: #000;
-        background: #d4af37;
-        border: 2px solid #d4af37;
-        padding: 12px 30px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        text-transform: uppercase;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-      }
-      .unlock-button:hover, .unlock-button:focus {
-        background: #fff;
-        border-color: #fff;
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
-        outline: none;
-      }
-      @keyframes pulse-border {
-        0% { box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); border-color: rgba(212, 175, 55, 0.6); }
-        100% { box-shadow: 0 0 35px rgba(212, 175, 55, 0.6); border-color: rgba(212, 175, 55, 1); }
-      }
-      @keyframes float-icon {
-        0% { transform: translateY(0); }
-        100% { transform: translateY(-10px); }
-      }
-    </style>
+    <link rel="stylesheet" href="receiver_styles.css?v=13.9.498" />
   </head>
-  <body class="app-loading">
+  <body class="app-loading receiver-mode">
     <div class="container" id="studio-root">
       <div id="cursor-mirror"></div>
       <div class="header">
         <div class="header-left">
           <h1
-            style="
-              font-size: 1.5em;
-              margin: 0;
-              font-family: &quot;Mexcellent&quot;, sans-serif;
-              color: var(--gold);
-            "
+            class="header-title"
           >
             NOWMULTIMEDIA MXS-004
           </h1>
         </div>
         <div class="header-right">
           <h2
-            style="
-              font-size: 0.85em;
-              margin: 0;
-              padding: 0;
-              font-family: &quot;Mexcellent&quot;, sans-serif;
-              color: var(--gold);
-            "
+            class="header-subtitle"
           >
-            Mix N Studio 004 :: v13.9.497
+            Mix N Studio 004 :: v13.9.498
           </h2>
         </div>
       </div>
@@ -299,9 +41,8 @@
           </div>
           <div
             class="master-item master-volume-aligned"
-            style="display: flex; align-items: center; gap: 4px"
           >
-            <label class="master-label" style="font-size: 0.72em; margin: 0"
+            <label class="master-label"
               >Vol</label
             >
             <input
@@ -316,22 +57,20 @@
             <span
               id="master-volume-value"
               class="pa-mic-value"
-              style="font-size: 0.72em"
               >0.0 dB</span
             >
           </div>
           <div class="master-item master-waveform-item">
             <div class="waveform-box master-waveform-box">
               <div class="waveform-labels">
-                <div class="waveform-label-external" style="margin-top: 2px">
+                <div class="waveform-label-external-top">
                   L
                 </div>
                 <div class="waveform-label-external">R</div>
               </div>
               <div
                 id="master-waveform-container"
-                class="waveform-canvas-container"
-                style="flex: 1"
+                class="waveform-canvas-container master-waveform-flex"
               >
                 <canvas
                   id="master-waveform-L"
@@ -350,9 +89,8 @@
           </div>
           <div
             class="master-item master-row-layout"
-            style="display: flex; align-items: center; gap: 4px"
           >
-            <label class="master-label" style="font-size: 0.72em; margin: 0"
+            <label class="master-label"
               >Loop Length</label
             >
             <input
@@ -367,52 +105,41 @@
             <span
               id="loop-length-value"
               class="pa-mic-value"
-              style="font-size: 0.72em"
               >4.0s</span
             >
           </div>
           <div class="master-item master-bottom-item">
-            <div
-              class="master-rec-row"
-              style="
-                display: flex;
-                flex-direction: row;
-                gap: 5px;
-                margin-top: 2px;
-              "
-            >
-              <button id="master-record-button" class="rec-btn">REC</button
-              ><select id="record-as-select">
-                <option value="master">Stereo (WAV)</option>
-              </select>
+            <div class="master-rec-row">
+              <div class="master-rec-col-left">
+                <button id="master-record-button" class="rec-btn" style="background-color: var(--red); color: white;">REC</button>
+              </div>
+              <div class="master-rec-col-right">
+                <select id="record-as-select">
+                  <option value="master">Stereo (WAV)</option>
+                </select>
+              </div>
             </div>
           </div>
           <div
             class="lfo-side-by-side-container"
-            style="
-              display: flex;
-              justify-content: space-between;
-              margin-top: 2px;
-              margin-bottom: 2px;
-            "
           >
-            <div class="lfo-column" style="flex: 1">
-              <div class="master-item lfo-button-item" style="padding: 1px">
-                <button id="lfo-toggle" style="height: 22px; font-size: 0.65em">
+            <div class="lfo-column">
+              <div class="master-item lfo-button-item">
+                <button id="lfo-toggle" class="lfo-toggle-btn">
                   LFO 1
                 </button>
               </div>
-              <div class="master-item lfo-meter-item" style="padding: 1px">
-                <div class="meter-container lfo-meter" style="height: 3px">
+              <div class="master-item lfo-meter-item">
+                <div class="meter-container lfo-meter">
                   <div
                     id="lfo-meter-bar"
                     class="meter-bar"
-                    style="width: 0%"
+                    
                   ></div>
                 </div>
               </div>
-              <div class="master-item lfo-sweep-control" style="margin-top: 0">
-                <label class="master-label" style="font-size: 0.6em; margin: 0"
+              <div class="master-item lfo-sweep-control lfo-sweep-control-no-margin">
+                <label class="master-label sweep-label"
                   >Sweep 1</label
                 ><input
                   type="range"
@@ -423,36 +150,34 @@
                   value="1.8"
                 /><span
                   id="lfo-time-value"
-                  class="master-value"
-                  style="font-size: 0.6em"
+                  class="master-value sweep-value"
                   >1.8s</span
                 >
               </div>
             </div>
             <div
               class="lfo-separator"
-              style="width: 1px; background: var(--gold); margin: 0 4px"
             ></div>
-            <div class="lfo-column" style="flex: 1">
-              <div class="master-item lfo-button-item" style="padding: 1px">
+            <div class="lfo-column">
+              <div class="master-item lfo-button-item">
                 <button
                   id="lfo2-toggle"
-                  style="height: 22px; font-size: 0.65em"
+                  class="lfo-toggle-btn"
                 >
                   LFO 2
                 </button>
               </div>
-              <div class="master-item lfo-meter-item" style="padding: 1px">
-                <div class="meter-container lfo-meter" style="height: 3px">
+              <div class="master-item lfo-meter-item">
+                <div class="meter-container lfo-meter">
                   <div
                     id="lfo2-meter-bar"
                     class="meter-bar"
-                    style="width: 0%"
+                    
                   ></div>
                 </div>
               </div>
-              <div class="master-item lfo-sweep-control" style="margin-top: 0">
-                <label class="master-label" style="font-size: 0.6em; margin: 0"
+              <div class="master-item lfo-sweep-control lfo-sweep-control-no-margin">
+                <label class="master-label sweep-label"
                   >Sweep 2</label
                 ><input
                   type="range"
@@ -463,8 +188,7 @@
                   value="1.8"
                 /><span
                   id="lfo2-time-value"
-                  class="master-value"
-                  style="font-size: 0.6em"
+                  class="master-value sweep-value"
                   >1.8s</span
                 >
               </div>
@@ -472,59 +196,35 @@
           </div>
           <div
             class="master-item sample-center-container"
-            style="margin-top: 0"
           >
             <div
-              class="track-header"
-              style="text-align: center; font-size: 0.75em; margin: 2px 0"
+              class="track-header center-header"
             >
               Sample Station
             </div>
             <div
-              class="sample-grid"
-              id="sample-grid"
-              style="margin-top: 2px"
+              class="sample-grid" id="sample-grid"
             ></div>
           </div>
           <div
             class="master-bottom-buttons"
-            style="
-              margin-top: 2px;
-              display: flex;
-              flex-direction: row;
-              gap: 4px;
-            "
           >
             <button id="import-files-button">IMPORT</button
             ><button id="show-docs-button">DOCS</button
             ><button id="sample-station-button">MEDIA</button
             ><button id="settings-button">SETTINGS</button>
           </div>
-          <div class="meter-container" style="margin-top: auto; height: 6px">
+          <div class="meter-container master-meter-container">
             <div
               id="master-meter-bar"
               class="meter-bar"
-              style="width: 0%"
+              
             ></div>
           </div>
           <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
           <div
             id="bridge-diag-text"
-            style="
-              position: fixed;
-              top: 10px;
-              left: 10px;
-              background: rgba(0, 0, 0, 0.9);
-              color: #0f0;
-              padding: 15px;
-              font-family: &quot;Cousine&quot;, monospace;
-              font-size: 1.4em;
-              z-index: 1000000;
-              border: 2px solid #0f0;
-              border-radius: 8px;
-              box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-              min-width: 400px;
-            "
+            class="bridge-diag-text"
           >
             BUF: -- | STALLS: -- | WS: DISCONNECTED
           </div>
@@ -536,72 +236,29 @@
             playsinline
             autoplay
             loop
-            style="
-              position: fixed;
-              top: 0;
-              left: 0;
-              width: 1px;
-              height: 1px;
-              opacity: 0.01;
-              pointer-events: none;
-            "
+            class="audio-unlocker"
           ></audio>
           <div
             id="tv-console"
-            style="
-              position: fixed;
-              top: 120px;
-              left: 10px;
-              width: 400px;
-              height: 200px;
-              background: rgba(0, 0, 0, 0.7);
-              color: #aaa;
-              font-family: monospace;
-              font-size: 0.7em;
-              padding: 10px;
-              overflow: hidden;
-              z-index: 999999;
-              border-radius: 4px;
-              border: 1px solid #333;
-              pointer-events: none;
-            "
+            class="tv-console"
           >
             <div id="tv-console-inner"></div>
           </div>
           <div
             class="buffer-status"
-            style="
-              font-size: 0.6em;
-              color: var(--gold);
-              margin-top: 2px;
-              display: flex;
-              flex-direction: column;
-              gap: 2px;
-            "
           >
-            <div style="display: flex; align-items: center; gap: 5px">
+            <div class="bridge-status-row">
               <div
                 id="bridge-status-dot"
-                style="
-                  width: 8px;
-                  height: 8px;
-                  border-radius: 50%;
-                  background: var(--red);
-                "
+                class="bridge-status-dot"
               ></div>
               BRIDGE:
               <div
-                class="meter-container"
-                style="flex: 1; height: 4px; background: #222"
+                class="meter-container buffer-health-meter"
               >
                 <div
                   id="buffer-health-bar"
-                  style="
-                    width: 0;
-                    height: 100%;
-                    background: var(--green);
-                    transition: width 0.1s;
-                  "
+                  class="buffer-health-bar"
                 ></div>
               </div>
             </div>
