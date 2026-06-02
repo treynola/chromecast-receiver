@@ -512,11 +512,15 @@ img {
 }
 
 .header h2 {
-  font-family: "Mexcellent", sans-serif;
-  font-size: 0.7em;
+  font-family: "Mexcellent", sans-serif !important;
+  font-size: 0.75em !important;
   margin: 0;
   color: var(--green);
   letter-spacing: 0.5px;
+}
+
+.header-subtitle {
+  font-family: "Mexcellent", sans-serif !important;
 }
 
 .header-right {
