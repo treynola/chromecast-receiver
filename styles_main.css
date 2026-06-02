@@ -3411,8 +3411,8 @@ select option {
   border-bottom: none;
 }
 .track-picker-item:hover {
-  background: rgba(0, 255, 200, 0.15);
-  color: #00ffc8;
+  background: rgba(0, 128, 0, 0.15);
+  color: var(--green);
 }
 
 /* Sampler Pad Picker Modal */
@@ -3432,11 +3432,11 @@ select option {
 
 .sampler-picker-modal {
   background: #1a1a1a;
-  border: 2px solid #00ffc8;
+  border: 2px solid var(--green);
   border-radius: 12px;
   padding: 30px;
   width: 480px;
-  box-shadow: 0 0 50px rgba(0, 255, 200, 0.2);
+  box-shadow: 0 0 50px rgba(0, 128, 0, 0.2);
   animation: modalScaleIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
 }
 
@@ -3489,11 +3489,11 @@ select option {
 }
 
 .sampler-pad-pick:hover {
-  background: #00ffc8;
-  color: #000;
+  background: var(--green);
+  color: #fff;
   border-color: #fff;
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(0, 255, 200, 0.3);
+  box-shadow: 0 5px 15px rgba(0, 128, 0, 0.3);
 }
 
 .sampler-picker-close {
@@ -4284,4 +4284,14 @@ select option {
 .loop-end-marker {
   border-left: 1px solid var(--red) !important;
   background-color: rgba(255, 0, 0, 0.8) !important;
+}
+
+.play-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px !important;
+  background-color: #00ff00 !important;
+  pointer-events: none;
+  z-index: 12 !important;
 }
