@@ -512,7 +512,7 @@ img {
 }
 
 .header h2 {
-  font-family: "Mexcellent", sans-serif !important;
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
   font-size: 0.75em !important;
   margin: 0;
   color: var(--green);
@@ -520,7 +520,7 @@ img {
 }
 
 .header-subtitle {
-  font-family: "Mexcellent", sans-serif !important;
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
 }
 
 .header-right {
