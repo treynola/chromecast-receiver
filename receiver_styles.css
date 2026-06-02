@@ -512,6 +512,7 @@ img {
 }
 
 .header h2 {
+  font-family: "Mexcellent", sans-serif;
   font-size: 0.7em;
   margin: 0;
   color: var(--green);
