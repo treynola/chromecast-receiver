@@ -3745,19 +3745,25 @@ body.receiver-mode .unlock-button:focus {
   width: 100% !important;
   flex-shrink: 0;
 }
+/* [QA] Match Loop Start label style exactly */
 .pa-mic-adjustment label {
   flex: 0 0 auto !important;
   white-space: nowrap !important;
-  font-size: 0.72em !important;
-  color: var(--gold) !important;
+  font-size: 0.65em !important;
+  color: var(--green) !important;
+  font-weight: bold !important;
+  text-transform: uppercase !important;
 }
+/* [QA] Slider visibility fix — appearance:auto lets WebKit render the thumb */
 .pa-mic-adjustment .pa-mic-slider {
   flex: 1 1 0 !important;
   min-width: 0 !important;
   width: auto !important;
-  height: 4px !important;
+  height: 10px !important;
   margin: 0 !important;
   cursor: pointer;
+  -webkit-appearance: auto !important;
+  appearance: auto !important;
 }
 .pa-mic-adjustment .pa-mic-value {
   flex: 0 0 auto !important;
@@ -3771,6 +3777,7 @@ body.receiver-mode .unlock-button:focus {
 .pa-mic-adjustment.hidden-input {
   display: none !important;
 }
+
 
 /* Assign Button Flash Animation (RecordingUI.js L155) */
 @keyframes assign-flash {
