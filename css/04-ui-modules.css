@@ -3759,41 +3759,30 @@ body.receiver-mode .unlock-button:focus {
   font-weight: bold !important;
   text-transform: uppercase !important;
 }
-/* [QA] Slider — height 20px gives the 14px thumb vertical room to render */
+/* [QA] Slider — styled directly on the input element for guaranteed rendering */
 .pa-mic-adjustment .pa-mic-slider {
   -webkit-appearance: none !important;
   appearance: none !important;
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  width: auto !important;
-  height: 20px !important;
+  flex: 1 !important;
+  min-width: 50px !important;
+  width: 100% !important;
+  height: 5px !important;
   margin: 0 !important;
   cursor: pointer !important;
-  background: transparent !important;
-  outline: none !important;
-}
-/* Track line centred within the 20px touch area */
-.pa-mic-adjustment .pa-mic-slider::-webkit-slider-runnable-track {
-  height: 5px !important;
   background: var(--mid-gray, #555) !important;
   border-radius: 5px !important;
+  outline: none !important;
 }
 /* Gold thumb — same style as every other slider in the app */
 .pa-mic-adjustment .pa-mic-slider::-webkit-slider-thumb {
   -webkit-appearance: none !important;
   width: 14px !important;
   height: 14px !important;
-  margin-top: -4.5px !important;
   background: var(--gold, #d4af37) !important;
   border-radius: 50% !important;
   border: 2px solid var(--dark-gray, #111) !important;
   box-shadow: 0 0 4px rgba(0,0,0,0.5) !important;
   cursor: pointer !important;
-}
-.pa-mic-adjustment .pa-mic-slider::-moz-range-track {
-  height: 5px !important;
-  background: var(--mid-gray, #555) !important;
-  border-radius: 5px !important;
 }
 .pa-mic-adjustment .pa-mic-slider::-moz-range-thumb {
   width: 14px !important;
