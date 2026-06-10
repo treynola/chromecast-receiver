@@ -830,8 +830,8 @@ select option {
   background-color: var(--off-black);
   position: relative;
   overflow: hidden;
-  height: 30px;
-  line-height: 30px;
+  height: 24px;  /* QA: reduced by 6px from 30px */
+  line-height: 24px;
   flex-shrink: 0;
 }
 
@@ -3743,7 +3743,12 @@ body.receiver-mode .unlock-button:focus {
   flex-wrap: nowrap !important;
   gap: 5px !important;
   width: 100% !important;
+  min-height: 25px !important; /* QA: +5px height for input gain area */
   flex-shrink: 0;
+  /* QA: overflow visible + z-index so thumb not clipped by .track overflow:hidden */
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 2 !important;
 }
 /* [QA] Match Loop Start label style */
 .pa-mic-adjustment label {
