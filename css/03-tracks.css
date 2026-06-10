@@ -1,0 +1,343 @@
+/*
+ * 03-tracks.css
+ * Phase 3: Tracks & Components
+ * The dynamically duplicated track columns and their internal modules.
+ */
+
+.track-eq-container .knob-group {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 5px !important;
+}
+
+.track-transport-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: auto;
+  margin-bottom: 2px;
+}
+
+.track-item .waveform-box {
+  width: 100% !important;
+  height: 50px !important; /* Reduced height */
+  min-height: 50px !important;
+  flex: 0 0 50px !important;
+  display: flex !important;
+  align-items: stretch !important; /* Ensure children fill height */
+}
+
+.track-input-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
+  width: 100% !important;
+  margin-top: 5px !important;
+}
+
+.track-bottom-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 5px !important;
+  padding-top: 5px !important;
+  border-top: 1px solid var(--mid-gray) !important;
+  margin-top: 5px !important;
+}
+
+#tracks-container,
+.tracks-container {
+  display: contents; /* Inherit the 5-column grid from main-content */
+}
+
+.track {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  padding: 4px;
+  background-color: var(--dark-gray);
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+}
+
+.track-header {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  font-size: 0.9em;
+  color: var(--gold);
+  margin-bottom: 5px;
+  text-align: center;
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+
+.track-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.track-buttons button,
+.track-btn {
+  height: 24px !important;
+  font-size: 0.75em !important;
+  padding: 2px 4px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family: "Cousine", monospace !important;
+  font-weight: 720 !important;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--gold);
+}
+
+.track-transport-row .track-btn {
+  font-family: "Courier New", Courier, monospace !important;
+  font-weight: bold !important;
+  font-size: 0.8em !important;
+  border-radius: 4px !important;
+  padding: 2px !important;
+  transition: all 0.15s ease-in-out !important;
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  cursor: pointer;
+}
+
+.track-transport-row .track-btn:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 5px rgba(250, 215, 142, 0.3);
+}
+
+.track-transport-row .track-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(100%);
+}
+
+.track-eq-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.track-buttons button,
+.track-time-display {
+  font-size: 0.9em;
+  color: var(--green);
+  font-weight: bold;
+  text-align: center;
+  font-family: monospace;
+  background: #111;
+  padding: 3px;
+  border-radius: 4px;
+  border: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.track-buttons button:hover {
+  filter: brightness(1.2);
+}
+
+.track-buttons button[data-action="play"] {
+  background-color: var(--green);
+  color: #fff;
+  border-color: #00ff00;
+}
+
+.track-buttons button[data-action="record"] {
+  background-color: var(--red);
+  color: #fff;
+  border-color: #ff0000;
+}
+
+.track-buttons button[data-action="stop"] {
+  background-color: var(--gold);
+  color: #000;
+  border-color: #fff;
+}
+
+.track-buttons button[data-action="reverse"] {
+  background-color: #333;
+  color: #ccc;
+  border-color: #555;
+  transition: all 0.2s;
+}
+
+.track-buttons button[data-action="reverse"].reversed {
+  background-color: var(--gold);
+  color: #000;
+  border-color: #fff;
+  font-weight: bold;
+  box-shadow: 0 0 5px var(--gold);
+}
+
+.track-buttons button[data-action="reverse"].reversed.blinking {
+  animation: none;
+}
+
+.track-buttons button.recording {
+  animation: recordingPulse 1s infinite alternate;
+}
+.track-buttons button.playing.blinking {
+  animation: recordingPulse 1.5s infinite alternate;
+}
+
+.track .meter-container {
+  margin: 0 !important;
+}
+
+.track-waveform-container {
+  position: relative;
+  width: 100%;
+  height: 100px;
+  background: #1a1a1a;
+  border: 1px solid var(--mid-gray);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 5px;
+  display: flex;
+}
+
+.track-waveform-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  width: 15px;
+  background: #2a2a2a;
+  border-right: 1px solid var(--mid-gray);
+  z-index: 10;
+}
+
+.track-waveform-canvases {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.track-waveform-canvas-L,
+.track-waveform-canvas-R {
+  width: 100%;
+  height: 50%;
+  display: block;
+}
+
+.track .control-group label {
+  color: var(--gold);
+}
+
+.track-picker-menu {
+  position: absolute;
+  background: var(--off-black);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 10000;
+  min-width: 150px;
+  padding: 4px 0;
+  font-family: monospace;
+}
+
+.track-picker-item {
+  padding: 8px 12px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #333;
+}
+
+.track-picker-item:last-child {
+  border-bottom: none;
+}
+
+.track-picker-item:hover {
+  background: var(--mid-gray);
+  color: var(--gold);
+}
+
+.track-peak-readout {
+  font-size: 0.7em !important;
+  color: var(--green) !important;
+  font-weight: 720 !important;
+  text-align: right;
+  margin-top: 2px;
+  min-height: 12px;
+}
+
+.track-peak-readout.peak-hot {
+  color: var(--red) !important;
+}
+
+.track-peak-readout.peak-warn {
+  color: var(--gold) !important;
+}
+
+.track-peak-readout.peak-safe {
+  color: var(--green) !important;
+}
+
+.pa-mic-value {
+  font-size: 0.7em !important;
+  color: var(--green) !important;
+  font-weight: 720 !important;
+}
+
+/* Layout overrides for same-line inputs and effects */
+.track-input-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 5px !important;
+}
+
+.track-input-layout label {
+  flex: 1 !important;
+  white-space: nowrap !important;
+}
+
+.track-input-layout .input-source {
+  flex: 2 !important;
+  width: auto !important;
+  margin: 0 !important;
+}
+
+.track-bottom-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 5px !important;
+  padding-top: 5px !important;
+  border-top: 1px solid var(--mid-gray) !important;
+  margin-top: 5px !important;
+}
+
+.track-bottom-layout label {
+  flex: 1 !important;
+  white-space: nowrap !important;
+}
+
+.track-bottom-layout .effect-type-select {
+  flex: 2 !important;
+  width: auto !important;
+  margin: 0 !important;
+}

@@ -1,235 +1,24 @@
-/*
- * Filename: styles_main.css
- * Version: v13.9.330
- * Date: May 23, 2026
- * Description: Main stylesheet for the NOWMULTIMEDIA MXS-004 application.
- */
-@font-face {
-  font-family: "Mexcellent";
-  src: url("fonts/MexcellentRg.otf") format("opentype");
-  font-weight: normal;
-  font-style: normal;
-}
+/* 04-ui-modules.css - All specific UI modules, modals, and dialogs */
 
-@font-face {
-  font-family: "Mexcellent 3D";
-  src: url("fonts/Mexcellent3d.otf") format("opentype");
-  font-weight: normal;
-  font-style: normal;
-}
 
-:root {
-  --red: #ff0000;
-  --gold: #fad78e;
-  --dark-gold: #b38600;
-  --green: #008000;
-  --dark-green: #004d00;
-  --darker-green: #005200;
-  --off-black: #1a1a1a;
-  --dark-gray: #2c2c2c;
-  --mid-gray: #444;
-  --text-color: #f0f0f0;
-  --dark-green-transparent: rgba(0, 100, 0, 0.5);
-  --dark-red: #8b0000;
-}
 
-html {
-  background-color: #000000 !important;
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-}
 
-body {
-  font-family: "Courier New", Courier, monospace;
-  background-color: #000000 !important;
-  color: var(--text-color);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
-  width: 100%;
-  padding: 0;
-  margin: 0;
-  box-sizing: border-box;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-user-select: none;
-  user-select: none;
-  overflow: hidden;
-  cursor: default;
-  position: relative;
-  /* [V13.6.6] Gold Standard Fade-in */
-  transition: opacity 0.72s ease-in-out !important;
-}
 
-/* [V13.5.2] App-wide text selection prevention */
-*,
-*::before,
-*::after {
-  -webkit-user-select: none;
-  user-select: none;
-}
 
-/* Sliders should show pointer cursor and accept keyboard focus */
-input[type="range"] {
-  cursor: pointer;
-}
 
-/* Focused sliders get a visible ring for arrow-key interaction */
-input[type="range"]:focus {
-  outline: 3px solid #ffcc00 !important;
-  outline-offset: 2px;
-  box-shadow: 0 0 8px #ffcc00;
-}
 
-/* Force hide global hidden inputs and containers to prevent layout shifts */
-.layout-hider,
-#global-hidden-container,
-#global-file-input,
-#global-dir-input {
-  display: none !important;
-  position: absolute !important;
-  width: 0 !important;
-  height: 0 !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  z-index: -1000 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: none !important;
-  overflow: hidden !important;
-}
 
-/* Helper Classes for Layout (avoiding inline styles for CSP compliance) */
-.full-width-flex {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  width: 100% !important;
-}
 
-.waveform-box {
-  display: flex !important;
-  align-items: center !important;
-  width: 100% !important;
-}
 
-.waveform-labels {
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-around !important;
-  height: 60px !important;
-  margin-right: 4px !important;
-}
 
-.flex-grow {
-  flex: 1 !important;
-}
 
-.tight-bottom {
-  margin-bottom: 2px !important;
-}
 
-.master-vol-group {
-  margin-top: 2px !important;
-}
 
-.master-rec-group {
-  display: flex !important;
-  flex-direction: row !important;
-  gap: 5px !important;
-  margin-bottom: 2px !important;
-  justify-content: center !important;
-  align-items: center !important;
-}
 
-.font-small {
-  font-size: 0.8em !important;
-}
 
-.bold {
-  font-weight: bold !important;
-}
 
-.text-center {
-  text-align: center !important;
-}
 
-.margin-top-0 {
-  margin-top: 0 !important;
-}
 
-.color-gold {
-  color: var(--gold) !important;
-}
-
-.bg-dark {
-  background-color: #444 !important;
-}
-
-.margin-0 {
-  margin: 0 !important;
-}
-
-.margin-top-5 {
-  margin-top: 5px !important;
-}
-
-.margin-bottom-20 {
-  margin-bottom: 20px !important;
-}
-
-.flex-center-gap-10 {
-  display: flex !important;
-  gap: 10px !important;
-  justify-content: center !important;
-}
-
-.btn-confirm {
-  background-color: var(--green) !important;
-  color: var(--gold) !important;
-  border: 1px solid var(--gold) !important;
-  padding: 8px 20px !important;
-  border-radius: 5px !important;
-  cursor: pointer !important;
-  font-weight: bold !important;
-  font-family: inherit !important;
-}
-
-.btn-cancel {
-  background-color: var(--red) !important;
-  color: var(--gold) !important;
-  border: 1px solid var(--gold) !important;
-  padding: 8px 20px !important;
-  border-radius: 5px !important;
-  cursor: pointer !important;
-  font-weight: bold !important;
-  font-family: inherit !important;
-}
-
-.z-3000 {
-  z-index: 3000 !important;
-}
-
-.lfo-meter-layout {
-  width: 50% !important;
-  margin: 2px auto 0 !important;
-}
-
-.docs-btn-layout {
-  display: flex !important;
-  justify-content: center !important;
-  margin-top: auto !important;
-  padding-top: 10px !important;
-}
-
-.display-none {
-  display: none !important;
-}
 
 /* Custom Message Box Classes */
 #custom-message-box {
@@ -287,20 +76,8 @@ input[type="range"]:focus {
 }
 
 /* Track UI Helpers */
-.track-input-layout {
-  display: flex !important;
-  gap: 5px !important;
-  align-items: center !important;
-  flex-direction: column !important;
-}
 
 /* TrackView Compatibility Styles */
-.track-controls-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 5px;
-  margin-bottom: 5px;
-}
 
 .knob-group {
   flex: 1;
@@ -327,20 +104,9 @@ input[type="range"]:focus {
   font-family: "Courier New", Courier, monospace;
 }
 
-.track-eq-container .knob-group {
-  width: 48%;
-  /* 2 per row */
-  flex: none;
-}
 
 /* .loop-controls REMOVED - MERGED INTO LINE 3595 */
 
-.track-transport-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 2px;
-  margin: 5px 0;
-}
 
 /* Uniform Waveform Styles (shared by track and master) */
 .waveform-box {
@@ -352,20 +118,7 @@ input[type="range"]:focus {
   margin-bottom: 5px !important;
 }
 
-.track-item .waveform-box {
-  border: 1px solid var(--mid-gray) !important;
-}
 
-.waveform-labels {
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: space-around !important;
-  height: 100% !important;
-  width: 20px !important;
-  text-align: center !important;
-  border-right: 1px solid var(--gold) !important;
-  margin-right: 4px !important;
-}
 
 .waveform-label-external {
   font-size: 0.6em !important;
@@ -393,11 +146,6 @@ input[type="range"]:focus {
   box-sizing: border-box !important;
 }
 
-.track-input-row {
-  display: flex;
-  align-items: center;
-  margin-top: 5px;
-}
 
 .input-device-select {
   flex: 1;
@@ -440,215 +188,40 @@ img {
   max-width: 100%;
 }
 
-.track-bottom-layout {
-  display: flex !important;
-  flex-direction: row !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 10px !important;
-  border-top: 1px solid var(--mid-gray) !important;
-  padding-top: 5px !important;
-  margin-top: 5px !important;
-}
 
-.flex-1-no-margin {
-  flex: 1 !important;
-  margin: 0 !important;
-}
 
-.container {
-  display: flex;
-  flex-direction: column;
-  width: 1432px; /* Adjusted to fit 1440px visual total including shadows */
-  height: 802px; /* Adjusted to fit 810px visual total including shadows */
-  max-width: 1432px;
-  max-height: 802px;
-  overflow: hidden; /* [V13.6.5] Lockdown GUI to 16:9 */
-  aspect-ratio: 16 / 9;
-  background-color: var(--dark-gray);
-  border-radius: 12px;
-  padding: 6px;
-  box-sizing: border-box;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  margin: 0 !important;
-  border: 1px solid var(--green);
-  box-shadow:
-    0 0 0 2px var(--gold),
-    0 0 0 4px var(--red);
-}
 
-.hidden {
-  display: none;
-}
 
-.app-loading {
-  opacity: 0;
-  pointer-events: none;
-  background-color: #000000 !important; /* Total blackout at launch */
-  transition: opacity 0.72s cubic-bezier(0.4, 0, 0.2, 1); /* Gold Standard Fade */
-}
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 8px;
-  background-color: var(--off-black);
-  border-radius: 8px;
-  margin-bottom: 6px;
-  height: 36px;
-  min-height: 36px;
-}
 
-.header h1 {
-  font-family: "Mexcellent 3D", sans-serif;
-  font-size: 1.1em;
-  margin: 0;
-  color: var(--gold);
-  letter-spacing: 1px;
-}
 
-.header h2 {
-  font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
-  font-size: 0.75em !important;
-  margin: 0;
-  color: var(--green);
-  letter-spacing: 0.5px;
-}
 
-.header-subtitle {
-  font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
-}
 
-.header-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
 
-#cast-btn {
-  background: transparent;
-  border: none;
-  color: var(--gold);
-  font-size: 1.2em;
-  cursor: pointer;
-  padding: 2px 5px;
-  transition: color 0.2s ease;
-}
 
-#cast-btn:hover {
-  color: var(--red);
-  filter: drop-shadow(0 0 5px var(--gold));
-}
 
 /* ============================================
    NEW 5-COLUMN LAYOUT (Master + 4 Tracks)
    ============================================ */
-.main-content {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  padding: 0 2px 2px 2px;
-  width: 100%;
-  flex: 1;
-  min-width: 0; /* [V13.6.5] Prevent content from blowing up the grid */
-  min-height: 0;
-  overflow: hidden;
-}
 
-.master-column {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border: 1px solid var(--green);
-  border-radius: 8px;
-  padding: 4px;
-  background-color: var(--dark-gray);
-  overflow: hidden;
-  position: relative;
-  min-width: 0; /* [V13.6.5] Force content to truncate/wrap instead of expanding column */
-}
 
 /* QA: Align Master Recording with tracks */
-.master-recording-area {
-  margin-top: 0 !important;
-  /* Reset, using ghost spacer instead */
-}
 
 /* QA Fix: Nudge Master Time Display down without moving Waveform */
-#recording-time-display {
-  margin-top: 3px !important;
-  margin-bottom: -3px !important;
-}
 
 /* Equal-height master items */
-.master-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  min-height: 0;
-}
 
-.master-item input[type="range"] {
-  width: 90%;
-  margin: 2px 0;
-}
 
-.master-label {
-  font-size: 0.75em;
-  color: var(--green);
-  font-weight: bold;
-  margin-bottom: 2px;
-}
 
-.master-value {
-  font-size: 0.7em;
-  color: var(--gold);
-  font-weight: 720;
-}
 
-.master-waveform-box {
-  width: 100%;
-  height: 100%;
-  min-height: 40px;
-}
 
 /* Visible line spacer to match track column dividers */
-.master-spacer {
-  flex: 0 0 auto;
-  height: 1px;
-  background-color: var(--mid-gray);
-  margin: 5px 0;
-  width: 100%;
-}
 
 /* Invisible spacer for spacing only */
-.master-spacer-invisible {
-  flex: 0 0 auto;
-  height: 5px;
-}
 
 /* Tighter spacing for bottom section items */
-.master-bottom-item {
-  flex: 0 0 24px !important;
-  height: 24px !important;
-  min-height: 24px !important;
-  padding: 0 !important;
-  margin-top: 8px !important;
-  margin-bottom: 8px !important;
-}
 
 /* Hide old master-controls if any remain */
-.master-controls {
-  display: none;
-}
 
 /* Hide duplicate buttons in recordings-section (now in master column) */
 .sessions-header #import-files-button,
@@ -658,248 +231,41 @@ img {
 
 
 /* Master Bottom Buttons Grouping */
-.master-bottom-buttons {
-  display: flex !important;
-  flex-direction: row !important;
-  gap: 3px !important;
-  width: 98% !important;
-  margin: 5px auto 0 auto !important;
-  padding: 0 2px !important;
-}
 
-.master-bottom-buttons button,
-#lfo-toggle,
-#lfo2-toggle {
-  flex: 1 !important;
-  height: 24px !important;
-  font-size: 0.75em !important;
-  font-family: "Cousine", monospace !important;
-  font-weight: 720 !important;
-  padding: 2px 4px !important;
-  min-width: 0 !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  background-color: var(--green) !important;
-  border: 1px solid var(--gold) !important;
-  border-radius: 4px !important;
-  color: var(--gold) !important;
-  cursor: pointer !important;
-  transition: all 0.15s ease-in-out !important;
-  text-transform: uppercase !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
 
-.master-bottom-buttons button:hover {
-  filter: brightness(1.2) !important;
-  box-shadow: 0 0 5px rgba(250, 215, 142, 0.3) !important;
-}
 
-.master-bottom-buttons button:active {
-  background-color: var(--dark-green) !important;
-  transform: translateY(1px) !important;
-}
 
 /* Tighten LFO spacing */
-.lfo-button-item {
-  margin-bottom: -5px !important;
-}
 
-.lfo-meter-item {
-  padding-top: 0 !important;
-}
 
-.master-waveform-item {
-  margin-top: 0 !important;
-  height: 60px !important;
-  flex: 0 0 auto !important;
-  /* Reset from flex:1 to match fixed track waveform height */
-}
 
 /* Master Volume Aligned (Row Layout to fit 30px height) */
-.master-volume-aligned {
-  flex-direction: row !important;
-  height: 30px;
-  flex: 0 0 auto !important;
-  /* Prevent stretching to align with fixed Track status */
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin: 5px 0 0 0 !important;
-  padding: 0 5px !important;
-}
 
-.master-volume-aligned input[type="range"] {
-  flex: 1;
-  height: 4px;
-  margin: 0;
-}
 
 /* Generalized Row Layout for Master Items (Loop, Vol) */
-.master-row-layout {
-  flex-direction: row !important;
-  height: 24px;
-  /* Compacted from 30px to align tighter */
-  flex: 0 0 auto !important;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin: 5px 0 0 0 !important;
-  /* Match Track Input Row margin-top: 5px */
-  padding: 0 5px !important;
-}
 
-.master-bottom-item {
-  width: 100% !important;
-  align-self: stretch !important;
-  padding: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 0 0 24px !important;
-  height: 24px !important;
-  margin-top: 8px !important;
-  margin-bottom: 8px !important;
-}
 
-.master-rec-row {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 5px !important;
-  margin: 0 !important;
-  width: 100% !important;
-  height: 24px !important;
-  box-sizing: border-box !important;
-  flex-wrap: nowrap !important;
-  position: relative !important;
-  z-index: 10 !important;
-}
 
-.master-rec-col-left {
-  flex: 0 0 60px !important;
-  width: 60px !important;
-  display: block !important;
-}
 
-.master-rec-col-right {
-  flex: 1 !important;
-  min-width: 0 !important;
-  display: block !important;
-}
 
-.master-rec-col-left #master-record-button {
-  width: 100% !important;
-  height: 24px !important;
-  box-sizing: border-box !important;
-  margin: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  position: static !important;
-}
 
-.master-rec-col-right select {
-  width: 100% !important;
-  height: 24px !important;
-  box-sizing: border-box !important;
-  margin: 0 !important;
-  display: block !important;
-  position: static !important;
-}
 
-.master-row-layout input[type="range"] {
-  flex: 1;
-  height: 4px;
-  margin: 0;
-}
 
-.master-row-layout .track-header {
-  font-size: 0.7em;
-  margin: 0;
-  white-space: nowrap;
-}
 
-.master-row-layout .master-value {
-  font-size: 0.7em;
-  min-width: 35px;
-  text-align: right;
-}
 
 /* Specific tweaks if needed */
-.master-volume-aligned {
-  /* Use the generic class properties but keep this for backward compat if JS references it, 
-       OR just have it inherit/duplicate for now to be safe */
-  flex-direction: row !important;
-  height: 30px;
-  flex: 0 0 auto !important;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin: 0 !important;
-  padding: 0 5px !important;
-}
 
 /* LFO Side-by-Side Layout */
-.lfo-side-by-side-container {
-  display: flex;
-  flex-direction: row;
-  width: 100%;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--mid-gray);
-  padding: 2px 0;
-  margin: 5px 0 2px 0;
-  background-color: rgba(0, 0, 0, 0.2);
-  position: relative !important;
-  z-index: 1 !important;
-}
 
-.lfo-column {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
 
 /* Vertical Separator */
-.lfo-separator {
-  width: 1px;
-  background-color: var(--mid-gray);
-  align-self: stretch;
-  margin: 0 2px;
-}
 
 /* Overrides for compact look in side-by-side */
-.lfo-column .master-item {
-  width: 100%;
-  margin-bottom: 5px !important;
-  padding: 0 !important;
-}
 
-.lfo-column .lfo-sweep-control {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding-top: 5px;
-}
 
-.lfo-column .lfo-meter-item .meter-container {
-  height: 6px;
-  /* Thinner meters */
-  width: 90%;
-}
 
-.lfo-column input[type="range"] {
-  height: 10px;
-  /* Smaller sliders */
-}
 
 /* Hide original individual spacers since we wrap the whole block */
-.lfo-hidden-spacer {
-  display: none;
-}
 
 .control-column {
   display: flex;
@@ -954,14 +320,6 @@ img {
 }
 
 /* MODULAR 4-TRACK ENFORCEMENT */
-#tracks-container,
-.tracks-container {
-  grid-column: 2 / span 4;
-  display: grid !important;
-  grid-template-columns: repeat(4, 1fr) !important;
-  gap: 8px;
-  min-width: 0;
-}
 
 .main-controls {
   display: grid;
@@ -974,23 +332,7 @@ img {
   border-radius: 4px;
 }
 
-.track {
-  background-color: var(--dark-gray);
-  border: 1px solid var(--green);
-  border-radius: 10px;
-  padding: 5px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
 
-.track-header {
-  text-align: center;
-  color: var(--gold);
-  font-weight: bold;
-  font-size: 0.9em;
-  cursor: pointer;
-}
 
 .knob-container {
   position: relative;
@@ -1143,12 +485,6 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* Removed conflicting .lfo-assign and .param-value styles */
 
-.track-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 5px;
-  margin-bottom: 5px;
-}
 
 .app-button {
   font-family: "Courier New", Courier, monospace;
@@ -1168,29 +504,6 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* [V13.6.5] Unified Master & Track Control Buttons */
-.track-buttons button,
-.track-btn,
-#lfo-toggle,
-#lfo2-toggle,
-#master-record-button,
-#show-docs-button,
-#import-files-button,
-#sample-station-button,
-#settings-button {
-  height: 24px !important;
-  font-size: 0.75em !important;
-  padding: 2px 4px !important;
-  box-sizing: border-box !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  font-family: "Cousine", monospace !important;
-  font-weight: 720 !important;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid var(--gold);
-}
 
 /* [V13.8.66] Master REC Dimension Alignment */
 #master-record-button {
@@ -1202,30 +515,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* Restored Transport Button Styles */
-.track-transport-row .track-btn {
-  flex: 1;
-  font-family: "Cousine", monospace !important;
-  font-weight: 720 !important;
-  font-size: 0.8em;
-  padding: 4px 2px;
-  border: 1px solid var(--mid-gray);
-  background: #333;
-  color: var(--gold);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.1s;
-}
 
-.track-transport-row .track-btn:hover {
-  filter: brightness(1.2);
-  border-color: var(--gold);
-}
 
-.track-transport-row .track-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  filter: none;
-}
 
 /* Specific Button Colors */
 .rec-btn {
@@ -1327,52 +618,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* EQ Container Layout Fix */
-.track-eq-container {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
 
-.track-buttons button,
-#master-record-button,
-#lfo-toggle,
-#lfo2-toggle,
-#show-docs-button,
-#import-files-button,
-.recording-item-arrow,
-#close-docs-button,
-#close-audio-files-modal,
-#close-load-to-track-modal,
-#load-to-track-list li button,
-.qa-controls button,
-#rescan-audio-files,
-#select-all-audio-files,
-#load-selected-audio-files,
-.fx-chain-arrow {
-  line-height: 18px !important;
-}
 
-.track-time-display {
-  text-align: center;
-  border-radius: 5px;
-  font-size: 0.9em;
-  background-color: var(--dark-green-transparent);
-  color: var(--gold);
-  border: 1px solid var(--gold);
-  font-family: "Courier New", Courier, monospace;
-  font-weight: 720;
-  width: 60%;
-  margin: 0 auto;
-  height: 24px;
-  /* Reduced height to match dropdowns */
-  box-sizing: border-box;
-  line-height: 24px;
-  /* Adjusted line-height for vertical centering */
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 
 #lfo-toggle,
 #lfo2-toggle {
@@ -1422,11 +669,6 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid var(--gold) !important;
 }
 
-.track-buttons button[data-action="stop"] {
-  background-color: var(--gold);
-  color: var(--red);
-  border: 1px solid var(--red);
-}
 
 .track-buttons button[data-action="reverse"],
 #lfo-toggle,
@@ -1590,6 +832,7 @@ select option {
   overflow: hidden;
   height: 30px;
   line-height: 30px;
+  flex-shrink: 0;
 }
 
 .scrolling-text-wrapper {
@@ -2239,20 +1482,6 @@ select option {
   background: rgba(0, 0, 0, 0.7);
 }
 
-.docs-content-wrapper {
-  position: relative;
-  background-color: var(--green);
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  overflow-y: auto;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 3px var(--green),
-    0 0 0 6px var(--gold),
-    0 0 0 9px var(--red);
-}
 
 #docs-dialog pre {
   background-color: var(--green);
@@ -2539,6 +1768,21 @@ select option {
 
 #audio-files-list li:hover {
   background-color: var(--mid-gray);
+}
+
+#audio-files-list label {
+  margin-left: 8px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.audio-files-scan-status {
+  padding: 5px 10px;
+  color: var(--gold);
+  font-size: 0.85em;
+  border-bottom: 1px solid var(--mid-gray);
 }
 
 #close-audio-files-modal {
@@ -2877,57 +2121,9 @@ select option {
   text-align: center;
 }
 
-.track-waveform-container {
-  width: 100%;
-  height: 60px;
-  /* Increased height to match master visualizer */
-  background-color: transparent;
-  /* Container itself is transparent */
-  border: none;
-  /* Remove border from container */
-  margin-bottom: 5px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  /* Gap between labels and canvases */
-  min-width: 0;
-  /* Flex fix */
-}
 
-.track-waveform-labels {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  height: 100%;
-  margin-right: 0;
-  flex-shrink: 0;
-  /* Prevent labels from shrinking */
-}
 
-.track-waveform-canvases {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  /* 4px gap between L and R canvases */
-  height: 100%;
-  min-width: 0;
-  /* Flex fix */
-}
 
-.track-waveform-canvas-L,
-.track-waveform-canvas-R {
-  width: 100%;
-  flex: 1;
-  display: block;
-  background-color: #111;
-  border: 1px solid var(--gold);
-  border-radius: 4px;
-  box-sizing: border-box;
-  min-height: 0;
-  /* Flex fix */
-}
 
 /* Cast Modal Styles */
 .modal {
@@ -2942,9 +2138,6 @@ select option {
   backdrop-filter: blur(5px);
 }
 
-.modal.hidden {
-  display: none;
-}
 
 .modal:not(.hidden) {
   display: flex;
@@ -3149,9 +2342,6 @@ select option {
   /* Tighten to exact thumb size */
 }
 
-.track .control-group label {
-  font-size: 0.8em;
-}
 
 .device-list {
   margin-top: 15px;
@@ -3417,18 +2607,6 @@ select option {
 }
 
 /* --- Custom Assignment Pickers [V13.6.5] --- */
-.track-picker-menu {
-  position: absolute;
-  background: rgba(20, 20, 20, 0.95);
-  border: 1px solid #444;
-  border-radius: 6px;
-  z-index: 10000;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(10px);
-  overflow: hidden;
-  min-width: 140px;
-  animation: menuFadeIn 0.2s ease-out;
-}
 
 @keyframes menuFadeIn {
   from {
@@ -3441,26 +2619,7 @@ select option {
   }
 }
 
-.track-picker-item {
-  padding: 15px 20px;
-  color: #eee;
-  font-family: "Cousine", monospace;
-  font-size: 15px;
-  font-weight: 720;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s;
-  display: flex;
-  justify-content: space-between;
-}
 
-.track-picker-item:last-child {
-  border-bottom: none;
-}
-.track-picker-item:hover {
-  background: rgba(0, 128, 0, 0.15);
-  color: var(--green);
-}
 
 /* Sampler Pad Picker Modal */
 .sampler-picker-overlay {
@@ -3865,11 +3024,6 @@ select option {
 }
 
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
-.sample-center-container .track-header {
-  color: var(--gold) !important;
-  font-weight: bold !important;
-  font-size: 0.9em !important;
-}
 
 .sample-grid {
   display: grid;
@@ -4032,12 +3186,6 @@ select option {
   /* border removed - final styling */
 }
 
-.loop-controls.hidden {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  height: 0 !important;
-}
 
 .loop-control-block {
   display: flex;
@@ -4347,23 +3495,6 @@ select option {
 body.receiver-mode {
   background: #000 !important;
 }
-body.receiver-mode .app-loading {
-  opacity: 1 !important;
-  visibility: visible !important;
-}
-body.receiver-mode .container {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(var(--scale, 1));
-  transform-origin: center;
-  opacity: 1 !important;
-  visibility: visible !important;
-  display: flex !important;
-  background-color: #000 !important;
-  width: 1440px !important;
-  height: 810px !important;
-}
 body.receiver-mode #cursor-mirror {
   position: absolute;
   width: 14px;
@@ -4381,23 +3512,6 @@ body.receiver-mode #cursor-mirror {
 }
 body.receiver-mode cast-media-player {
   display: none;
-}
-body.receiver-mode .main-content {
-  display: grid !important;
-  grid-template-columns: repeat(5, 1fr) !important;
-  gap: 6px !important;
-  width: 100% !important;
-  height: calc(100% - 40px) !important;
-}
-body.receiver-mode .track {
-  background: rgba(20, 20, 20, 0.8) !important;
-  border: 1px solid var(--green) !important;
-}
-body.receiver-mode .master-column {
-  border: 1px solid var(--green) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 2px !important;
 }
 body.receiver-mode .sample-grid {
   display: grid !important;
@@ -4417,9 +3531,6 @@ body.receiver-mode .sample-btn {
   justify-content: center !important;
   text-transform: uppercase;
 }
-body.receiver-mode .hidden {
-  display: none !important;
-}
 body.receiver-mode .scrolling-text-wrapper {
   overflow: hidden;
   white-space: nowrap;
@@ -4433,12 +3544,6 @@ body.receiver-mode .scrolling-text {
 body.receiver-mode .scrolling-text.active-scrolling {
   padding-left: 0;
   animation: none;
-}
-body.receiver-mode .track-buttons {
-  display: flex;
-  justify-content: space-between;
-  gap: 2px;
-  margin: 5px 0;
 }
 body.receiver-mode .track-buttons button {
   flex: 1;
@@ -4469,9 +3574,6 @@ body.receiver-mode .track-buttons button[id^="t-rev-"] {
   background-color: var(--gold) !important;
   color: var(--green) !important;
   border: 1px solid var(--green) !important;
-}
-body.receiver-mode .track-buttons button.recording {
-  animation: text-blink 0.5s infinite;
 }
 body.receiver-mode .bridge-connected-pulse {
   animation: pulse-dot 2s infinite !important;
@@ -4570,8 +3672,6 @@ body.receiver-mode .unlock-button:focus {
 }
 
 /* --- Extracted Inline Styles from index.html --- */
-body.app-loading { background-color: #000000; }
-.header { height: 32px; min-height: 32px; padding: 2px 8px; margin-bottom: 4px; }
 .dialog-control-group { padding: 10px; }
 .dialog-control-group-mt { padding: 10px; margin-top: 10px; }
 .dialog-label { color: var(--gold); display: block; margin-bottom: 5px; }
@@ -4579,3 +3679,869 @@ body.app-loading { background-color: #000000; }
 .dialog-help-text { font-size: 0.8em; color: #888; margin-top: 5px; }
 .dialog-range { width: 100%; }
 .dialog-gain-label { text-align: right; font-size: 0.8em; color: white; }
+
+/* ==========================================================================
+   [v13.9.600] CSS MIGRATION — Phase 1 & 2
+   Replaces JS-injected inline styles with class-based state management.
+   ========================================================================== */
+
+/* --- Phase 1: State Toggles --- */
+
+/* App Curtain Fade (GlobalUIMethods.js L21-22) */
+#app-curtain {
+  transition: opacity 1.2s ease-out;
+}
+#app-curtain.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+#app-curtain.fade-out.removed {
+  display: none;
+}
+
+/* Resume Audio Overlay (MetersUI.js L26-31) */
+#resume-audio-overlay {
+  display: none;
+}
+#resume-audio-overlay.visible {
+  display: flex;
+}
+
+/* Peak Meter Color States (MetersUI.js L119-127) */
+
+/* Waveform Container Glow States (MetersUI.js L135-137) */
+.waveform-canvas-container.glow-hot {
+  box-shadow: 0 0 12px #ff4444 inset;
+}
+.waveform-canvas-container.glow-warn {
+  box-shadow: 0 0 12px #ffcc00 inset;
+}
+.waveform-canvas-container.glow-green {
+  box-shadow: 0 0 12px var(--green) inset;
+}
+.waveform-canvas-container:not(.glow-hot):not(.glow-warn):not(.glow-green) {
+  box-shadow: none;
+}
+
+/* Master Record Button Recording State (Interactions.js L1379-1422) */
+#master-record-button.recording {
+  background-color: white !important;
+  color: red !important;
+}
+
+/* LFO Preset Marker Visibility (Interactions.js L645-683) */
+.preset-marker.active {
+  display: block;
+}
+
+/* Input Gain Group Toggle (Interactions.js L851) */
+/* [QA] Single-row layout: label | slider | dB value — saves vertical space */
+.pa-mic-adjustment {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 5px !important;
+  width: 100% !important;
+  flex-shrink: 0;
+}
+.pa-mic-adjustment label {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  font-size: 0.72em !important;
+  color: var(--gold) !important;
+}
+.pa-mic-adjustment .pa-mic-slider {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: 4px !important;
+  margin: 0 !important;
+  cursor: pointer;
+}
+.pa-mic-adjustment .pa-mic-value {
+  flex: 0 0 auto !important;
+  min-width: 38px !important;
+  text-align: right !important;
+  font-size: 0.7em !important;
+  color: var(--green) !important;
+  font-weight: 720 !important;
+  white-space: nowrap !important;
+}
+.pa-mic-adjustment.hidden-input {
+  display: none !important;
+}
+
+/* Assign Button Flash Animation (RecordingUI.js L155) */
+@keyframes assign-flash {
+  0% { box-shadow: 0 0 15px var(--green); }
+  100% { box-shadow: none; }
+}
+.media-assign-btn.flash {
+  animation: assign-flash 0.3s ease-out forwards;
+}
+
+/* --- Phase 2: Component CSS Classes --- */
+
+/* Toast Notification (RecordingUI.js L266) */
+.toast-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--green);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-weight: bold;
+  z-index: 30000;
+  animation: menuFadeIn 0.3s;
+}
+
+/* Track Picker Menu (RecordingUI.js L203) */
+
+/* Track Labels Font Size (TrackView.js — global rule replaces 6 inline fontSize) */
+.track label,
+
+/* Loop Grid Layout (TrackView.js L235-268 — replaces redundant inline styles) */
+.loop-row-layout {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  align-items: flex-end;
+}
+.loop-line-1 {
+  display: flex;
+  width: 100%;
+  gap: 4px;
+}
+.loop-line-1 > div {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.loop-line-1 > div:first-child {
+  justify-content: flex-start;
+}
+.loop-line-1 > div:last-child {
+  justify-content: space-between;
+}
+
+/* Loop Control Value Display (TrackView.js L658-660) */
+.loop-control-value span {
+  display: block;
+  text-align: left;
+  width: 100%;
+}
+
+/* Effect Header Title (EffectUI.js L49) */
+.effect-header-title {
+  color: var(--gold);
+  font-weight: bold;
+}
+
+/* Slot Button Row (EffectUI.js L52-54) */
+.audition-slot-selector {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+.audition-slot-selector .slot-label-text {
+  font-size: 0.8em;
+  font-weight: bold;
+  color: #ccc;
+}
+.audition-slot-selector .slot-btn-row {
+  display: flex;
+  gap: 4px;
+}
+
+/* Slot Assign Button States (EffectUI.js L62, Interactions.js L324/L377) */
+.slot-assign-btn {
+  padding: 2px 6px;
+  font-size: 0.8em;
+  background: #444;
+  border: 1px solid #666;
+  color: white;
+  cursor: pointer;
+}
+.slot-assign-btn.active {
+  background: var(--green);
+}
+.slot-assign-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Effect Params Wrapper (EffectUI.js L79) */
+.effect-params-wrapper {
+  width: 100%;
+}
+
+/* Media Library Empty State (RecordingUI.js L58) */
+.media-empty-state {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+/* Media Item Inner Layout (RecordingUI.js L66) */
+.media-item-inner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* Sampler Picker (RecordingUI.js L296-307) */
+.sampler-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+}
+.sampler-picker-modal {
+  background: #222;
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 360px;
+  width: 90vw;
+}
+.sampler-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+.sampler-picker-title {
+  color: var(--gold);
+  font-weight: bold;
+  font-size: 1.1em;
+}
+.sampler-picker-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.5em;
+  cursor: pointer;
+}
+.sampler-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.sampler-pad-pick {
+  background: #333;
+  border: 1px solid #555;
+  color: var(--gold);
+  padding: 12px 0;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 4px;
+  font-weight: bold;
+  transition: background 0.15s;
+}
+.sampler-pad-pick:hover {
+  background: var(--green);
+  color: white;
+}
+
+/* --- Phase 3 Preview: Dialog Base Styles --- */
+
+/* Generic dialog base (Modals.js — shared across all dynamic dialogs) */
+.mxs-dialog {
+  padding: 20px;
+  background: #222;
+  color: #fff;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  z-index: 10000;
+}
+.mxs-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.mxs-dialog h3 {
+  margin-top: 0;
+  color: var(--gold);
+}
+
+/* Message Box (Modals.js showMessageBox) */
+.message-box {
+  max-width: 400px;
+}
+.message-box.error {
+  border-color: red;
+}
+.message-box .msg-content {
+  margin-bottom: 15px;
+}
+.message-box .msg-ok-btn {
+  width: 100%;
+  padding: 8px;
+}
+
+/* Action Prompt (Modals.js showActionPrompt) */
+.action-prompt .btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.action-prompt .btn-row button {
+  padding: 8px 16px;
+}
+
+/* Input Prompt (Modals.js showInputPrompt) */
+.input-prompt-dialog {
+  width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background: #181818;
+}
+.input-prompt-dialog h3 {
+  margin-bottom: 15px;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+.input-prompt-dialog input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 18px;
+  background: #111111;
+  border: 1px solid #444444;
+  color: #ffffff;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 1em;
+  outline: none;
+}
+.input-prompt-dialog input[type="text"]:focus {
+  border-color: var(--gold);
+}
+.input-prompt-dialog .btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.input-prompt-dialog .btn-ok {
+  padding: 8px 16px;
+  background: var(--gold);
+  border: none;
+  color: #000000;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+/* Cast Dialog Status Colors (Modals.js L395) */
+.cast-status-success { color: var(--green); }
+.cast-status-error { color: var(--red); }
+.cast-status-warn { color: var(--gold); }
+
+/* Pad Settings Dialog (SamplerUI.js showPadSettings) */
+.pad-settings-dialog {
+  padding: 20px;
+  background: #222;
+  border: 2px solid var(--gold);
+  color: #fff;
+  border-radius: 8px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+}
+.pad-settings-dialog h3 {
+  color: var(--gold);
+  margin-bottom: 10px;
+  margin-top: 0;
+}
+.pad-settings-dialog .setting-row {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+.pad-settings-dialog .setting-row input[type="radio"],
+.pad-settings-dialog .setting-row input[type="checkbox"] {
+  margin-right: 10px;
+}
+.pad-settings-dialog .mode-label {
+  margin-bottom: 5px;
+  font-size: 0.9em;
+}
+.pad-settings-dialog .vintage-title {
+  color: var(--gold);
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+.pad-settings-dialog hr {
+  border: 0;
+  border-top: 1px solid #444;
+  margin: 15px 0;
+}
+.pad-settings-dialog label {
+  font-size: 0.9em;
+}
+.pad-settings-dialog .section-label {
+  font-size: 0.8em;
+  margin-bottom: 3px;
+}
+.pad-settings-dialog select {
+  width: 100%;
+  background: #333;
+  color: white;
+  border: 1px solid #555;
+  padding: 4px;
+}
+.pad-settings-dialog .close-btn {
+  margin-top: 15px;
+  width: 100%;
+  padding: 8px;
+  background: #444;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+.pad-settings-dialog .close-btn:hover {
+  background: #555;
+}
+
+/* Audio Files Modal (FileSelectionUI.js showAudioFilesModal) */
+.audio-files-modal {
+  padding: 20px;
+  background: #222;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  max-width: 80vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.audio-files-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.audio-files-modal .close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.scan-status {
+  padding: 5px 10px;
+  color: var(--gold);
+  font-size: 0.85em;
+  border-bottom: 1px solid #333;
+}
+.audio-file-list {
+  list-style: none;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #333;
+  border: 1px solid #444;
+}
+.audio-file-list li {
+  padding: 5px;
+  border-bottom: 1px solid #444;
+}
+.audio-file-label {
+  margin-left: 8px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+/* Audition Params Container (TrackView.js L426 — legacy hidden) */
+.audition-params-container {
+  display: none;
+}
+
+/* Monitor widget layout (TrackView.js L157-158) */
+.monitor-widget {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+/* --- Modals.js Cleanup Classes --- */
+
+/* Modals.js - message-box */
+dialog.message-box {
+  padding: 20px;
+  background: #222;
+  border: 1px solid var(--gold, gold);
+  color: white;
+  border-radius: 8px;
+  max-width: 400px;
+  z-index: 10000;
+}
+dialog.message-box.error {
+  border: 1px solid red;
+}
+.message-content {
+  margin-bottom: 15px;
+}
+.message-btn {
+  width: 100%;
+  padding: 8px;
+}
+
+/* Modals.js - action-prompt */
+dialog.action-prompt {
+  padding: 20px;
+  background: #222;
+  border: 1px solid var(--gold, gold);
+  color: white;
+  border-radius: 8px;
+  z-index: 10000;
+}
+.action-prompt h3 {
+  margin-top: 0;
+}
+.action-prompt-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.action-btn {
+  padding: 8px 16px;
+}
+
+/* Modals.js - legacy-audio-files-modal */
+dialog.legacy-audio-files-modal {
+  padding: 20px;
+  background: #222;
+  color: #fff;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 10000;
+}
+.legacy-audio-files-modal h3 {
+  margin-top: 0;
+}
+.legacy-audio-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.legacy-audio-file-btn {
+  text-align: left;
+  padding: 8px;
+  background: #333;
+  border: 1px solid #444;
+  color: #eee;
+  cursor: pointer;
+}
+.legacy-close-btn {
+  margin-top: 15px;
+  width: 100%;
+  padding: 10px;
+}
+
+/* Modals.js - input-prompt-dialog */
+dialog.input-prompt-dialog {
+  padding: 20px;
+  background: #181818;
+  border: 1px solid var(--gold, #ffd700);
+  color: #ffffff;
+  border-radius: 8px;
+  width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-family: inherit;
+  z-index: 10000;
+}
+.input-prompt-dialog h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--gold, #ffd700);
+}
+.input-prompt-input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 18px;
+  background: #111111;
+  border: 1px solid #444444;
+  color: #ffffff;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 1em;
+  outline: none;
+}
+.input-prompt-input:focus {
+  border: 1px solid var(--gold, #ffd700);
+}
+.input-prompt-btns {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.input-prompt-cancel {
+  padding: 8px 16px;
+  background: #333333;
+  border: 1px solid #555555;
+  color: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.input-prompt-ok {
+  padding: 8px 16px;
+  background: var(--gold, #ffd700);
+  border: none;
+  color: #000000;
+  font-weight: bold;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+/* Modals.js - cast-dialog overrides */
+.cast-dialog {
+  min-width: 400px;
+  max-width: 400px;
+  padding: 0;
+  overflow: hidden;
+}
+.cast-dialog-content {
+  max-height: 450px;
+  overflow-y: auto;
+}
+.cast-live-session {
+  padding: 15px;
+  background: rgba(255, 204, 0, 0.1);
+  border-bottom: 1px solid var(--gold);
+  margin-bottom: 10px;
+}
+.cast-live-title {
+  font-weight: bold;
+  color: var(--gold);
+  margin-bottom: 5px;
+}
+.cast-live-stats {
+  font-size: 0.8em;
+  font-family: monospace;
+  color: #aaa;
+}
+.cast-audio-only {
+  font-size: 0.7em;
+  color: #888;
+  margin-top: 5px;
+}
+.cast-stop-btn {
+  margin-top: 10px;
+  width: 100%;
+  background: #600 !important;
+  border-color: #800 !important;
+}
+.cast-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+.cast-manual-ip-section {
+  padding: 10px;
+  border-top: 1px solid #444;
+  margin-top: 10px;
+}
+.cast-manual-ip-title {
+  font-size: 0.8em;
+  color: #888;
+  margin-bottom: 5px;
+}
+.cast-manual-ip-row {
+  display: flex;
+  gap: 5px;
+}
+.cast-manual-ip-input {
+  flex: 1;
+  background: #222;
+  border: 1px solid #444;
+  color: white;
+  padding: 5px;
+  font-family: monospace;
+}
+.cast-manual-ip-btn {
+  padding: 5px 10px;
+  font-size: 0.8em;
+  background: #444 !important;
+}
+
+
+/* Device List Button */
+.cast-device-btn {
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #333;
+  border: 1px solid #444;
+  color: white;
+  cursor: pointer;
+}
+.disabled-btn {
+  opacity: 0.5;
+}
+.text-green { color: var(--green) !important; }
+.text-gold { color: var(--gold) !important; }
+.text-red { color: var(--red) !important; }
+
+
+/* Toast Notification */
+.toast-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--green);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 5px;
+  font-family: monospace;
+  font-weight: bold;
+  z-index: 30000;
+  animation: menuFadeIn 0.3s;
+}
+
+
+/* TrackView loop controls */
+.loop-control-header { display: flex; align-items: center; }
+.loop-control-slider-wrapper { margin-top: 2px; }
+.loop-control-param-value { display: block; text-align: left; width: 100%; }
+
+/* --- Universal MXS Dialog Styling (Based on effect-params-dialog) --- */
+.mxs-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+  background: var(--off-black);
+  border: 1px solid var(--green);
+  border-radius: 12px;
+  padding: 0;
+  width: 400px;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9);
+  margin: 0;
+  max-width: 95vw;
+  height: auto;
+  max-height: 85vh;
+  min-height: 100px;
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+}
+
+.mxs-dialog[open] {
+  display: flex;
+  animation: dialog-open 0.3s ease-out forwards;
+}
+
+.mxs-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.mxs-dialog .dialog-header {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: #222;
+  border-bottom: 1px solid #444;
+  border-radius: 11px 11px 0 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.mxs-dialog .dialog-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.mxs-dialog .dialog-title {
+  font-weight: bold;
+  color: var(--gold);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mxs-dialog .close-dialog-btn {
+  background: transparent;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1.4em;
+  padding: 0 8px;
+  line-height: 1;
+  width: auto;
+}
+.mxs-dialog .close-dialog-btn:hover {
+  filter: brightness(1.5);
+}
+
+.mxs-dialog .dialog-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  overflow-y: auto;
+  max-height: 70vh;
+  color: white;
+  gap: 15px;
+}
+
+/* Modifiers */
+.mxs-dialog.error-dialog {
+  border-color: var(--red);
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--green),
+    0 8px 32px rgba(0, 0, 0, 0.9);
+}
+.mxs-dialog.error-dialog .dialog-title {
+  color: var(--red);
+}
+
+.mxs-dialog .dialog-btn {
+  background-color: var(--green);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+  text-align: center;
+  transition: filter 0.2s ease;
+  width: 100%;
+}
+.mxs-dialog .dialog-btn:hover {
+  filter: brightness(1.2);
+}
+.mxs-dialog .dialog-btn.cancel {
+  background-color: var(--red);
+}
+
