@@ -3745,7 +3745,7 @@ body.receiver-mode .unlock-button:focus {
   width: 100% !important;
   flex-shrink: 0;
 }
-/* [QA] Match Loop Start label style exactly */
+/* [QA] Match Loop Start label style */
 .pa-mic-adjustment label {
   flex: 0 0 auto !important;
   white-space: nowrap !important;
@@ -3754,37 +3754,48 @@ body.receiver-mode .unlock-button:focus {
   font-weight: bold !important;
   text-transform: uppercase !important;
 }
-/* [QA] Slider — restore visible track + thumb (global appearance:none strips them) */
+/* [QA] Slider — height 20px gives the 14px thumb vertical room to render */
 .pa-mic-adjustment .pa-mic-slider {
+  -webkit-appearance: none !important;
+  appearance: none !important;
   flex: 1 1 0 !important;
   min-width: 0 !important;
   width: auto !important;
-  height: 5px !important;
+  height: 20px !important;
   margin: 0 !important;
-  cursor: pointer;
-  -webkit-appearance: none !important;
-  appearance: none !important;
-  background: var(--mid-gray) !important;
-  border-radius: 5px !important;
+  cursor: pointer !important;
+  background: transparent !important;
   outline: none !important;
 }
-/* Re-declare thumb so WebKit renders it (global rule uses appearance:none which hides it unless explicitly re-styled) */
+/* Track line centred within the 20px touch area */
+.pa-mic-adjustment .pa-mic-slider::-webkit-slider-runnable-track {
+  height: 5px !important;
+  background: var(--mid-gray, #555) !important;
+  border-radius: 5px !important;
+}
+/* Gold thumb — same style as every other slider in the app */
 .pa-mic-adjustment .pa-mic-slider::-webkit-slider-thumb {
   -webkit-appearance: none !important;
-  width: 12px !important;
-  height: 12px !important;
-  background: var(--gold) !important;
+  width: 14px !important;
+  height: 14px !important;
+  margin-top: -4.5px !important;
+  background: var(--gold, #d4af37) !important;
   border-radius: 50% !important;
-  border: 2px solid var(--dark-gray) !important;
+  border: 2px solid var(--dark-gray, #111) !important;
   box-shadow: 0 0 4px rgba(0,0,0,0.5) !important;
   cursor: pointer !important;
 }
+.pa-mic-adjustment .pa-mic-slider::-moz-range-track {
+  height: 5px !important;
+  background: var(--mid-gray, #555) !important;
+  border-radius: 5px !important;
+}
 .pa-mic-adjustment .pa-mic-slider::-moz-range-thumb {
-  width: 12px !important;
-  height: 12px !important;
-  background: var(--gold) !important;
+  width: 14px !important;
+  height: 14px !important;
+  background: var(--gold, #d4af37) !important;
   border-radius: 50% !important;
-  border: 2px solid var(--dark-gray) !important;
+  border: 2px solid var(--dark-gray, #111) !important;
   cursor: pointer !important;
 }
 .pa-mic-adjustment .pa-mic-value {
@@ -3799,6 +3810,7 @@ body.receiver-mode .unlock-button:focus {
 .pa-mic-adjustment.hidden-input {
   display: none !important;
 }
+
 
 
 /* Assign Button Flash Animation (RecordingUI.js L155) */
