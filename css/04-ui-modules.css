@@ -3754,16 +3754,38 @@ body.receiver-mode .unlock-button:focus {
   font-weight: bold !important;
   text-transform: uppercase !important;
 }
-/* [QA] Slider visibility fix — appearance:auto lets WebKit render the thumb */
+/* [QA] Slider — restore visible track + thumb (global appearance:none strips them) */
 .pa-mic-adjustment .pa-mic-slider {
   flex: 1 1 0 !important;
   min-width: 0 !important;
   width: auto !important;
-  height: 10px !important;
+  height: 5px !important;
   margin: 0 !important;
   cursor: pointer;
-  -webkit-appearance: auto !important;
-  appearance: auto !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background: var(--mid-gray) !important;
+  border-radius: 5px !important;
+  outline: none !important;
+}
+/* Re-declare thumb so WebKit renders it (global rule uses appearance:none which hides it unless explicitly re-styled) */
+.pa-mic-adjustment .pa-mic-slider::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  width: 12px !important;
+  height: 12px !important;
+  background: var(--gold) !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--dark-gray) !important;
+  box-shadow: 0 0 4px rgba(0,0,0,0.5) !important;
+  cursor: pointer !important;
+}
+.pa-mic-adjustment .pa-mic-slider::-moz-range-thumb {
+  width: 12px !important;
+  height: 12px !important;
+  background: var(--gold) !important;
+  border-radius: 50% !important;
+  border: 2px solid var(--dark-gray) !important;
+  cursor: pointer !important;
 }
 .pa-mic-adjustment .pa-mic-value {
   flex: 0 0 auto !important;
