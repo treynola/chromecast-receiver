@@ -1082,6 +1082,13 @@
                   }
                   configReceived = true;
                   initAudio();
+                  // [v13.9.505] Reveal receiver UI — remove the app-loading blackout
+                  // The class sets opacity:0 + background:#000 !important; removing it
+                  // triggers the 0.72s cubic-bezier fade-in defined in 01-base.css.
+                  setTimeout(() => {
+                    document.body.classList.remove("app-loading");
+                    relayLogToStudio("✅ TV: Receiver UI revealed (app-loading removed).");
+                  }, 200);
                   // Configure worklet bit depth after init
                   setTimeout(() => {
                     if (workletNode) {
