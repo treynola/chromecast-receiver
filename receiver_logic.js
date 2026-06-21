@@ -26,7 +26,7 @@
         var autoDiscoveryFallbackTimeoutId = null;
         var autoUnlockIntervalId = null;
         var pendingBinaryFrames = [];
-        const VERSION_TAG = "v13.9.504-APORv2";
+        const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
 
         // [v13.9.504] Dynamically build a valid 2-second silent WAV loop for TV OS media wake-lock
@@ -272,7 +272,7 @@
           }
 
           try {
-            let workletUrl = `pcm-player-worklet-v13.9.504.js?cb=${Date.now()}`;
+            let workletUrl = `pcm-player-worklet-v13.9.505.js?cb=${Date.now()}`;
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
