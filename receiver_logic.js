@@ -312,6 +312,10 @@
             workletNode.connect(masterGain);
             flushPendingBinaryFrames();
 
+            // [v13.9.505] Reveal UI — single authoritative point, fires once via workletNode guard above
+            document.body.classList.remove("app-loading");
+            relayLogToStudio("✅ TV: Receiver UI revealed (app-loading removed).");
+
             relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${actualRate}Hz`);
 
             workletNode.port.onmessage = (e) => {
@@ -1092,13 +1096,6 @@
                   }
                   configReceived = true;
                   initAudio();
-                  // [v13.9.505] Reveal receiver UI — remove the app-loading blackout
-                  // The class sets opacity:0 + background:#000 !important; removing it
-                  // triggers the 0.72s cubic-bezier fade-in defined in 01-base.css.
-                  setTimeout(() => {
-                    document.body.classList.remove("app-loading");
-                    relayLogToStudio("✅ TV: Receiver UI revealed (app-loading removed).");
-                  }, 200);
                   // Configure worklet bit depth after init
                   setTimeout(() => {
                     if (workletNode) {
