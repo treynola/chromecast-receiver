@@ -1,0 +1,357 @@
+/*
+ * 01-base.css
+ * Phase 1: Base GUI & Scaffolding
+ * Foundational elements, CSS variables, typography, and structural scaffolding.
+ */
+
+@font-face {
+  font-family: "Mexcellent";
+  src: url("../fonts/MexcellentRg.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Mexcellent 3D";
+  src: url("../fonts/Mexcellent3d.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --red: #ff0000;
+  --gold: #fad78e;
+  --dark-gold: #b38600;
+  --green: #008000;
+  --dark-green: #004d00;
+  --darker-green: #005200;
+  --off-black: #1a1a1a;
+  --dark-gray: #2c2c2c;
+  --mid-gray: #444;
+  --text-color: #f0f0f0;
+  --dark-green-transparent: rgba(0, 100, 0, 0.5);
+  --dark-red: #8b0000;
+}
+
+html {
+  background-color: #000000 !important;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Courier New", Courier, monospace;
+  background-color: #000000 !important;
+  color: var(--text-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-user-select: none;
+  user-select: none;
+  overflow: hidden;
+  cursor: default;
+  position: relative;
+  /* [V13.6.6] Gold Standard Fade-in */
+  transition: opacity 0.72s ease-in-out !important;
+}
+
+/* [V13.5.2] App-wide text selection prevention */
+*,
+*::before,
+*::after {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Sliders should show pointer cursor and accept keyboard focus */
+input[type="range"] {
+  cursor: pointer;
+}
+
+/* Focused sliders get a visible ring for arrow-key interaction */
+input[type="range"]:focus {
+  outline: 3px solid #ffcc00 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 8px #ffcc00;
+}
+
+/* Force hide global hidden inputs and containers to prevent layout shifts */
+.layout-hider,
+#global-hidden-container,
+#global-file-input,
+#global-dir-input {
+  display: none !important;
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  z-index: -1000 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+}
+
+/* Helper Classes for Layout (avoiding inline styles for CSP compliance) */
+.full-width-flex {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.waveform-box {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.waveform-labels {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-around !important;
+  height: 100% !important;
+  margin-right: 4px !important;
+}
+
+.flex-grow {
+  flex: 1 !important;
+}
+
+.tight-bottom {
+  margin-bottom: 2px !important;
+}
+
+.master-vol-group {
+  margin-top: 2px !important;
+}
+
+.master-rec-group {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 5px !important;
+  margin-bottom: 2px !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+.font-small {
+  font-size: 0.8em !important;
+}
+
+.bold {
+  font-weight: bold !important;
+}
+
+.text-center {
+  text-align: center !important;
+}
+
+.margin-top-0 {
+  margin-top: 0 !important;
+}
+
+.color-gold {
+  color: var(--gold) !important;
+}
+
+.bg-dark {
+  background-color: #444 !important;
+}
+
+.margin-0 {
+  margin: 0 !important;
+}
+
+.margin-top-5 {
+  margin-top: 5px !important;
+}
+
+.margin-bottom-20 {
+  margin-bottom: 20px !important;
+}
+
+.flex-center-gap-10 {
+  display: flex !important;
+  gap: 10px !important;
+  justify-content: center !important;
+}
+
+.btn-confirm {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  padding: 8px 20px !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  font-weight: bold !important;
+  font-family: inherit !important;
+}
+
+.btn-cancel {
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  padding: 8px 20px !important;
+  border-radius: 5px !important;
+  cursor: pointer !important;
+  font-weight: bold !important;
+  font-family: inherit !important;
+}
+
+.z-3000 {
+  z-index: 3000 !important;
+}
+
+.lfo-meter-layout {
+  width: 50% !important;
+  margin: 2px auto 0 !important;
+}
+
+.docs-btn-layout {
+  display: flex !important;
+  justify-content: center !important;
+  margin-top: auto !important;
+  padding-top: 10px !important;
+}
+
+.display-none {
+  display: none !important;
+}
+
+/* Track UI Helpers */
+.track-input-layout {
+  display: flex !important;
+  gap: 5px !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+}
+
+/* TrackView Compatibility Styles */
+.track-controls-row {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 5px !important;
+  margin-top: 5px !important;
+}
+
+.flex-1-no-margin {
+  flex: 1 !important;
+  margin: 0 !important;
+}
+
+/* GUI Container */
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 1432px; /* Adjusted to fit 1440px visual total including shadows */
+  height: 802px; /* Adjusted to fit 810px visual total including shadows */
+  max-width: 1432px;
+  max-height: 802px;
+  overflow: hidden; /* [V13.6.5] Lockdown GUI to 16:9 */
+  aspect-ratio: 16 / 9;
+  background-color: var(--dark-gray);
+  border-radius: 12px;
+  padding: 6px;
+  box-sizing: border-box;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0 !important;
+  border: 1px solid var(--green);
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red);
+}
+
+.hidden {
+  display: none;
+}
+
+.app-loading {
+  opacity: 0;
+  pointer-events: none;
+  background-color: #000000 !important; /* Total blackout at launch */
+  transition: opacity 0.72s cubic-bezier(0.4, 0, 0.2, 1); /* Gold Standard Fade */
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background-color: var(--off-black);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  height: 36px;
+  min-height: 36px;
+}
+
+.header h1 {
+  font-family: "Mexcellent 3D", sans-serif;
+  font-size: 1.1em;
+  margin: 0;
+  color: var(--gold);
+  letter-spacing: 1px;
+}
+
+.header h2 {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
+  font-size: 0.75em !important;
+  margin: 0;
+  color: var(--green);
+  letter-spacing: 0.5px;
+}
+
+.header-subtitle {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
+}
+
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+#cast-btn {
+  background: transparent;
+  border: none;
+  color: var(--gold);
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 2px 5px;
+  transition: color 0.2s ease;
+}
+
+#cast-btn:hover {
+  color: var(--red);
+  filter: drop-shadow(0 0 5px var(--gold));
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 0 2px 2px 2px;
+  width: 100%;
+  flex: 1;
+  min-width: 0; /* [V13.6.5] Prevent content from blowing up the grid */
+  min-height: 0;
+  overflow: hidden;
+}
+

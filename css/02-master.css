@@ -1,0 +1,333 @@
+/*
+ * 02-master.css
+ * Phase 2: Master Column & Components
+ * The static control strip on the left side.
+ */
+
+.master-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  padding: 4px;
+  background-color: var(--dark-gray);
+  overflow: hidden;
+  position: relative;
+  min-width: 0; /* [V13.6.5] Force content to truncate/wrap instead of expanding column */
+}
+
+/* QA: Align Master Recording with tracks */
+.master-recording-area {
+  margin-top: 0 !important;
+  /* Reset, using ghost spacer instead */
+}
+
+/* QA Fix: Nudge Master Time Display down without moving Waveform */
+#recording-time-display {
+  margin-top: 3px !important;
+  margin-bottom: -3px !important;
+}
+
+/* Equal-height master items */
+.master-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  min-height: 0;
+}
+
+.master-item input[type="range"] {
+  width: 90%;
+  margin: 2px 0;
+}
+
+.master-label {
+  font-size: 0.75em;
+  color: var(--green);
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.master-value {
+  font-size: 0.7em;
+  color: var(--gold);
+  font-weight: 720;
+}
+
+.master-waveform-box {
+  width: 100%;
+  height: 100%;
+  min-height: 40px;
+}
+
+/* Visible line spacer to match track column dividers */
+.master-spacer {
+  flex: 0 0 auto;
+  height: 1px;
+  background-color: var(--mid-gray);
+  margin: 5px 0;
+  width: 100%;
+}
+
+/* Invisible spacer for spacing only */
+.master-spacer-invisible {
+  flex: 0 0 auto;
+  height: 5px;
+}
+
+/* Tighter spacing for bottom section items */
+.master-bottom-item {
+  flex: 0 0 24px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
+}
+
+/* Hide old master-controls if any remain */
+.master-controls {
+  display: none;
+}
+
+/* Hide duplicate buttons in recordings-section (now in master column) */
+.sessions-header #import-files-button,
+.sessions-header #show-docs-button {
+  display: none;
+}
+
+
+/* Master Bottom Buttons Grouping */
+.master-bottom-buttons {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 3px !important;
+  width: 98% !important;
+  margin: 5px auto 0 auto !important;
+  padding: 0 2px !important;
+}
+
+.master-bottom-buttons button,
+#lfo-toggle,
+#lfo2-toggle {
+  flex: 1 !important;
+  height: 24px !important;
+  font-size: 0.75em !important;
+  font-family: "Cousine", monospace !important;
+  font-weight: 720 !important;
+  padding: 2px 4px !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  background-color: var(--green) !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  color: var(--gold) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  text-transform: uppercase !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.master-bottom-buttons button:hover {
+  filter: brightness(1.2) !important;
+  box-shadow: 0 0 5px rgba(250, 215, 142, 0.3) !important;
+}
+
+.master-bottom-buttons button:active {
+  background-color: var(--dark-green) !important;
+  transform: translateY(1px) !important;
+}
+
+/* Tighten LFO spacing */
+.lfo-button-item {
+  margin-bottom: -5px !important;
+}
+
+.lfo-meter-item {
+  padding-top: 0 !important;
+}
+
+.master-waveform-item {
+  margin-top: 0 !important;
+  height: 60px !important;
+  flex: 0 0 auto !important;
+  /* Reset from flex:1 to match fixed track waveform height */
+}
+
+/* Master Volume Aligned (Row Layout to fit 30px height) */
+.master-volume-aligned {
+  flex-direction: row !important;
+  height: 30px;
+  flex: 0 0 auto !important;
+  /* Prevent stretching to align with fixed Track status */
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 5px 0 0 0 !important;
+  padding: 0 5px !important;
+}
+
+.master-volume-aligned input[type="range"] {
+  flex: 1;
+  height: 4px;
+  margin: 0;
+}
+
+/* Generalized Row Layout for Master Items (Loop, Vol) */
+.master-row-layout {
+  flex-direction: row !important;
+  height: 24px;
+  /* Compacted from 30px to align tighter */
+  flex: 0 0 auto !important;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 5px 0 0 0 !important;
+  /* Match Track Input Row margin-top: 5px */
+  padding: 0 5px !important;
+}
+
+.master-bottom-item {
+  width: 100% !important;
+  align-self: stretch !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 0 0 24px !important;
+  height: 24px !important;
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
+}
+
+.master-rec-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  flex-wrap: nowrap !important;
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+.master-rec-col-left {
+  flex: 0 0 60px !important;
+  width: 60px !important;
+  display: block !important;
+}
+
+.master-rec-col-right {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: block !important;
+}
+
+.master-rec-col-left #master-record-button {
+  width: 100% !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: static !important;
+}
+
+.master-rec-col-right select {
+  width: 100% !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  display: block !important;
+  position: static !important;
+}
+
+.master-row-layout input[type="range"] {
+  flex: 1;
+  height: 4px;
+  margin: 0;
+}
+
+.master-row-layout .track-header {
+  font-size: 0.7em;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.master-row-layout .master-value {
+  font-size: 0.7em;
+  min-width: 35px;
+  text-align: right;
+}
+
+/* LFO Side-by-Side Layout */
+.lfo-side-by-side-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--mid-gray);
+  padding: 2px 0;
+  margin: 5px 0 2px 0;
+  background-color: rgba(0, 0, 0, 0.2);
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.lfo-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Vertical Separator */
+.lfo-separator {
+  width: 1px;
+  background-color: var(--mid-gray);
+  align-self: stretch;
+  margin: 0 2px;
+}
+
+/* Overrides for compact look in side-by-side */
+.lfo-column .master-item {
+  width: 100%;
+  margin-bottom: 5px !important;
+  padding: 0 !important;
+}
+
+.lfo-column .lfo-sweep-control {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 5px;
+}
+
+.lfo-column .lfo-meter-item .meter-container {
+  height: 6px;
+  /* Thinner meters */
+  width: 90%;
+}
+
+.lfo-column input[type="range"] {
+  height: 10px;
+  /* Smaller sliders */
+}
+
+/* Hide original individual spacers since we wrap the whole block */
+.lfo-hidden-spacer {
+  display: none;
+}
+
