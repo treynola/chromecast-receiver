@@ -103,6 +103,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._callbackCount++;
 
       let available = Math.round(this._totalWritten - this._totalRead);
+      let consumed = 0;
+      let playbackRate = this._playbackRate;
 
       // 1. HARD OVERRUN PROTECTION
       if (available > ringLen) {
@@ -124,95 +126,98 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
+      let renderSilence = false;
+
       // 3. PRE-BUFFERING
       if (this._isBuffering) {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
           this._smoothedError = 0;
         } else {
-          channel0.fill(0);
-          channel1.fill(0);
-          return true;
+          renderSilence = true;
         }
       }
 
       // 4. STALL PROTECTION
-      if (available < this._MIN_BUFFER) {
+      if (!renderSilence && available < this._MIN_BUFFER) {
         this._isBuffering = true;
         this._smoothedError = 0;
         this._fade = 0;
         this._stallCount++;
+        renderSilence = true;
+      }
+
+      const QUARTZ_DEADZONE = 4800; // 100ms tolerance
+
+      if (renderSilence) {
         channel0.fill(0);
         channel1.fill(0);
-        return true;
-      }
-
-      // 5. QUARTZ-LOCK P-CONTROLLER (Aggressive Sync 13.9.495)
-      const rawError = available - this._TARGET_BUFFER;
-      this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
-      
-      const QUARTZ_DEADZONE = 4800; // 100ms tolerance
-      const kp = 0.000005; // [v13.9.504] 25x stronger gain than v494
-      
-      let targetRate = 1.0;
-      if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-         // Sub-audible pitch correction (+/- 1.0% cap)
-         targetRate = 1.0 + Math.max(-0.01, Math.min(0.01, this._smoothedError * kp));
-      }
-      
-      // Smooth transition
-      this._playbackRate = this._playbackRate * 0.995 + (targetRate * this._baseRate) * 0.005;
-      
-      const playbackRate = this._playbackRate;
-      let frameIdx = this._readFrameIdx;
-      let frac = this._readFrac;
-      let fade = this._fade;
-      const INV_32768 = 3.0517578125e-5;
-      const INV_8388608 = 1.1920928955078125e-7;
-
-      // 6. HIGH-EFFICIENCY RENDERER
-      const isUnity = Math.abs(playbackRate - 1.0) < 0.00001;
-      let consumed = 0;
-
-      for (let i = 0; i < framesInBlock; i++) {
-        if (available - consumed >= 4) {
-          const idxL1 = frameIdx * 2;
-          const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
-
-          if (isUnity) {
-            channel0[i] = this._ringBuffer[idxL1]     * scale;
-            channel1[i] = this._ringBuffer[idxL1 + 1] * scale;
-            frameIdx = (frameIdx + 1) % ringLenFrames;
-            consumed += 2;
-          } else {
-            let idxL2 = idxL1 + 2;
-            if (idxL2 >= ringLen) idxL2 -= ringLen;
-            const vL1 = this._ringBuffer[idxL1];
-            const vR1 = this._ringBuffer[idxL1 + 1];
-            channel0[i] = (vL1 + (this._ringBuffer[idxL2]     - vL1) * frac) * scale;
-            channel1[i] = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * scale;
-            
-            frac += playbackRate;
-            const advance = frac | 0;
-            if (advance > 0) {
-              frameIdx = (frameIdx + advance) % ringLenFrames;
-              frac -= advance;
-              consumed += advance * 2;
-            }
-          }
-          if (fade < 1.0) fade = Math.min(1.0, fade + 0.01);
-          if (i === 0) this._currentPeak = Math.max(this._currentPeak, Math.abs(channel0[i]));
-        } else {
-          channel0[i] = 0;
-          channel1[i] = 0;
+      } else {
+        // 5. QUARTZ-LOCK P-CONTROLLER (Aggressive Sync 13.9.495)
+        const rawError = available - this._TARGET_BUFFER;
+        this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
+        
+        const kp = 0.000005; // [v13.9.504] 25x stronger gain than v494
+        
+        let targetRate = 1.0;
+        if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
+           // Sub-audible pitch correction (+/- 1.0% cap)
+           targetRate = 1.0 + Math.max(-0.01, Math.min(0.01, this._smoothedError * kp));
         }
-      }
+        
+        // Smooth transition
+        this._playbackRate = this._playbackRate * 0.995 + (targetRate * this._baseRate) * 0.005;
+        
+        playbackRate = this._playbackRate;
+        let frameIdx = this._readFrameIdx;
+        let frac = this._readFrac;
+        let fade = this._fade;
+        const INV_32768 = 3.0517578125e-5;
+        const INV_8388608 = 1.1920928955078125e-7;
 
-      this._readFrameIdx = frameIdx;
-      this._readFrac = frac;
-      this._totalRead += consumed;
-      this._fade = fade;
-      this._framesProcessed += framesInBlock;
+        // 6. HIGH-EFFICIENCY RENDERER
+        const isUnity = Math.abs(playbackRate - 1.0) < 0.00001;
+
+        for (let i = 0; i < framesInBlock; i++) {
+          if (available - consumed >= 4) {
+            const idxL1 = frameIdx * 2;
+            const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
+
+            if (isUnity) {
+              channel0[i] = this._ringBuffer[idxL1]     * scale;
+              channel1[i] = this._ringBuffer[idxL1 + 1] * scale;
+              frameIdx = (frameIdx + 1) % ringLenFrames;
+              consumed += 2;
+            } else {
+              let idxL2 = idxL1 + 2;
+              if (idxL2 >= ringLen) idxL2 -= ringLen;
+              const vL1 = this._ringBuffer[idxL1];
+              const vR1 = this._ringBuffer[idxL1 + 1];
+              channel0[i] = (vL1 + (this._ringBuffer[idxL2]     - vL1) * frac) * scale;
+              channel1[i] = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * scale;
+              
+              frac += playbackRate;
+              const advance = frac | 0;
+              if (advance > 0) {
+                frameIdx = (frameIdx + advance) % ringLenFrames;
+                frac -= advance;
+                consumed += advance * 2;
+              }
+            }
+            if (fade < 1.0) fade = Math.min(1.0, fade + 0.01);
+            if (i === 0) this._currentPeak = Math.max(this._currentPeak, Math.abs(channel0[i]));
+          } else {
+            channel0[i] = 0;
+            channel1[i] = 0;
+          }
+        }
+
+        this._readFrameIdx = frameIdx;
+        this._readFrac = frac;
+        this._totalRead += consumed;
+        this._fade = fade;
+        this._framesProcessed += framesInBlock;
+      }
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
@@ -223,7 +228,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           rate: playbackRate,
           measuredHz: Math.round(this._framesProcessed / elapsed), // [v13.9.504] Real clock tracking
           peak: this._currentPeak,
-          locked: Math.abs(this._smoothedError) < QUARTZ_DEADZONE
+          locked: !renderSilence && Math.abs(this._smoothedError) < QUARTZ_DEADZONE
         });
         this._currentPeak = 0;
       }
