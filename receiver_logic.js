@@ -403,6 +403,16 @@
         function connectCastMediaElement() {
           if (!audioCtx || !masterGain) return;
           try {
+            // Log all media elements for debugging
+            const allMedia = document.querySelectorAll("video, audio");
+            const mediaIds = Array.from(allMedia).map(el => `${el.tagName.toLowerCase()}[id=${el.id},class=${el.className},crossOrigin=${el.crossOrigin}]`);
+            
+            // Limit logging frequency to avoid flooding
+            if (!window._lastMediaLogTime || Date.now() - window._lastMediaLogTime > 10000) {
+              relayLogToStudio("🔍 TV Media elements: " + JSON.stringify(mediaIds));
+              window._lastMediaLogTime = Date.now();
+            }
+
             let castMediaElement = null;
             if (typeof cast !== "undefined" && cast.framework) {
               const context = cast.framework.CastReceiverContext.getInstance();
@@ -415,21 +425,38 @@
             }
             if (!castMediaElement) {
               // Fallback: look for video or audio elements (except audio-unlocker)
-              const el = document.querySelector("video");
-              if (el) {
-                castMediaElement = el;
+              const videoEl = document.querySelector("video");
+              if (videoEl) {
+                castMediaElement = videoEl;
+              } else {
+                // Look for any audio elements other than audio-unlocker
+                const audios = document.querySelectorAll("audio");
+                for (const a of audios) {
+                  if (a.id !== "audio-unlocker") {
+                    castMediaElement = a;
+                    break;
+                  }
+                }
               }
             }
+
             if (castMediaElement && !castMediaElement._connectedToAudioCtx) {
-              castMediaElement._connectedToAudioCtx = true;
+              relayLogToStudio("🛠️ TV: Found Cast media element: " + castMediaElement.tagName);
+              
+              // Set crossOrigin to anonymous to avoid CORS SecurityError on Tauri local stream
+              if (castMediaElement.crossOrigin !== "anonymous") {
+                castMediaElement.crossOrigin = "anonymous";
+                relayLogToStudio("🔧 TV: Set crossOrigin='anonymous' on Cast media element.");
+              }
+
+              // Create MediaElementSource and connect
               const mediaSource = audioCtx.createMediaElementSource(castMediaElement);
               mediaSource.connect(masterGain);
+              castMediaElement._connectedToAudioCtx = true;
               relayLogToStudio("✅ TV: Cast SDK Media Element connected to AudioContext successfully.");
             }
           } catch (e) {
-            if (e.message && e.message.indexOf("already connected") === -1) {
-              console.warn("⚠️ TV: connectCastMediaElement error:", e);
-            }
+            relayLogToStudio("⚠️ TV: connectCastMediaElement error: " + e.message);
           }
         }
 
