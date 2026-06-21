@@ -400,19 +400,34 @@
           }
         }
 
+        function findMediaElement(root = document) {
+          // Check video
+          const video = root.querySelector("video");
+          if (video) return video;
+          
+          // Check audio (except audio-unlocker)
+          const audios = root.querySelectorAll("audio");
+          for (const a of audios) {
+            if (a.id !== "audio-unlocker") {
+              return a;
+            }
+          }
+          
+          // Traverse Shadow DOMs
+          const all = root.querySelectorAll("*");
+          for (const el of all) {
+            if (el.shadowRoot) {
+              const found = findMediaElement(el.shadowRoot);
+              if (found) return found;
+            }
+          }
+          return null;
+        }
+
         function connectCastMediaElement() {
           if (!audioCtx || !masterGain) return;
           try {
-            // Log all media elements for debugging
-            const allMedia = document.querySelectorAll("video, audio");
-            const mediaIds = Array.from(allMedia).map(el => `${el.tagName.toLowerCase()}[id=${el.id},class=${el.className},crossOrigin=${el.crossOrigin}]`);
-            
-            // Limit logging frequency to avoid flooding
-            if (!window._lastMediaLogTime || Date.now() - window._lastMediaLogTime > 10000) {
-              relayLogToStudio("🔍 TV Media elements: " + JSON.stringify(mediaIds));
-              window._lastMediaLogTime = Date.now();
-            }
-
+            // Find Cast media element including shadow roots
             let castMediaElement = null;
             if (typeof cast !== "undefined" && cast.framework) {
               const context = cast.framework.CastReceiverContext.getInstance();
@@ -424,24 +439,11 @@
               }
             }
             if (!castMediaElement) {
-              // Fallback: look for video or audio elements (except audio-unlocker)
-              const videoEl = document.querySelector("video");
-              if (videoEl) {
-                castMediaElement = videoEl;
-              } else {
-                // Look for any audio elements other than audio-unlocker
-                const audios = document.querySelectorAll("audio");
-                for (const a of audios) {
-                  if (a.id !== "audio-unlocker") {
-                    castMediaElement = a;
-                    break;
-                  }
-                }
-              }
+              castMediaElement = findMediaElement(document);
             }
 
             if (castMediaElement && !castMediaElement._connectedToAudioCtx) {
-              relayLogToStudio("🛠️ TV: Found Cast media element: " + castMediaElement.tagName);
+              relayLogToStudio("🛠️ TV: Found Cast media element: " + castMediaElement.tagName + " (id=" + castMediaElement.id + ", class=" + castMediaElement.className + ")");
               
               // Set crossOrigin to anonymous to avoid CORS SecurityError on Tauri local stream
               if (castMediaElement.crossOrigin !== "anonymous") {
