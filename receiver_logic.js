@@ -3,6 +3,16 @@
       window.SERVER_PORT = "{{SERVER_PORT}}";
       window.SECURITY_TOKEN = "{{SECURITY_TOKEN}}";
 
+      // [v13.9.505] AUTO CACHE-BUST: If no ?cb= param, redirect to self with one.
+      // Fires exactly once per cast session — no loop because redirect URL already has cb=.
+      (function () {
+        if (window.location.search.indexOf('cb=') === -1) {
+          var freshUrl = window.location.href.split('?')[0] + '?cb=' + Date.now();
+          window.location.replace(freshUrl);
+          // Execution stops here — the browser navigates away immediately.
+        }
+      })();
+
       (function () {
         var audioCtx = null;
         var masterGain = null;
