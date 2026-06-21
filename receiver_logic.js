@@ -1061,16 +1061,39 @@
 
             // Send actual hardware capabilities
             preInitAudioContext();
-            const handshake = {
-              type: "HANDSHAKE",
-              config: {
-                sampleRate: hwRate,
-                bitDepth: 16, // Request 16-bit pipeline for lower CPU overhead
-                maxChannels: 2,
-              },
-            };
-            binaryWS.send(JSON.stringify(handshake));
-            relayLogToStudio(`🤝 TV: Handshake sent → ${hwRate}Hz / 16-bit`);
+            
+            function sendHandshake() {
+              if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+              const rate = window._hwRate || hwRate || 48000;
+              const handshake = {
+                type: "HANDSHAKE",
+                config: {
+                  sampleRate: rate,
+                  bitDepth: 16, // Request 16-bit pipeline for lower CPU overhead
+                  maxChannels: 2,
+                },
+              };
+              try {
+                binaryWS.send(JSON.stringify(handshake));
+                relayLogToStudio(`🤝 TV: Handshake sent → ${rate}Hz / 16-bit`);
+              } catch (e) {
+                relayLogToStudio(`⚠️ TV: Failed to send handshake: ${e.message}`);
+              }
+            }
+
+            window._handshakeAcked = false;
+            sendHandshake();
+
+            // Set up a retry interval in case the initial handshake is lost/dropped by sender
+            const handshakeRetryInterval = setInterval(() => {
+              if (generation !== binaryConnectionGeneration || !binaryWS || binaryWS.readyState !== WebSocket.OPEN || window._handshakeAcked) {
+                clearInterval(handshakeRetryInterval);
+                return;
+              }
+              relayLogToStudio("⏳ TV: Retrying Handshake (no ACK received yet)...");
+              sendHandshake();
+            }, 1500);
+
             // Audio init is deferred until HANDSHAKE_ACK arrives
             triggerWakeLockLoad();
           };
@@ -1172,6 +1195,7 @@
                     window._hwRate = ackRate;
                   }
                   configReceived = true;
+                  window._handshakeAcked = true;
                   initAudio();
                   // Configure worklet bit depth after init
                   setTimeout(() => {
@@ -1189,6 +1213,12 @@
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
                     configReceived = true;
+                    
+                    // Proactive fallback: If we haven't received HANDSHAKE_ACK yet, resend HANDSHAKE
+                    if (!window._handshakeAcked && typeof sendHandshake === "function") {
+                      sendHandshake();
+                    }
+
                     if (window._studioRate !== newStudioRate) {
                       window._studioRate = newStudioRate;
                       relayLogToStudio(
