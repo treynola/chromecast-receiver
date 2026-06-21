@@ -223,15 +223,14 @@
                   });
                 }
 
-                // Only configure/play the programmatic Blob URL fallback if not in Cast mode
-                if (typeof cast === "undefined" || !cast.framework) {
-                  if (!audioUnlocker.src) {
-                    audioUnlocker.src = createSilentWavUrl();
-                  }
-                  audioUnlocker.play().catch(function(e) {
-                    relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
-                  });
+                // [v13.9.505] Run the programmatic silent WAV fallback unconditionally (in both Cast and non-Cast modes)
+                // to automatically bypass Chromecast Autoplay restrictions.
+                if (!audioUnlocker.src) {
+                  audioUnlocker.src = createSilentWavUrl();
                 }
+                audioUnlocker.play().catch(function(e) {
+                  relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
+                });
               }
               
               resumeAudio();
