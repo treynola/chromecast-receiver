@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="head_init.js?v=13.9.505-9edc711bcb28"></script>
+    <script src="head_init.js?v=13.9.505-b828bd9c3516"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -242,6 +242,15 @@
             loop
             class="audio-unlocker"
           ></audio>
+          <!-- Dedicated Cast SDK Media Element to prevent Shadow DOM nesting and enable early AudioContext routing -->
+          <video
+            id="cast-media-element"
+            class="castMediaElement"
+            crossorigin="anonymous"
+            playsinline
+            autoplay
+            style="display: none;"
+          ></video>
           <div
             id="tv-console"
             class="tv-console"
@@ -285,6 +294,6 @@
       </div>
     </div>
 
-    <script src="receiver_logic.js?v=13.9.505-9edc711bcb28"></script>
+    <script src="receiver_logic.js?v=13.9.505-b828bd9c3516"></script>
   </body>
 </html>
