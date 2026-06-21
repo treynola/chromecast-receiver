@@ -223,14 +223,19 @@
                   });
                 }
 
-                // [v13.9.505] Run the programmatic silent WAV fallback unconditionally (in both Cast and non-Cast modes)
-                // to automatically bypass Chromecast Autoplay restrictions.
-                if (!audioUnlocker.src) {
-                  audioUnlocker.src = createSilentWavUrl();
+                // [v13.9.505] Run the programmatic silent WAV fallback conditionally
+                // (only in non-Cast mode) to prevent conflict with Cast SDK PlayerManager.
+                const isCastSupported = typeof cast !== "undefined" && cast.framework;
+                if (!isCastSupported) {
+                  if (!audioUnlocker.src) {
+                    audioUnlocker.src = createSilentWavUrl();
+                  }
+                  audioUnlocker.play().catch(function(e) {
+                    relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
+                  });
+                } else {
+                  relayLogToStudio("📡 TV: Skipping audioUnlocker play in Cast mode (using PlayerManager wake-lock instead).");
                 }
-                audioUnlocker.play().catch(function(e) {
-                  relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
-                });
               }
               
               resumeAudio();
@@ -319,6 +324,7 @@
 
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
+                window._lastWorkletDiagTime = Date.now();
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                   binaryWS.send(
                     JSON.stringify({
@@ -394,26 +400,56 @@
           }
         }
 
+        function connectCastMediaElement() {
+          if (!audioCtx || !masterGain) return;
+          try {
+            let castMediaElement = null;
+            if (typeof cast !== "undefined" && cast.framework) {
+              const context = cast.framework.CastReceiverContext.getInstance();
+              if (context) {
+                const pm = context.getPlayerManager();
+                if (pm) {
+                  castMediaElement = pm.getMediaElement();
+                }
+              }
+            }
+            if (!castMediaElement) {
+              // Fallback: look for video or audio elements (except audio-unlocker)
+              const el = document.querySelector("video");
+              if (el) {
+                castMediaElement = el;
+              }
+            }
+            if (castMediaElement && !castMediaElement._connectedToAudioCtx) {
+              castMediaElement._connectedToAudioCtx = true;
+              const mediaSource = audioCtx.createMediaElementSource(castMediaElement);
+              mediaSource.connect(masterGain);
+              relayLogToStudio("✅ TV: Cast SDK Media Element connected to AudioContext successfully.");
+            }
+          } catch (e) {
+            if (e.message && e.message.indexOf("already connected") === -1) {
+              console.warn("⚠️ TV: connectCastMediaElement error:", e);
+            }
+          }
+        }
+
         async function resumeAudio() {
           if (audioCtx) {
-            if (audioCtx.state === "suspended") {
-              try {
-                await audioCtx.resume();
-                if (audioCtx.state === "running") {
-                  console.log("🔊 Receiver: AudioContext Resumed.");
-                  relayLogToStudio("✅ TV: AudioContext Resumed.");
-                  hideUnlockOverlay();
-                } else {
-                  relayLogToStudio("⚠️ TV: resumeAudio() called but state is still: " + audioCtx.state);
-                  showUnlockOverlay();
-                }
-              } catch (e) {
-                console.warn("⚠️ TV: Resume failed", e);
-                relayLogToStudio("⚠️ TV: resumeAudio() failed: " + e.message);
+            connectCastMediaElement();
+            const prevState = audioCtx.state;
+            try {
+              relayLogToStudio("🔊 TV: resumeAudio() calling audioCtx.resume(). State: " + prevState);
+              await audioCtx.resume();
+              relayLogToStudio("🔊 TV: resumeAudio() resolved. State: " + audioCtx.state);
+              if (audioCtx.state === "running") {
+                hideUnlockOverlay();
+              } else {
                 showUnlockOverlay();
               }
-            } else if (audioCtx.state === "running") {
-              hideUnlockOverlay();
+            } catch (e) {
+              console.warn("⚠️ TV: Resume failed", e);
+              relayLogToStudio("⚠️ TV: resumeAudio() failed: " + e.message);
+              showUnlockOverlay();
             }
           }
         }
@@ -1463,15 +1499,18 @@
 
           // [V13.8.150] RECURSIVE AUTO-RESUME
           autoUnlockIntervalId = setInterval(() => {
+            connectCastMediaElement();
+
             if (audioCtx) {
-              if (audioCtx.state === "suspended") {
+              const now = Date.now();
+              const isWorkletStalled = workletNode && (!window._lastWorkletDiagTime || (now - window._lastWorkletDiagTime > 4000));
+              
+              if (audioCtx.state === "suspended" || isWorkletStalled) {
+                if (isWorkletStalled && workletNode) {
+                  relayLogToStudio("⚠️ TV: Worklet process() stalled/not started. Attempting resume...");
+                }
                 showUnlockOverlay();
-                audioCtx.resume().then(() => {
-                  if (audioCtx.state === "running") {
-                    relayLogToStudio("✅ TV: AudioContext Auto-Unlocked!");
-                    hideUnlockOverlay();
-                  }
-                });
+                resumeAudio();
               } else if (audioCtx.state === "running") {
                 hideUnlockOverlay();
               }
@@ -1493,15 +1532,16 @@
 
             // [v13.9.504] Non-Cast fallback only — keep HTML5 audio element alive
             // In Cast mode, the PlayerManager wake-lock with REPEAT_SINGLE handles this.
-            // [v13.9.505] Run the programmatic silent play loop unconditionally in all modes
-            // to ensure autoplay bypass stays warm.
-            const audioUnlocker = document.getElementById("audio-unlocker");
-            if (audioUnlocker) {
-              if (!audioUnlocker.src) {
-                audioUnlocker.src = createSilentWavUrl();
-              }
-              if (audioUnlocker.paused) {
-                audioUnlocker.play().catch(function() {});
+            const isCastSupported = typeof cast !== "undefined" && cast.framework;
+            if (!isCastSupported) {
+              const audioUnlocker = document.getElementById("audio-unlocker");
+              if (audioUnlocker) {
+                if (!audioUnlocker.src) {
+                  audioUnlocker.src = createSilentWavUrl();
+                }
+                if (audioUnlocker.paused) {
+                  audioUnlocker.play().catch(function() {});
+                }
               }
             }
           }, 2000);
