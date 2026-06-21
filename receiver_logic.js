@@ -383,15 +383,8 @@
         }
 
         function showUnlockOverlay() {
-          const overlay = document.getElementById("audio-unlock-overlay");
-          if (overlay && !overlay.classList.contains("visible")) {
-            overlay.classList.add("visible");
-            const btn = document.getElementById("btn-unlock-audio");
-            if (btn) {
-              btn.focus();
-            }
-            relayLogToStudio("🖥️ TV: Audio Unlock Overlay shown.");
-          }
+          // [v13.9.505] Disabled visual overlay so the GUI is never blocked.
+          // Suspended context auto-unlock runs in the background.
         }
 
         function hideUnlockOverlay() {
