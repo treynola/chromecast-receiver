@@ -1493,15 +1493,15 @@
 
             // [v13.9.504] Non-Cast fallback only — keep HTML5 audio element alive
             // In Cast mode, the PlayerManager wake-lock with REPEAT_SINGLE handles this.
-            if (typeof cast === "undefined" || !cast.framework) {
-              const audioUnlocker = document.getElementById("audio-unlocker");
-              if (audioUnlocker) {
-                if (!audioUnlocker.src) {
-                  audioUnlocker.src = createSilentWavUrl();
-                }
-                if (audioUnlocker.paused) {
-                  audioUnlocker.play().catch(function() {});
-                }
+            // [v13.9.505] Run the programmatic silent play loop unconditionally in all modes
+            // to ensure autoplay bypass stays warm.
+            const audioUnlocker = document.getElementById("audio-unlocker");
+            if (audioUnlocker) {
+              if (!audioUnlocker.src) {
+                audioUnlocker.src = createSilentWavUrl();
+              }
+              if (audioUnlocker.paused) {
+                audioUnlocker.play().catch(function() {});
               }
             }
           }, 2000);
