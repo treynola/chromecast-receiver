@@ -430,14 +430,21 @@
             // Find Cast media element including shadow roots
             let castMediaElement = null;
             if (typeof cast !== "undefined" && cast.framework) {
-              const context = cast.framework.CastReceiverContext.getInstance();
-              if (context) {
-                const pm = context.getPlayerManager();
-                if (pm) {
-                  castMediaElement = pm.getMediaElement();
+              try {
+                const context = cast.framework.CastReceiverContext.getInstance();
+                if (context) {
+                  const pm = context.getPlayerManager();
+                  // Check if getMediaElement is a valid function (avoid TypeError in older/custom Cast SDK runtimes)
+                  if (pm && typeof pm.getMediaElement === "function") {
+                    castMediaElement = pm.getMediaElement();
+                  }
                 }
+              } catch (sdkErr) {
+                relayLogToStudio("⚠️ TV: Cast SDK getMediaElement error: " + sdkErr.message);
               }
             }
+            
+            // If Cast SDK method wasn't available or returned null, use our recursive traverser
             if (!castMediaElement) {
               castMediaElement = findMediaElement(document);
             }
