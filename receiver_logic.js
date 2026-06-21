@@ -160,7 +160,7 @@
           const winH = window.innerHeight;
           document.documentElement.style.setProperty(
             "--scale",
-            Math.min(winW / 1440, winH / 810) * 0.98,
+            Math.min(winW / 1440, winH / 810) * 0.96,
           );
         }
 
@@ -989,7 +989,6 @@
             // Audio init is deferred until HANDSHAKE_ACK arrives
             triggerWakeLockLoad();
           };
-
           binaryWS.onmessage = (event) => {
             if (generation !== binaryConnectionGeneration) return;
             // [v13.9.504] PRIORITY: Binary audio data gets the fastest path
@@ -1012,7 +1011,8 @@
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
                 queueBinaryFrame(event.data);
               } else {
-                queueBinaryFrame(event.data.slice(0));
+                if (audioCtx && audioCtx.state === "suspended") resumeAudio();
+                queueBinaryFrame(event.data);
               }
               return;
             } else if (event.data instanceof Blob) {
