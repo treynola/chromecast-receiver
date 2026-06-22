@@ -26,7 +26,7 @@
         var autoDiscoveryFallbackTimeoutId = null;
         var autoUnlockIntervalId = null;
         var pendingBinaryFrames = [];
-        const PENDING_BINARY_FRAMES_MAX = 24; // Keep only a short live prebuffer; stale PCM increases cast latency.
+        const PENDING_BINARY_FRAMES_MAX = 12; // Keep only a very short live prebuffer; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
 
