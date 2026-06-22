@@ -17,20 +17,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
-    this._playbackRate = 1.0;
 
-    // [v13.9.504] CONCRETE SYNC: Jitter-Resilient Targets
-    this._TARGET_BUFFER = 38400; // 400ms target
-    this._MIN_BUFFER = 9600;      // 100ms stall threshold
-    this._PREBUFFER = 28800;      // 300ms pre-fill
-    this._FLUSH_THRESHOLD = 67200; // 700ms limit
+    // Keep the receiver close to a modest fixed latency without continuously
+    // warping playback speed, which creates audible wobble on long sessions.
+    this._TARGET_BUFFER = 9600;    // 100ms target
+    this._MIN_BUFFER = 2400;       // 25ms stall threshold
+    this._PREBUFFER = 9600;        // 100ms pre-fill
+    this._FLUSH_THRESHOLD = 76800; // 800ms guard rail
 
     this._isBuffering = true;
     this._stallCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0;
     this._bitDepth = options.processorOptions?.bitDepth || 16;
-    this._smoothedError = 0;
 
     this._framesProcessed = 0;
     this._callbackCount = 0;
@@ -59,8 +58,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._totalWritten = 0;
           this._totalRead = 0;
           this._isBuffering = true;
-          this._smoothedError = 0;
-          this._playbackRate = 1.0;
           this._framesProcessed = 0;
           this._startTime = 0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
@@ -124,7 +121,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       let available = Math.round(this._totalWritten - this._totalRead);
       let consumed = 0;
-      let playbackRate = this._playbackRate;
 
       // 1. HARD OVERRUN PROTECTION
       if (available > ringLen) {
@@ -132,7 +128,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._totalRead += skip;
         this._readFrameIdx = ((this._writePtr >> 1) - (this._TARGET_BUFFER >> 1) + ringLenFrames) % ringLenFrames;
         available = this._TARGET_BUFFER;
-        this._smoothedError = 0;
       }
 
       // 2. AGGRESSIVE FLUSH
@@ -141,8 +136,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._totalRead += excess;
         this._readFrameIdx = (this._readFrameIdx + (excess >> 1)) % ringLenFrames;
         available = this._TARGET_BUFFER;
-        this._smoothedError = 0;
-        this._playbackRate = 1.0; 
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
@@ -152,7 +145,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (this._isBuffering) {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
-          this._smoothedError = 0;
           this._startTime = now;
           this._framesProcessed = 0;
         } else {
@@ -163,69 +155,29 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // 4. STALL PROTECTION
       if (!renderSilence && available < this._MIN_BUFFER) {
         this._isBuffering = true;
-        this._smoothedError = 0;
         this._fade = 0;
         this._stallCount++;
         renderSilence = true;
       }
 
-      const QUARTZ_DEADZONE = 1920; // 40ms tolerance
-
       if (renderSilence) {
         channel0.fill(0);
         channel1.fill(0);
       } else {
-        // 5. QUARTZ-LOCK P-CONTROLLER (Gentle Sync 13.9.506)
-        const rawError = available - this._TARGET_BUFFER;
-        this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
-        
-        const kp = 0.0000001; // Gentler sync tracking gain to avoid oscillation
-        
-        let targetRate = 1.0;
-        if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-           // Sub-audible pitch correction (+/- 0.15% cap for clean pitch)
-           targetRate = 1.0 + Math.max(-0.0015, Math.min(0.0015, this._smoothedError * kp));
-        }
-        
-        // Smooth transition
-        this._playbackRate = this._playbackRate * 0.995 + (targetRate * this._baseRate) * 0.005;
-        
-        playbackRate = this._playbackRate;
+        const playbackRate = this._baseRate;
         let frameIdx = this._readFrameIdx;
-        let frac = this._readFrac;
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
         const INV_8388608 = 1.1920928955078125e-7;
 
-        // 6. HIGH-EFFICIENCY RENDERER
-        const isUnity = Math.abs(playbackRate - 1.0) < 0.00001;
-
         for (let i = 0; i < framesInBlock; i++) {
-          if (available - consumed >= 4) {
+          if (available - consumed >= 2) {
             const idxL1 = frameIdx * 2;
             const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
-
-            if (isUnity) {
-              channel0[i] = this._ringBuffer[idxL1]     * scale;
-              channel1[i] = this._ringBuffer[idxL1 + 1] * scale;
-              frameIdx = (frameIdx + 1) % ringLenFrames;
-              consumed += 2;
-            } else {
-              let idxL2 = idxL1 + 2;
-              if (idxL2 >= ringLen) idxL2 -= ringLen;
-              const vL1 = this._ringBuffer[idxL1];
-              const vR1 = this._ringBuffer[idxL1 + 1];
-              channel0[i] = (vL1 + (this._ringBuffer[idxL2]     - vL1) * frac) * scale;
-              channel1[i] = (vR1 + (this._ringBuffer[idxL2 + 1] - vR1) * frac) * scale;
-              
-              frac += playbackRate;
-              const advance = frac | 0;
-              if (advance > 0) {
-                frameIdx = (frameIdx + advance) % ringLenFrames;
-                frac -= advance;
-                consumed += advance * 2;
-              }
-            }
+            channel0[i] = this._ringBuffer[idxL1]     * scale;
+            channel1[i] = this._ringBuffer[idxL1 + 1] * scale;
+            frameIdx = (frameIdx + 1) % ringLenFrames;
+            consumed += 2;
             if (fade < 1.0) fade = Math.min(1.0, fade + 0.01);
             if (i === 0) this._currentPeak = Math.max(this._currentPeak, Math.abs(channel0[i]));
           } else {
@@ -235,7 +187,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         }
 
         this._readFrameIdx = frameIdx;
-        this._readFrac = frac;
         this._totalRead += consumed;
         this._fade = fade;
         this._framesProcessed += framesInBlock;
@@ -243,6 +194,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
+        const lockWindow = Math.max(4800, this._TARGET_BUFFER >> 2);
         this.port.postMessage({
           type: "DIAG",
           available: available,
@@ -250,7 +202,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           rate: playbackRate,
           measuredHz: Math.round(this._framesProcessed / elapsed), // [v13.9.504] Real clock tracking
           peak: this._currentPeak,
-          locked: !renderSilence && Math.abs(this._smoothedError) < QUARTZ_DEADZONE
+          locked: !renderSilence && Math.abs(available - this._TARGET_BUFFER) <= lockWindow
         });
         this._currentPeak = 0;
       }
