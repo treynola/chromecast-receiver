@@ -310,7 +310,19 @@
               relayLogToStudio(`📡 TV: Loading Worklet from Studio: ${workletUrl}`);
             }
 
-            await audioCtx.audioWorklet.addModule(workletUrl);
+            const workletResponse = await fetch(workletUrl, { cache: "no-store" });
+            if (!workletResponse.ok) {
+              throw new Error(`Worklet fetch failed (${workletResponse.status})`);
+            }
+            const workletSource = await workletResponse.text();
+            const workletBlobUrl = URL.createObjectURL(
+              new Blob([workletSource], { type: "application/javascript" }),
+            );
+            try {
+              await audioCtx.audioWorklet.addModule(workletBlobUrl);
+            } finally {
+              URL.revokeObjectURL(workletBlobUrl);
+            }
 
             // [v13.9.504] DYNAMIC RATE TRANSFORMATION
             // Since the Rust backend now handles authoritative resampling (Studio -> TV),
