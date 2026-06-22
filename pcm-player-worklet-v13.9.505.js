@@ -38,6 +38,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this.port.onmessage = (e) => {
       try {
+        if (e.data && typeof e.data.type === "string") {
+          this.port.postMessage({ type: "LOG", msg: `📥 Worklet message: ${e.data.type}` });
+        } else {
+          if (!this._binLogCount) this._binLogCount = 0;
+          if (this._binLogCount < 10) {
+            this._binLogCount++;
+            this.port.postMessage({
+              type: "LOG",
+              msg: `📥 Worklet binary recv: type=${typeof e.data} constr=${e.data && e.data.constructor ? e.data.constructor.name : "null"} byteLen=${e.data ? e.data.byteLength : "n/a"}`
+            });
+          }
+        }
+
         if (e.data && e.data.type === "RESET") {
           this._ringBuffer.fill(0);
           this._writePtr = 0;

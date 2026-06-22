@@ -68,7 +68,18 @@
         }
 
         function queueBinaryFrame(buffer) {
-          if (!(buffer instanceof ArrayBuffer) && (!buffer || typeof buffer.byteLength !== "number")) return;
+          if (!window._qCount) window._qCount = 0;
+          if (window._qCount < 10) {
+            window._qCount++;
+            const isAB = buffer instanceof ArrayBuffer;
+            const len = buffer ? buffer.byteLength : "n/a";
+            const constr = buffer && buffer.constructor ? buffer.constructor.name : "null";
+            relayLogToStudio(`🔍 TV queueBinaryFrame: isAB=${isAB} len=${len} constr=${constr}`);
+          }
+          if (!(buffer instanceof ArrayBuffer) && (!buffer || typeof buffer.byteLength !== "number")) {
+            relayLogToStudio("⚠️ TV queueBinaryFrame: Rejected buffer (not ArrayBuffer / no byteLength)");
+            return;
+          }
           if (workletNode) {
             try {
               workletNode.port.postMessage(buffer, [buffer]);
