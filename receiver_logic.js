@@ -26,7 +26,7 @@
         var autoDiscoveryFallbackTimeoutId = null;
         var autoUnlockIntervalId = null;
         var pendingBinaryFrames = [];
-        const PENDING_BINARY_FRAMES_MAX = 12; // Keep only a very short live prebuffer; stale PCM increases cast latency.
+        const PENDING_BINARY_FRAMES_MAX = 4; // Keep only a tiny live prebuffer; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
 
@@ -98,7 +98,10 @@
 
         function flushPendingBinaryFrames() {
           if (!workletNode || pendingBinaryFrames.length === 0) return;
-          const queued = pendingBinaryFrames.splice(0, pendingBinaryFrames.length);
+          // Drop stale startup PCM instead of replaying it all into the worklet.
+          // The TV should start with fresh live audio, not a buffered tail.
+          const queued = pendingBinaryFrames.slice(-2);
+          pendingBinaryFrames.length = 0;
           queued.forEach((buffer) => queueBinaryFrame(buffer));
         }
 
