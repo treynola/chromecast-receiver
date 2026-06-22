@@ -8,7 +8,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     this._ringLen = 192000; // 2 seconds of stereo 48kHz
-    this._ringBuffer = new Float32Array(this._ringLen);
+    this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
     this._readFrameIdx = 0;
     this._readFrac = 0;
@@ -95,17 +95,23 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             const offset = i * 3;
             let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
             if (val & 0x800000) val |= 0xFF000000;
-            this._ringBuffer[this._writePtr] = val;
+            this._ringBuffer[this._writePtr] = val >> 8;
             this._writePtr = (this._writePtr + 1) % this._ringLen;
             this._totalWritten++;
           }
         } else {
           const pcm16 = new Int16Array(arrayBuffer);
-          for (let i = 0; i < pcm16.length; i++) {
-            this._ringBuffer[this._writePtr] = pcm16[i];
-            this._writePtr = (this._writePtr + 1) % this._ringLen;
-            this._totalWritten++;
+          const len = pcm16.length;
+          if (this._writePtr + len <= this._ringLen) {
+            this._ringBuffer.set(pcm16, this._writePtr);
+            this._writePtr = (this._writePtr + len) % this._ringLen;
+          } else {
+            const firstPart = this._ringLen - this._writePtr;
+            this._ringBuffer.set(pcm16.subarray(0, firstPart), this._writePtr);
+            this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+            this._writePtr = len - firstPart;
           }
+          this._totalWritten += len;
         }
       } catch (err) {
         this.port.postMessage({ type: "LOG", msg: `❌ Worklet Error: ${err.message}` });
@@ -215,7 +221,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
         if (playbackRate === 1.0 && frac === 0) {
           // Optimized fast-path: direct samples lookup
-          const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
+          const scale = INV_32768 * fade;
           for (let i = 0; i < framesInBlock; i++) {
             if (available - consumed >= 2) {
               const idxL = frameIdx * 2;
@@ -242,7 +248,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
               const idxL1 = frameIdx * 2;
               const nextFrameIdx = (frameIdx + 1) % ringLenFrames;
               const idxL2 = nextFrameIdx * 2;
-              const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
+              const scale = INV_32768 * fade;
               channel0[i] = (this._ringBuffer[idxL1] + ((this._ringBuffer[idxL2] - this._ringBuffer[idxL1]) * frac)) * scale;
               channel1[i] = (this._ringBuffer[idxL1 + 1] + ((this._ringBuffer[idxL2 + 1] - this._ringBuffer[idxL1 + 1]) * frac)) * scale;
               frac += playbackRate;
