@@ -20,10 +20,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // Keep the receiver close to a modest fixed latency without continuously
     // warping playback speed, which creates audible wobble on long sessions.
-    this._TARGET_BUFFER = 9600;    // 100ms target
-    this._MIN_BUFFER = 2400;       // 25ms stall threshold
-    this._PREBUFFER = 9600;        // 100ms pre-fill
-    this._FLUSH_THRESHOLD = 76800; // 800ms guard rail
+    this._TARGET_BUFFER = 48000;   // ~500ms target, matches observed steady-state latency
+    this._MIN_BUFFER = 12000;      // 125ms stall threshold
+    this._PREBUFFER = 24000;       // 250ms pre-fill
+    this._FLUSH_THRESHOLD = 120000; // 1.25s guard rail
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -194,7 +194,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
-        const lockWindow = Math.max(4800, this._TARGET_BUFFER >> 2);
+        const lockWindow = Math.max(12000, this._TARGET_BUFFER >> 2);
         this.port.postMessage({
           type: "DIAG",
           available: available,
