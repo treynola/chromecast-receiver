@@ -70,6 +70,9 @@
         }
 
         function queueBinaryFrame(buffer) {
+          if (window._isDrainingStartup) {
+            return; // Discard stale startup burst packets to prevent backlog build-up
+          }
           if (!window._qCount) window._qCount = 0;
           if (window._qCount < 10) {
             window._qCount++;
@@ -426,8 +429,15 @@
                 }
               } else if (e.data.type === "LOG") {
                 if (typeof e.data.msg === "string" && e.data.msg.indexOf("Worklet message: CONFIG") !== -1) {
-                  workletReady = true;
-                  flushPendingBinaryFrames();
+                  relayLogToStudio("⏳ TV: Draining stale startup packets...");
+                  window._isDrainingStartup = true;
+                  pendingBinaryFrames = []; // Clear any queued pre-handshake packets
+                  setTimeout(() => {
+                    window._isDrainingStartup = false;
+                    workletReady = true;
+                    flushPendingBinaryFrames();
+                    relayLogToStudio("✅ TV: Startup packets drained. Playout active.");
+                  }, 1000);
                 }
                 relayLogToStudio(e.data.msg);
               }
@@ -1318,6 +1328,7 @@
             wakeLockLoadingOrLoaded = false;
             pendingBinaryFrames = [];
             workletReady = false;
+            window._isDrainingStartup = false;
             if (workletNode) {
               try {
                 workletNode.port.postMessage({ type: "RESET" });
