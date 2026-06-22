@@ -1101,6 +1101,20 @@
           };
           binaryWS.onmessage = (event) => {
             if (generation !== binaryConnectionGeneration) return;
+            
+            // Debug print for first few messages
+            if (!window._msgCount) window._msgCount = 0;
+            if (window._msgCount < 15) {
+              window._msgCount++;
+              const type = typeof event.data;
+              const isAB = event.data instanceof ArrayBuffer;
+              const isB = event.data instanceof Blob;
+              const byteLen = event.data ? event.data.byteLength : undefined;
+              const size = event.data ? event.data.size : undefined;
+              const constr = event.data && event.data.constructor ? event.data.constructor.name : "null";
+              relayLogToStudio(`🔍 TV MSG DEBUG: type=${type} constr=${constr} isAB=${isAB} isB=${isB} byteLen=${byteLen} size=${size}`);
+            }
+
             // [v13.9.504] PRIORITY: Binary audio data gets the fastest path
             const isArrayBuffer = event.data instanceof ArrayBuffer || (event.data && typeof event.data.byteLength === "number");
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
