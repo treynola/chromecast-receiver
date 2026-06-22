@@ -1519,11 +1519,7 @@
 
               if (buffer && workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                try {
-                  workletNode.port.postMessage(buffer, [buffer]);
-                } catch (e) {
-                  workletNode.port.postMessage(buffer);
-                }
+                queueBinaryFrame(buffer);
                 window._relayPkts = (window._relayPkts || 0) + 1;
               }
             }
