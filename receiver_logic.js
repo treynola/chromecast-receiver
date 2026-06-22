@@ -325,6 +325,10 @@
                 },
               },
             );
+            workletNode.onprocessorerror = (e) => {
+              console.error("❌ TV: workletNode processor error:", e);
+              relayLogToStudio(`❌ TV: workletNode processor error: ${e.message || e}`);
+            };
             workletNode.connect(masterGain);
             flushPendingBinaryFrames();
 

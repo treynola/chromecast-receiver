@@ -6,7 +6,7 @@
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
-    super(options);
+    super();
     this._ringLen = 192000; // 2 seconds of stereo 48kHz
     this._ringBuffer = new Float32Array(this._ringLen);
     this._writePtr = 0;
