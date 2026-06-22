@@ -110,8 +110,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const channel0 = output?.[0];
       const channel1 = output?.[1] || channel0;
       if (!channel0) return true;
-      const playbackRate = this._baseRate;
-
       const ringLen = this._ringLen;
       const ringLenFrames = ringLen >> 1; 
       const framesInBlock = channel0.length;
@@ -140,6 +138,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
+      // Soft drift correction: gently speed up when the buffer is ahead of the
+      // target and slow down when it is too empty. This avoids the hard chop
+      // pattern that sounds wavy.
+      const bufferError = available - this._TARGET_BUFFER;
+      const correction = Math.max(-0.08, Math.min(0.12, bufferError / 32000));
+      const playbackRate = Math.max(0.95, Math.min(1.12, this._baseRate + correction));
+
       let renderSilence = false;
 
       // 3. PRE-BUFFERING
@@ -166,6 +171,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         channel1.fill(0);
       } else {
         let frameIdx = this._readFrameIdx;
+        let frac = this._readFrac;
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
         const INV_8388608 = 1.1920928955078125e-7;
@@ -173,11 +179,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         for (let i = 0; i < framesInBlock; i++) {
           if (available - consumed >= 2) {
             const idxL1 = frameIdx * 2;
+            const nextFrameIdx = (frameIdx + 1) % ringLenFrames;
+            const idxL2 = nextFrameIdx * 2;
             const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
-            channel0[i] = this._ringBuffer[idxL1]     * scale;
-            channel1[i] = this._ringBuffer[idxL1 + 1] * scale;
-            frameIdx = (frameIdx + 1) % ringLenFrames;
-            consumed += 2;
+            channel0[i] = (this._ringBuffer[idxL1] + ((this._ringBuffer[idxL2] - this._ringBuffer[idxL1]) * frac)) * scale;
+            channel1[i] = (this._ringBuffer[idxL1 + 1] + ((this._ringBuffer[idxL2 + 1] - this._ringBuffer[idxL1 + 1]) * frac)) * scale;
+            frac += playbackRate;
+            while (frac >= 1.0) {
+              frac -= 1.0;
+              frameIdx = (frameIdx + 1) % ringLenFrames;
+              consumed += 2;
+            }
             if (fade < 1.0) fade = Math.min(1.0, fade + 0.01);
             if (i === 0) this._currentPeak = Math.max(this._currentPeak, Math.abs(channel0[i]));
           } else {
@@ -187,6 +199,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         }
 
         this._readFrameIdx = frameIdx;
+        this._readFrac = frac;
         this._totalRead += consumed;
         this._fade = fade;
         this._framesProcessed += framesInBlock;
