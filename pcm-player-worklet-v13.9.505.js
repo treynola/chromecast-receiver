@@ -18,11 +18,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
 
-    // Robust buffer parameters for stable streaming over Wi-Fi
-    this._TARGET_BUFFER = 19200;    // ~200ms target buffer (9600 frames)
-    this._MIN_BUFFER = 4800;        // ~50ms stall threshold (2400 frames)
-    this._PREBUFFER = 9600;         // ~100ms pre-fill cushion (4800 frames)
-    this._FLUSH_THRESHOLD = 76800;  // Trim severe backlog (>800ms) instantly
+    // Jitter-Adaptive buffer parameters for ultra-low latency playout
+    this._TARGET_BUFFER = 7680;      // Start at 80ms target (3840 frames)
+    this._MIN_BUFFER = 1920;        // ~20ms stall threshold (960 frames)
+    this._PREBUFFER = 3840;         // ~40ms pre-fill cushion (1920 frames)
+    this._FLUSH_THRESHOLD = 19200;  // Trim severe backlog (>200ms) instantly
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -33,6 +33,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._framesProcessed = 0;
     this._callbackCount = 0;
     this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
+    this._realStartTime = 0; // [v13.9.507] Wall-clock timer using real-world milliseconds
+    this._stableCallbackCount = 0;
     this._smoothedRate = this._baseRate;
 
     this.port.onmessage = (e) => {
@@ -60,6 +62,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
+          this._realStartTime = 0;
+          this._stableCallbackCount = 0;
+          this._TARGET_BUFFER = 7680;
+          this._MIN_BUFFER = 1920;
+          this._PREBUFFER = 3840;
+          this._FLUSH_THRESHOLD = 19200;
           this._smoothedRate = this._baseRate;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
@@ -116,7 +124,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const framesInBlock = channel0.length;
       const now = currentTime;
 
-      if (this._startTime === 0) this._startTime = now;
+      if (this._startTime === 0) {
+        this._startTime = now;
+        this._realStartTime = Date.now();
+      }
       this._callbackCount++;
 
       let available = Math.round(this._totalWritten - this._totalRead);
@@ -159,6 +170,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
           this._startTime = now;
+          this._realStartTime = Date.now();
           this._framesProcessed = 0;
         } else {
           renderSilence = true;
@@ -170,12 +182,25 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._isBuffering = true;
         this._fade = 0;
         this._stallCount++;
+
+        // Adaptive Buffer Scale Up: Increase target buffer by 20ms (1920 samples), max 250ms (24000 samples)
+        this._TARGET_BUFFER = Math.min(24000, this._TARGET_BUFFER + 1920);
+        this._MIN_BUFFER = Math.max(1920, this._TARGET_BUFFER >> 2); // 25% of target
+        this._PREBUFFER = Math.max(2880, this._TARGET_BUFFER >> 1); // 50% of target
+        this._FLUSH_THRESHOLD = Math.min(76800, this._TARGET_BUFFER * 2.5); // 2.5x target
+
+        this.port.postMessage({
+          type: "LOG",
+          msg: `⚠️ TV Stall detected! Scaling target buffer to ${Math.round(this._TARGET_BUFFER / 96)}ms.`
+        });
+
         renderSilence = true;
       }
 
       if (renderSilence) {
         channel0.fill(0);
         channel1.fill(0);
+        this._stableCallbackCount = 0;
       } else {
         let frameIdx = this._readFrameIdx;
         let frac = this._readFrac;
@@ -210,17 +235,34 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._totalRead += consumed;
         this._fade = fade;
         this._framesProcessed += framesInBlock;
+
+        // Adaptive Buffer Scale Down on Stability
+        this._stableCallbackCount++;
+        if (this._stableCallbackCount > 5000) {
+          this._stableCallbackCount = 0;
+          if (this._TARGET_BUFFER > 4800) { // minimum 50ms (4800 samples)
+            this._TARGET_BUFFER = Math.max(4800, this._TARGET_BUFFER - 960); // decay by 10ms (960 samples)
+            this._MIN_BUFFER = Math.max(1920, this._TARGET_BUFFER >> 2);
+            this._PREBUFFER = Math.max(2880, this._TARGET_BUFFER >> 1);
+            this._FLUSH_THRESHOLD = Math.min(76800, this._TARGET_BUFFER * 2.5);
+            this.port.postMessage({
+              type: "LOG",
+              msg: `📉 TV Buffer stable. Decaying target buffer to ${Math.round(this._TARGET_BUFFER / 96)}ms.`
+            });
+          }
+        }
       }
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
+        const realElapsed = Math.max(0.1, (Date.now() - this._realStartTime) / 1000);
         const lockWindow = Math.max(6000, this._TARGET_BUFFER >> 2);
         this.port.postMessage({
           type: "DIAG",
           available: available,
           stalled: this._stallCount,
           rate: playbackRate,
-          measuredHz: Math.round(this._framesProcessed / elapsed), // [v13.9.504] Real clock tracking
+          measuredHz: Math.round(this._framesProcessed / realElapsed), // [v13.9.507] Wall-clock tracking
           peak: this._currentPeak,
           locked: !renderSilence && Math.abs(available - this._TARGET_BUFFER) <= lockWindow
         });
