@@ -110,6 +110,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const channel0 = output?.[0];
       const channel1 = output?.[1] || channel0;
       if (!channel0) return true;
+      const playbackRate = this._baseRate;
 
       const ringLen = this._ringLen;
       const ringLenFrames = ringLen >> 1; 
@@ -164,7 +165,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         channel0.fill(0);
         channel1.fill(0);
       } else {
-        const playbackRate = this._baseRate;
         let frameIdx = this._readFrameIdx;
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
