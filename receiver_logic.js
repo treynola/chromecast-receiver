@@ -201,7 +201,7 @@
             }
             try {
               relayLogToStudio("🛠️ TV: Creating new AudioContext...");
-              audioCtx = new window.AudioContext({ latencyHint: "playback" });
+              audioCtx = new window.AudioContext({ latencyHint: "interactive" });
               relayLogToStudio("🛠️ TV: AudioContext created. State: " + audioCtx.state);
 
               masterGain = audioCtx.createGain();

@@ -154,13 +154,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // Soft drift correction: speed adjustments proportional to buffer error.
       const bufferError = available - this._TARGET_BUFFER;
       let correction = 0;
-      if (Math.abs(bufferError) > 500) {
+      if (Math.abs(bufferError) > 960) { // 10ms dead-zone to prevent constant rate updates
         // Proportional speed correction: max 1.5% speed adjustment for faster convergence
         const errorRatio = bufferError / this._TARGET_BUFFER;
         correction = Math.max(-0.015, Math.min(0.015, errorRatio * 0.05));
       }
       // Smooth the playback rate transitions (0.995 / 0.005) for glitch-free pitching (~500ms time constant)
       this._smoothedRate = (this._smoothedRate * 0.995) + ((this._baseRate + correction) * 0.005);
+
+      // Snap to exactly 1.0 if very close to minimize floating point interpolation CPU overhead
+      if (Math.abs(this._smoothedRate - 1.0) < 0.0005) {
+        this._smoothedRate = 1.0;
+      }
       const playbackRate = Math.max(0.95, Math.min(1.05, this._smoothedRate));
 
       let renderSilence = false;
@@ -208,25 +213,53 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const INV_32768 = 3.0517578125e-5;
         const INV_8388608 = 1.1920928955078125e-7;
 
-        for (let i = 0; i < framesInBlock; i++) {
-          if (available - consumed >= 2) {
-            const idxL1 = frameIdx * 2;
-            const nextFrameIdx = (frameIdx + 1) % ringLenFrames;
-            const idxL2 = nextFrameIdx * 2;
-            const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
-            channel0[i] = (this._ringBuffer[idxL1] + ((this._ringBuffer[idxL2] - this._ringBuffer[idxL1]) * frac)) * scale;
-            channel1[i] = (this._ringBuffer[idxL1 + 1] + ((this._ringBuffer[idxL2 + 1] - this._ringBuffer[idxL1 + 1]) * frac)) * scale;
-            frac += playbackRate;
-            while (frac >= 1.0) {
-              frac -= 1.0;
+        if (playbackRate === 1.0 && frac === 0) {
+          // Optimized fast-path: direct samples lookup
+          const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
+          for (let i = 0; i < framesInBlock; i++) {
+            if (available - consumed >= 2) {
+              const idxL = frameIdx * 2;
+              channel0[i] = this._ringBuffer[idxL] * scale;
+              channel1[i] = this._ringBuffer[idxL + 1] * scale;
               frameIdx = (frameIdx + 1) % ringLenFrames;
               consumed += 2;
+              if (fade < 1.0) {
+                fade += 0.01;
+                if (fade > 1.0) fade = 1.0;
+              }
+            } else {
+              channel0[i] = 0;
+              channel1[i] = 0;
             }
-            if (fade < 1.0) fade = Math.min(1.0, fade + 0.01);
-            if (i === 0) this._currentPeak = Math.max(this._currentPeak, Math.abs(channel0[i]));
-          } else {
-            channel0[i] = 0;
-            channel1[i] = 0;
+          }
+          if (framesInBlock > 0) {
+            this._currentPeak = Math.abs(channel0[0]);
+          }
+        } else {
+          // Standard linear interpolation fallback
+          for (let i = 0; i < framesInBlock; i++) {
+            if (available - consumed >= 2) {
+              const idxL1 = frameIdx * 2;
+              const nextFrameIdx = (frameIdx + 1) % ringLenFrames;
+              const idxL2 = nextFrameIdx * 2;
+              const scale = (this._bitDepth === 24 ? INV_8388608 : INV_32768) * fade;
+              channel0[i] = (this._ringBuffer[idxL1] + ((this._ringBuffer[idxL2] - this._ringBuffer[idxL1]) * frac)) * scale;
+              channel1[i] = (this._ringBuffer[idxL1 + 1] + ((this._ringBuffer[idxL2 + 1] - this._ringBuffer[idxL1 + 1]) * frac)) * scale;
+              frac += playbackRate;
+              while (frac >= 1.0) {
+                frac -= 1.0;
+                frameIdx = (frameIdx + 1) % ringLenFrames;
+                consumed += 2;
+              }
+              if (fade < 1.0) {
+                fade += 0.01;
+                if (fade > 1.0) fade = 1.0;
+              }
+              if (i === 0) this._currentPeak = Math.abs(channel0[i]);
+            } else {
+              channel0[i] = 0;
+              channel1[i] = 0;
+            }
           }
         }
 
