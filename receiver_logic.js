@@ -1312,7 +1312,13 @@
             configReceived = false;
             wakeLockLoadingOrLoaded = false;
             pendingBinaryFrames = [];
+            if (workletNode) {
+              try {
+                workletNode.port.postMessage({ type: "RESET" });
+              } catch (e) {}
+            }
             window._lastBinaryTime = 0;
+            window._lastWorkletDiagTime = 0;
             teardownWebRtcFallback();
             const conn = document.getElementById("bridge-status-dot");
             if (conn) {
