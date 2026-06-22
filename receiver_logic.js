@@ -269,7 +269,9 @@
         }
 
         let lastInitAttempt = 0;
+        let audioInitializing = false;
         async function initAudio() {
+          if (audioInitializing) return;
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
             relayLogToStudio("📡 TV: initAudio (Legacy) skipped because WebRTC is primary.");
@@ -288,18 +290,19 @@
           if (now - lastInitAttempt < 5000) return;
           lastInitAttempt = now;
           
-          preInitAudioContext();
-
-          if (!audioCtx) {
-            relayLogToStudio("❌ TV ERROR: initAudio failed - audioCtx is null");
-            return;
-          }
-
-          if (workletNode) {
-            return;
-          }
-
+          audioInitializing = true;
           try {
+            preInitAudioContext();
+
+            if (!audioCtx) {
+              relayLogToStudio("❌ TV ERROR: initAudio failed - audioCtx is null");
+              return;
+            }
+
+            if (workletNode) {
+              return;
+            }
+
             let workletUrl = `pcm-player-worklet-v13.9.505.js?cb=${Date.now()}`;
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
@@ -411,6 +414,8 @@
             resumeAudio();
           } catch (e) {
             relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+          } finally {
+            audioInitializing = false;
           }
         }
 

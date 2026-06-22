@@ -153,6 +153,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
           this._smoothedError = 0;
+          this._startTime = now;
+          this._framesProcessed = 0;
         } else {
           renderSilence = true;
         }
@@ -167,22 +169,22 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      const QUARTZ_DEADZONE = 4800; // 100ms tolerance
+      const QUARTZ_DEADZONE = 1920; // 40ms tolerance
 
       if (renderSilence) {
         channel0.fill(0);
         channel1.fill(0);
       } else {
-        // 5. QUARTZ-LOCK P-CONTROLLER (Aggressive Sync 13.9.495)
+        // 5. QUARTZ-LOCK P-CONTROLLER (Gentle Sync 13.9.506)
         const rawError = available - this._TARGET_BUFFER;
         this._smoothedError = this._smoothedError * 0.99 + rawError * 0.01;
         
-        const kp = 0.000005; // [v13.9.504] 25x stronger gain than v494
+        const kp = 0.0000001; // Gentler sync tracking gain to avoid oscillation
         
         let targetRate = 1.0;
         if (Math.abs(this._smoothedError) > QUARTZ_DEADZONE) {
-           // Sub-audible pitch correction (+/- 1.0% cap)
-           targetRate = 1.0 + Math.max(-0.01, Math.min(0.01, this._smoothedError * kp));
+           // Sub-audible pitch correction (+/- 0.15% cap for clean pitch)
+           targetRate = 1.0 + Math.max(-0.0015, Math.min(0.0015, this._smoothedError * kp));
         }
         
         // Smooth transition
