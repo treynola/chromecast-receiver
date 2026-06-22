@@ -6,7 +6,7 @@
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options) {
-    super();
+    super(options);
     this._ringLen = 192000; // 2 seconds of stereo 48kHz
     this._ringBuffer = new Float32Array(this._ringLen);
     this._writePtr = 0;
@@ -59,7 +59,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           return;
         }
 
-        const arrayBuffer = e.data instanceof ArrayBuffer ? e.data : e.data.buffer;
+        let arrayBuffer = null;
+        if (e.data) {
+          if (e.data instanceof ArrayBuffer || typeof e.data.byteLength === "number") {
+            arrayBuffer = e.data;
+          } else if (e.data.buffer && (e.data.buffer instanceof ArrayBuffer || typeof e.data.buffer.byteLength === "number")) {
+            arrayBuffer = e.data.buffer;
+          }
+        }
         if (!arrayBuffer) return;
 
         if (this._bitDepth === 24) {
