@@ -361,6 +361,7 @@
               relayLogToStudio(`❌ TV: workletNode processor error: ${e.message || e}`);
             };
             workletNode.connect(masterGain);
+            window._lastWorkletDiagTime = Date.now(); // Prevent premature watchdog triggers during startup
 
             // [v13.9.505] Reveal UI — single authoritative point, fires once via workletNode guard above
             document.body.classList.remove("app-loading");
