@@ -981,23 +981,20 @@
 
 
         function connectBinaryBridge(ip, customPort, customToken) {
-          const generation = ++binaryConnectionGeneration;
           suppressBinaryReconnect = false;
           clearBinaryReconnectTimer();
           if (
             binaryWS &&
-            binaryWS.readyState === WebSocket.OPEN &&
+            (binaryWS.readyState === WebSocket.OPEN || binaryWS.readyState === WebSocket.CONNECTING) &&
             currentBridgeIp === ip &&
             currentBridgePort === customPort &&
             currentBridgeToken === customToken
           ) {
-            // [v13.9.504] Already connected to this Studio IP. Ignore heartbeat redundancy.
+            // [v13.9.504] Already connected or connecting to this Studio IP. Ignore heartbeat redundancy.
             return;
           }
-          // [v13.9.504] Guard against connecting while another connect is in progress
-          if (binaryWS && binaryWS.readyState === WebSocket.CONNECTING) {
-            return;
-          }
+
+          const generation = ++binaryConnectionGeneration;
 
           currentBridgeIp = ip;
           currentBridgePort = customPort;
