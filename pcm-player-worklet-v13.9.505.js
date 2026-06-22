@@ -18,12 +18,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
 
-    // Keep the receiver close to a low fixed latency without hard-trimming
-    // ordinary drift. Frequent buffer chops sound like the "wavy" artifact.
-    this._TARGET_BUFFER = 8000;    // ~83ms target: stay live
-    this._MIN_BUFFER = 3000;       // ~31ms stall threshold
-    this._PREBUFFER = 4096;        // ~43ms pre-fill for faster startup
-    this._FLUSH_THRESHOLD = 38400;  // Trim severe backlog (>400ms) instantly to stay live
+    // Robust buffer parameters for stable streaming over Wi-Fi
+    this._TARGET_BUFFER = 19200;    // ~200ms target buffer (9600 frames)
+    this._MIN_BUFFER = 4800;        // ~50ms stall threshold (2400 frames)
+    this._PREBUFFER = 9600;         // ~100ms pre-fill cushion (4800 frames)
+    this._FLUSH_THRESHOLD = 76800;  // Trim severe backlog (>800ms) instantly
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -137,18 +136,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._totalRead += excess;
         this._readFrameIdx = (this._readFrameIdx + (excess >> 1)) % ringLenFrames;
         available = this._TARGET_BUFFER;
+        this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
-      // Soft drift correction: extremely gentle speed adjustments to prevent wavy pitch shifts.
+      // Soft drift correction: speed adjustments proportional to buffer error.
       const bufferError = available - this._TARGET_BUFFER;
       let correction = 0;
-      if (Math.abs(bufferError) > 1000) {
-        // Very small correction factor: max 0.3% speed adjustment to keep pitch shift completely imperceptible
-        correction = Math.max(-0.003, Math.min(0.003, bufferError / 1000000));
+      if (Math.abs(bufferError) > 500) {
+        // Proportional speed correction: max 1.5% speed adjustment for faster convergence
+        const errorRatio = bufferError / this._TARGET_BUFFER;
+        correction = Math.max(-0.015, Math.min(0.015, errorRatio * 0.05));
       }
-      // High smoothing (0.998 / 0.002) to ensure rate transitions are extremely smooth (seconds-long time constant)
-      this._smoothedRate = (this._smoothedRate * 0.998) + ((this._baseRate + correction) * 0.002);
+      // Smooth the playback rate transitions (0.995 / 0.005) for glitch-free pitching (~500ms time constant)
+      this._smoothedRate = (this._smoothedRate * 0.995) + ((this._baseRate + correction) * 0.005);
       const playbackRate = Math.max(0.95, Math.min(1.05, this._smoothedRate));
 
       let renderSilence = false;
