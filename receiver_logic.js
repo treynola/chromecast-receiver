@@ -26,6 +26,7 @@
         var autoDiscoveryFallbackTimeoutId = null;
         var autoUnlockIntervalId = null;
         var pendingBinaryFrames = [];
+        var workletReady = false;
         const PENDING_BINARY_FRAMES_MAX = 4; // Keep only a tiny live prebuffer; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
@@ -81,7 +82,7 @@
             relayLogToStudio("⚠️ TV queueBinaryFrame: Rejected buffer (not ArrayBuffer / no byteLength)");
             return;
           }
-          if (workletNode) {
+          if (workletNode && workletReady) {
             try {
               workletNode.port.postMessage(buffer, [buffer]);
             } catch (e) {
@@ -97,7 +98,7 @@
         }
 
         function flushPendingBinaryFrames() {
-          if (!workletNode || pendingBinaryFrames.length === 0) return;
+          if (!workletNode || !workletReady || pendingBinaryFrames.length === 0) return;
           // Drop stale startup PCM instead of replaying it all into the worklet.
           // The TV should start with fresh live audio, not a buffered tail.
           const queued = pendingBinaryFrames.slice(-2);
@@ -360,7 +361,6 @@
               relayLogToStudio(`❌ TV: workletNode processor error: ${e.message || e}`);
             };
             workletNode.connect(masterGain);
-            flushPendingBinaryFrames();
 
             // [v13.9.505] Reveal UI — single authoritative point, fires once via workletNode guard above
             document.body.classList.remove("app-loading");
@@ -424,6 +424,10 @@
                   window._lastDiagSent = Date.now();
                 }
               } else if (e.data.type === "LOG") {
+                if (typeof e.data.msg === "string" && e.data.msg.indexOf("Worklet message: CONFIG") !== -1) {
+                  workletReady = true;
+                  flushPendingBinaryFrames();
+                }
                 relayLogToStudio(e.data.msg);
               }
             };
@@ -1312,6 +1316,7 @@
             configReceived = false;
             wakeLockLoadingOrLoaded = false;
             pendingBinaryFrames = [];
+            workletReady = false;
             if (workletNode) {
               try {
                 workletNode.port.postMessage({ type: "RESET" });
