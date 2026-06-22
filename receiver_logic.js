@@ -68,7 +68,7 @@
         }
 
         function queueBinaryFrame(buffer) {
-          if (!(buffer instanceof ArrayBuffer)) return;
+          if (!(buffer instanceof ArrayBuffer) && (!buffer || typeof buffer.byteLength !== "number")) return;
           if (workletNode) {
             try {
               workletNode.port.postMessage(buffer, [buffer]);
@@ -996,6 +996,7 @@
               binaryWS.close();
             } catch (e) {}
             binaryWS = null;
+            window._sendHandshake = null;
           }
 
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
@@ -1081,6 +1082,7 @@
               }
             }
 
+            window._sendHandshake = sendHandshake;
             window._handshakeAcked = false;
             sendHandshake();
 
@@ -1100,7 +1102,10 @@
           binaryWS.onmessage = (event) => {
             if (generation !== binaryConnectionGeneration) return;
             // [v13.9.504] PRIORITY: Binary audio data gets the fastest path
-            if (event.data instanceof ArrayBuffer) {
+            const isArrayBuffer = event.data instanceof ArrayBuffer || (event.data && typeof event.data.byteLength === "number");
+            const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
+            
+            if (isArrayBuffer) {
               if (workletNode) {
                 // [v13.9.504] BINARY SUPERIORITY LOCK
                 // We have a direct high-fidelity bridge. Kill all fallback paths to save TV CPU.
@@ -1123,7 +1128,7 @@
                 queueBinaryFrame(event.data);
               }
               return;
-            } else if (event.data instanceof Blob) {
+            } else if (isBlob) {
               // [v13.9.504] Fallback: TV browser ignored binaryType="arraybuffer"
               window._lastBinaryTime = Date.now();
               if (!window._binaryActive) {
@@ -1215,8 +1220,8 @@
                     configReceived = true;
                     
                     // Proactive fallback: If we haven't received HANDSHAKE_ACK yet, resend HANDSHAKE
-                    if (!window._handshakeAcked && typeof sendHandshake === "function") {
-                      sendHandshake();
+                    if (!window._handshakeAcked && typeof window._sendHandshake === "function") {
+                      window._sendHandshake();
                     }
 
                     if (window._studioRate !== newStudioRate) {
