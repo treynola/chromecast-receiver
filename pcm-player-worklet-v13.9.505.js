@@ -23,7 +23,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 8000;    // ~83ms target: stay live
     this._MIN_BUFFER = 3000;       // ~31ms stall threshold
     this._PREBUFFER = 4096;        // ~43ms pre-fill for faster startup
-    this._FLUSH_THRESHOLD = 64000; // Only trim pathological backlog
+    this._FLUSH_THRESHOLD = 38400;  // Trim severe backlog (>400ms) instantly to stay live
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -34,6 +34,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._framesProcessed = 0;
     this._callbackCount = 0;
     this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
+    this._smoothedRate = this._baseRate;
 
     this.port.onmessage = (e) => {
       try {
@@ -60,6 +61,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
+          this._smoothedRate = this._baseRate;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -138,12 +140,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
-      // Soft drift correction: gently speed up when the buffer is ahead of the
-      // target and slow down when it is too empty. This avoids the hard chop
-      // pattern that sounds wavy.
+      // Soft drift correction: extremely gentle speed adjustments to prevent wavy pitch shifts.
       const bufferError = available - this._TARGET_BUFFER;
-      const correction = Math.max(-0.08, Math.min(0.12, bufferError / 32000));
-      const playbackRate = Math.max(0.95, Math.min(1.12, this._baseRate + correction));
+      let correction = 0;
+      if (Math.abs(bufferError) > 1000) {
+        // Very small correction factor: max 0.3% speed adjustment to keep pitch shift completely imperceptible
+        correction = Math.max(-0.003, Math.min(0.003, bufferError / 1000000));
+      }
+      // High smoothing (0.998 / 0.002) to ensure rate transitions are extremely smooth (seconds-long time constant)
+      this._smoothedRate = (this._smoothedRate * 0.998) + ((this._baseRate + correction) * 0.002);
+      const playbackRate = Math.max(0.95, Math.min(1.05, this._smoothedRate));
 
       let renderSilence = false;
 
