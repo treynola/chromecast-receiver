@@ -18,12 +18,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
 
-    // Keep the receiver close to a modest fixed latency without continuously
-    // warping playback speed, which creates audible wobble on long sessions.
-    this._TARGET_BUFFER = 12000;   // ~125ms target: stay live and avoid a long buffered tail
-    this._MIN_BUFFER = 4000;       // ~42ms stall threshold
-    this._PREBUFFER = 6000;        // ~62ms pre-fill for faster startup
-    this._FLUSH_THRESHOLD = 24000; // ~0.25s guard rail
+    // Keep the receiver close to a low fixed latency without hard-trimming
+    // ordinary drift. Frequent buffer chops sound like the "wavy" artifact.
+    this._TARGET_BUFFER = 8000;    // ~83ms target: stay live
+    this._MIN_BUFFER = 3000;       // ~31ms stall threshold
+    this._PREBUFFER = 4096;        // ~43ms pre-fill for faster startup
+    this._FLUSH_THRESHOLD = 64000; // Only trim pathological backlog
 
     this._isBuffering = true;
     this._stallCount = 0;
