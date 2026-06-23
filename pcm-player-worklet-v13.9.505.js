@@ -273,8 +273,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrac = frac;
         this._totalRead += consumed;
         this._fade = fade;
-        this._framesProcessed += framesInBlock;
-
         // Adaptive Buffer Scale Down on Stability
         this._stableCallbackCount++;
         if (this._stableCallbackCount > 5000) {
@@ -292,16 +290,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         }
       }
 
+      this._framesProcessed += framesInBlock;
+
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
         const realElapsed = Math.max(0.1, (Date.now() - this._realStartTime) / 1000);
         const lockWindow = Math.max(6000, this._TARGET_BUFFER >> 2);
+        // [v13.9.506] Avoid division noise/spikes immediately after startup or recovery from a stall.
+        // Only report measuredHz after at least 5.0 seconds of continuous playback.
+        const hzReported = realElapsed >= 5.0 ? Math.round(this._framesProcessed / realElapsed) : 0;
         this.port.postMessage({
           type: "DIAG",
           available: available,
           stalled: this._stallCount,
           rate: playbackRate,
-          measuredHz: Math.round(this._framesProcessed / realElapsed), // [v13.9.507] Wall-clock tracking
+          measuredHz: hzReported,
           peak: this._currentPeak,
           locked: !renderSilence && Math.abs(available - this._TARGET_BUFFER) <= lockWindow
         });
