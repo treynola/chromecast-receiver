@@ -243,14 +243,13 @@
             class="audio-unlocker"
           ></audio>
           <!-- Dedicated Cast SDK Media Element to prevent Shadow DOM nesting and enable early AudioContext routing -->
-          <video
+          <audio
             id="cast-media-element"
             class="castMediaElement"
             crossorigin="anonymous"
             playsinline
             autoplay
-            style="position: absolute; width: 1px; height: 1px; opacity: 0.01; left: -100px; pointer-events: none;"
-          ></video>
+          ></audio>
           <div
             id="tv-console"
             class="tv-console"
