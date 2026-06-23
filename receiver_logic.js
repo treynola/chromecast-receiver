@@ -221,23 +221,12 @@
               const audioUnlocker = document.getElementById("audio-unlocker");
               relayLogToStudio("🛠️ TV: audioUnlocker found: " + !!audioUnlocker);
               if (audioUnlocker) {
-                try {
-                  const mediaSource = audioCtx.createMediaElementSource(audioUnlocker);
-                  window._mediaSourceNode = mediaSource;
-                  mediaSource.connect(masterGain);
-                  relayLogToStudio("✅ TV: MediaElementSource connected to AudioContext early.");
-                } catch (e) {
-                  relayLogToStudio("⚠️ TV: MediaElementSource failed: " + e.message);
-                }
-                
                 if (!audioUnlocker._hasUnlockListeners) {
                   audioUnlocker._hasUnlockListeners = true;
                   audioUnlocker.addEventListener("play", function() {
-                    // relayLogToStudio("🎵 TV: audio-unlocker 'play' event detected.");
                     resumeAudio();
                   });
                   audioUnlocker.addEventListener("playing", function() {
-                    // relayLogToStudio("🎵 TV: audio-unlocker 'playing' event detected.");
                     resumeAudio();
                   });
                 }
@@ -259,14 +248,11 @@
 
               const castMedia = document.getElementById("cast-media-element");
               if (castMedia) {
-                try {
-                  const castSource = audioCtx.createMediaElementSource(castMedia);
-                  castSource.connect(masterGain);
-                  castMedia._connectedToAudioCtx = true;
-                  relayLogToStudio("✅ TV: Dedicated Cast SDK Media Element connected to AudioContext early.");
-                } catch (e) {
-                  relayLogToStudio("⚠️ TV: Dedicated Cast Media Element connection failed: " + e.message);
-                }
+                // [v13.9.506] Dedicated Cast SDK Media Element acts as background wake-lock.
+                // We do not connect it to the AudioContext via MediaElementAudioSourceNode to avoid
+                // CPU intensive resampling and audio thread synchronization stalls on low-end TV CPUs.
+                castMedia._connectedToAudioCtx = true;
+                relayLogToStudio("✅ TV: Dedicated Cast SDK Media Element verified (operating offline).");
               }
               
               resumeAudio();
@@ -488,54 +474,11 @@
         }
 
         function connectCastMediaElement() {
-          if (!audioCtx || !masterGain) return;
-          try {
-            // Check for statically declared Cast media element first
-            let castMediaElement = document.getElementById("cast-media-element");
-            
-            // Fallback: check Cast SDK PlayerManager
-            if (!castMediaElement && typeof cast !== "undefined" && cast.framework) {
-              try {
-                const context = cast.framework.CastReceiverContext.getInstance();
-                if (context) {
-                  const pm = context.getPlayerManager();
-                  if (pm && typeof pm.getMediaElement === "function") {
-                    castMediaElement = pm.getMediaElement();
-                  }
-                }
-              } catch (sdkErr) {
-                // Non-fatal fallback
-              }
-            }
-            
-            // Fallback: use recursive shadow root traverser
-            if (!castMediaElement) {
-              castMediaElement = findMediaElement(document);
-            }
-
-            if (castMediaElement && !castMediaElement._connectedToAudioCtx) {
-              relayLogToStudio("🛠️ TV: Found Cast media element: " + castMediaElement.tagName + " (id=" + castMediaElement.id + ", class=" + castMediaElement.className + ")");
-              
-              // Set crossOrigin to anonymous to avoid CORS SecurityError on Tauri local stream
-              if (castMediaElement.crossOrigin !== "anonymous") {
-                castMediaElement.crossOrigin = "anonymous";
-                relayLogToStudio("🔧 TV: Set crossOrigin='anonymous' on Cast media element.");
-              }
-
-              // Create MediaElementSource and connect
-              const mediaSource = audioCtx.createMediaElementSource(castMediaElement);
-              mediaSource.connect(masterGain);
-              castMediaElement._connectedToAudioCtx = true;
-              relayLogToStudio("✅ TV: Cast SDK Media Element connected to AudioContext successfully.");
-            }
-          } catch (e) {
-            relayLogToStudio("⚠️ TV: connectCastMediaElement error: " + e.message);
-          }
+          // No-op: MediaElementAudioSourceNode connection is bypassed to optimize CPU
         }
 
         async function resumeAudio() {
           if (audioCtx) {
-            connectCastMediaElement();
             const prevState = audioCtx.state;
             try {
               relayLogToStudio("🔊 TV: resumeAudio() calling audioCtx.resume(). State: " + prevState);
