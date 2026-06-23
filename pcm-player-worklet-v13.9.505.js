@@ -16,7 +16,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalRead = 0;
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
-    this._baseRate = options.processorOptions?.baseRateRatio || 1.0;
+    this._baseRate = 1.0;
 
     // Jitter-Adaptive buffer parameters for ultra-low latency playout
     this._TARGET_BUFFER = 7680;      // Start at 80ms target (3840 frames)

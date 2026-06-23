@@ -201,7 +201,10 @@
             }
             try {
               relayLogToStudio("🛠️ TV: Creating new AudioContext...");
-              audioCtx = new window.AudioContext({ latencyHint: "interactive" });
+              audioCtx = new window.AudioContext({ 
+                sampleRate: 32000,
+                latencyHint: "interactive" 
+              });
               relayLogToStudio("🛠️ TV: AudioContext created. State: " + audioCtx.state);
 
               masterGain = audioCtx.createGain();
@@ -1290,9 +1293,7 @@
                         `🔄 TV: Studio rate updated to ${newStudioRate}Hz`,
                       );
                       if (workletNode && audioCtx) {
-                        const newBaseRateRatio = audioCtx.sampleRate
-                          ? newStudioRate / audioCtx.sampleRate
-                          : 1.0;
+                        const newBaseRateRatio = 1.0;
                         workletNode.port.postMessage({
                           type: "CONFIG",
                           baseRateRatio: newBaseRateRatio,
@@ -1449,9 +1450,7 @@
                     `🔄 TV: Studio rate updated via signaling to ${newRate}Hz`,
                   );
                   if (workletNode && audioCtx) {
-                    const newBaseRateRatio = audioCtx.sampleRate
-                      ? newRate / audioCtx.sampleRate
-                      : 1.0;
+                    const newBaseRateRatio = 1.0;
                     workletNode.port.postMessage({
                       type: "CONFIG",
                       baseRateRatio: newBaseRateRatio,
