@@ -184,13 +184,14 @@
         }
 
         function preInitAudioContext() {
-          const HARDWARE_RATE = window._hwRate || 48000;
+          const isCastSupported = typeof cast !== "undefined" && cast.framework;
+          const requestedRate = isCastSupported ? 32000 : (window._hwRate || 48000);
           relayLogToStudio("🛠️ TV: preInitAudioContext called. audioCtx=" + !!audioCtx);
-          if (!audioCtx || window._lastHwRate !== HARDWARE_RATE) {
-            window._lastHwRate = HARDWARE_RATE;
+          if (!audioCtx || window._lastHwRate !== requestedRate) {
+            window._lastHwRate = requestedRate;
             if (audioCtx) {
               relayLogToStudio(
-                `📡 TV: Reseting AudioContext for Hardware Rate: ${HARDWARE_RATE}Hz`,
+                `📡 TV: Reseting AudioContext for Requested Rate: ${requestedRate}Hz`,
               );
               try {
                 audioCtx.close();
@@ -201,9 +202,6 @@
             }
             try {
               relayLogToStudio("🛠️ TV: Creating new AudioContext...");
-              const requestedRate = Number.isFinite(HARDWARE_RATE) && HARDWARE_RATE > 0
-                ? HARDWARE_RATE
-                : 48000;
               audioCtx = new window.AudioContext({
                 sampleRate: requestedRate,
                 latencyHint: "interactive",
@@ -214,7 +212,7 @@
                 );
               }
               window._hwRate = audioCtx.sampleRate || requestedRate;
-              window._lastHwRate = window._hwRate;
+              window._lastHwRate = requestedRate;
               relayLogToStudio("🛠️ TV: AudioContext created. State: " + audioCtx.state);
 
               masterGain = audioCtx.createGain();
@@ -223,9 +221,11 @@
               relayLogToStudio("🛠️ TV: masterGain connected.");
 
               const keepAlive = audioCtx.createOscillator();
-              keepAlive.frequency.value = 20000;
+              // Keep-alive tone must stay below Nyquist for the active context.
+              // 20kHz aliases on 32kHz Cast runtimes and can leak into playback.
+              keepAlive.frequency.value = Math.min(12000, Math.floor((audioCtx.sampleRate || 32000) * 0.25));
               const g = audioCtx.createGain();
-              g.gain.value = 0.002;
+              g.gain.value = 0.00001;
               keepAlive.connect(g);
               g.connect(audioCtx.destination);
               keepAlive.start();
@@ -234,15 +234,6 @@
               const audioUnlocker = document.getElementById("audio-unlocker");
               relayLogToStudio("🛠️ TV: audioUnlocker found: " + !!audioUnlocker);
               if (audioUnlocker) {
-                try {
-                  const mediaSource = audioCtx.createMediaElementSource(audioUnlocker);
-                  window._mediaSourceNode = mediaSource;
-                  mediaSource.connect(masterGain);
-                  relayLogToStudio("✅ TV: MediaElementSource connected to AudioContext early.");
-                } catch (e) {
-                  relayLogToStudio("⚠️ TV: MediaElementSource failed: " + e.message);
-                }
-                
                 if (!audioUnlocker._hasUnlockListeners) {
                   audioUnlocker._hasUnlockListeners = true;
                   audioUnlocker.addEventListener("play", function() {
@@ -268,18 +259,6 @@
                 }
               }
 
-              const castMedia = document.getElementById("cast-media-element");
-              if (castMedia) {
-                try {
-                  const castSource = audioCtx.createMediaElementSource(castMedia);
-                  castSource.connect(masterGain);
-                  castMedia._connectedToAudioCtx = true;
-                  relayLogToStudio("✅ TV: Dedicated Cast SDK Media Element connected to AudioContext early.");
-                } catch (e) {
-                  relayLogToStudio("⚠️ TV: Dedicated Cast Media Element connection failed: " + e.message);
-                }
-              }
-              
               resumeAudio();
             } catch (e) {
               relayLogToStudio(`❌ TV ERROR: preInitAudioContext failed - ${e.message}`);
@@ -348,10 +327,11 @@
             // the receiver worklet should operate at unity rate (1.0).
             const studioRate = window._studioRate || 48000;
             const actualRate = audioCtx.sampleRate;
+            const requestedRate = window._lastHwRate || window._hwRate || 48000;
             const baseRateRatio = 1.0; // Backend Resampled Alignment
 
             console.log(
-              `📏 TV Clock: requested=${window._hwRate || 48000}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
+              `📏 TV Clock: requested=${requestedRate}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
             );
             relayLogToStudio(
               `📏 TV Clock: ${actualRate}Hz | Studio: ${studioRate}Hz | Sync: APORv2 Unity`,
@@ -499,7 +479,6 @@
         }
 
         function connectCastMediaElement() {
-          if (!audioCtx || !masterGain) return;
           try {
             // Check for statically declared Cast media element first
             let castMediaElement = document.getElementById("cast-media-element");
@@ -524,20 +503,17 @@
               castMediaElement = findMediaElement(document);
             }
 
-            if (castMediaElement && !castMediaElement._connectedToAudioCtx) {
-              relayLogToStudio("🛠️ TV: Found Cast media element: " + castMediaElement.tagName + " (id=" + castMediaElement.id + ", class=" + castMediaElement.className + ")");
-              
-              // Set crossOrigin to anonymous to avoid CORS SecurityError on Tauri local stream
+            if (castMediaElement) {
+              // Keep the wake-lock element out of the Web Audio graph.
+              // Connecting media elements to the graph forced Chromium to sync
+              // decoding and audio rendering, which throttled the worklet thread.
+              if (!castMediaElement._wakeLockLogged) {
+                castMediaElement._wakeLockLogged = true;
+                relayLogToStudio("🛠️ TV: Cast media element present; keeping wake-lock playback offline.");
+              }
               if (castMediaElement.crossOrigin !== "anonymous") {
                 castMediaElement.crossOrigin = "anonymous";
-                relayLogToStudio("🔧 TV: Set crossOrigin='anonymous' on Cast media element.");
               }
-
-              // Create MediaElementSource and connect
-              const mediaSource = audioCtx.createMediaElementSource(castMediaElement);
-              mediaSource.connect(masterGain);
-              castMediaElement._connectedToAudioCtx = true;
-              relayLogToStudio("✅ TV: Cast SDK Media Element connected to AudioContext successfully.");
             }
           } catch (e) {
             relayLogToStudio("⚠️ TV: connectCastMediaElement error: " + e.message);
