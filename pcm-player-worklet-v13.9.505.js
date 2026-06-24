@@ -143,30 +143,41 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (available > ringLen) {
         const skip = available - this._TARGET_BUFFER;
         this._totalRead += skip;
-        this._readFrameIdx = ((this._writePtr >> 1) - (this._TARGET_BUFFER >> 1) + ringLenFrames) % ringLenFrames;
+        frameIdx = ((this._writePtr >> 1) - (this._TARGET_BUFFER >> 1) + ringLenFrames) % ringLenFrames;
+        frac = 0;
+        this._readFrameIdx = frameIdx;
+        this._readFrac = frac;
+        this._smoothedRate = this._baseRate;
+        this._stableCallbackCount = 0;
         available = this._TARGET_BUFFER;
       }
 
       // 2. AGGRESSIVE FLUSH
       if (available > this._FLUSH_THRESHOLD) {
         const excess = available - this._TARGET_BUFFER;
+        const excessFrames = Math.max(0, Math.floor(excess / 2));
         this._totalRead += excess;
-        this._readFrameIdx = (this._readFrameIdx + (excess >> 1)) % ringLenFrames;
+        frameIdx = (frameIdx + excessFrames) % ringLenFrames;
+        frac = 0;
+        this._readFrameIdx = frameIdx;
+        this._readFrac = frac;
         available = this._TARGET_BUFFER;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
+        this._smoothedRate = this._baseRate;
+        this._stableCallbackCount = 0;
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
       // Soft drift correction: speed adjustments proportional to buffer error.
       const bufferError = available - this._TARGET_BUFFER;
       let correction = 0;
-      if (Math.abs(bufferError) > 960) { // 10ms dead-zone to prevent constant rate updates
-        // Proportional speed correction: max 1.5% speed adjustment for faster convergence
+      if (Math.abs(bufferError) > 1440) { // 15ms dead-zone to prevent constant rate updates
+        // Keep the correction gentle so buffer recovery does not sound like pitch modulation.
         const errorRatio = bufferError / this._TARGET_BUFFER;
-        correction = Math.max(-0.015, Math.min(0.015, errorRatio * 0.05));
+        correction = Math.max(-0.005, Math.min(0.005, errorRatio * 0.01));
       }
-      // Smooth the playback rate transitions (0.995 / 0.005) for glitch-free pitching (~500ms time constant)
-      this._smoothedRate = (this._smoothedRate * 0.995) + ((this._baseRate + correction) * 0.005);
+      // Smooth the playback rate transitions gently so short buffer corrections stay inaudible.
+      this._smoothedRate = (this._smoothedRate * 0.998) + ((this._baseRate + correction) * 0.002);
 
       // Snap to exactly 1.0 if very close to minimize floating point interpolation CPU overhead
       if (Math.abs(this._smoothedRate - 1.0) < 0.0005) {
@@ -193,6 +204,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._isBuffering = true;
         this._fade = 0;
         this._stallCount++;
+        this._smoothedRate = this._baseRate;
 
         // Adaptive Buffer Scale Up: Increase target buffer by 20ms (1920 samples), max 250ms (24000 samples)
         this._TARGET_BUFFER = Math.min(24000, this._TARGET_BUFFER + 1920);
