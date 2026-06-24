@@ -1,7 +1,7 @@
 /* global AudioWorkletProcessor, registerProcessor, currentTime, sampleRate */
 /**
  * pcm-player-worklet.js
- * [v13.9.504] CONCRETE SYNC - High-Stability PCM Playout
+ * [v13.9.505] CONCRETE SYNC - High-Stability PCM Playout
  */
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
@@ -16,7 +16,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalRead = 0;
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
-    this._baseRate = 1.0;
 
     // Fixed jitter-buffer parameters for stable low-latency playout
     // Use a deeper fixed buffer so Cast / LAN jitter does not constantly trigger
@@ -35,7 +34,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._framesProcessed = 0;
     this._callbackCount = 0;
     this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
-    this._smoothedRate = this._baseRate;
 
     this.port.onmessage = (e) => {
       try {
@@ -66,13 +64,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._MIN_BUFFER = 8192;
           this._PREBUFFER = 12288;
           this._FLUSH_THRESHOLD = 65536;
-          this._smoothedRate = this._baseRate;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
         if (e.data && e.data.type === "CONFIG") {
           if (e.data.bitDepth) this._bitDepth = e.data.bitDepth;
-          if (e.data.baseRateRatio) this._baseRate = e.data.baseRateRatio;
           return;
         }
 
@@ -146,7 +142,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         frac = 0;
         this._readFrameIdx = frameIdx;
         this._readFrac = frac;
-        this._smoothedRate = this._baseRate;
         available = this._TARGET_BUFFER;
       }
 
@@ -161,26 +156,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrac = frac;
         available = this._TARGET_BUFFER;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
-        this._smoothedRate = this._baseRate;
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
-      // Soft drift correction: speed adjustments proportional to buffer error.
-      const bufferError = available - this._TARGET_BUFFER;
-      let correction = 0;
-      if (Math.abs(bufferError) > 1440) { // 15ms dead-zone to prevent constant rate updates
-        // Keep the correction gentle so buffer recovery does not sound like pitch modulation.
-        const errorRatio = bufferError / this._TARGET_BUFFER;
-        correction = Math.max(-0.005, Math.min(0.005, errorRatio * 0.01));
-      }
-      // Smooth the playback rate transitions gently so short buffer corrections stay inaudible.
-      this._smoothedRate = (this._smoothedRate * 0.998) + ((this._baseRate + correction) * 0.002);
-
-      // Snap to exactly 1.0 if very close to minimize floating point interpolation CPU overhead
-      if (Math.abs(this._smoothedRate - 1.0) < 0.0005) {
-        this._smoothedRate = 1.0;
-      }
-      const playbackRate = Math.max(0.95, Math.min(1.05, this._smoothedRate));
+      // Keep playout locked to unity. Recovery is handled by buffer thresholds
+      // only; live rate nudging caused audible pitch wobble on cast receivers.
+      const playbackRate = 1.0;
 
       let renderSilence = false;
 
@@ -200,7 +181,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._isBuffering = true;
         this._fade = 0;
         this._stallCount++;
-        this._smoothedRate = this._baseRate;
 
         this.port.postMessage({
           type: "LOG",
@@ -216,7 +196,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       } else {
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
-        const INV_8388608 = 1.1920928955078125e-7;
 
         if (playbackRate === 1.0 && frac === 0) {
           // Optimized fast-path: direct samples lookup
