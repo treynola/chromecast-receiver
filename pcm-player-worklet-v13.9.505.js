@@ -18,11 +18,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._baseRate = 1.0;
 
-    // Jitter-Adaptive buffer parameters for ultra-low latency playout
-    this._TARGET_BUFFER = 7680;      // Start at 80ms target (3840 frames)
-    this._MIN_BUFFER = 1920;        // ~20ms stall threshold (960 frames)
-    this._PREBUFFER = 3840;         // ~40ms pre-fill cushion (1920 frames)
-    this._FLUSH_THRESHOLD = 19200;  // Trim severe backlog (>200ms) instantly
+    // Fixed jitter-buffer parameters for stable low-latency playout
+    // Use a deeper fixed buffer so Cast / LAN jitter does not constantly trigger
+    // catch-up flushes. The stream is already packetized in 2048-frame chunks.
+    this._TARGET_BUFFER = 20480;    // ~213ms of interleaved samples (5 packets)
+    this._MIN_BUFFER = 8192;        // ~85ms stall threshold
+    this._PREBUFFER = 12288;        // ~128ms pre-fill cushion
+    this._FLUSH_THRESHOLD = 65536;  // Trim only when backlog becomes severe
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -33,8 +35,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._framesProcessed = 0;
     this._callbackCount = 0;
     this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
-    this._realStartTime = 0; // [v13.9.507] Wall-clock timer using real-world milliseconds
-    this._stableCallbackCount = 0;
     this._smoothedRate = this._baseRate;
 
     this.port.onmessage = (e) => {
@@ -62,12 +62,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
-          this._realStartTime = 0;
-          this._stableCallbackCount = 0;
-          this._TARGET_BUFFER = 7680;
-          this._MIN_BUFFER = 1920;
-          this._PREBUFFER = 3840;
-          this._FLUSH_THRESHOLD = 19200;
+          this._TARGET_BUFFER = 20480;
+          this._MIN_BUFFER = 8192;
+          this._PREBUFFER = 12288;
+          this._FLUSH_THRESHOLD = 65536;
           this._smoothedRate = this._baseRate;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
@@ -132,7 +130,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       if (this._startTime === 0) {
         this._startTime = now;
-        this._realStartTime = Date.now();
       }
       this._callbackCount++;
 
@@ -150,11 +147,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrameIdx = frameIdx;
         this._readFrac = frac;
         this._smoothedRate = this._baseRate;
-        this._stableCallbackCount = 0;
         available = this._TARGET_BUFFER;
       }
 
-      // 2. AGGRESSIVE FLUSH
+      // 2. SEVERE BACKLOG FLUSH
       if (available > this._FLUSH_THRESHOLD) {
         const excess = available - this._TARGET_BUFFER;
         const excessFrames = Math.max(0, Math.floor(excess / 2));
@@ -166,7 +162,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         available = this._TARGET_BUFFER;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
         this._smoothedRate = this._baseRate;
-        this._stableCallbackCount = 0;
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
@@ -194,7 +189,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
           this._startTime = now;
-          this._realStartTime = Date.now();
           this._framesProcessed = 0;
         } else {
           renderSilence = true;
@@ -208,15 +202,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._stallCount++;
         this._smoothedRate = this._baseRate;
 
-        // Adaptive Buffer Scale Up: Increase target buffer by 20ms (1920 samples), max 250ms (24000 samples)
-        this._TARGET_BUFFER = Math.min(24000, this._TARGET_BUFFER + 1920);
-        this._MIN_BUFFER = Math.max(1920, this._TARGET_BUFFER >> 2); // 25% of target
-        this._PREBUFFER = Math.max(2880, this._TARGET_BUFFER >> 1); // 50% of target
-        this._FLUSH_THRESHOLD = Math.min(76800, this._TARGET_BUFFER * 2.5); // 2.5x target
-
         this.port.postMessage({
           type: "LOG",
-          msg: `⚠️ TV Stall detected! Scaling target buffer to ${Math.round(this._TARGET_BUFFER / 96)}ms.`
+          msg: `⚠️ TV Stall detected! Rebuffering at ${Math.round((this._TARGET_BUFFER / 2) / this._studioRate * 1000)}ms target.`
         });
 
         renderSilence = true;
@@ -225,7 +213,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (renderSilence) {
         channel0.fill(0);
         channel1.fill(0);
-        this._stableCallbackCount = 0;
       } else {
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
@@ -285,32 +272,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrac = frac;
         this._totalRead += consumed;
         this._fade = fade;
-        // Adaptive Buffer Scale Down on Stability
-        this._stableCallbackCount++;
-        if (this._stableCallbackCount > 5000) {
-          this._stableCallbackCount = 0;
-          if (this._TARGET_BUFFER > 4800) { // minimum 50ms (4800 samples)
-            this._TARGET_BUFFER = Math.max(4800, this._TARGET_BUFFER - 960); // decay by 10ms (960 samples)
-            this._MIN_BUFFER = Math.max(1920, this._TARGET_BUFFER >> 2);
-            this._PREBUFFER = Math.max(2880, this._TARGET_BUFFER >> 1);
-            this._FLUSH_THRESHOLD = Math.min(76800, this._TARGET_BUFFER * 2.5);
-            this.port.postMessage({
-              type: "LOG",
-              msg: `📉 TV Buffer stable. Decaying target buffer to ${Math.round(this._TARGET_BUFFER / 96)}ms.`
-            });
-          }
-        }
+        // Keep the receiver target fixed. The previous adaptive shrink/expand loop
+        // created audible oscillation on Chromecast-class receivers.
       }
 
       this._framesProcessed += framesInBlock;
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
-        const realElapsed = Math.max(0.1, (Date.now() - this._realStartTime) / 1000);
         const lockWindow = Math.max(6000, this._TARGET_BUFFER >> 2);
-        // [v13.9.506] Avoid division noise/spikes immediately after startup or recovery from a stall.
-        // Only report measuredHz after at least 5.0 seconds of continuous playback.
-        const hzReported = realElapsed >= 5.0 ? Math.round(this._framesProcessed / realElapsed) : 0;
+        // Report against the audio clock, not wall clock, so telemetry matches
+        // the receiver's actual playout cadence.
+        const hzReported = elapsed >= 5.0 ? Math.round(this._framesProcessed / elapsed) : 0;
         this.port.postMessage({
           type: "DIAG",
           available: available,
