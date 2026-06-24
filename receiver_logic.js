@@ -1100,7 +1100,9 @@
             
             function sendHandshake() {
               if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
-              const rate = window._hwRate || hwRate || 48000;
+              // Use the live AudioContext rate, not the probe rate, so the
+              // backend resamples to the actual Cast playout clock.
+              const rate = (audioCtx && audioCtx.sampleRate) || window._hwRate || hwRate || 48000;
               const handshake = {
                 type: "HANDSHAKE",
                 config: {
