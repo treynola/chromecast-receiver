@@ -136,6 +136,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
       this._callbackCount++;
 
+      let frameIdx = this._readFrameIdx;
+      let frac = this._readFrac;
       let available = Math.round(this._totalWritten - this._totalRead);
       let consumed = 0;
 
@@ -225,8 +227,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         channel1.fill(0);
         this._stableCallbackCount = 0;
       } else {
-        let frameIdx = this._readFrameIdx;
-        let frac = this._readFrac;
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
         const INV_8388608 = 1.1920928955078125e-7;
