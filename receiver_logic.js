@@ -201,10 +201,20 @@
             }
             try {
               relayLogToStudio("🛠️ TV: Creating new AudioContext...");
-              audioCtx = new window.AudioContext({ 
-                sampleRate: 32000,
-                latencyHint: "interactive" 
+              const requestedRate = Number.isFinite(HARDWARE_RATE) && HARDWARE_RATE > 0
+                ? HARDWARE_RATE
+                : 48000;
+              audioCtx = new window.AudioContext({
+                sampleRate: requestedRate,
+                latencyHint: "interactive",
               });
+              if (audioCtx.sampleRate && audioCtx.sampleRate !== requestedRate) {
+                relayLogToStudio(
+                  `⚠️ TV: AudioContext resolved ${audioCtx.sampleRate}Hz instead of requested ${requestedRate}Hz.`,
+                );
+              }
+              window._hwRate = audioCtx.sampleRate || requestedRate;
+              window._lastHwRate = window._hwRate;
               relayLogToStudio("🛠️ TV: AudioContext created. State: " + audioCtx.state);
 
               masterGain = audioCtx.createGain();
