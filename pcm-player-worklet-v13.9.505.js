@@ -23,7 +23,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 20480;    // ~213ms of interleaved samples (5 packets)
     this._MIN_BUFFER = 8192;        // ~85ms stall threshold
     this._PREBUFFER = 12288;        // ~128ms pre-fill cushion
-    this._FLUSH_THRESHOLD = 65536;  // Trim only when backlog becomes severe
+    this._FLUSH_THRESHOLD = 38400;  // Trim earlier to avoid long-lag sawtooth recovery
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -63,7 +63,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 20480;
           this._MIN_BUFFER = 8192;
           this._PREBUFFER = 12288;
-          this._FLUSH_THRESHOLD = 65536;
+          this._FLUSH_THRESHOLD = 38400;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -113,6 +113,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     };
   }
 
+  _reanchorReadCursor(targetSamples = this._TARGET_BUFFER) {
+    const ringLenFrames = this._ringLen >> 1;
+    const target = Math.max(0, Math.min(targetSamples & ~1, this._ringLen));
+    const targetFrames = target >> 1;
+    this._totalRead = Math.max(0, this._totalWritten - target);
+    this._readFrameIdx = ((this._writePtr >> 1) - targetFrames + ringLenFrames) % ringLenFrames;
+    this._readFrac = 0;
+    return target;
+  }
+
   process(inputs, outputs) {
     try {
       const output = outputs[0];
@@ -136,25 +146,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       // 1. HARD OVERRUN PROTECTION
       if (available > ringLen) {
-        const skip = available - this._TARGET_BUFFER;
-        this._totalRead += skip;
-        frameIdx = ((this._writePtr >> 1) - (this._TARGET_BUFFER >> 1) + ringLenFrames) % ringLenFrames;
-        frac = 0;
-        this._readFrameIdx = frameIdx;
-        this._readFrac = frac;
-        available = this._TARGET_BUFFER;
+        available = this._reanchorReadCursor(this._TARGET_BUFFER);
+        frameIdx = this._readFrameIdx;
+        frac = this._readFrac;
       }
 
       // 2. SEVERE BACKLOG FLUSH
       if (available > this._FLUSH_THRESHOLD) {
         const excess = available - this._TARGET_BUFFER;
-        const excessFrames = Math.max(0, Math.floor(excess / 2));
-        this._totalRead += excess;
-        frameIdx = (frameIdx + excessFrames) % ringLenFrames;
-        frac = 0;
-        this._readFrameIdx = frameIdx;
-        this._readFrac = frac;
-        available = this._TARGET_BUFFER;
+        available = this._reanchorReadCursor(this._TARGET_BUFFER);
+        frameIdx = this._readFrameIdx;
+        frac = this._readFrac;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
@@ -171,6 +173,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = false;
           this._startTime = now;
           this._framesProcessed = 0;
+          if (available > this._TARGET_BUFFER) {
+            const excess = available - this._TARGET_BUFFER;
+            available = this._reanchorReadCursor(this._TARGET_BUFFER);
+            frameIdx = this._readFrameIdx;
+            frac = this._readFrac;
+            this._fade = 0;
+            this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
+          }
         } else {
           renderSilence = true;
         }
