@@ -450,6 +450,12 @@
           if (!ENABLE_NATIVE_STREAM_PLAYOUT || window._receiverShutdownInProgress) {
             return false;
           }
+          // [v13.9.506] SINGLE PATH: Don't start native stream if worklet is already
+          // handling playout — dual paths cause wobble from competing clock recovery.
+          if (workletNode && workletReady) {
+            relayLogToStudio("📡 Receiver: Native stream skipped; AudioWorklet already active.");
+            return false;
+          }
           if (!ip) {
             relayLogToStudio("⚠️ Receiver: Native stream skipped; bridge IP unavailable.");
             return false;
@@ -758,10 +764,11 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
+          // [v13.9.506] SINGLE PATH: If native stream is active, tear it down
+          // in favor of the worklet path which gives us buffer control and diagnostics.
           if (nativeStreamActive || nativeStreamStarting) {
-            document.body.classList.remove("app-loading");
-            relayLogToStudio("📡 Receiver: AudioWorklet init skipped; native /stream.wav playout owns audio.");
-            return;
+            relayLogToStudio("📡 Receiver: Tearing down native stream; AudioWorklet takes priority.");
+            stopNativeStreamPlayout("worklet-priority");
           }
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
@@ -1483,6 +1490,8 @@
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             // [v13.9.504] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
+            // [v13.9.506] Reset stale bypass flag so fresh sessions don't carry old state
+            window._nativeStreamBypassLogged = false;
             clearBinaryReconnectTimer();
             // Flush buffered logs
             while (logQueue.length > 0) {
@@ -1588,14 +1597,11 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              if (nativeStreamActive || nativeStreamStarting) {
-                window._lastBinaryTime = Date.now();
-                window._binaryActive = true;
-                if (!window._nativeStreamBypassLogged) {
-                  window._nativeStreamBypassLogged = true;
-                  relayLogToStudio("📡 Receiver: Native stream active; bypassing AudioWorklet binary enqueue.");
-                }
-                return;
+              // [v13.9.506] SINGLE PATH: Always feed binary data to worklet when available.
+              // If a native stream is still lingering, tear it down now — the worklet
+              // path provides superior buffering and clock control.
+              if ((nativeStreamActive || nativeStreamStarting) && workletNode && workletReady) {
+                stopNativeStreamPlayout("worklet-binary-active");
               }
               if (workletNode) {
                 // [v13.9.504] BINARY SUPERIORITY LOCK
@@ -1620,14 +1626,9 @@
               }
               return;
             } else if (isBlob) {
-              if (nativeStreamActive || nativeStreamStarting) {
-                window._lastBinaryTime = Date.now();
-                window._binaryActive = true;
-                if (!window._nativeStreamBypassLogged) {
-                  window._nativeStreamBypassLogged = true;
-                  relayLogToStudio("📡 Receiver: Native stream active; bypassing Blob AudioWorklet enqueue.");
-                }
-                return;
+              // [v13.9.506] SINGLE PATH: Tear down native stream if worklet is ready.
+              if ((nativeStreamActive || nativeStreamStarting) && workletNode && workletReady) {
+                stopNativeStreamPlayout("worklet-blob-active");
               }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
               window._lastBinaryTime = Date.now();
