@@ -19,6 +19,7 @@
         var workletNode = null;
         var peerConnection = null;
         window._useWebRTC = false; // [v13.9.504] APOR V2 Primary (LOCK)
+        window._receiverShutdownInProgress = false;
         var configReceived = false;
         var targetRate = 48000;
         window._studioRate = 48000;
@@ -69,7 +70,87 @@
           return URL.createObjectURL(blob);
         }
 
+        function shutdownReceiver(reason) {
+          if (window._receiverShutdownInProgress) {
+            return;
+          }
+          window._receiverShutdownInProgress = true;
+          suppressBinaryReconnect = true;
+          clearBinaryReconnectTimer();
+          window._wsReconnectAttempts = 0;
+          window._handshakeAcked = false;
+          window._sendHandshake = null;
+          window._binaryActive = false;
+          window._isDrainingStartup = false;
+          configReceived = false;
+          wakeLockLoadingOrLoaded = false;
+          pendingBinaryFrames = [];
+          workletReady = false;
+          window._lastBinaryTime = 0;
+          window._lastWorkletDiagTime = 0;
+          if (autoDiscoveryFallbackTimeoutId) {
+            clearTimeout(autoDiscoveryFallbackTimeoutId);
+            autoDiscoveryFallbackTimeoutId = null;
+          }
+          if (autoUnlockIntervalId) {
+            clearInterval(autoUnlockIntervalId);
+            autoUnlockIntervalId = null;
+          }
+          relayLogToStudio(`🛑 Receiver: Shutdown requested${reason ? ` (${reason})` : ""}`);
+          teardownWebRtcFallback();
+          if (workletNode) {
+            try {
+              if (workletNode.port) {
+                workletNode.port.postMessage({ type: "RESET" });
+                workletNode.port.onmessage = null;
+              }
+            } catch (e) {}
+            try {
+              workletNode.disconnect();
+            } catch (e) {}
+            workletNode = null;
+          }
+          if (masterGain) {
+            try {
+              masterGain.disconnect();
+            } catch (e) {}
+            masterGain = null;
+          }
+          if (audioCtx) {
+            try {
+              audioCtx.close();
+            } catch (e) {}
+            audioCtx = null;
+          }
+          if (binaryWS) {
+            try {
+              binaryWS.onopen = null;
+              binaryWS.onmessage = null;
+              binaryWS.onclose = null;
+              binaryWS.onerror = null;
+              binaryWS.close();
+            } catch (e) {}
+            binaryWS = null;
+          }
+          try {
+            if (typeof cast !== "undefined" && cast.framework) {
+              const context = window.castReceiverContext || cast.framework.CastReceiverContext.getInstance();
+              if (context && typeof context.stop === "function") {
+                context.stop();
+              }
+            }
+          } catch (e) {
+            relayLogToStudio(`⚠️ Receiver: Cast receiver stop failed: ${e.message}`);
+          }
+          currentBridgeIp = null;
+          currentBridgePort = null;
+          currentBridgeToken = null;
+        }
+
         function queueBinaryFrame(buffer) {
+          if (window._receiverShutdownInProgress) {
+            return;
+          }
           if (window._isDrainingStartup) {
             return; // Discard stale startup burst packets to prevent backlog build-up
           }
@@ -184,6 +265,7 @@
         }
 
         function preInitAudioContext() {
+          if (window._receiverShutdownInProgress) return;
           const isCastSupported = typeof cast !== "undefined" && cast.framework;
           // Request 48 kHz on Cast so the receiver does not inherit an older mismatched
           // context or force a downsample path when the hardware can run natively at 48 kHz.
@@ -270,6 +352,7 @@
         let lastInitAttempt = 0;
         let audioInitializing = false;
         async function initAudio() {
+          if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
@@ -522,6 +605,7 @@
         }
 
         async function resumeAudio() {
+          if (window._receiverShutdownInProgress) return;
           if (audioCtx) {
             connectCastMediaElement();
             const prevState = audioCtx.state;
@@ -543,6 +627,7 @@
         }
 
         async function playSineTest() {
+          if (window._receiverShutdownInProgress) return;
           if (!audioCtx) {
             await initAudio();
           }
@@ -902,6 +987,9 @@
         }
 
         function scheduleBinaryReconnect(ip, customPort, customToken, delayMs) {
+          if (window._receiverShutdownInProgress) {
+            return;
+          }
           clearBinaryReconnectTimer();
           wsConnectTimeout = setTimeout(() => {
             connectBinaryBridge(ip, customPort, customToken);
@@ -909,6 +997,7 @@
         }
 
         function triggerWakeLockLoad() {
+          if (window._receiverShutdownInProgress) return;
           if (typeof cast === "undefined" || !cast.framework) return;
           const context = cast.framework.CastReceiverContext.getInstance();
           if (!context) return;
@@ -1005,6 +1094,9 @@
 
 
         function connectBinaryBridge(ip, customPort, customToken) {
+          if (window._receiverShutdownInProgress) {
+            return;
+          }
           suppressBinaryReconnect = false;
           clearBinaryReconnectTimer();
           if (
@@ -1052,6 +1144,7 @@
 
           binaryWS.onopen = async () => {
             if (generation !== binaryConnectionGeneration) return;
+            if (window._receiverShutdownInProgress) return;
             console.log("✅ Binary Bridge Connected");
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             // [v13.9.504] Reset reconnect backoff counter on success
@@ -1100,6 +1193,7 @@
             preInitAudioContext();
             
             function sendHandshake() {
+              if (window._receiverShutdownInProgress) return;
               if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
               // Use the live AudioContext rate, not the probe rate, so the
               // backend resamples to the actual Cast playout clock.
@@ -1139,6 +1233,7 @@
           };
           binaryWS.onmessage = (event) => {
             if (generation !== binaryConnectionGeneration) return;
+            if (window._receiverShutdownInProgress) return;
             
             // Debug print for first few messages
             if (!window._msgCount) window._msgCount = 0;
@@ -1205,6 +1300,10 @@
             } else if (typeof event.data === "string") {
               try {
                 const d = JSON.parse(event.data);
+                if (d.type === "RECEIVER_SHUTDOWN") {
+                  shutdownReceiver(d.reason || "signal");
+                  return;
+                }
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
                 } else if (d.type === "PCM_RELAY") {
@@ -1330,6 +1429,11 @@
               conn.style.backgroundColor = "var(--red)";
               conn.classList.remove("bridge-connected-pulse");
             }
+            if (window._receiverShutdownInProgress) {
+              suppressBinaryReconnect = false;
+              clearBinaryReconnectTimer();
+              return;
+            }
             if (suppressBinaryReconnect) {
               suppressBinaryReconnect = false;
               clearBinaryReconnectTimer();
@@ -1356,6 +1460,7 @@
 
           binaryWS.onerror = (e) => {
             if (generation !== binaryConnectionGeneration) return;
+            if (window._receiverShutdownInProgress) return;
             console.error("❌ Binary Bridge Error:", e);
             relayLogToStudio(`❌ Receiver: WebSocket Error on ${url}`);
             const diagEl = document.getElementById("bridge-diag-text");
@@ -1370,6 +1475,7 @@
         }
 
         async function handleWebRTCOffer(sdp) {
+          if (window._receiverShutdownInProgress) return;
           try {
             relayLogToStudio("📡 Receiver WebRTC: Received Offer. Initializing...");
             
@@ -1424,6 +1530,7 @@
         }
 
         function handleInboundData(data) {
+          if (window._receiverShutdownInProgress) return;
           try {
             const d = typeof data === "string" ? JSON.parse(data) : data;
             if (!d) return;
@@ -1461,6 +1568,11 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
+              return;
+            }
+
+            if (d.type === "RECEIVER_SHUTDOWN") {
+              shutdownReceiver(d.reason || "signal");
               return;
             }
 
@@ -1556,6 +1668,7 @@
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_CONNECTED,
                 () => {
+                  if (window._receiverShutdownInProgress) return;
                   console.log("📡 Sender connected.");
                   isSenderConnected = true;
                   preInitAudioContext();
@@ -1567,6 +1680,7 @@
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_DISCONNECTED,
                 () => {
+                  if (window._receiverShutdownInProgress) return;
                   isSenderConnected = false;
                   wakeLockLoadingOrLoaded = false;
                   window._binaryActive = false; 
@@ -1583,6 +1697,7 @@
               );
 
               context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
+                if (window._receiverShutdownInProgress) return;
                 if (event.data) {
                   let msgData = event.data;
                   // Support both raw JSON and nested data object from SDK
@@ -1612,6 +1727,9 @@
 
           // [v13.8.150] Auto-Discovery Fallback
           autoDiscoveryFallbackTimeoutId = setTimeout(() => {
+            if (window._receiverShutdownInProgress) {
+              return;
+            }
             if (
               !binaryWS ||
               (binaryWS.readyState !== WebSocket.OPEN &&
@@ -1683,14 +1801,11 @@
           }, 2000);
 
           window.addEventListener("beforeunload", function() {
-            if (autoDiscoveryFallbackTimeoutId) {
-              clearTimeout(autoDiscoveryFallbackTimeoutId);
-              autoDiscoveryFallbackTimeoutId = null;
-            }
-            if (autoUnlockIntervalId) {
-              clearInterval(autoUnlockIntervalId);
-              autoUnlockIntervalId = null;
-            }
+            shutdownReceiver("beforeunload");
+          });
+
+          window.addEventListener("pagehide", function() {
+            shutdownReceiver("pagehide");
           });
 
           // [v13.9.504] Global interaction listeners to catch Receiver remote keys and clicks for AudioContext unlock
