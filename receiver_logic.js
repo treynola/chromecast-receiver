@@ -26,11 +26,84 @@
         window._hwRate = 48000;
         var autoDiscoveryFallbackTimeoutId = null;
         var autoUnlockIntervalId = null;
+        var noSenderShutdownTimeoutId = null;
         var pendingBinaryFrames = [];
         var workletReady = false;
         const PENDING_BINARY_FRAMES_MAX = 4; // Keep only a tiny live prebuffer; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
+
+        function getCastReceiverContext() {
+          if (typeof cast === "undefined" || !cast.framework) {
+            return null;
+          }
+          if (window.castReceiverContext) {
+            return window.castReceiverContext;
+          }
+          try {
+            window.castReceiverContext = cast.framework.CastReceiverContext.getInstance();
+            return window.castReceiverContext;
+          } catch (e) {
+            console.warn("⚠️ Receiver: Cast context unavailable:", e);
+            return null;
+          }
+        }
+
+        function getCastPlayerManager() {
+          const context = getCastReceiverContext();
+          if (!context || typeof context.getPlayerManager !== "function") {
+            return null;
+          }
+          return context.getPlayerManager();
+        }
+
+        function clearNoSenderShutdownTimer() {
+          if (noSenderShutdownTimeoutId) {
+            clearTimeout(noSenderShutdownTimeoutId);
+            noSenderShutdownTimeoutId = null;
+          }
+        }
+
+        function scheduleNoSenderShutdown(reason) {
+          if (window._receiverShutdownInProgress) {
+            return;
+          }
+          clearNoSenderShutdownTimer();
+          noSenderShutdownTimeoutId = setTimeout(() => {
+            noSenderShutdownTimeoutId = null;
+            if (window._receiverShutdownInProgress) {
+              return;
+            }
+            const context = getCastReceiverContext();
+            const senders = context && typeof context.getSenders === "function" ? context.getSenders() : [];
+            if (!senders || senders.length === 0) {
+              shutdownReceiver(reason);
+            }
+          }, 3000);
+        }
+
+        function parseCastPayload(raw) {
+          if (!raw) {
+            return null;
+          }
+          if (typeof raw === "string") {
+            try {
+              return JSON.parse(raw);
+            } catch (e) {
+              relayLogToStudio("⚠️ Receiver: Ignored malformed Cast message JSON.");
+              return null;
+            }
+          }
+          if (raw && typeof raw.data === "string") {
+            try {
+              return JSON.parse(raw.data);
+            } catch (e) {
+              relayLogToStudio("⚠️ Receiver: Ignored malformed nested Cast message JSON.");
+              return null;
+            }
+          }
+          return raw;
+        }
 
         // [v13.9.504] Dynamically build a valid 2-second silent WAV loop for Receiver OS media wake-lock
         function createSilentWavUrl() {
@@ -96,6 +169,7 @@
             clearInterval(autoUnlockIntervalId);
             autoUnlockIntervalId = null;
           }
+          clearNoSenderShutdownTimer();
           relayLogToStudio(`🛑 Receiver: Shutdown requested${reason ? ` (${reason})` : ""}`);
           teardownWebRtcFallback();
           if (workletNode) {
@@ -133,8 +207,8 @@
             binaryWS = null;
           }
           try {
-            if (typeof cast !== "undefined" && cast.framework) {
-              const context = window.castReceiverContext || cast.framework.CastReceiverContext.getInstance();
+            if (reason !== "beforeunload" && reason !== "pagehide") {
+              const context = getCastReceiverContext();
               if (context && typeof context.stop === "function") {
                 context.stop();
               }
@@ -570,12 +644,9 @@
             // Fallback: check Cast SDK PlayerManager
             if (!castMediaElement && typeof cast !== "undefined" && cast.framework) {
               try {
-                const context = cast.framework.CastReceiverContext.getInstance();
-                if (context) {
-                  const pm = context.getPlayerManager();
-                  if (pm && typeof pm.getMediaElement === "function") {
-                    castMediaElement = pm.getMediaElement();
-                  }
+                const pm = getCastPlayerManager();
+                if (pm && typeof pm.getMediaElement === "function") {
+                  castMediaElement = pm.getMediaElement();
                 }
               } catch (sdkErr) {
                 // Non-fatal fallback
@@ -694,14 +765,16 @@
           // [v13.9.504] FALLBACK: Google Cast SDK Namespace
           if (!sent && typeof cast !== "undefined" && cast.framework) {
             try {
-              const context = cast.framework.CastReceiverContext.getInstance();
-              const senders = context.getSenders();
-              if (senders.length > 0) {
-                context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, {
-                  type: "LOG",
-                  msg: msg,
-                });
-                sent = true;
+              const context = getCastReceiverContext();
+              if (context) {
+                const senders = context.getSenders();
+                if (senders.length > 0) {
+                  context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, {
+                    type: "LOG",
+                    msg: msg,
+                  });
+                  sent = true;
+                }
               }
             } catch (e) {}
           }
@@ -999,7 +1072,7 @@
         function triggerWakeLockLoad() {
           if (window._receiverShutdownInProgress) return;
           if (typeof cast === "undefined" || !cast.framework) return;
-          const context = cast.framework.CastReceiverContext.getInstance();
+          const context = getCastReceiverContext();
           if (!context) return;
 
           // Check if there are active senders
@@ -1015,7 +1088,11 @@
           }
 
           try {
-            const pm = context.getPlayerManager();
+            const pm = getCastPlayerManager();
+            if (!pm) {
+              relayLogToStudio("⚠️ Receiver: PlayerManager unavailable for wake-lock load.");
+              return;
+            }
 
             if (pm && !pm._hasAudioListeners) {
               pm._hasAudioListeners = true;
@@ -1532,7 +1609,7 @@
         function handleInboundData(data) {
           if (window._receiverShutdownInProgress) return;
           try {
-            const d = typeof data === "string" ? JSON.parse(data) : data;
+            const d = parseCastPayload(data);
             if (!d) return;
 
             // 1. Hardware Alignment
@@ -1646,7 +1723,9 @@
               if (window._binaryActive) return;
               renderState(d.state);
             }
-          } catch (e) {}
+          } catch (e) {
+            relayLogToStudio("⚠️ Receiver: Inbound Cast message failed: " + e.message);
+          }
         }
 
         window.onload = function () {
@@ -1658,9 +1737,10 @@
 
           if (typeof cast !== "undefined" && cast.framework) {
             try {
-              window.castReceiverContext =
-                cast.framework.CastReceiverContext.getInstance();
-              const context = window.castReceiverContext;
+              const context = getCastReceiverContext();
+              if (!context) {
+                throw new Error("CastReceiverContext unavailable");
+              }
 
               relayLogToStudio("🎬 Receiver: Startup - URL: " + window.location.href);
 
@@ -1670,6 +1750,7 @@
                 () => {
                   if (window._receiverShutdownInProgress) return;
                   console.log("📡 Sender connected.");
+                  clearNoSenderShutdownTimer();
                   isSenderConnected = true;
                   preInitAudioContext();
                   resumeAudio();
@@ -1693,23 +1774,14 @@
                     binaryWS.close();
                     binaryWS = null;
                   }
+                  scheduleNoSenderShutdown("sender_disconnected");
                 },
               );
 
               context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
                 if (window._receiverShutdownInProgress) return;
                 if (event.data) {
-                  let msgData = event.data;
-                  // Support both raw JSON and nested data object from SDK
-                  if (typeof msgData === "string") {
-                    try {
-                      msgData = JSON.parse(msgData);
-                    } catch (e) {}
-                  } else if (msgData && typeof msgData.data === "string") {
-                    try {
-                      msgData = JSON.parse(msgData.data);
-                    } catch (e) {}
-                  }
+                  const msgData = parseCastPayload(event.data);
                   handleInboundData(msgData);
                 }
               });
