@@ -32,10 +32,15 @@
         const PENDING_BINARY_FRAMES_MAX = 4; // Keep only a tiny live prebuffer; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
+        const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         // Do not run CAF PlayerManager media in parallel with the custom PCM
         // AudioWorklet path. On Chromecast-class devices that extra native
         // media pipeline contends with Web Audio and causes periodic lag flushes.
         const ENABLE_PLAYERMANAGER_WAKE_LOCK = false;
+        var nativeStreamActive = false;
+        var nativeStreamStarting = false;
+        var nativeStreamUrl = "";
+        window._nativeStreamActive = false;
 
         function getCastReceiverContext() {
           if (typeof cast === "undefined" || !cast.framework) {
@@ -147,6 +152,99 @@
           return URL.createObjectURL(blob);
         }
 
+        function stopNativeStreamPlayout(reason) {
+          nativeStreamStarting = false;
+          nativeStreamActive = false;
+          nativeStreamUrl = "";
+          window._nativeStreamActive = false;
+          const nativeAudio = document.getElementById("native-stream-audio");
+          if (!nativeAudio) return;
+          try {
+            nativeAudio.pause();
+            nativeAudio.removeAttribute("src");
+            nativeAudio.load();
+          } catch (e) {}
+          if (reason) {
+            relayLogToStudio("🛑 Receiver: Native stream stopped (" + reason + ").");
+          }
+        }
+
+        function startNativeStreamPlayout(ip, customPort) {
+          if (!ENABLE_NATIVE_STREAM_PLAYOUT || window._receiverShutdownInProgress) {
+            return false;
+          }
+          if (!ip) {
+            relayLogToStudio("⚠️ Receiver: Native stream skipped; bridge IP unavailable.");
+            return false;
+          }
+          const nativeAudio = document.getElementById("native-stream-audio");
+          if (!nativeAudio) {
+            relayLogToStudio("⚠️ Receiver: Native stream element missing; falling back to AudioWorklet.");
+            return false;
+          }
+
+          const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
+          const streamUrl = "http://" + ip + ":" + targetPort + "/stream.wav?cb=" + Date.now();
+          if (nativeStreamActive && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
+            return true;
+          }
+
+          nativeStreamStarting = true;
+          nativeStreamActive = true;
+          nativeStreamUrl = streamUrl;
+          window._nativeStreamActive = true;
+
+          try {
+            nativeAudio.pause();
+            nativeAudio.muted = false;
+            nativeAudio.loop = false;
+            nativeAudio.preload = "auto";
+            nativeAudio.crossOrigin = "anonymous";
+            nativeAudio.src = streamUrl;
+            nativeAudio.onerror = function () {
+              if (!nativeStreamActive) return;
+              nativeStreamStarting = false;
+              nativeStreamActive = false;
+              window._nativeStreamActive = false;
+              relayLogToStudio("⚠️ Receiver: Native stream media error; falling back to AudioWorklet.");
+              if (configReceived) {
+                initAudio();
+              }
+            };
+            const playPromise = nativeAudio.play();
+            if (playPromise && typeof playPromise.then === "function") {
+              playPromise
+                .then(function () {
+                  nativeStreamStarting = false;
+                  nativeStreamActive = true;
+                  window._nativeStreamActive = true;
+                  document.body.classList.remove("app-loading");
+                  relayLogToStudio("✅ Receiver: Native 48k stream playout active via /stream.wav.");
+                })
+                .catch(function (e) {
+                  nativeStreamStarting = false;
+                  nativeStreamActive = false;
+                  window._nativeStreamActive = false;
+                  relayLogToStudio("⚠️ Receiver: Native stream play failed: " + (e && e.message ? e.message : e));
+                  if (configReceived) {
+                    initAudio();
+                  }
+                });
+            } else {
+              nativeStreamStarting = false;
+              document.body.classList.remove("app-loading");
+              relayLogToStudio("✅ Receiver: Native 48k stream playout started via /stream.wav.");
+            }
+            return true;
+          } catch (e) {
+            nativeStreamStarting = false;
+            nativeStreamActive = false;
+            window._nativeStreamActive = false;
+            relayLogToStudio("⚠️ Receiver: Native stream setup failed: " + e.message);
+            return false;
+          }
+        }
+
         function shutdownReceiver(reason) {
           if (window._receiverShutdownInProgress) {
             return;
@@ -165,6 +263,7 @@
           workletReady = false;
           window._lastBinaryTime = 0;
           window._lastWorkletDiagTime = 0;
+          stopNativeStreamPlayout(reason || "shutdown");
           if (autoDiscoveryFallbackTimeoutId) {
             clearTimeout(autoDiscoveryFallbackTimeoutId);
             autoDiscoveryFallbackTimeoutId = null;
@@ -432,6 +531,11 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
+          if (nativeStreamActive || nativeStreamStarting) {
+            document.body.classList.remove("app-loading");
+            relayLogToStudio("📡 Receiver: AudioWorklet init skipped; native /stream.wav playout owns audio.");
+            return;
+          }
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
             relayLogToStudio("📡 Receiver: initAudio (Legacy) skipped because WebRTC is primary.");
@@ -535,6 +639,7 @@
                       available: e.data.available,
                       stalled: e.data.stalled,
                       measuredHz: e.data.measuredHz,
+                      wallHz: e.data.wallHz,
                       rate: e.data.rate,
                       peak: e.data.peak,
                       locked: e.data.locked,
@@ -1077,7 +1182,7 @@
           if (window._receiverShutdownInProgress) return;
           if (!wakeLockLoadingOrLoaded) {
             wakeLockLoadingOrLoaded = true;
-            relayLogToStudio("📡 Receiver: CAF PlayerManager wake-lock disabled; custom PCM AudioWorklet owns audio output.");
+            relayLogToStudio("📡 Receiver: CAF PlayerManager wake-lock disabled; native stream/worklet path owns audio output.");
           }
         }
 
@@ -1180,7 +1285,8 @@
 
             // Send actual hardware capabilities
             preInitAudioContext();
-            
+            startNativeStreamPlayout(ip, targetPort);
+
             function sendHandshake() {
               if (window._receiverShutdownInProgress) return;
               if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
@@ -1242,6 +1348,15 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
+              if (nativeStreamActive || nativeStreamStarting) {
+                window._lastBinaryTime = Date.now();
+                window._binaryActive = true;
+                if (!window._nativeStreamBypassLogged) {
+                  window._nativeStreamBypassLogged = true;
+                  relayLogToStudio("📡 Receiver: Native stream active; bypassing AudioWorklet binary enqueue.");
+                }
+                return;
+              }
               if (workletNode) {
                 // [v13.9.504] BINARY SUPERIORITY LOCK
                 // We have a direct high-fidelity bridge. Kill all fallback paths to save Receiver CPU.
@@ -1265,6 +1380,15 @@
               }
               return;
             } else if (isBlob) {
+              if (nativeStreamActive || nativeStreamStarting) {
+                window._lastBinaryTime = Date.now();
+                window._binaryActive = true;
+                if (!window._nativeStreamBypassLogged) {
+                  window._nativeStreamBypassLogged = true;
+                  relayLogToStudio("📡 Receiver: Native stream active; bypassing Blob AudioWorklet enqueue.");
+                }
+                return;
+              }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
               window._lastBinaryTime = Date.now();
               if (!window._binaryActive) {
@@ -1297,7 +1421,7 @@
                   renderState(d.state);
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
-                   if (window._binaryActive) return;
+                   if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
 
                    let buffer = d.binary || d.data;
                    if (buffer && typeof buffer === "string") {
@@ -1341,19 +1465,23 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  initAudio();
-                  // Configure worklet bit depth after init
-                  setTimeout(() => {
-                    if (workletNode) {
-                      workletNode.port.postMessage({
-                        type: "CONFIG",
-                        bitDepth: ackBitDepth,
-                      });
-                      relayLogToStudio(
-                        `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
-                      );
-                    }
-                  }, 500);
+                  if (startNativeStreamPlayout(currentBridgeIp, currentBridgePort)) {
+                    document.body.classList.remove("app-loading");
+                  } else {
+                    initAudio();
+                    // Configure worklet bit depth after init
+                    setTimeout(() => {
+                      if (workletNode) {
+                        workletNode.port.postMessage({
+                          type: "CONFIG",
+                          bitDepth: ackBitDepth,
+                        });
+                        relayLogToStudio(
+                          `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
+                        );
+                      }
+                    }, 500);
+                  }
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
@@ -1375,11 +1503,11 @@
                           type: "CONFIG",
                           baseRateRatio: newBaseRateRatio,
                         });
-                      } else {
+                      } else if (!nativeStreamActive && !nativeStreamStarting) {
                         initAudio();
                       }
                     } else {
-                      if (!audioCtx || !workletNode) {
+                      if (!nativeStreamActive && !nativeStreamStarting && (!audioCtx || !workletNode)) {
                         initAudio();
                       }
                     }
@@ -1405,6 +1533,7 @@
             pendingBinaryFrames = [];
             workletReady = false;
             window._isDrainingStartup = false;
+            stopNativeStreamPlayout("websocket_closed");
             if (workletNode) {
               try {
                 workletNode.port.postMessage({ type: "RESET" });
@@ -1534,27 +1663,28 @@
                   relayLogToStudio(
                     `🔄 Receiver: Studio rate updated via signaling to ${newRate}Hz`,
                   );
-                  if (workletNode && audioCtx) {
+                  if (workletNode && audioCtx && !nativeStreamActive && !nativeStreamStarting) {
                     const newBaseRateRatio = 1.0;
                     workletNode.port.postMessage({
                       type: "CONFIG",
                       baseRateRatio: newBaseRateRatio,
                     });
-                  } else {
+                  } else if (!nativeStreamActive && !nativeStreamStarting) {
                     initAudio();
                   }
                 } else {
-                  if (!audioCtx || !workletNode) {
+                  if (!nativeStreamActive && !nativeStreamStarting && (!audioCtx || !workletNode)) {
                     initAudio();
                   }
                 }
               } else {
-                if (!audioCtx || !workletNode) {
+                if (!nativeStreamActive && !nativeStreamStarting && (!audioCtx || !workletNode)) {
                   initAudio();
                 }
               }
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
+                startNativeStreamPlayout(d.ip, d.port);
                 triggerWakeLockLoad();
               }
               return;
@@ -1599,7 +1729,7 @@
             // 2. High-Fidelity Audio Relay (Fallback Path)
             if (d.type === "PCM_RELAY") {
               // If Binary WS is active, IGNORE Relay to prevent doubling/echo
-              if (window._binaryActive) return;
+              if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
 
               let buffer = d.binary || d.data;
               if (buffer && typeof buffer === "string") {
@@ -1678,6 +1808,7 @@
                   wakeLockLoadingOrLoaded = false;
                   window._binaryActive = false; 
                   window._lastBinaryTime = 0;
+                  stopNativeStreamPlayout("sender_disconnected");
                   teardownWebRtcFallback();
                   suppressBinaryReconnect = true;
                   binaryConnectionGeneration++;
@@ -1754,7 +1885,7 @@
               }
             } else {
               // Only auto-init if we already have the config
-              if (configReceived) initAudio();
+              if (configReceived && !nativeStreamActive && !nativeStreamStarting) initAudio();
             }
 
             // [v13.9.504] APOR-WebRTC FAILOVER
