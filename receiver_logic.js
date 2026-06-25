@@ -41,6 +41,7 @@
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
         window._nativeStreamActive = false;
+        var cafLoadInterceptorConfigured = false;
 
         function getCastReceiverContext() {
           if (typeof cast === "undefined" || !cast.framework) {
@@ -64,6 +65,36 @@
             return null;
           }
           return context.getPlayerManager();
+        }
+
+        function configureCafLoadInterceptor() {
+          if (cafLoadInterceptorConfigured) {
+            return;
+          }
+          const pm = getCastPlayerManager();
+          if (!pm || !cast.framework.messages || typeof pm.setMessageInterceptor !== "function") {
+            return;
+          }
+          const messageType = cast.framework.messages.MessageType;
+          if (!messageType || !messageType.LOAD) {
+            return;
+          }
+          pm.setMessageInterceptor(messageType.LOAD, function (request) {
+            if (
+              request &&
+              request.media &&
+              request.media.contentId === "mxs-native-stream" &&
+              request.media.customData &&
+              request.media.customData.streamUrl
+            ) {
+              request.media.contentUrl = request.media.customData.streamUrl;
+              request.media.contentType = "audio/wav";
+              request.media.streamType = cast.framework.messages.StreamType.LIVE;
+            }
+            return request;
+          });
+          cafLoadInterceptorConfigured = true;
+          relayLogToStudio("✅ Receiver: CAF LOAD interceptor configured for native stream.");
         }
 
         function clearNoSenderShutdownTimer() {
@@ -157,6 +188,12 @@
           nativeStreamActive = false;
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
+          const pm = getCastPlayerManager();
+          if (pm && typeof pm.stop === "function") {
+            try {
+              pm.stop();
+            } catch (e) {}
+          }
           const nativeAudio = document.getElementById("native-stream-audio");
           if (!nativeAudio) return;
           try {
@@ -169,17 +206,130 @@
           }
         }
 
+        function startHtmlAudioStreamPlayout(streamUrl) {
+          const nativeAudio = document.getElementById("native-stream-audio");
+          if (!nativeAudio) {
+            relayLogToStudio("⚠️ Receiver: Native stream element missing; falling back to AudioWorklet.");
+            nativeStreamStarting = false;
+            nativeStreamActive = false;
+            window._nativeStreamActive = false;
+            return false;
+          }
+          try {
+            nativeAudio.pause();
+            nativeAudio.muted = false;
+            nativeAudio.loop = false;
+            nativeAudio.preload = "auto";
+            nativeAudio.crossOrigin = "anonymous";
+            nativeAudio.src = streamUrl;
+            nativeAudio.onerror = function () {
+              if (!nativeStreamActive) return;
+              nativeStreamStarting = false;
+              nativeStreamActive = false;
+              window._nativeStreamActive = false;
+              relayLogToStudio("⚠️ Receiver: HTML audio stream media error; falling back to AudioWorklet.");
+              if (configReceived) {
+                initAudio();
+              }
+            };
+            const playPromise = nativeAudio.play();
+            if (playPromise && typeof playPromise.then === "function") {
+              playPromise
+                .then(function () {
+                  nativeStreamStarting = false;
+                  nativeStreamActive = true;
+                  window._nativeStreamActive = true;
+                  document.body.classList.remove("app-loading");
+                  relayLogToStudio("✅ Receiver: HTML audio stream fallback active via /stream.wav.");
+                })
+                .catch(function (e) {
+                  nativeStreamStarting = false;
+                  nativeStreamActive = false;
+                  window._nativeStreamActive = false;
+                  relayLogToStudio("⚠️ Receiver: HTML audio stream play failed: " + (e && e.message ? e.message : e));
+                  if (configReceived) {
+                    initAudio();
+                  }
+                });
+            } else {
+              nativeStreamStarting = false;
+              nativeStreamActive = true;
+              window._nativeStreamActive = true;
+              document.body.classList.remove("app-loading");
+              relayLogToStudio("✅ Receiver: HTML audio stream fallback started via /stream.wav.");
+            }
+            return true;
+          } catch (e) {
+            nativeStreamStarting = false;
+            nativeStreamActive = false;
+            window._nativeStreamActive = false;
+            relayLogToStudio("⚠️ Receiver: HTML audio stream setup failed: " + e.message);
+            return false;
+          }
+        }
+
+        function startCafStreamPlayout(streamUrl) {
+          if (typeof cast === "undefined" || !cast.framework || !cast.framework.messages) {
+            return false;
+          }
+          configureCafLoadInterceptor();
+          const pm = getCastPlayerManager();
+          if (!pm || typeof pm.load !== "function") {
+            return false;
+          }
+          try {
+            const messages = cast.framework.messages;
+            const loadRequestData = new messages.LoadRequestData();
+            const media = new messages.MediaInformation();
+            media.contentId = "mxs-native-stream";
+            media.contentUrl = streamUrl;
+            media.contentType = "audio/wav";
+            media.streamType = messages.StreamType.LIVE;
+            media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
+            if (typeof messages.GenericMediaMetadata === "function") {
+              const metadata = new messages.GenericMediaMetadata();
+              metadata.title = "MXS-004 Studio";
+              metadata.subtitle = "Native 48k LAN audio stream";
+              media.metadata = metadata;
+            }
+            loadRequestData.media = media;
+            loadRequestData.autoplay = true;
+            loadRequestData.currentTime = 0;
+
+            const result = pm.load(loadRequestData);
+            if (result && typeof result.then === "function") {
+              result
+                .then(function () {
+                  nativeStreamStarting = false;
+                  nativeStreamActive = true;
+                  window._nativeStreamActive = true;
+                  document.body.classList.remove("app-loading");
+                  relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.");
+                })
+                .catch(function (e) {
+                  relayLogToStudio("⚠️ Receiver: CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
+                  startHtmlAudioStreamPlayout(streamUrl);
+                });
+            } else {
+              nativeStreamStarting = false;
+              nativeStreamActive = true;
+              window._nativeStreamActive = true;
+              document.body.classList.remove("app-loading");
+              relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.");
+            }
+            return true;
+          } catch (e) {
+            relayLogToStudio("⚠️ Receiver: CAF native stream setup failed: " + e.message);
+            return false;
+          }
+        }
+
         function startNativeStreamPlayout(ip, customPort) {
           if (!ENABLE_NATIVE_STREAM_PLAYOUT || window._receiverShutdownInProgress) {
             return false;
           }
           if (!ip) {
             relayLogToStudio("⚠️ Receiver: Native stream skipped; bridge IP unavailable.");
-            return false;
-          }
-          const nativeAudio = document.getElementById("native-stream-audio");
-          if (!nativeAudio) {
-            relayLogToStudio("⚠️ Receiver: Native stream element missing; falling back to AudioWorklet.");
             return false;
           }
 
@@ -194,55 +344,10 @@
           nativeStreamUrl = streamUrl;
           window._nativeStreamActive = true;
 
-          try {
-            nativeAudio.pause();
-            nativeAudio.muted = false;
-            nativeAudio.loop = false;
-            nativeAudio.preload = "auto";
-            nativeAudio.crossOrigin = "anonymous";
-            nativeAudio.src = streamUrl;
-            nativeAudio.onerror = function () {
-              if (!nativeStreamActive) return;
-              nativeStreamStarting = false;
-              nativeStreamActive = false;
-              window._nativeStreamActive = false;
-              relayLogToStudio("⚠️ Receiver: Native stream media error; falling back to AudioWorklet.");
-              if (configReceived) {
-                initAudio();
-              }
-            };
-            const playPromise = nativeAudio.play();
-            if (playPromise && typeof playPromise.then === "function") {
-              playPromise
-                .then(function () {
-                  nativeStreamStarting = false;
-                  nativeStreamActive = true;
-                  window._nativeStreamActive = true;
-                  document.body.classList.remove("app-loading");
-                  relayLogToStudio("✅ Receiver: Native 48k stream playout active via /stream.wav.");
-                })
-                .catch(function (e) {
-                  nativeStreamStarting = false;
-                  nativeStreamActive = false;
-                  window._nativeStreamActive = false;
-                  relayLogToStudio("⚠️ Receiver: Native stream play failed: " + (e && e.message ? e.message : e));
-                  if (configReceived) {
-                    initAudio();
-                  }
-                });
-            } else {
-              nativeStreamStarting = false;
-              document.body.classList.remove("app-loading");
-              relayLogToStudio("✅ Receiver: Native 48k stream playout started via /stream.wav.");
-            }
+          if (startCafStreamPlayout(streamUrl)) {
             return true;
-          } catch (e) {
-            nativeStreamStarting = false;
-            nativeStreamActive = false;
-            window._nativeStreamActive = false;
-            relayLogToStudio("⚠️ Receiver: Native stream setup failed: " + e.message);
-            return false;
           }
+          return startHtmlAudioStreamPlayout(streamUrl);
         }
 
         function shutdownReceiver(reason) {
@@ -1829,6 +1934,7 @@
                 }
               });
 
+              configureCafLoadInterceptor();
               context.start({ disableIdleTimeout: true });
             } catch (e) {
               relayLogToStudio("❌ Receiver: Cast framework start failed: " + e.message);
