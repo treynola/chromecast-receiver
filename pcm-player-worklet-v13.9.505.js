@@ -17,13 +17,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Fixed jitter-buffer parameters for stable low-latency playout
-    // Use a deeper fixed buffer so Cast / LAN jitter does not constantly trigger
-    // catch-up flushes. The stream is already packetized in 2048-frame chunks.
-    this._TARGET_BUFFER = 20480;    // ~213ms of interleaved samples (5 packets)
-    this._MIN_BUFFER = 8192;        // ~85ms stall threshold
-    this._PREBUFFER = 12288;        // ~128ms pre-fill cushion
-    this._FLUSH_THRESHOLD = 65536;  // Give the 32kHz sink enough headroom to avoid audible sawtooth flushes
+    // Fixed jitter-buffer parameters for stable low-latency playout.
+    // Keep the receiver on whole-packet boundaries and reserve hard flushes for
+    // true emergency backlog only; normal refill should ride out bursty packet
+    // arrival without chopping audio.
+    this._TARGET_BUFFER = 49152;    // 12 packets of interleaved PCM
+    this._MIN_BUFFER = 16384;        // 4 packets before we declare a stall
+    this._PREBUFFER = 32768;         // 8 packets before starting playout
+    this._FLUSH_THRESHOLD = 163840;  // Emergency-only guard near ring exhaustion
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -60,10 +61,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
-          this._TARGET_BUFFER = 20480;
-          this._MIN_BUFFER = 8192;
-          this._PREBUFFER = 12288;
-          this._FLUSH_THRESHOLD = 65536;
+          this._TARGET_BUFFER = 49152;
+          this._MIN_BUFFER = 16384;
+          this._PREBUFFER = 32768;
+          this._FLUSH_THRESHOLD = 163840;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -151,7 +152,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         frac = this._readFrac;
       }
 
-      // 2. SEVERE BACKLOG FLUSH
+      // 2. SEVERE BACKLOG GUARD
       if (available > this._FLUSH_THRESHOLD) {
         const excess = available - this._TARGET_BUFFER;
         available = this._reanchorReadCursor(this._TARGET_BUFFER);
@@ -173,14 +174,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = false;
           this._startTime = now;
           this._framesProcessed = 0;
-          if (available > this._TARGET_BUFFER) {
-            const excess = available - this._TARGET_BUFFER;
-            available = this._reanchorReadCursor(this._TARGET_BUFFER);
-            frameIdx = this._readFrameIdx;
-            frac = this._readFrac;
-            this._fade = 0;
-            this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
-          }
         } else {
           renderSilence = true;
         }
