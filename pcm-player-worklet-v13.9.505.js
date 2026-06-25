@@ -23,7 +23,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 20480;    // ~213ms of interleaved samples (5 packets)
     this._MIN_BUFFER = 8192;        // ~85ms stall threshold
     this._PREBUFFER = 12288;        // ~128ms pre-fill cushion
-    this._FLUSH_THRESHOLD = 38400;  // Trim earlier to avoid long-lag sawtooth recovery
+    this._FLUSH_THRESHOLD = 65536;  // Give the 32kHz sink enough headroom to avoid audible sawtooth flushes
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -63,7 +63,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 20480;
           this._MIN_BUFFER = 8192;
           this._PREBUFFER = 12288;
-          this._FLUSH_THRESHOLD = 38400;
+          this._FLUSH_THRESHOLD = 65536;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
