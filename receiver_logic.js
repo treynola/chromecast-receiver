@@ -42,6 +42,9 @@
         var nativeStreamUrl = "";
         window._nativeStreamActive = false;
         var cafLoadInterceptorConfigured = false;
+        var castDebugLogger = null;
+        var castDebugLoggerConfigured = false;
+        const CAST_DEBUG_TAG = "MXS004.RECEIVER";
 
         function getCastReceiverContext() {
           if (typeof cast === "undefined" || !cast.framework) {
@@ -67,6 +70,83 @@
           return context.getPlayerManager();
         }
 
+        function isCastDebugOverlayRequested() {
+          return /(?:^|[?&])castDebugOverlay=1(?:&|$)/.test(window.location.search);
+        }
+
+        function getCastDebugLogger() {
+          if (castDebugLogger) {
+            return castDebugLogger;
+          }
+          if (typeof cast === "undefined" || !cast.debug || !cast.debug.CastDebugLogger) {
+            return null;
+          }
+          try {
+            castDebugLogger = cast.debug.CastDebugLogger.getInstance();
+            return castDebugLogger;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function writeCastDebug(level, msg) {
+          const logger = getCastDebugLogger();
+          if (!logger || typeof msg !== "string") {
+            return;
+          }
+          try {
+            const fn =
+              level === "error" && typeof logger.error === "function"
+                ? logger.error
+                : level === "warn" && typeof logger.warn === "function"
+                  ? logger.warn
+                  : level === "info" && typeof logger.info === "function"
+                    ? logger.info
+                    : logger.debug;
+            if (typeof fn === "function") {
+              fn.call(logger, CAST_DEBUG_TAG, msg);
+            }
+          } catch (e) {}
+        }
+
+        function configureCastDebugLogger(context) {
+          if (castDebugLoggerConfigured || !context) {
+            return;
+          }
+          const logger = getCastDebugLogger();
+          if (!logger || !cast.framework) {
+            return;
+          }
+          try {
+            if (cast.framework.LoggerLevel) {
+              logger.loggerLevelByEvents = {
+                "cast.framework.events.category.CORE": cast.framework.LoggerLevel.INFO,
+                "cast.framework.events.EventType.MEDIA_STATUS": cast.framework.LoggerLevel.DEBUG,
+              };
+              logger.loggerLevelByTags = {
+                [CAST_DEBUG_TAG]: cast.framework.LoggerLevel.DEBUG,
+              };
+            }
+            if (cast.framework.system && cast.framework.system.EventType && cast.framework.system.EventType.READY) {
+              context.addEventListener(cast.framework.system.EventType.READY, function () {
+                try {
+                  logger.setEnabled(true);
+                  if (typeof logger.showDebugLogs === "function") {
+                    logger.showDebugLogs(isCastDebugOverlayRequested());
+                  }
+                  if (isCastDebugOverlayRequested() && typeof logger.clearDebugLogs === "function") {
+                    logger.clearDebugLogs();
+                  }
+                  writeCastDebug("info", "Cast debug logger ready; overlay=" + isCastDebugOverlayRequested());
+                } catch (e) {}
+              });
+            }
+            castDebugLoggerConfigured = true;
+          } catch (e) {
+            console.warn("⚠️ Receiver: CastDebugLogger setup failed:", e);
+          }
+        }
+
         function configureCafLoadInterceptor() {
           if (cafLoadInterceptorConfigured) {
             return;
@@ -80,6 +160,7 @@
             return;
           }
           pm.setMessageInterceptor(messageType.LOAD, function (request) {
+            writeCastDebug("info", "Intercepting LOAD request");
             if (
               request &&
               request.media &&
@@ -90,11 +171,46 @@
               request.media.contentUrl = request.media.customData.streamUrl;
               request.media.contentType = "audio/wav";
               request.media.streamType = cast.framework.messages.StreamType.LIVE;
+              writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + request.media.contentUrl);
+            } else {
+              const contentId = request && request.media ? request.media.contentId : "unknown";
+              writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
             }
             return request;
           });
           cafLoadInterceptorConfigured = true;
           relayLogToStudio("✅ Receiver: CAF LOAD interceptor configured for native stream.");
+        }
+
+        function configureCafPlayerDebugEvents() {
+          const pm = getCastPlayerManager();
+          if (!pm || pm._mxsDebugEventsConfigured || typeof pm.addEventListener !== "function") {
+            return;
+          }
+          const events = cast.framework.events && cast.framework.events.EventType ? cast.framework.events.EventType : {};
+          [
+            events.PLAYER_STATE_CHANGED,
+            events.MEDIA_STATUS,
+            events.ERROR,
+          ].forEach(function (eventType) {
+            if (!eventType) return;
+            try {
+              pm.addEventListener(eventType, function (event) {
+                const value =
+                  event && event.value !== undefined
+                    ? event.value
+                    : event && event.errorCode !== undefined
+                      ? event.errorCode
+                      : "";
+                const msg = "CAF event " + eventType + (value !== "" ? ": " + value : "");
+                writeCastDebug(eventType === events.ERROR ? "error" : "debug", msg);
+                if (eventType === events.ERROR || eventType === events.PLAYER_STATE_CHANGED) {
+                  relayLogToStudio("📺 Receiver: " + msg);
+                }
+              });
+            } catch (e) {}
+          });
+          pm._mxsDebugEventsConfigured = true;
         }
 
         function clearNoSenderShutdownTimer() {
@@ -275,6 +391,7 @@
           configureCafLoadInterceptor();
           const pm = getCastPlayerManager();
           if (!pm || typeof pm.load !== "function") {
+            writeCastDebug("warn", "CAF PlayerManager unavailable; falling back to HTML audio stream.");
             return false;
           }
           try {
@@ -296,6 +413,7 @@
             loadRequestData.autoplay = true;
             loadRequestData.currentTime = 0;
 
+            writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
             if (result && typeof result.then === "function") {
               result
@@ -304,9 +422,11 @@
                   nativeStreamActive = true;
                   window._nativeStreamActive = true;
                   document.body.classList.remove("app-loading");
+                  writeCastDebug("info", "CAF native stream LOAD active.");
                   relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.");
                 })
                 .catch(function (e) {
+                  writeCastDebug("error", "CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
                   relayLogToStudio("⚠️ Receiver: CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
                   startHtmlAudioStreamPlayout(streamUrl);
                 });
@@ -315,10 +435,12 @@
               nativeStreamActive = true;
               window._nativeStreamActive = true;
               document.body.classList.remove("app-loading");
+              writeCastDebug("info", "CAF native stream LOAD started.");
               relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.");
             }
             return true;
           } catch (e) {
+            writeCastDebug("error", "CAF native stream setup failed: " + e.message);
             relayLogToStudio("⚠️ Receiver: CAF native stream setup failed: " + e.message);
             return false;
           }
@@ -948,13 +1070,26 @@
         function relayLogToStudio(msg) {
           const isHighFreq =
             msg.indexOf("Latency Catch-up") !== -1 ||
-            msg.indexOf("Callback Rate") !== -1;
+            msg.indexOf("Callback Rate") !== -1 ||
+            msg.indexOf("Receiver Feedback") !== -1 ||
+            msg.indexOf("Receiver STATUS") !== -1;
           if (isHighFreq) {
             const now = Date.now();
             if (now - lastHighFreqLogTime < 10000) {
               return; // Throttle: Skip both DOM rendering and WS broadcasting
             }
             lastHighFreqLogTime = now;
+          }
+          if (!isHighFreq) {
+            const debugLevel =
+              msg.indexOf("❌") !== -1
+                ? "error"
+                : msg.indexOf("⚠️") !== -1
+                  ? "warn"
+                  : msg.indexOf("✅") !== -1 || msg.indexOf("📡") !== -1 || msg.indexOf("🤝") !== -1
+                    ? "info"
+                    : "debug";
+            writeCastDebug(debugLevel, msg);
           }
           // [v13.9.504] Suppress DOM updates during active streaming to reduce Receiver CPU overhead
           if (!isHighFreq && !workletNode) {
@@ -1934,7 +2069,9 @@
                 }
               });
 
+              configureCastDebugLogger(context);
               configureCafLoadInterceptor();
+              configureCafPlayerDebugEvents();
               context.start({ disableIdleTimeout: true });
             } catch (e) {
               relayLogToStudio("❌ Receiver: Cast framework start failed: " + e.message);
