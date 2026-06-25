@@ -416,7 +416,7 @@
                     relayLogToStudio("⚠️ Receiver: play silent WAV failed - " + e.message);
                   });
                 } else {
-                  relayLogToStudio("📡 Receiver: Skipping audioUnlocker play in Cast mode (using PlayerManager wake-lock instead).");
+                  relayLogToStudio("📡 Receiver: Skipping audioUnlocker play in Cast mode; custom PCM AudioWorklet owns playout.");
                 }
               }
 
@@ -1075,107 +1075,9 @@
 
         function triggerWakeLockLoad() {
           if (window._receiverShutdownInProgress) return;
-          if (typeof cast === "undefined" || !cast.framework) return;
-          const context = getCastReceiverContext();
-          if (!context) return;
-
-          // Check if there are active senders
-          const senders = context.getSenders();
-          const hasSender = senders && senders.length > 0;
-          if (!hasSender && !isSenderConnected) {
-            return;
-          }
-          isSenderConnected = true;
-
-          if (wakeLockLoadingOrLoaded) {
-            return;
-          }
-
-          if (!ENABLE_PLAYERMANAGER_WAKE_LOCK) {
+          if (!wakeLockLoadingOrLoaded) {
             wakeLockLoadingOrLoaded = true;
-            relayLogToStudio("📡 Receiver: Skipping PlayerManager wake-lock; custom PCM AudioWorklet owns audio output.");
-            return;
-          }
-
-          try {
-            const pm = getCastPlayerManager();
-            if (!pm) {
-              relayLogToStudio("⚠️ Receiver: PlayerManager unavailable for wake-lock load.");
-              return;
-            }
-
-            if (pm && !pm._hasAudioListeners) {
-              pm._hasAudioListeners = true;
-              try {
-                const evType = (cast && cast.framework && cast.framework.events && cast.framework.events.EventType) 
-                               ? cast.framework.events.EventType.PLAYER_STATE_CHANGED 
-                               : "PLAYER_STATE_CHANGED";
-                
-                if (evType) {
-                  pm.addEventListener(evType, function(e) {
-                    relayLogToStudio("📱 Receiver: PLAYER_STATE_CHANGED event detected: " + (e ? e.value : "unknown"));
-                    resumeAudio();
-                  });
-                }
-              } catch (e) {
-                relayLogToStudio("⚠️ Receiver: Failed to add PlayerManager listener: " + e.message);
-              }
-            }
-
-            const state = pm.getPlayerState();
-            if (
-              state === cast.framework.messages.PlayerState.PLAYING ||
-              state === cast.framework.messages.PlayerState.BUFFERING
-            ) {
-              relayLogToStudio("✅ Receiver: PlayerManager already in " + state + " state.");
-              wakeLockLoadingOrLoaded = true;
-              return;
-            }
-
-            // Build the silence URL from the bridge IP (Tauri server)
-            let silenceUrl = null;
-            if (currentBridgeIp) {
-              const port = currentBridgePort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-              silenceUrl = "http://" + currentBridgeIp + ":" + port + "/silence.wav";
-            } else {
-              // Fallback: try to extract IP from current WebSocket URL
-              const wsUrl = binaryWS ? binaryWS.url : null;
-              if (wsUrl) {
-                const match = wsUrl.match(/ws:\/\/([^:]+):(\d+)/);
-                if (match) {
-                  silenceUrl = "http://" + match[1] + ":" + match[2] + "/silence.wav";
-                }
-              }
-            }
-
-            if (!silenceUrl) {
-              return;
-            }
-
-            wakeLockLoadingOrLoaded = true;
-            relayLogToStudio("📡 Receiver: Loading wake-lock media from " + silenceUrl);
-
-            const loadRequestData = new cast.framework.messages.LoadRequestData();
-            loadRequestData.media = new cast.framework.messages.MediaInformation();
-            loadRequestData.media.contentId = silenceUrl;
-            loadRequestData.media.contentType = "audio/wav";
-            loadRequestData.media.streamType = cast.framework.messages.StreamType.BUFFERED;
-            loadRequestData.autoplay = true;
-            loadRequestData.queueData = new cast.framework.messages.QueueData();
-            loadRequestData.queueData.repeatMode = cast.framework.messages.RepeatMode.REPEAT_SINGLE;
-
-            pm.load(loadRequestData)
-              .then(function() {
-                relayLogToStudio("✅ Receiver: Programmatic wake-lock load successful!");
-                resumeAudio();
-              })
-              .catch(function(e) {
-                wakeLockLoadingOrLoaded = false; // Allow retrying
-                relayLogToStudio("⚠️ Receiver: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
-              });
-          } catch (err) {
-            wakeLockLoadingOrLoaded = false;
-            relayLogToStudio("❌ Receiver: Wake-lock load setup failed: " + err.message);
+            relayLogToStudio("📡 Receiver: CAF PlayerManager wake-lock disabled; custom PCM AudioWorklet owns audio output.");
           }
         }
 
