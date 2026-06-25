@@ -19,11 +19,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // Fixed jitter-buffer parameters for stable low-latency playout.
     // Keep the receiver buffer shallow enough to avoid long-cast latency,
-    // while still reserving a hard guard for true runaway backlog.
+    // while still allowing tiny clock correction before any emergency flush.
     this._TARGET_BUFFER = 12288;    // ~0.19s at 32kHz stereo interleaved
     this._MIN_BUFFER = 4096;        // ~0.06s stall threshold
     this._PREBUFFER = 8192;         // ~0.13s pre-fill cushion
-    this._FLUSH_THRESHOLD = 24576;  // Emergency-only guard for runaway backlog
+    this._FLUSH_THRESHOLD = 49152;  // Emergency-only guard for runaway backlog
+    this._MAX_RATE_ADJUST = 0.004;   // Gentle PLL correction, below audible wobble
+    this._playbackRate = 1.0;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -63,7 +65,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 12288;
           this._MIN_BUFFER = 4096;
           this._PREBUFFER = 8192;
-          this._FLUSH_THRESHOLD = 24576;
+          this._FLUSH_THRESHOLD = 49152;
+          this._MAX_RATE_ADJUST = 0.004;
+          this._playbackRate = 1.0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -161,10 +165,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
       }
 
-      // Keep playout locked to unity. Recovery is handled by buffer thresholds
-      // only; live rate nudging caused audible pitch wobble on cast receivers.
-      const playbackRate = 1.0;
-
       let renderSilence = false;
 
       // 3. PRE-BUFFERING
@@ -190,6 +190,22 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         });
 
         renderSilence = true;
+      }
+
+      let playbackRate = 1.0;
+      if (!renderSilence && !this._isBuffering) {
+        const bufferError = available - this._TARGET_BUFFER;
+        const deadband = Math.max(2048, this._TARGET_BUFFER >> 3);
+        if (Math.abs(bufferError) > deadband) {
+          const normalizedError = Math.max(-1, Math.min(1, bufferError / this._TARGET_BUFFER));
+          const desiredRate = 1.0 + (normalizedError * this._MAX_RATE_ADJUST);
+          this._playbackRate = (this._playbackRate * 0.85) + (desiredRate * 0.15);
+        } else {
+          this._playbackRate = (this._playbackRate * 0.9) + (1.0 * 0.1);
+        }
+        playbackRate = Math.max(1.0 - this._MAX_RATE_ADJUST, Math.min(1.0 + this._MAX_RATE_ADJUST, this._playbackRate));
+      } else {
+        this._playbackRate = 1.0;
       }
 
       if (renderSilence) {
