@@ -17,12 +17,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Fixed jitter-buffer parameters for stable low-latency playout.
-    // Keep the receiver buffer shallow enough to avoid long-cast latency.
-    this._TARGET_BUFFER = 12288;    // Low-latency target buffer in interleaved samples
-    this._MIN_BUFFER = 4096;        // Stall threshold
-    this._PREBUFFER = 8192;         // Pre-fill cushion
-    this._FLUSH_THRESHOLD = 49152;  // Emergency-only guard for runaway backlog
+    // Fixed jitter-buffer parameters for stable cast playout.
+    // These are interleaved samples, so 32768 ~= 341ms at stereo 48kHz.
+    this._TARGET_BUFFER = 32768;
+    this._MIN_BUFFER = 8192;
+    this._PREBUFFER = 24576;
+    this._FLUSH_THRESHOLD = 98304;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -59,10 +59,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
-          this._TARGET_BUFFER = 12288;
-          this._MIN_BUFFER = 4096;
-          this._PREBUFFER = 8192;
-          this._FLUSH_THRESHOLD = 49152;
+          this._TARGET_BUFFER = 32768;
+          this._MIN_BUFFER = 8192;
+          this._PREBUFFER = 24576;
+          this._FLUSH_THRESHOLD = 98304;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -152,12 +152,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       // 2. SEVERE BACKLOG GUARD
       if (available > this._FLUSH_THRESHOLD) {
-        const excess = available - this._TARGET_BUFFER;
+        const beforeFlush = available;
+        const dropped = available - this._TARGET_BUFFER;
         available = this._reanchorReadCursor(this._TARGET_BUFFER);
         frameIdx = this._readFrameIdx;
         frac = this._readFrac;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
-        this.port.postMessage({ type: "LOG", msg: `⚠️ Quartz: Lag-Flush (${excess} samples).` });
+        this.port.postMessage({
+          type: "LOG",
+          msg: `⚠️ Quartz: Lag-Flush available=${beforeFlush} target=${this._TARGET_BUFFER} threshold=${this._FLUSH_THRESHOLD} dropped=${dropped}`
+        });
       }
 
       let renderSilence = false;
@@ -258,7 +262,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
-        const lockWindow = Math.max(6000, this._TARGET_BUFFER >> 2);
+        const lockWindow = Math.max(24576, this._TARGET_BUFFER >> 1);
         // Report against the audio clock, not wall clock, so telemetry matches
         // the receiver's actual playout cadence.
         const hzReported = elapsed >= 5.0 ? Math.round(this._framesProcessed / elapsed) : 0;
