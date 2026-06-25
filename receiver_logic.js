@@ -31,7 +31,7 @@
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
 
-        // [v13.9.504] Dynamically build a valid 2-second silent WAV loop for TV OS media wake-lock
+        // [v13.9.504] Dynamically build a valid 2-second silent WAV loop for Receiver OS media wake-lock
         function createSilentWavUrl() {
           const sampleRate = 8000;
           const numSamples = sampleRate * 2; // 2 seconds
@@ -79,10 +79,10 @@
             const isAB = buffer instanceof ArrayBuffer;
             const len = buffer ? buffer.byteLength : "n/a";
             const constr = buffer && buffer.constructor ? buffer.constructor.name : "null";
-            relayLogToStudio(`🔍 TV queueBinaryFrame: isAB=${isAB} len=${len} constr=${constr}`);
+            relayLogToStudio(`🔍 Receiver queueBinaryFrame: isAB=${isAB} len=${len} constr=${constr}`);
           }
           if (!(buffer instanceof ArrayBuffer) && (!buffer || typeof buffer.byteLength !== "number")) {
-            relayLogToStudio("⚠️ TV queueBinaryFrame: Rejected buffer (not ArrayBuffer / no byteLength)");
+            relayLogToStudio("⚠️ Receiver queueBinaryFrame: Rejected buffer (not ArrayBuffer / no byteLength)");
             return;
           }
           if (workletNode && workletReady) {
@@ -103,7 +103,7 @@
         function flushPendingBinaryFrames() {
           if (!workletNode || !workletReady || pendingBinaryFrames.length === 0) return;
           // Drop stale startup PCM instead of replaying it all into the worklet.
-          // The TV should start with fresh live audio, not a buffered tail.
+          // The Receiver should start with fresh live audio, not a buffered tail.
           const queued = pendingBinaryFrames.slice(-2);
           pendingBinaryFrames.length = 0;
           queued.forEach((buffer) => queueBinaryFrame(buffer));
@@ -185,13 +185,15 @@
 
         function preInitAudioContext() {
           const isCastSupported = typeof cast !== "undefined" && cast.framework;
-          const requestedRate = isCastSupported ? 32000 : (window._hwRate || 48000);
-          relayLogToStudio("🛠️ TV: preInitAudioContext called. audioCtx=" + !!audioCtx);
+          // Request 48 kHz on Cast so the receiver does not inherit an older mismatched
+          // context or force a downsample path when the hardware can run natively at 48 kHz.
+          const requestedRate = isCastSupported ? 48000 : (window._hwRate || 48000);
+          relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx || window._lastHwRate !== requestedRate) {
             window._lastHwRate = requestedRate;
             if (audioCtx) {
               relayLogToStudio(
-                `📡 TV: Reseting AudioContext for Requested Rate: ${requestedRate}Hz`,
+                `📡 Receiver: Resetting AudioContext for receiver rate: ${requestedRate}Hz`,
               );
               try {
                 audioCtx.close();
@@ -201,38 +203,37 @@
               workletNode = null;
             }
             try {
-              relayLogToStudio("🛠️ TV: Creating new AudioContext...");
+              relayLogToStudio("🛠️ Receiver: Creating new AudioContext...");
               audioCtx = new window.AudioContext({
                 sampleRate: requestedRate,
                 latencyHint: "interactive",
               });
               if (audioCtx.sampleRate && audioCtx.sampleRate !== requestedRate) {
                 relayLogToStudio(
-                  `⚠️ TV: AudioContext resolved ${audioCtx.sampleRate}Hz instead of requested ${requestedRate}Hz.`,
+                  `⚠️ Receiver: AudioContext resolved ${audioCtx.sampleRate}Hz instead of receiver rate ${requestedRate}Hz.`,
                 );
               }
               window._hwRate = audioCtx.sampleRate || requestedRate;
               window._lastHwRate = requestedRate;
-              relayLogToStudio("🛠️ TV: AudioContext created. State: " + audioCtx.state);
+              relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state);
 
               masterGain = audioCtx.createGain();
               masterGain.gain.value = 1.0;
               masterGain.connect(audioCtx.destination);
-              relayLogToStudio("🛠️ TV: masterGain connected.");
+              relayLogToStudio("🛠️ Receiver: masterGain connected.");
 
               const keepAlive = audioCtx.createOscillator();
               // Keep-alive tone must stay below Nyquist for the active context.
-              // 20kHz aliases on 32kHz Cast runtimes and can leak into playback.
-              keepAlive.frequency.value = Math.min(12000, Math.floor((audioCtx.sampleRate || 32000) * 0.25));
+              keepAlive.frequency.value = Math.min(12000, Math.floor((audioCtx.sampleRate || requestedRate || 48000) * 0.25));
               const g = audioCtx.createGain();
               g.gain.value = 0.00001;
               keepAlive.connect(g);
               g.connect(audioCtx.destination);
               keepAlive.start();
-              relayLogToStudio("🛠️ TV: keepAlive oscillator started.");
+              relayLogToStudio("🛠️ Receiver: keepAlive oscillator started.");
 
               const audioUnlocker = document.getElementById("audio-unlocker");
-              relayLogToStudio("🛠️ TV: audioUnlocker found: " + !!audioUnlocker);
+              relayLogToStudio("🛠️ Receiver: audioUnlocker found: " + !!audioUnlocker);
               if (audioUnlocker) {
                 if (!audioUnlocker._hasUnlockListeners) {
                   audioUnlocker._hasUnlockListeners = true;
@@ -252,16 +253,16 @@
                     audioUnlocker.src = createSilentWavUrl();
                   }
                   audioUnlocker.play().catch(function(e) {
-                    relayLogToStudio("⚠️ TV: play silent WAV failed - " + e.message);
+                    relayLogToStudio("⚠️ Receiver: play silent WAV failed - " + e.message);
                   });
                 } else {
-                  relayLogToStudio("📡 TV: Skipping audioUnlocker play in Cast mode (using PlayerManager wake-lock instead).");
+                  relayLogToStudio("📡 Receiver: Skipping audioUnlocker play in Cast mode (using PlayerManager wake-lock instead).");
                 }
               }
 
               resumeAudio();
             } catch (e) {
-              relayLogToStudio(`❌ TV ERROR: preInitAudioContext failed - ${e.message}`);
+              relayLogToStudio(`❌ Receiver ERROR: preInitAudioContext failed - ${e.message}`);
             }
           }
         }
@@ -272,14 +273,14 @@
           if (audioInitializing) return;
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
-            relayLogToStudio("📡 TV: initAudio (Legacy) skipped because WebRTC is primary.");
+            relayLogToStudio("📡 Receiver: initAudio (Legacy) skipped because WebRTC is primary.");
             preInitAudioContext(); // Still ensure native context is warmed up
             return;
           }
 
           // [v13.9.504] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
-            relayLogToStudio("⏳ TV: Waiting for BRIDGE_CONFIG handshake...");
+            relayLogToStudio("⏳ Receiver: Waiting for BRIDGE_CONFIG handshake...");
             return;
           }
 
@@ -293,7 +294,7 @@
             preInitAudioContext();
 
             if (!audioCtx) {
-              relayLogToStudio("❌ TV ERROR: initAudio failed - audioCtx is null");
+              relayLogToStudio("❌ Receiver ERROR: initAudio failed - audioCtx is null");
               return;
             }
 
@@ -305,7 +306,7 @@
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
-              relayLogToStudio(`📡 TV: Loading Worklet from Studio: ${workletUrl}`);
+              relayLogToStudio(`📡 Receiver: Loading Worklet from Studio: ${workletUrl}`);
             }
 
             const workletResponse = await fetch(workletUrl, { cache: "no-store" });
@@ -331,10 +332,10 @@
             const baseRateRatio = 1.0; // Backend Resampled Alignment
 
             console.log(
-              `📏 TV Clock: requested=${requestedRate}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
+              `📏 Receiver Clock: receiverRate=${requestedRate}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
             );
             relayLogToStudio(
-              `📏 TV Clock: ${actualRate}Hz | Studio: ${studioRate}Hz | Sync: APORv2 Unity`,
+              `📏 Receiver Clock: ${actualRate}Hz | Studio: ${studioRate}Hz | Sync: APORv2 Unity`,
             );
 
             workletNode = new AudioWorkletNode(
@@ -351,17 +352,17 @@
               },
             );
             workletNode.onprocessorerror = (e) => {
-              console.error("❌ TV: workletNode processor error:", e);
-              relayLogToStudio(`❌ TV: workletNode processor error: ${e.message || e}`);
+              console.error("❌ Receiver: workletNode processor error:", e);
+              relayLogToStudio(`❌ Receiver: workletNode processor error: ${e.message || e}`);
             };
             workletNode.connect(masterGain);
             window._lastWorkletDiagTime = Date.now(); // Prevent premature watchdog triggers during startup
 
             // [v13.9.505] Reveal UI — single authoritative point, fires once via workletNode guard above
             document.body.classList.remove("app-loading");
-            relayLogToStudio("✅ TV: Receiver UI revealed (app-loading removed).");
+            relayLogToStudio("✅ Receiver: Receiver UI revealed (app-loading removed).");
 
-            relayLogToStudio(`✅ TV: APOR V2 Sink Active @ ${actualRate}Hz`);
+            relayLogToStudio(`✅ Receiver sink active @ ${actualRate}Hz`);
 
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
@@ -414,20 +415,20 @@
                     ? ` | HZ: ${e.data.measuredHz}`
                     : "";
                   relayLogToStudio(
-                    `📊 TV STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`,
+                    `📊 Receiver STATUS: ${lockStatus} @ ${rate}x (BUF: ${e.data.available}${hzInfo} | PEAK: ${peakPercent}% | STALLS: ${e.data.stalled})`,
                   );
                   window._lastDiagSent = Date.now();
                 }
               } else if (e.data.type === "LOG") {
                 if (typeof e.data.msg === "string" && e.data.msg.indexOf("Worklet message: CONFIG") !== -1) {
-                  relayLogToStudio("⏳ TV: Draining stale startup packets...");
+                  relayLogToStudio("⏳ Receiver: Draining stale startup packets...");
                   window._isDrainingStartup = true;
                   pendingBinaryFrames = []; // Clear any queued pre-handshake packets
                   setTimeout(() => {
                     window._isDrainingStartup = false;
                     workletReady = true;
                     flushPendingBinaryFrames();
-                    relayLogToStudio("✅ TV: Startup packets drained. Playout active.");
+                    relayLogToStudio("✅ Receiver: Startup packets drained. Playout active.");
                   }, 1000);
                 }
                 relayLogToStudio(e.data.msg);
@@ -435,7 +436,7 @@
             };
             resumeAudio();
           } catch (e) {
-            relayLogToStudio(`❌ TV ERROR: initAudio failed - ${e.message}`);
+            relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
           } finally {
             audioInitializing = false;
           }
@@ -450,7 +451,7 @@
           const overlay = document.getElementById("audio-unlock-overlay");
           if (overlay && overlay.classList.contains("visible")) {
             overlay.classList.remove("visible");
-            relayLogToStudio("🖥️ TV: Audio Unlock Overlay hidden.");
+            relayLogToStudio("🖥️ Receiver: Audio Unlock Overlay hidden.");
           }
         }
 
@@ -509,14 +510,14 @@
               // decoding and audio rendering, which throttled the worklet thread.
               if (!castMediaElement._wakeLockLogged) {
                 castMediaElement._wakeLockLogged = true;
-                relayLogToStudio("🛠️ TV: Cast media element present; keeping wake-lock playback offline.");
+                relayLogToStudio("🛠️ Receiver: Cast media element present; keeping wake-lock playback offline.");
               }
               if (castMediaElement.crossOrigin !== "anonymous") {
                 castMediaElement.crossOrigin = "anonymous";
               }
             }
           } catch (e) {
-            relayLogToStudio("⚠️ TV: connectCastMediaElement error: " + e.message);
+            relayLogToStudio("⚠️ Receiver: connectCastMediaElement error: " + e.message);
           }
         }
 
@@ -525,17 +526,17 @@
             connectCastMediaElement();
             const prevState = audioCtx.state;
             try {
-              relayLogToStudio("🔊 TV: resumeAudio() calling audioCtx.resume(). State: " + prevState);
+              relayLogToStudio("🔊 Receiver: resumeAudio() calling audioCtx.resume(). State: " + prevState);
               await audioCtx.resume();
-              relayLogToStudio("🔊 TV: resumeAudio() resolved. State: " + audioCtx.state);
+              relayLogToStudio("🔊 Receiver: resumeAudio() resolved. State: " + audioCtx.state);
               if (audioCtx.state === "running") {
                 hideUnlockOverlay();
               } else {
                 showUnlockOverlay();
               }
             } catch (e) {
-              console.warn("⚠️ TV: Resume failed", e);
-              relayLogToStudio("⚠️ TV: resumeAudio() failed: " + e.message);
+              console.warn("⚠️ Receiver: Resume failed", e);
+              relayLogToStudio("⚠️ Receiver: resumeAudio() failed: " + e.message);
               showUnlockOverlay();
             }
           }
@@ -546,7 +547,7 @@
             await initAudio();
           }
           if (!audioCtx) {
-            relayLogToStudio("⚠️ TV: Sine test skipped; audio context not ready.");
+            relayLogToStudio("⚠️ Receiver: Sine test skipped; audio context not ready.");
             return;
           }
           await resumeAudio();
@@ -585,7 +586,7 @@
             }
             lastHighFreqLogTime = now;
           }
-          // [v13.9.504] Suppress DOM updates during active streaming to reduce TV CPU overhead
+          // [v13.9.504] Suppress DOM updates during active streaming to reduce Receiver CPU overhead
           if (!isHighFreq && !workletNode) {
             const inner = document.getElementById("tv-console-inner");
             if (inner) {
@@ -879,7 +880,7 @@
                 updateClass(`t-rec-${i}`, t.isRecording ? "recording" : "");
               });
           } catch (e) {
-            console.error("❌ TV Render Error:", e);
+            console.error("❌ Receiver Render Error:", e);
           }
         }
 
@@ -936,12 +937,12 @@
                 
                 if (evType) {
                   pm.addEventListener(evType, function(e) {
-                    relayLogToStudio("📱 TV: PLAYER_STATE_CHANGED event detected: " + (e ? e.value : "unknown"));
+                    relayLogToStudio("📱 Receiver: PLAYER_STATE_CHANGED event detected: " + (e ? e.value : "unknown"));
                     resumeAudio();
                   });
                 }
               } catch (e) {
-                relayLogToStudio("⚠️ TV: Failed to add PlayerManager listener: " + e.message);
+                relayLogToStudio("⚠️ Receiver: Failed to add PlayerManager listener: " + e.message);
               }
             }
 
@@ -950,7 +951,7 @@
               state === cast.framework.messages.PlayerState.PLAYING ||
               state === cast.framework.messages.PlayerState.BUFFERING
             ) {
-              relayLogToStudio("✅ TV: PlayerManager already in " + state + " state.");
+              relayLogToStudio("✅ Receiver: PlayerManager already in " + state + " state.");
               wakeLockLoadingOrLoaded = true;
               return;
             }
@@ -976,7 +977,7 @@
             }
 
             wakeLockLoadingOrLoaded = true;
-            relayLogToStudio("📡 TV: Loading wake-lock media from " + silenceUrl);
+            relayLogToStudio("📡 Receiver: Loading wake-lock media from " + silenceUrl);
 
             const loadRequestData = new cast.framework.messages.LoadRequestData();
             loadRequestData.media = new cast.framework.messages.MediaInformation();
@@ -989,16 +990,16 @@
 
             pm.load(loadRequestData)
               .then(function() {
-                relayLogToStudio("✅ TV: Programmatic wake-lock load successful!");
+                relayLogToStudio("✅ Receiver: Programmatic wake-lock load successful!");
                 resumeAudio();
               })
               .catch(function(e) {
                 wakeLockLoadingOrLoaded = false; // Allow retrying
-                relayLogToStudio("⚠️ TV: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
+                relayLogToStudio("⚠️ Receiver: Programmatic wake-lock load failed: " + (e && e.message ? e.message : e));
               });
           } catch (err) {
             wakeLockLoadingOrLoaded = false;
-            relayLogToStudio("❌ TV: Wake-lock load setup failed: " + err.message);
+            relayLogToStudio("❌ Receiver: Wake-lock load setup failed: " + err.message);
           }
         }
 
@@ -1038,12 +1039,12 @@
           const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
           const url = `ws://${ip}:${targetPort}/?role=receiver&token=${encodeURIComponent(targetToken)}`;
           try {
-            relayLogToStudio(`📡 TV: Attempting to connect to ${url}`);
+            relayLogToStudio(`📡 Receiver: Attempting to connect to ${url}`);
             binaryWS = new WebSocket(url);
             binaryWS.binaryType = "arraybuffer";
           } catch (err) {
             relayLogToStudio(
-              `❌ TV: WebSocket Constructor Failed: ${err.message}`,
+              `❌ Receiver: WebSocket Constructor Failed: ${err.message}`,
             );
             wsConnectTimeout = setTimeout(() => connectBinaryBridge(ip, customPort, customToken), 5000);
             return;
@@ -1052,7 +1053,7 @@
           binaryWS.onopen = async () => {
             if (generation !== binaryConnectionGeneration) return;
             console.log("✅ Binary Bridge Connected");
-            relayLogToStudio(`✅ TV: WebSocket Connected to ${url}`);
+            relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             // [v13.9.504] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
             clearBinaryReconnectTimer();
@@ -1085,12 +1086,12 @@
               hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
               window._hwRate = hwRate;
               relayLogToStudio(
-                `🔍 TV: Hardware probe → actual rate = ${hwRate}Hz`,
+                `🔍 Receiver: Hardware probe → actual rate = ${hwRate}Hz`,
               );
               probe.close();
             } catch (e) {
               relayLogToStudio(
-                `⚠️ TV: Hardware probe failed, defaulting to ${hwRate}Hz`,
+                `⚠️ Receiver: Hardware probe failed, defaulting to ${hwRate}Hz`,
               );
               window._hwRate = hwRate;
             }
@@ -1113,9 +1114,9 @@
               };
               try {
                 binaryWS.send(JSON.stringify(handshake));
-                relayLogToStudio(`🤝 TV: Handshake sent → ${rate}Hz / 16-bit`);
+                relayLogToStudio(`🤝 Receiver: Handshake sent → ${rate}Hz / 16-bit`);
               } catch (e) {
-                relayLogToStudio(`⚠️ TV: Failed to send handshake: ${e.message}`);
+                relayLogToStudio(`⚠️ Receiver: Failed to send handshake: ${e.message}`);
               }
             }
 
@@ -1129,7 +1130,7 @@
                 clearInterval(handshakeRetryInterval);
                 return;
               }
-              relayLogToStudio("⏳ TV: Retrying Handshake (no ACK received yet)...");
+              relayLogToStudio("⏳ Receiver: Retrying Handshake (no ACK received yet)...");
               sendHandshake();
             }, 1500);
 
@@ -1149,7 +1150,7 @@
               const byteLen = event.data ? event.data.byteLength : undefined;
               const size = event.data ? event.data.size : undefined;
               const constr = event.data && event.data.constructor ? event.data.constructor.name : "null";
-              relayLogToStudio(`🔍 TV MSG DEBUG: type=${type} constr=${constr} isAB=${isAB} isB=${isB} byteLen=${byteLen} size=${size}`);
+              relayLogToStudio(`🔍 Receiver MSG DEBUG: type=${type} constr=${constr} isAB=${isAB} isB=${isB} byteLen=${byteLen} size=${size}`);
             }
 
             // [v13.9.504] PRIORITY: Binary audio data gets the fastest path
@@ -1159,16 +1160,16 @@
             if (isArrayBuffer) {
               if (workletNode) {
                 // [v13.9.504] BINARY SUPERIORITY LOCK
-                // We have a direct high-fidelity bridge. Kill all fallback paths to save TV CPU.
+                // We have a direct high-fidelity bridge. Kill all fallback paths to save Receiver CPU.
                 window._lastBinaryTime = Date.now();
                 window._binaryActive = true;
 
-                // Terminate WebRTC stream entirely to save TV CPU
+                // Terminate WebRTC stream entirely to save Receiver CPU
                 const audioUnlocker = document.getElementById("audio-unlocker");
                 if (audioUnlocker && audioUnlocker.srcObject) {
                   audioUnlocker.srcObject = null;
                   relayLogToStudio(
-                    "🛡️ TV: Binary Bridge Active. Terminated redundant WebRTC decoder.",
+                    "🛡️ Receiver: Binary Bridge Active. Terminated redundant WebRTC decoder.",
                   );
                 }
 
@@ -1180,14 +1181,14 @@
               }
               return;
             } else if (isBlob) {
-              // [v13.9.504] Fallback: TV browser ignored binaryType="arraybuffer"
+              // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
               window._lastBinaryTime = Date.now();
               if (!window._binaryActive) {
                 window._binaryActive = true;
                 const audioUnlocker = document.getElementById("audio-unlocker");
                 if (audioUnlocker && audioUnlocker.srcObject) {
                   audioUnlocker.srcObject = null;
-                  relayLogToStudio("🛡️ TV: Binary Bridge Active (Blob). Terminated redundant WebRTC decoder.");
+                  relayLogToStudio("🛡️ Receiver: Binary Bridge Active (Blob). Terminated redundant WebRTC decoder.");
                 }
               }
 
@@ -1197,7 +1198,7 @@
                 queueBinaryFrame(this.result);
               };
               reader.onerror = function() {
-                relayLogToStudio("⚠️ TV: FileReader failed to read Blob.");
+                relayLogToStudio("⚠️ Receiver: FileReader failed to read Blob.");
               };
               reader.readAsArrayBuffer(event.data);
               return;
@@ -1234,7 +1235,7 @@
                      }
                    }
                 } else if (d.type === "RELOAD") {
-                  relayLogToStudio("🔄 TV: RELOAD command received. Reloading page with cache-buster...");
+                  relayLogToStudio("🔄 Receiver: RELOAD command received. Reloading page with cache-buster...");
                   setTimeout(() => {
                     const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
                     window.location.href = cleanUrl + "?cb=" + Date.now();
@@ -1244,7 +1245,7 @@
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
-                    `✅ TV: HANDSHAKE_ACK received → ${ackRate}Hz / ${ackBitDepth}-bit`,
+                    `✅ Receiver: HANDSHAKE_ACK received → ${ackRate}Hz / ${ackBitDepth}-bit`,
                   );
                   window._negotiatedBitDepth = ackBitDepth;
                   if (ackRate) {
@@ -1261,7 +1262,7 @@
                         bitDepth: ackBitDepth,
                       });
                       relayLogToStudio(
-                        `🔧 TV: Worklet configured for ${ackBitDepth}-bit decode`,
+                        `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
                       );
                     }
                   }, 500);
@@ -1278,7 +1279,7 @@
                     if (window._studioRate !== newStudioRate) {
                       window._studioRate = newStudioRate;
                       relayLogToStudio(
-                        `🔄 TV: Studio rate updated to ${newStudioRate}Hz`,
+                        `🔄 Receiver: Studio rate updated to ${newStudioRate}Hz`,
                       );
                       if (workletNode && audioCtx) {
                         const newBaseRateRatio = 1.0;
@@ -1300,7 +1301,7 @@
                 } else if (d.type === "WEBRTC_CANDIDATE") {
                   if (peerConnection && d.candidate) {
                     peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
-                      relayLogToStudio("⚠️ TV WebRTC: Failed to add ICE candidate - " + e.message);
+                      relayLogToStudio("⚠️ Receiver WebRTC: Failed to add ICE candidate - " + e.message);
                     });
                   }
                 }
@@ -1341,10 +1342,10 @@
             const maxRetries = 5;
             if (window._wsReconnectAttempts <= maxRetries) {
               const delay = Math.min(1000 * Math.pow(2, window._wsReconnectAttempts - 1), 16000);
-              relayLogToStudio(`🔄 TV: WS closed. Reconnect attempt ${window._wsReconnectAttempts}/${maxRetries} in ${delay}ms...`);
+              relayLogToStudio(`🔄 Receiver: WS closed. Reconnect attempt ${window._wsReconnectAttempts}/${maxRetries} in ${delay}ms...`);
               scheduleBinaryReconnect(currentBridgeIp, currentBridgePort, currentBridgeToken, delay);
             } else {
-              relayLogToStudio("🛑 TV: All reconnect attempts exhausted. Reloading page...");
+              relayLogToStudio("🛑 Receiver: All reconnect attempts exhausted. Reloading page...");
               window._wsReconnectAttempts = 0;
               setTimeout(() => {
                 const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
@@ -1356,7 +1357,7 @@
           binaryWS.onerror = (e) => {
             if (generation !== binaryConnectionGeneration) return;
             console.error("❌ Binary Bridge Error:", e);
-            relayLogToStudio(`❌ TV: WebSocket Error on ${url}`);
+            relayLogToStudio(`❌ Receiver: WebSocket Error on ${url}`);
             const diagEl = document.getElementById("bridge-diag-text");
             if (diagEl) {
               diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
@@ -1370,7 +1371,7 @@
 
         async function handleWebRTCOffer(sdp) {
           try {
-            relayLogToStudio("📡 TV WebRTC: Received Offer. Initializing...");
+            relayLogToStudio("📡 Receiver WebRTC: Received Offer. Initializing...");
             
             if (peerConnection) {
               peerConnection.close();
@@ -1395,12 +1396,12 @@
             };
 
             peerConnection.ontrack = (event) => {
-              relayLogToStudio("✅ TV WebRTC: Track received! Kind: " + event.track.kind);
+              relayLogToStudio("✅ Receiver WebRTC: Track received! Kind: " + event.track.kind);
               const audioUnlocker = document.getElementById("audio-unlocker");
               if (audioUnlocker) {
                 audioUnlocker.srcObject = event.streams[0];
                 audioUnlocker.play().catch(e => {
-                  relayLogToStudio("⚠️ TV WebRTC: Play failed - " + e.message);
+                  relayLogToStudio("⚠️ Receiver WebRTC: Play failed - " + e.message);
                 });
                 resumeAudio();
               }
@@ -1415,10 +1416,10 @@
                 type: "WEBRTC_ANSWER",
                 sdp: answer
               }));
-              relayLogToStudio("📡 TV WebRTC: Answer sent to Studio.");
+              relayLogToStudio("📡 Receiver WebRTC: Answer sent to Studio.");
             }
           } catch (e) {
-            relayLogToStudio("❌ TV WebRTC Error: " + e.message);
+            relayLogToStudio("❌ Receiver WebRTC Error: " + e.message);
           }
         }
 
@@ -1435,7 +1436,7 @@
                 if (window._studioRate !== newRate) {
                   window._studioRate = newRate;
                   relayLogToStudio(
-                    `🔄 TV: Studio rate updated via signaling to ${newRate}Hz`,
+                    `🔄 Receiver: Studio rate updated via signaling to ${newRate}Hz`,
                   );
                   if (workletNode && audioCtx) {
                     const newBaseRateRatio = 1.0;
@@ -1465,7 +1466,7 @@
 
             // 3. Command Relay
             if (d.type === "RELOAD") {
-              relayLogToStudio("🔄 TV: RELOAD command received via Cast SDK. Reloading page...");
+              relayLogToStudio("🔄 Receiver: RELOAD command received via Cast SDK. Reloading page...");
               setTimeout(() => {
                 const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
                 window.location.href = cleanUrl + "?cb=" + Date.now();
@@ -1475,7 +1476,7 @@
 
             if (d.type === "SINE_TEST") {
               playSineTest().catch((e) => {
-                relayLogToStudio("⚠️ TV: Sine test failed: " + e.message);
+                relayLogToStudio("⚠️ Receiver: Sine test failed: " + e.message);
               });
               return;
             }
@@ -1488,7 +1489,7 @@
             if (d.type === "WEBRTC_CANDIDATE") {
               if (peerConnection && d.candidate) {
                 peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
-                  relayLogToStudio("⚠️ TV WebRTC: Failed to add ICE candidate (SDK) - " + e.message);
+                  relayLogToStudio("⚠️ Receiver WebRTC: Failed to add ICE candidate (SDK) - " + e.message);
                 });
               }
               return;
@@ -1524,7 +1525,7 @@
             // 3. Diagnostics & Testing
             if (d.type === "SINE_TEST") {
               playSineTest().catch((e) => {
-                relayLogToStudio("⚠️ TV: Sine test failed: " + e.message);
+                relayLogToStudio("⚠️ Receiver: Sine test failed: " + e.message);
               });
             }
 
@@ -1540,7 +1541,7 @@
           buildGUI();
 
           // [V13.9.40] Aggressive Startup Trace
-          console.log("🎬 TV: Startup sequence initiated.");
+          console.log("🎬 Receiver: Startup sequence initiated.");
           console.log("🔗 URL: " + window.location.href);
 
           if (typeof cast !== "undefined" && cast.framework) {
@@ -1549,7 +1550,7 @@
                 cast.framework.CastReceiverContext.getInstance();
               const context = window.castReceiverContext;
 
-              relayLogToStudio("🎬 TV: Startup - URL: " + window.location.href);
+              relayLogToStudio("🎬 Receiver: Startup - URL: " + window.location.href);
 
               // [v13.9.504] SENDER_CONNECTED/DISCONNECTED listeners
               context.addEventListener(
@@ -1600,12 +1601,12 @@
 
               context.start({ disableIdleTimeout: true });
             } catch (e) {
-              relayLogToStudio("❌ TV: Cast framework start failed: " + e.message);
-              console.error("❌ TV: Cast framework start failed:", e);
+              relayLogToStudio("❌ Receiver: Cast framework start failed: " + e.message);
+              console.error("❌ Receiver: Cast framework start failed:", e);
             }
           } else {
             relayLogToStudio(
-              "🎬 TV: Startup - Running in standard browser (non-cast)",
+              "🎬 Receiver: Startup - Running in standard browser (non-cast)",
             );
           }
 
@@ -1616,7 +1617,7 @@
               (binaryWS.readyState !== WebSocket.OPEN &&
                 binaryWS.readyState !== WebSocket.CONNECTING)
             ) {
-              console.log("📡 TV: Auto-Discovery Fallback triggered...");
+              console.log("📡 Receiver: Auto-Discovery Fallback triggered...");
               const hostname = window.location.hostname;
               const isLocal =
                 hostname === "localhost" ||
@@ -1626,7 +1627,7 @@
                 connectBinaryBridge(hostname);
               } else {
                 console.log(
-                  "📡 TV: Public hosting detected. Staying silent until BRIDGE_CONFIG.",
+                  "📡 Receiver: Public hosting detected. Staying silent until BRIDGE_CONFIG.",
                 );
               }
             }
@@ -1642,7 +1643,7 @@
               
               if (audioCtx.state === "suspended" || isWorkletStalled) {
                 if (isWorkletStalled && workletNode) {
-                  relayLogToStudio("⚠️ TV: Worklet process() stalled/not started. Attempting resume...");
+                  relayLogToStudio("⚠️ Receiver: Worklet process() stalled/not started. Attempting resume...");
                 }
                 showUnlockOverlay();
                 resumeAudio();
@@ -1660,7 +1661,7 @@
                const audioUnlocker = document.getElementById("audio-unlocker");
                if (audioUnlocker && audioUnlocker.srcObject && audioUnlocker.muted) {
                   audioUnlocker.muted = false;
-                  relayLogToStudio("⚠️ TV: APOR V2 Timed out. Restoring WebRTC fallback audio.");
+                  relayLogToStudio("⚠️ Receiver: APOR V2 Timed out. Restoring WebRTC fallback audio.");
                   window._lastBinaryTime = 0; // Prevent loop
                }
             }
@@ -1692,19 +1693,19 @@
             }
           });
 
-          // [v13.9.504] Global interaction listeners to catch TV remote keys and clicks for AudioContext unlock
+          // [v13.9.504] Global interaction listeners to catch Receiver remote keys and clicks for AudioContext unlock
           window.addEventListener("keydown", function(e) {
-            // relayLogToStudio("🎹 TV: keydown event: " + e.key + " (code: " + e.keyCode + ")");
+            // relayLogToStudio("🎹 Receiver: keydown event: " + e.key + " (code: " + e.keyCode + ")");
             resumeAudio();
           });
 
           window.addEventListener("click", function() {
-            // relayLogToStudio("🖱️ TV: click event detected.");
+            // relayLogToStudio("🖱️ Receiver: click event detected.");
             resumeAudio();
           });
 
           window.addEventListener("pointerdown", function() {
-            // relayLogToStudio("🖱️ TV: pointerdown event detected.");
+            // relayLogToStudio("🖱️ Receiver: pointerdown event detected.");
             resumeAudio();
           });
 
@@ -1712,13 +1713,13 @@
           if (btnUnlock) {
             btnUnlock.addEventListener("click", function(e) {
               e.stopPropagation();
-              relayLogToStudio("🖱️ TV: Unlock button clicked.");
+              relayLogToStudio("🖱️ Receiver: Unlock button clicked.");
               resumeAudio();
             });
           }
 
           window.addEventListener("resize", updateScale);
-          relayLogToStudio("🎬 TV: Startup Complete [" + VERSION_TAG + "].");
+          relayLogToStudio("🎬 Receiver: Startup Complete [" + VERSION_TAG + "].");
         };
       })();
     
