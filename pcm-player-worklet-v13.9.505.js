@@ -18,13 +18,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
     // Fixed jitter-buffer parameters for stable low-latency playout.
-    // Keep the receiver on whole-packet boundaries and reserve hard flushes for
-    // true emergency backlog only; normal refill should ride out bursty packet
-    // arrival without chopping audio.
-    this._TARGET_BUFFER = 49152;    // 12 packets of interleaved PCM
-    this._MIN_BUFFER = 16384;        // 4 packets before we declare a stall
-    this._PREBUFFER = 32768;         // 8 packets before starting playout
-    this._FLUSH_THRESHOLD = 163840;  // Emergency-only guard near ring exhaustion
+    // Keep the receiver buffer shallow enough to avoid long-cast latency,
+    // while still reserving a hard guard for true runaway backlog.
+    this._TARGET_BUFFER = 12288;    // ~0.19s at 32kHz stereo interleaved
+    this._MIN_BUFFER = 4096;        // ~0.06s stall threshold
+    this._PREBUFFER = 8192;         // ~0.13s pre-fill cushion
+    this._FLUSH_THRESHOLD = 24576;  // Emergency-only guard for runaway backlog
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -61,10 +60,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
-          this._TARGET_BUFFER = 49152;
-          this._MIN_BUFFER = 16384;
-          this._PREBUFFER = 32768;
-          this._FLUSH_THRESHOLD = 163840;
+          this._TARGET_BUFFER = 12288;
+          this._MIN_BUFFER = 4096;
+          this._PREBUFFER = 8192;
+          this._FLUSH_THRESHOLD = 24576;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
