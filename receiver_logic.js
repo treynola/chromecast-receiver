@@ -32,6 +32,10 @@
         const PENDING_BINARY_FRAMES_MAX = 4; // Keep only a tiny live prebuffer; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
+        // Do not run CAF PlayerManager media in parallel with the custom PCM
+        // AudioWorklet path. On Chromecast-class devices that extra native
+        // media pipeline contends with Web Audio and causes periodic lag flushes.
+        const ENABLE_PLAYERMANAGER_WAKE_LOCK = false;
 
         function getCastReceiverContext() {
           if (typeof cast === "undefined" || !cast.framework) {
@@ -1084,6 +1088,12 @@
           isSenderConnected = true;
 
           if (wakeLockLoadingOrLoaded) {
+            return;
+          }
+
+          if (!ENABLE_PLAYERMANAGER_WAKE_LOCK) {
+            wakeLockLoadingOrLoaded = true;
+            relayLogToStudio("📡 Receiver: Skipping PlayerManager wake-lock; custom PCM AudioWorklet owns audio output.");
             return;
           }
 

@@ -33,6 +33,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._framesProcessed = 0;
     this._callbackCount = 0;
     this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
+    this._wallStartMs = 0;
 
     this.port.onmessage = (e) => {
       try {
@@ -59,6 +60,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._isBuffering = true;
           this._framesProcessed = 0;
           this._startTime = 0;
+          this._wallStartMs = 0;
           this._TARGET_BUFFER = 32768;
           this._MIN_BUFFER = 8192;
           this._PREBUFFER = 24576;
@@ -132,9 +134,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const ringLenFrames = ringLen >> 1; 
       const framesInBlock = channel0.length;
       const now = currentTime;
+      const wallNow = typeof Date !== "undefined" ? Date.now() : 0;
 
       if (this._startTime === 0) {
         this._startTime = now;
+      }
+      if (this._wallStartMs === 0 && wallNow) {
+        this._wallStartMs = wallNow;
       }
       this._callbackCount++;
 
@@ -171,6 +177,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
           this._startTime = now;
+          this._wallStartMs = wallNow || this._wallStartMs;
           this._framesProcessed = 0;
         } else {
           renderSilence = true;
@@ -262,16 +269,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
+        const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
         const lockWindow = Math.max(24576, this._TARGET_BUFFER >> 1);
         // Report against the audio clock, not wall clock, so telemetry matches
         // the receiver's actual playout cadence.
-        const hzReported = elapsed >= 5.0 ? Math.round(this._framesProcessed / elapsed) : 0;
+        const wallHzReported = wallElapsed >= 2.0 ? Math.round(this._framesProcessed / wallElapsed) : 0;
+        const hzReported = elapsed >= 5.0 ? Math.round(this._framesProcessed / elapsed) : wallHzReported;
         this.port.postMessage({
           type: "DIAG",
           available: available,
           stalled: this._stallCount,
           rate: playbackRate,
           measuredHz: hzReported,
+          wallHz: wallHzReported,
           peak: this._currentPeak,
           locked: !renderSilence && Math.abs(available - this._TARGET_BUFFER) <= lockWindow
         });
