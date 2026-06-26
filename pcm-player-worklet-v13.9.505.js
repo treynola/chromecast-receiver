@@ -164,6 +164,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         frameIdx = this._readFrameIdx;
         frac = this._readFrac;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
+        
+        // Reset rate estimation timeline to prevent math distortion from dropped samples
+        this._startTime = now;
+        this._wallStartMs = wallNow || this._wallStartMs;
+        this._framesProcessed = 0;
+
         this.port.postMessage({
           type: "LOG",
           msg: `⚠️ Quartz: Lag-Flush available=${beforeFlush} target=${this._TARGET_BUFFER} threshold=${this._FLUSH_THRESHOLD} dropped=${dropped}`
@@ -271,10 +277,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const elapsed = Math.max(0.1, now - this._startTime);
         const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
         const lockWindow = Math.max(24576, this._TARGET_BUFFER >> 1);
-        // Report against the audio clock, not wall clock, so telemetry matches
-        // the receiver's actual playout cadence.
-        const wallHzReported = wallElapsed >= 2.0 ? Math.round(this._framesProcessed / wallElapsed) : 0;
-        const hzReported = elapsed >= 5.0 ? Math.round(this._framesProcessed / elapsed) : wallHzReported;
+        // Report the physical wall-clock sample rate so the backend resampler can match the TV's processing speed
+        const wallHzReported = wallElapsed >= 1.0 ? Math.round(this._framesProcessed / wallElapsed) : 0;
+        const hzReported = wallHzReported;
         this.port.postMessage({
           type: "DIAG",
           available: available,
