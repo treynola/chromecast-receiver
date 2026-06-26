@@ -37,6 +37,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._callbackCount = 0;
     this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
     this._wallStartMs = 0;
+    this._lastDiagWallMs = 0;
+    this._lastDiagFramesProcessed = 0;
 
     this.port.onmessage = (e) => {
       try {
@@ -64,6 +66,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._framesProcessed = 0;
           this._startTime = 0;
           this._wallStartMs = 0;
+          this._lastDiagWallMs = 0;
+          this._lastDiagFramesProcessed = 0;
           this._TARGET_BUFFER = 16384;
           this._MIN_BUFFER = 4096;
           this._PREBUFFER = 12288;
@@ -275,8 +279,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const elapsed = Math.max(0.1, now - this._startTime);
         const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
         const lockWindow = Math.max(24576, this._TARGET_BUFFER >> 1);
-        // Report the physical wall-clock sample rate so the backend resampler can match the TV's processing speed
-        const wallHzReported = wallElapsed >= 1.0 ? Math.round(this._framesProcessed / wallElapsed) : 0;
+        // Report drain rate from the most recent DIAG interval so the backend can
+        // lock quickly even while the buffer is oscillating around lag flushes.
+        let wallHzReported = 0;
+        if (this._lastDiagWallMs && wallNow) {
+          const deltaWallMs = wallNow - this._lastDiagWallMs;
+          const deltaFrames = this._framesProcessed - this._lastDiagFramesProcessed;
+          if (deltaWallMs >= 250 && deltaFrames > 0) {
+            wallHzReported = Math.round((deltaFrames * 1000) / deltaWallMs);
+          }
+        }
+        this._lastDiagWallMs = wallNow || this._lastDiagWallMs;
+        this._lastDiagFramesProcessed = this._framesProcessed;
         const hzReported = wallHzReported;
         this.port.postMessage({
           type: "DIAG",
