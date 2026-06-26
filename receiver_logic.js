@@ -40,6 +40,7 @@
         var nativeStreamActive = false;
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
+        var nativeStartupAttemptId = 0;
         var nativeStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 2500;
         window._nativeStreamActive = false;
@@ -280,6 +281,29 @@
           }
         }
 
+        function isCurrentNativeAttempt(attemptId) {
+          return attemptId === nativeStartupAttemptId;
+        }
+
+        function stopHtmlAudioNativeCompanion() {
+          const nativeAudio = document.getElementById("native-stream-audio");
+          if (!nativeAudio) return;
+          try {
+            nativeAudio.pause();
+            nativeAudio.removeAttribute("src");
+            nativeAudio.load();
+          } catch (e) {}
+        }
+
+        function stopCafNativeCompanion() {
+          const pm = getCastPlayerManager();
+          if (pm && typeof pm.stop === "function") {
+            try {
+              pm.stop();
+            } catch (e) {}
+          }
+        }
+
         function teardownPcmPlayout(reason, closeAudioContext) {
           pendingBinaryFrames = [];
           workletReady = false;
@@ -337,17 +361,26 @@
           }, NATIVE_STARTUP_TIMEOUT_MS);
         }
 
-        function activateNativeStream(modeReason, logMessage) {
+        function activateNativeStream(modeReason, logMessage, attemptId) {
+          if (attemptId && !isCurrentNativeAttempt(attemptId)) {
+            return false;
+          }
           nativeStreamStarting = false;
           nativeStreamActive = true;
           window._nativeStreamActive = true;
           clearNativeStartupWatchdog();
+          if (modeReason.indexOf("caf_") === 0) {
+            stopHtmlAudioNativeCompanion();
+          } else {
+            stopCafNativeCompanion();
+          }
           teardownPcmPlayout("native_active", true);
           notifyPlaybackMode("native", modeReason);
           document.body.classList.remove("app-loading");
           if (logMessage) {
             relayLogToStudio(logMessage);
           }
+          return true;
         }
 
         function scheduleNoSenderShutdown(reason) {
@@ -430,30 +463,20 @@
         }
 
         function stopNativeStreamPlayout(reason) {
+          nativeStartupAttemptId++;
           clearNativeStartupWatchdog();
           nativeStreamStarting = false;
           nativeStreamActive = false;
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
-          const pm = getCastPlayerManager();
-          if (pm && typeof pm.stop === "function") {
-            try {
-              pm.stop();
-            } catch (e) {}
-          }
-          const nativeAudio = document.getElementById("native-stream-audio");
-          if (!nativeAudio) return;
-          try {
-            nativeAudio.pause();
-            nativeAudio.removeAttribute("src");
-            nativeAudio.load();
-          } catch (e) {}
+          stopCafNativeCompanion();
+          stopHtmlAudioNativeCompanion();
           if (reason) {
             relayLogToStudio("🛑 Receiver: Native stream stopped (" + reason + ").");
           }
         }
 
-        function startHtmlAudioStreamPlayout(streamUrl) {
+        function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
           const nativeAudio = document.getElementById("native-stream-audio");
           if (!nativeAudio) {
             clearNativeStartupWatchdog();
@@ -471,6 +494,7 @@
             nativeAudio.crossOrigin = "anonymous";
             nativeAudio.src = streamUrl;
             nativeAudio.onerror = function () {
+              if (!isCurrentNativeAttempt(attemptId)) return;
               if (!nativeStreamActive && !nativeStreamStarting) return;
               nativeStreamStarting = false;
               nativeStreamActive = false;
@@ -488,9 +512,11 @@
                   activateNativeStream(
                     "html_audio_active",
                     "✅ Receiver: HTML audio stream fallback active via /stream.wav.",
+                    attemptId,
                   );
                 })
                 .catch(function (e) {
+                  if (!isCurrentNativeAttempt(attemptId)) return;
                   nativeStreamStarting = false;
                   nativeStreamActive = false;
                   window._nativeStreamActive = false;
@@ -504,6 +530,7 @@
               activateNativeStream(
                 "html_audio_started",
                 "✅ Receiver: HTML audio stream fallback started via /stream.wav.",
+                attemptId,
               );
             }
             return true;
@@ -517,7 +544,7 @@
           }
         }
 
-        function startCafStreamPlayout(streamUrl) {
+        function startCafStreamPlayout(streamUrl, attemptId) {
           if (typeof cast === "undefined" || !cast.framework || !cast.framework.messages) {
             return false;
           }
@@ -564,18 +591,21 @@
                   activateNativeStream(
                     "caf_load_active",
                     "✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.",
+                    attemptId,
                   );
                   writeCastDebug("info", "CAF native stream LOAD active.");
                 })
                 .catch(function (e) {
+                  if (!isCurrentNativeAttempt(attemptId)) return;
                   writeCastDebug("error", "CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
                   relayLogToStudio("⚠️ Receiver: CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
-                  startHtmlAudioStreamPlayout(streamUrl);
+                  startHtmlAudioStreamPlayout(streamUrl, attemptId);
                 });
             } else {
               activateNativeStream(
                 "caf_load_started",
                 "✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.",
+                attemptId,
               );
               writeCastDebug("info", "CAF native stream LOAD started.");
             }
@@ -605,20 +635,21 @@
 
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
           const streamUrl = "http://" + ip + ":" + targetPort + "/stream.wav?cb=" + Date.now();
-          if (nativeStreamActive && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
+          if ((nativeStreamActive || nativeStreamStarting) && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
             return true;
           }
 
+          const attemptId = ++nativeStartupAttemptId;
           nativeStreamStarting = true;
           nativeStreamActive = false;
           nativeStreamUrl = streamUrl;
           window._nativeStreamActive = false;
           armNativeStartupWatchdog();
 
-          if (startCafStreamPlayout(streamUrl)) {
+          if (startCafStreamPlayout(streamUrl, attemptId)) {
             return true;
           }
-          const htmlStarted = startHtmlAudioStreamPlayout(streamUrl);
+          const htmlStarted = startHtmlAudioStreamPlayout(streamUrl, attemptId);
           if (!htmlStarted) {
             clearNativeStartupWatchdog();
           }
