@@ -17,12 +17,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Fixed jitter-buffer parameters for stable cast playout.
-    // These are interleaved samples, so 32768 ~= 341ms at stereo 48kHz.
-    this._TARGET_BUFFER = 32768;
-    this._MIN_BUFFER = 8192;
-    this._PREBUFFER = 24576;
-    this._FLUSH_THRESHOLD = 98304;
+    // [v13.9.510] Tightened jitter-buffer parameters.
+    // TV drains at ~32kHz but receives 48kHz PCM — buffer fills at ~16k samples/sec.
+    // Lower TARGET and FLUSH_THRESHOLD to minimise the drop size when overrun occurs.
+    // The permanent fix is the Rust resampler lock (v13.9.509) once Tauri is rebuilt.
+    // Interleaved samples: 16384 stereo samples = ~170ms at 48kHz
+    this._TARGET_BUFFER = 16384;   // was 32768
+    this._MIN_BUFFER = 4096;        // was 8192
+    this._PREBUFFER = 12288;        // was 24576 — pre-buffer to ~128ms before playout
+    this._FLUSH_THRESHOLD = 49152; // was 98304 — flush at ~512ms to reduce pop size
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -61,10 +64,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._framesProcessed = 0;
           this._startTime = 0;
           this._wallStartMs = 0;
-          this._TARGET_BUFFER = 32768;
-          this._MIN_BUFFER = 8192;
-          this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 98304;
+          this._TARGET_BUFFER = 16384;
+          this._MIN_BUFFER = 4096;
+          this._PREBUFFER = 12288;
+          this._FLUSH_THRESHOLD = 49152;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
