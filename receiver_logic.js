@@ -41,6 +41,7 @@
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
         window._nativeStreamActive = false;
+        window._playbackMode = "unknown";
         var cafLoadInterceptorConfigured = false;
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
@@ -145,6 +146,28 @@
           } catch (e) {
             console.warn("⚠️ Receiver: CastDebugLogger setup failed:", e);
           }
+        }
+
+        function notifyPlaybackMode(mode, reason) {
+          if (!mode) {
+            return;
+          }
+          if (window._playbackMode === mode) {
+            return;
+          }
+          window._playbackMode = mode;
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
+            return;
+          }
+          try {
+            binaryWS.send(
+              JSON.stringify({
+                type: "PLAYBACK_MODE",
+                mode: mode,
+                reason: reason || "",
+              }),
+            );
+          } catch (e) {}
         }
 
         function configureCafLoadInterceptor() {
@@ -352,7 +375,7 @@
           try {
             nativeAudio.pause();
             nativeAudio.muted = false;
-            nativeAudio.loop = true; // [v13.9.506] Loop static silence.wav wake-lock
+            nativeAudio.loop = false;
             nativeAudio.preload = "auto";
             nativeAudio.crossOrigin = "anonymous";
             nativeAudio.src = streamUrl;
@@ -373,8 +396,9 @@
                   nativeStreamStarting = false;
                   nativeStreamActive = true;
                   window._nativeStreamActive = true;
+                  notifyPlaybackMode("native", "html_audio_active");
                   document.body.classList.remove("app-loading");
-                  relayLogToStudio("✅ Receiver: HTML audio stream fallback active via /silence.wav.");
+                  relayLogToStudio("✅ Receiver: HTML audio stream fallback active via /stream.wav.");
                 })
                 .catch(function (e) {
                   nativeStreamStarting = false;
@@ -389,8 +413,9 @@
               nativeStreamStarting = false;
               nativeStreamActive = true;
               window._nativeStreamActive = true;
+              notifyPlaybackMode("native", "html_audio_started");
               document.body.classList.remove("app-loading");
-              relayLogToStudio("✅ Receiver: HTML audio stream fallback started via /silence.wav.");
+              relayLogToStudio("✅ Receiver: HTML audio stream fallback started via /stream.wav.");
             }
             return true;
           } catch (e) {
@@ -407,6 +432,16 @@
             return false;
           }
           configureCafLoadInterceptor();
+          const context = getCastReceiverContext();
+          if (context && typeof context.canDisplayType === "function") {
+            try {
+              const supported = context.canDisplayType("audio/wav");
+              if (supported === false) {
+                writeCastDebug("warn", "CastReceiverContext.canDisplayType rejected audio/wav; falling back.");
+                return false;
+              }
+            } catch (e) {}
+          }
           const pm = getCastPlayerManager();
           if (!pm || typeof pm.load !== "function") {
             writeCastDebug("warn", "CAF PlayerManager unavailable; falling back to HTML audio stream.");
@@ -419,7 +454,7 @@
             media.contentId = "mxs-native-stream";
             media.contentUrl = streamUrl;
             media.contentType = "audio/wav";
-            media.streamType = messages.StreamType.BUFFERED; // [v13.9.506] BUFFERED for static cached file
+            media.streamType = messages.StreamType.LIVE;
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
             if (typeof messages.GenericMediaMetadata === "function") {
               const metadata = new messages.GenericMediaMetadata();
@@ -439,9 +474,10 @@
                   nativeStreamStarting = false;
                   nativeStreamActive = true;
                   window._nativeStreamActive = true;
+                  notifyPlaybackMode("native", "caf_load_active");
                   document.body.classList.remove("app-loading");
                   writeCastDebug("info", "CAF native stream LOAD active.");
-                  relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /silence.wav.");
+                  relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.");
                 })
                 .catch(function (e) {
                   writeCastDebug("error", "CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
@@ -452,9 +488,10 @@
               nativeStreamStarting = false;
               nativeStreamActive = true;
               window._nativeStreamActive = true;
+              notifyPlaybackMode("native", "caf_load_started");
               document.body.classList.remove("app-loading");
               writeCastDebug("info", "CAF native stream LOAD started.");
-              relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /silence.wav.");
+              relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.");
             }
             return true;
           } catch (e) {
@@ -480,8 +517,8 @@
           }
 
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const streamUrl = "http://" + ip + ":" + targetPort + "/silence.wav?cb=" + Date.now();
-          if (nativeStreamActive && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/silence.wav") === 0) {
+          const streamUrl = "http://" + ip + ":" + targetPort + "/stream.wav?cb=" + Date.now();
+          if (nativeStreamActive && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
             return true;
           }
 
@@ -511,6 +548,7 @@
           configReceived = false;
           wakeLockLoadingOrLoaded = false;
           pendingBinaryFrames = [];
+          window._playbackMode = "unknown";
           workletReady = false;
           window._lastBinaryTime = 0;
           window._lastWorkletDiagTime = 0;
@@ -782,9 +820,9 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
-          // [v13.9.506] WAKE-LOCK KEEP-ALIVE: Do not tear down the native stream.
-          // Since the HTTP stream now serves silence, it keeps the CAF PlayerManager
-          // in PLAYING state for wake-lock while the AudioWorklet renders real audio.
+          // [v13.9.510] Native CAF playout is now the primary cast-audio path.
+          // This AudioWorklet path remains fallback-only for receivers that cannot
+          // sustain the native /stream.wav media pipeline.
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
             relayLogToStudio("📡 Receiver: initAudio (Legacy) skipped because WebRTC is primary.");
@@ -805,6 +843,7 @@
           
           audioInitializing = true;
           try {
+            notifyPlaybackMode("pcm_fallback", "native_stream_unavailable");
             preInitAudioContext();
 
             if (!audioCtx) {
@@ -1613,7 +1652,9 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              // [v13.9.506] WAKE-LOCK KEEP-ALIVE: Keep the silent native stream running to preserve Cast PlayerManager state.
+              if ((nativeStreamActive || nativeStreamStarting) && !workletNode) {
+                return;
+              }
               if (workletNode) {
                 // [v13.9.504] BINARY SUPERIORITY LOCK
                 // We have a direct high-fidelity bridge. Kill all fallback paths to save Receiver CPU.
@@ -1637,7 +1678,9 @@
               }
               return;
             } else if (isBlob) {
-              // [v13.9.506] WAKE-LOCK KEEP-ALIVE: Keep the silent native stream running to preserve Cast PlayerManager state.
+              if ((nativeStreamActive || nativeStreamStarting) && !workletNode) {
+                return;
+              }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
               window._lastBinaryTime = Date.now();
               if (!window._binaryActive) {
@@ -1714,9 +1757,11 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                  const nativeStarted = startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
                   document.body.classList.remove("app-loading");
-                  initAudio();
+                  if (!nativeStarted) {
+                    initAudio();
+                  }
                   // Configure worklet bit depth after init
                   setTimeout(() => {
                     if (workletNode) {
@@ -2055,6 +2100,7 @@
                   wakeLockLoadingOrLoaded = false;
                   window._binaryActive = false; 
                   window._lastBinaryTime = 0;
+                  window._playbackMode = "unknown";
                   stopNativeStreamPlayout("sender_disconnected");
                   teardownWebRtcFallback();
                   suppressBinaryReconnect = true;
