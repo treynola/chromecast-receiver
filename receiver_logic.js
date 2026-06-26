@@ -695,9 +695,9 @@
         function preInitAudioContext() {
           if (window._receiverShutdownInProgress) return;
           const isCastSupported = typeof cast !== "undefined" && cast.framework;
-          // Request 32 kHz on Cast to reduce CPU thread scheduling overhead on low-power TVs,
-          // avoiding audio starvation wobble. The browser natively upsamples to hardware output.
-          const requestedRate = isCastSupported ? 32000 : (window._hwRate || 48000);
+          // Request 48 kHz on Cast so the receiver does not inherit an older mismatched
+          // context or force a downsample path when the hardware can run natively at 48 kHz.
+          const requestedRate = isCastSupported ? 48000 : (window._hwRate || 48000);
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx || window._lastHwRate !== requestedRate) {
             window._lastHwRate = requestedRate;
