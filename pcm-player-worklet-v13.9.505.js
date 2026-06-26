@@ -168,10 +168,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         frac = this._readFrac;
         this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
         
-        // Reset rate estimation timeline to prevent math distortion from dropped samples
-        this._startTime = now;
-        this._wallStartMs = wallNow || this._wallStartMs;
-        this._framesProcessed = 0;
+        // Keep telemetry time running across lag flushes. The backend needs a
+        // continuous wall-clock drain estimate to lock its resampler target.
 
         this.port.postMessage({
           type: "LOG",
@@ -185,9 +183,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (this._isBuffering) {
         if (available >= this._PREBUFFER) {
           this._isBuffering = false;
-          this._startTime = now;
-          this._wallStartMs = wallNow || this._wallStartMs;
-          this._framesProcessed = 0;
         } else {
           renderSilence = true;
         }
