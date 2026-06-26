@@ -188,6 +188,7 @@
             return;
           }
           const events = cast.framework.events && cast.framework.events.EventType ? cast.framework.events.EventType : {};
+          const messages = cast.framework.messages && cast.framework.messages.PlayerState ? cast.framework.messages : {};
           [
             events.PLAYER_STATE_CHANGED,
             events.MEDIA_STATUS,
@@ -206,6 +207,23 @@
                 writeCastDebug(eventType === events.ERROR ? "error" : "debug", msg);
                 if (eventType === events.ERROR || eventType === events.PLAYER_STATE_CHANGED) {
                   relayLogToStudio("📺 Receiver: " + msg);
+                }
+                
+                // [v13.9.506] Loop/Reload static wake-lock stream when finished
+                if (
+                  eventType === events.PLAYER_STATE_CHANGED &&
+                  messages.PlayerState &&
+                  event.playerState === messages.PlayerState.IDLE &&
+                  event.idleReason === messages.IdleReason.FINISHED
+                ) {
+                  if (nativeStreamActive && nativeStreamUrl) {
+                    relayLogToStudio("🔄 Receiver: Wake-lock finished playing; reloading silent stream...");
+                    setTimeout(() => {
+                      if (nativeStreamActive && nativeStreamUrl) {
+                        startCafStreamPlayout(nativeStreamUrl);
+                      }
+                    }, 100);
+                  }
                 }
               });
             } catch (e) {}
@@ -334,7 +352,7 @@
           try {
             nativeAudio.pause();
             nativeAudio.muted = false;
-            nativeAudio.loop = false;
+            nativeAudio.loop = true; // [v13.9.506] Loop static silence.wav wake-lock
             nativeAudio.preload = "auto";
             nativeAudio.crossOrigin = "anonymous";
             nativeAudio.src = streamUrl;
@@ -356,7 +374,7 @@
                   nativeStreamActive = true;
                   window._nativeStreamActive = true;
                   document.body.classList.remove("app-loading");
-                  relayLogToStudio("✅ Receiver: HTML audio stream fallback active via /stream.wav.");
+                  relayLogToStudio("✅ Receiver: HTML audio stream fallback active via /silence.wav.");
                 })
                 .catch(function (e) {
                   nativeStreamStarting = false;
@@ -372,7 +390,7 @@
               nativeStreamActive = true;
               window._nativeStreamActive = true;
               document.body.classList.remove("app-loading");
-              relayLogToStudio("✅ Receiver: HTML audio stream fallback started via /stream.wav.");
+              relayLogToStudio("✅ Receiver: HTML audio stream fallback started via /silence.wav.");
             }
             return true;
           } catch (e) {
@@ -401,7 +419,7 @@
             media.contentId = "mxs-native-stream";
             media.contentUrl = streamUrl;
             media.contentType = "audio/wav";
-            media.streamType = messages.StreamType.LIVE;
+            media.streamType = messages.StreamType.BUFFERED; // [v13.9.506] BUFFERED for static cached file
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
             if (typeof messages.GenericMediaMetadata === "function") {
               const metadata = new messages.GenericMediaMetadata();
@@ -423,7 +441,7 @@
                   window._nativeStreamActive = true;
                   document.body.classList.remove("app-loading");
                   writeCastDebug("info", "CAF native stream LOAD active.");
-                  relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.");
+                  relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /silence.wav.");
                 })
                 .catch(function (e) {
                   writeCastDebug("error", "CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
@@ -436,7 +454,7 @@
               window._nativeStreamActive = true;
               document.body.classList.remove("app-loading");
               writeCastDebug("info", "CAF native stream LOAD started.");
-              relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.");
+              relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /silence.wav.");
             }
             return true;
           } catch (e) {
@@ -462,8 +480,8 @@
           }
 
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const streamUrl = "http://" + ip + ":" + targetPort + "/stream.wav?cb=" + Date.now();
-          if (nativeStreamActive && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
+          const streamUrl = "http://" + ip + ":" + targetPort + "/silence.wav?cb=" + Date.now();
+          if (nativeStreamActive && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/silence.wav") === 0) {
             return true;
           }
 
@@ -1450,9 +1468,12 @@
 
           const generation = ++binaryConnectionGeneration;
 
+          const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
+          const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
+
           currentBridgeIp = ip;
-          currentBridgePort = customPort;
-          currentBridgeToken = customToken;
+          currentBridgePort = targetPort;
+          currentBridgeToken = targetToken;
           if (binaryWS) {
             try {
               binaryWS.onopen = null;
@@ -1465,8 +1486,6 @@
             window._sendHandshake = null;
           }
 
-          const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
           const url = `ws://${ip}:${targetPort}/?role=receiver&token=${encodeURIComponent(targetToken)}`;
           try {
             relayLogToStudio(`📡 Receiver: Attempting to connect to ${url}`);
