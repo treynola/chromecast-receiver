@@ -40,6 +40,8 @@
         var nativeStreamActive = false;
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
+        var nativeStartupWatchdogId = null;
+        const NATIVE_STARTUP_TIMEOUT_MS = 2500;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var cafLoadInterceptorConfigured = false;
@@ -271,6 +273,83 @@
           }
         }
 
+        function clearNativeStartupWatchdog() {
+          if (nativeStartupWatchdogId) {
+            clearTimeout(nativeStartupWatchdogId);
+            nativeStartupWatchdogId = null;
+          }
+        }
+
+        function teardownPcmPlayout(reason, closeAudioContext) {
+          pendingBinaryFrames = [];
+          workletReady = false;
+          window._isDrainingStartup = false;
+          window._binaryActive = false;
+          window._lastBinaryTime = 0;
+          window._lastWorkletDiagTime = 0;
+          audioInitializing = false;
+          if (workletNode) {
+            try {
+              if (workletNode.port) {
+                workletNode.port.postMessage({ type: "RESET" });
+                workletNode.port.onmessage = null;
+              }
+            } catch (e) {}
+            try {
+              workletNode.disconnect();
+            } catch (e) {}
+            workletNode = null;
+          }
+          if (closeAudioContext) {
+            if (masterGain) {
+              try {
+                masterGain.disconnect();
+              } catch (e) {}
+              masterGain = null;
+            }
+            if (audioCtx) {
+              try {
+                audioCtx.close();
+              } catch (e) {}
+              audioCtx = null;
+            }
+          }
+          if (reason) {
+            relayLogToStudio("🛑 Receiver: PCM fallback path torn down (" + reason + ").");
+          }
+        }
+
+        function armNativeStartupWatchdog() {
+          clearNativeStartupWatchdog();
+          nativeStartupWatchdogId = setTimeout(() => {
+            nativeStartupWatchdogId = null;
+            if (window._receiverShutdownInProgress) {
+              return;
+            }
+            if (window._playbackMode === "native" || nativeStreamActive) {
+              return;
+            }
+            relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
+            stopNativeStreamPlayout("startup_timeout");
+            if (configReceived) {
+              initAudio();
+            }
+          }, NATIVE_STARTUP_TIMEOUT_MS);
+        }
+
+        function activateNativeStream(modeReason, logMessage) {
+          nativeStreamStarting = false;
+          nativeStreamActive = true;
+          window._nativeStreamActive = true;
+          clearNativeStartupWatchdog();
+          teardownPcmPlayout("native_active", true);
+          notifyPlaybackMode("native", modeReason);
+          document.body.classList.remove("app-loading");
+          if (logMessage) {
+            relayLogToStudio(logMessage);
+          }
+        }
+
         function scheduleNoSenderShutdown(reason) {
           if (window._receiverShutdownInProgress) {
             return;
@@ -351,6 +430,7 @@
         }
 
         function stopNativeStreamPlayout(reason) {
+          clearNativeStartupWatchdog();
           nativeStreamStarting = false;
           nativeStreamActive = false;
           nativeStreamUrl = "";
@@ -376,6 +456,7 @@
         function startHtmlAudioStreamPlayout(streamUrl) {
           const nativeAudio = document.getElementById("native-stream-audio");
           if (!nativeAudio) {
+            clearNativeStartupWatchdog();
             relayLogToStudio("⚠️ Receiver: Native stream element missing; falling back to AudioWorklet.");
             nativeStreamStarting = false;
             nativeStreamActive = false;
@@ -390,10 +471,11 @@
             nativeAudio.crossOrigin = "anonymous";
             nativeAudio.src = streamUrl;
             nativeAudio.onerror = function () {
-              if (!nativeStreamActive) return;
+              if (!nativeStreamActive && !nativeStreamStarting) return;
               nativeStreamStarting = false;
               nativeStreamActive = false;
               window._nativeStreamActive = false;
+              clearNativeStartupWatchdog();
               relayLogToStudio("⚠️ Receiver: HTML audio stream media error; falling back to AudioWorklet.");
               if (configReceived) {
                 initAudio();
@@ -403,35 +485,33 @@
             if (playPromise && typeof playPromise.then === "function") {
               playPromise
                 .then(function () {
-                  nativeStreamStarting = false;
-                  nativeStreamActive = true;
-                  window._nativeStreamActive = true;
-                  notifyPlaybackMode("native", "html_audio_active");
-                  document.body.classList.remove("app-loading");
-                  relayLogToStudio("✅ Receiver: HTML audio stream fallback active via /stream.wav.");
+                  activateNativeStream(
+                    "html_audio_active",
+                    "✅ Receiver: HTML audio stream fallback active via /stream.wav.",
+                  );
                 })
                 .catch(function (e) {
                   nativeStreamStarting = false;
                   nativeStreamActive = false;
                   window._nativeStreamActive = false;
+                  clearNativeStartupWatchdog();
                   relayLogToStudio("⚠️ Receiver: HTML audio stream play failed: " + (e && e.message ? e.message : e));
                   if (configReceived) {
                     initAudio();
                   }
                 });
             } else {
-              nativeStreamStarting = false;
-              nativeStreamActive = true;
-              window._nativeStreamActive = true;
-              notifyPlaybackMode("native", "html_audio_started");
-              document.body.classList.remove("app-loading");
-              relayLogToStudio("✅ Receiver: HTML audio stream fallback started via /stream.wav.");
+              activateNativeStream(
+                "html_audio_started",
+                "✅ Receiver: HTML audio stream fallback started via /stream.wav.",
+              );
             }
             return true;
           } catch (e) {
             nativeStreamStarting = false;
             nativeStreamActive = false;
             window._nativeStreamActive = false;
+            clearNativeStartupWatchdog();
             relayLogToStudio("⚠️ Receiver: HTML audio stream setup failed: " + e.message);
             return false;
           }
@@ -481,13 +561,11 @@
             if (result && typeof result.then === "function") {
               result
                 .then(function () {
-                  nativeStreamStarting = false;
-                  nativeStreamActive = true;
-                  window._nativeStreamActive = true;
-                  notifyPlaybackMode("native", "caf_load_active");
-                  document.body.classList.remove("app-loading");
+                  activateNativeStream(
+                    "caf_load_active",
+                    "✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.",
+                  );
                   writeCastDebug("info", "CAF native stream LOAD active.");
-                  relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.");
                 })
                 .catch(function (e) {
                   writeCastDebug("error", "CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
@@ -495,16 +573,15 @@
                   startHtmlAudioStreamPlayout(streamUrl);
                 });
             } else {
-              nativeStreamStarting = false;
-              nativeStreamActive = true;
-              window._nativeStreamActive = true;
-              notifyPlaybackMode("native", "caf_load_started");
-              document.body.classList.remove("app-loading");
+              activateNativeStream(
+                "caf_load_started",
+                "✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.",
+              );
               writeCastDebug("info", "CAF native stream LOAD started.");
-              relayLogToStudio("✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.");
             }
             return true;
           } catch (e) {
+            clearNativeStartupWatchdog();
             writeCastDebug("error", "CAF native stream setup failed: " + e.message);
             relayLogToStudio("⚠️ Receiver: CAF native stream setup failed: " + e.message);
             return false;
@@ -533,14 +610,19 @@
           }
 
           nativeStreamStarting = true;
-          nativeStreamActive = true;
+          nativeStreamActive = false;
           nativeStreamUrl = streamUrl;
-          window._nativeStreamActive = true;
+          window._nativeStreamActive = false;
+          armNativeStartupWatchdog();
 
           if (startCafStreamPlayout(streamUrl)) {
             return true;
           }
-          return startHtmlAudioStreamPlayout(streamUrl);
+          const htmlStarted = startHtmlAudioStreamPlayout(streamUrl);
+          if (!htmlStarted) {
+            clearNativeStartupWatchdog();
+          }
+          return htmlStarted;
         }
 
         function shutdownReceiver(reason) {
@@ -830,6 +912,9 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
+          if (nativeStreamStarting || nativeStreamActive || window._playbackMode === "native") {
+            return;
+          }
           // [v13.9.510] Native CAF playout is now the primary cast-audio path.
           // This AudioWorklet path remains fallback-only for receivers that cannot
           // sustain the native /stream.wav media pipeline.
@@ -1662,7 +1747,7 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              if ((nativeStreamActive || nativeStreamStarting) && !workletNode) {
+              if (nativeStreamActive || nativeStreamStarting) {
                 return;
               }
               if (workletNode) {
@@ -1688,7 +1773,7 @@
               }
               return;
             } else if (isBlob) {
-              if ((nativeStreamActive || nativeStreamStarting) && !workletNode) {
+              if (nativeStreamActive || nativeStreamStarting) {
                 return;
               }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
