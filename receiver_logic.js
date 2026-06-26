@@ -184,13 +184,23 @@
           }
           pm.setMessageInterceptor(messageType.LOAD, function (request) {
             writeCastDebug("info", "Intercepting LOAD request");
-            if (
-              request &&
-              request.media &&
-              request.media.contentId === "mxs-native-stream" &&
-              request.media.customData &&
-              request.media.customData.streamUrl
-            ) {
+            if (!request || !request.media) {
+              const error = new cast.framework.messages.ErrorData(
+                cast.framework.messages.ErrorType.LOAD_FAILED,
+              );
+              error.reason = cast.framework.messages.ErrorReason.INVALID_REQUEST;
+              writeCastDebug("error", "Rejected malformed LOAD request with no media payload.");
+              return error;
+            }
+            if (request.media.contentId === "mxs-native-stream") {
+              if (!request.media.customData || !request.media.customData.streamUrl) {
+                const error = new cast.framework.messages.ErrorData(
+                  cast.framework.messages.ErrorType.LOAD_FAILED,
+                );
+                error.reason = cast.framework.messages.ErrorReason.INVALID_REQUEST;
+                writeCastDebug("error", "Rejected mxs-native-stream LOAD request with no streamUrl.");
+                return error;
+              }
               request.media.contentUrl = request.media.customData.streamUrl;
               request.media.contentType = "audio/wav";
               request.media.streamType = cast.framework.messages.StreamType.LIVE;
@@ -2125,7 +2135,12 @@
               configureCastDebugLogger(context);
               configureCafLoadInterceptor();
               configureCafPlayerDebugEvents();
-              context.start({ disableIdleTimeout: true });
+              const options = new cast.framework.CastReceiverOptions();
+              const playbackConfig = new cast.framework.PlaybackConfig();
+              playbackConfig.autoResumeDuration = 5;
+              options.playbackConfig = playbackConfig;
+              options.disableIdleTimeout = true;
+              context.start(options);
             } catch (e) {
               relayLogToStudio("❌ Receiver: Cast framework start failed: " + e.message);
               console.error("❌ Receiver: Cast framework start failed:", e);
