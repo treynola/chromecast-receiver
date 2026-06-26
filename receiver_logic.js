@@ -173,6 +173,34 @@
           } catch (e) {}
         }
 
+        function isPlaybackActiveState(state) {
+          if (!state || typeof state !== "object") {
+            return false;
+          }
+          const tracks = Array.isArray(state.tracks) ? state.tracks : [];
+          const trackActive = tracks.some(function (track) {
+            return !!(track && (track.isPlaying || track.isRecording));
+          });
+          const masterActive = !!(state.master && state.master.isRecording);
+          return trackActive || masterActive;
+        }
+
+        function maybeStartNativeStream(reason) {
+          if (window._receiverShutdownInProgress) {
+            return false;
+          }
+          if (nativeStreamActive || nativeStreamStarting) {
+            return true;
+          }
+          if (!configReceived || !currentBridgeIp) {
+            return false;
+          }
+          if (reason) {
+            relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
+          }
+          return startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+        }
+
         function configureCafLoadInterceptor() {
           if (cafLoadInterceptorConfigured) {
             return;
@@ -1715,7 +1743,6 @@
 
             // Send actual hardware capabilities
             preInitAudioContext();
-            startNativeStreamPlayout(ip, targetPort);
 
             function sendHandshake() {
               if (window._receiverShutdownInProgress) return;
@@ -1753,7 +1780,8 @@
               sendHandshake();
             }, 1500);
 
-            // Audio init is deferred until HANDSHAKE_ACK arrives
+            // Native playback waits for actual audio activity so the live stream
+            // does not spend seconds buffering silence before the first play.
             triggerWakeLockLoad();
           };
           binaryWS.onmessage = (event) => {
@@ -1837,6 +1865,9 @@
                 }
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
+                  if (isPlaybackActiveState(d.state)) {
+                    maybeStartNativeStream("state_update");
+                  }
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
                    if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
@@ -1871,7 +1902,8 @@
                     window.location.href = cleanUrl + "?cb=" + Date.now();
                   }, 500);
                 } else if (d.type === "HANDSHAKE_ACK") {
-                  // [v13.9.504] Server confirmed handshake — init audio with negotiated config
+                  // [v13.9.504] Server confirmed handshake — keep the receiver primed
+                  // and let actual playback activity trigger native stream startup.
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
@@ -1883,11 +1915,7 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  const nativeStarted = startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
                   document.body.classList.remove("app-loading");
-                  if (!nativeStarted) {
-                    initAudio();
-                  }
                   // Configure worklet bit depth after init
                   setTimeout(() => {
                     if (workletNode) {
@@ -1900,6 +1928,8 @@
                       );
                     }
                   }, 500);
+                } else if (d.type === "PLAYBACK_START") {
+                  maybeStartNativeStream("playback_start");
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
@@ -2253,7 +2283,7 @@
               configureCafPlayerDebugEvents();
               const options = new cast.framework.CastReceiverOptions();
               const playbackConfig = new cast.framework.PlaybackConfig();
-              playbackConfig.autoResumeDuration = 5;
+              playbackConfig.autoResumeDuration = 0;
               options.playbackConfig = playbackConfig;
               options.disableIdleTimeout = true;
               context.start(options);
