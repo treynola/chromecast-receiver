@@ -42,6 +42,7 @@
         var nativeStreamUrl = "";
         var nativeStartupAttemptId = 0;
         var nativeStartupWatchdogId = null;
+        var pendingNativePlaybackStart = false;
         const NATIVE_STARTUP_TIMEOUT_MS = 2500;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
@@ -173,18 +174,6 @@
           } catch (e) {}
         }
 
-        function isPlaybackActiveState(state) {
-          if (!state || typeof state !== "object") {
-            return false;
-          }
-          const tracks = Array.isArray(state.tracks) ? state.tracks : [];
-          const trackActive = tracks.some(function (track) {
-            return !!(track && (track.isPlaying || track.isRecording));
-          });
-          const masterActive = !!(state.master && state.master.isRecording);
-          return trackActive || masterActive;
-        }
-
         function maybeStartNativeStream(reason) {
           if (window._receiverShutdownInProgress) {
             return false;
@@ -199,6 +188,15 @@
             relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
           }
           return startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+        }
+
+        function requestNativePlaybackStart(reason) {
+          pendingNativePlaybackStart = true;
+          const started = maybeStartNativeStream(reason);
+          if (started) {
+            pendingNativePlaybackStart = false;
+          }
+          return started;
         }
 
         function configureCafLoadInterceptor() {
@@ -496,6 +494,7 @@
           nativeStreamStarting = false;
           nativeStreamActive = false;
           nativeStreamUrl = "";
+          pendingNativePlaybackStart = false;
           window._nativeStreamActive = false;
           stopCafNativeCompanion();
           stopHtmlAudioNativeCompanion();
@@ -703,6 +702,7 @@
           workletReady = false;
           window._lastBinaryTime = 0;
           window._lastWorkletDiagTime = 0;
+          pendingNativePlaybackStart = false;
           stopNativeStreamPlayout(reason || "shutdown");
           if (autoDiscoveryFallbackTimeoutId) {
             clearTimeout(autoDiscoveryFallbackTimeoutId);
@@ -1865,9 +1865,6 @@
                 }
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
-                  if (isPlaybackActiveState(d.state)) {
-                    maybeStartNativeStream("state_update");
-                  }
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
                    if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
@@ -1929,7 +1926,7 @@
                     }
                   }, 500);
                 } else if (d.type === "PLAYBACK_START") {
-                  maybeStartNativeStream("playback_start");
+                  requestNativePlaybackStart("playback_start");
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
@@ -2132,8 +2129,10 @@
               }
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
-                startNativeStreamPlayout(d.ip, d.port);
                 triggerWakeLockLoad();
+                if (pendingNativePlaybackStart) {
+                  requestNativePlaybackStart("bridge_config_ready");
+                }
               }
               return;
             }
