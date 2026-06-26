@@ -764,12 +764,9 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
-          // [v13.9.506] SINGLE PATH: If native stream is active, tear it down
-          // in favor of the worklet path which gives us buffer control and diagnostics.
-          if (nativeStreamActive || nativeStreamStarting) {
-            relayLogToStudio("📡 Receiver: Tearing down native stream; AudioWorklet takes priority.");
-            stopNativeStreamPlayout("worklet-priority");
-          }
+          // [v13.9.506] WAKE-LOCK KEEP-ALIVE: Do not tear down the native stream.
+          // Since the HTTP stream now serves silence, it keeps the CAF PlayerManager
+          // in PLAYING state for wake-lock while the AudioWorklet renders real audio.
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
             relayLogToStudio("📡 Receiver: initAudio (Legacy) skipped because WebRTC is primary.");
@@ -1597,12 +1594,7 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              // [v13.9.506] SINGLE PATH: Always feed binary data to worklet when available.
-              // If a native stream is still lingering, tear it down now — the worklet
-              // path provides superior buffering and clock control.
-              if ((nativeStreamActive || nativeStreamStarting) && workletNode && workletReady) {
-                stopNativeStreamPlayout("worklet-binary-active");
-              }
+              // [v13.9.506] WAKE-LOCK KEEP-ALIVE: Keep the silent native stream running to preserve Cast PlayerManager state.
               if (workletNode) {
                 // [v13.9.504] BINARY SUPERIORITY LOCK
                 // We have a direct high-fidelity bridge. Kill all fallback paths to save Receiver CPU.
@@ -1626,10 +1618,7 @@
               }
               return;
             } else if (isBlob) {
-              // [v13.9.506] SINGLE PATH: Tear down native stream if worklet is ready.
-              if ((nativeStreamActive || nativeStreamStarting) && workletNode && workletReady) {
-                stopNativeStreamPlayout("worklet-blob-active");
-              }
+              // [v13.9.506] WAKE-LOCK KEEP-ALIVE: Keep the silent native stream running to preserve Cast PlayerManager state.
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
               window._lastBinaryTime = Date.now();
               if (!window._binaryActive) {
@@ -1706,23 +1695,21 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  if (startNativeStreamPlayout(currentBridgeIp, currentBridgePort)) {
-                    document.body.classList.remove("app-loading");
-                  } else {
-                    initAudio();
-                    // Configure worklet bit depth after init
-                    setTimeout(() => {
-                      if (workletNode) {
-                        workletNode.port.postMessage({
-                          type: "CONFIG",
-                          bitDepth: ackBitDepth,
-                        });
-                        relayLogToStudio(
-                          `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
-                        );
-                      }
-                    }, 500);
-                  }
+                  startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                  document.body.classList.remove("app-loading");
+                  initAudio();
+                  // Configure worklet bit depth after init
+                  setTimeout(() => {
+                    if (workletNode) {
+                      workletNode.port.postMessage({
+                        type: "CONFIG",
+                        bitDepth: ackBitDepth,
+                      });
+                      relayLogToStudio(
+                        `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
+                      );
+                    }
+                  }, 500);
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
