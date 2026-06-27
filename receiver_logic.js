@@ -174,6 +174,18 @@
           } catch (e) {}
         }
 
+        function isPlaybackActiveState(state) {
+          if (!state || typeof state !== "object") {
+            return false;
+          }
+          const tracks = Array.isArray(state.tracks) ? state.tracks : [];
+          const trackActive = tracks.some(function (track) {
+            return !!(track && (track.isPlaying || track.isRecording));
+          });
+          const masterActive = !!(state.master && state.master.isRecording);
+          return trackActive || masterActive;
+        }
+
         function maybeStartNativeStream(reason) {
           if (window._receiverShutdownInProgress) {
             return false;
@@ -1865,6 +1877,9 @@
                 }
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
+                  if (isPlaybackActiveState(d.state)) {
+                    requestNativePlaybackStart("state_update");
+                  }
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
                    if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
@@ -1948,14 +1963,12 @@
                           type: "CONFIG",
                           baseRateRatio: newBaseRateRatio,
                         });
-                      } else if (!nativeStreamActive && !nativeStreamStarting) {
-                        initAudio();
-                      }
-                    } else {
-                      if (!nativeStreamActive && !nativeStreamStarting && (!audioCtx || !workletNode)) {
-                        initAudio();
                       }
                     }
+                  }
+                  if (d.ip) {
+                    startNativeStreamPlayout(d.ip, d.port);
+                    triggerWakeLockLoad();
                   }
                 } else if (d.type === "WEBRTC_OFFER") {
                   handleWebRTCOffer(d.sdp);
@@ -2114,25 +2127,13 @@
                       type: "CONFIG",
                       baseRateRatio: newBaseRateRatio,
                     });
-                  } else if (!nativeStreamActive && !nativeStreamStarting) {
-                    initAudio();
                   }
-                } else {
-                  if (!nativeStreamActive && !nativeStreamStarting && (!audioCtx || !workletNode)) {
-                    initAudio();
-                  }
-                }
-              } else {
-                if (!nativeStreamActive && !nativeStreamStarting && (!audioCtx || !workletNode)) {
-                  initAudio();
                 }
               }
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
+                startNativeStreamPlayout(d.ip, d.port);
                 triggerWakeLockLoad();
-                if (pendingNativePlaybackStart) {
-                  requestNativePlaybackStart("bridge_config_ready");
-                }
               }
               return;
             }
@@ -2211,6 +2212,9 @@
             if (d.type === "STATE_UPDATE") {
               if (window._binaryActive) return;
               renderState(d.state);
+              if (isPlaybackActiveState(d.state)) {
+                requestNativePlaybackStart("state_update");
+              }
             }
           } catch (e) {
             relayLogToStudio("⚠️ Receiver: Inbound Cast message failed: " + e.message);
