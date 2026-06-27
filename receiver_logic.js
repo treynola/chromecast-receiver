@@ -1422,11 +1422,50 @@
         const _lastParamsCache = [];
         const _lastFxCache = [];
         let _lastSamplerCache = "";
+        let lastMirroredState = null;
 
-        function renderState(s) {
+        function cloneMirroredState(state) {
+          if (!state || typeof state !== "object") {
+            return null;
+          }
+          try {
+            return JSON.parse(JSON.stringify(state));
+          } catch (e) {
+            const copy = { ...state };
+            if (Array.isArray(state.tracks)) {
+              copy.tracks = state.tracks.map((track) =>
+                track && typeof track === "object" ? { ...track } : track,
+              );
+            }
+            return copy;
+          }
+        }
+
+        function buildImmediatePlaybackState(trackId) {
+          if (lastMirroredState == null) {
+            return null;
+          }
+          const nextState = cloneMirroredState(lastMirroredState);
+          if (!nextState || !Array.isArray(nextState.tracks)) {
+            return null;
+          }
+          const index = Number(trackId);
+          if (!Number.isInteger(index) || index < 0 || index >= nextState.tracks.length) {
+            return null;
+          }
+          const track = nextState.tracks[index];
+          if (!track || typeof track !== "object") {
+            return null;
+          }
+          track.isPlaying = true;
+          track.isRecording = false;
+          return nextState;
+        }
+
+        function renderState(s, force = false) {
           if (!s) return;
           const now = Date.now();
-          if (now - lastRenderTime < RENDER_THROTTLE_MS) return;
+          if (!force && now - lastRenderTime < RENDER_THROTTLE_MS) return;
           lastRenderTime = now;
           try {
             if (s.transport) {
@@ -1877,6 +1916,7 @@
                 }
                 if (d.type === "STATE_UPDATE") {
                   renderState(d.state);
+                  lastMirroredState = d.state;
                   if (isPlaybackActiveState(d.state)) {
                     requestNativePlaybackStart("state_update");
                   }
@@ -1940,6 +1980,11 @@
                     }
                   }, 500);
                 } else if (d.type === "PLAYBACK_START") {
+                  const immediateState = buildImmediatePlaybackState(d.trackId);
+                  if (immediateState) {
+                    renderState(immediateState, true);
+                    lastMirroredState = immediateState;
+                  }
                   requestNativePlaybackStart("playback_start");
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (d.config && d.config.sampleRate) {
@@ -2211,6 +2256,7 @@
             if (d.type === "STATE_UPDATE") {
               if (window._binaryActive) return;
               renderState(d.state);
+              lastMirroredState = d.state;
               if (isPlaybackActiveState(d.state)) {
                 requestNativePlaybackStart("state_update");
               }
