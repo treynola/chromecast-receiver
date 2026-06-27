@@ -1951,7 +1951,7 @@
                       window._sendHandshake();
                     }
 
-                    if (window._studioRate !== newStudioRate) {
+                  if (window._studioRate !== newStudioRate) {
                       window._studioRate = newStudioRate;
                       relayLogToStudio(
                         `🔄 Receiver: Studio rate updated to ${newStudioRate}Hz`,
@@ -1966,7 +1966,6 @@
                     }
                   }
                   if (d.ip) {
-                    startNativeStreamPlayout(d.ip, d.port);
                     triggerWakeLockLoad();
                   }
                 } else if (d.type === "WEBRTC_OFFER") {
@@ -2127,13 +2126,12 @@
                       baseRateRatio: newBaseRateRatio,
                     });
                   }
+                  }
                 }
-              }
-              if (d.ip) {
-                connectBinaryBridge(d.ip, d.port, d.token);
-                startNativeStreamPlayout(d.ip, d.port);
-                triggerWakeLockLoad();
-              }
+                if (d.ip) {
+                  connectBinaryBridge(d.ip, d.port, d.token);
+                  triggerWakeLockLoad();
+                }
               return;
             }
 
