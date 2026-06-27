@@ -42,6 +42,7 @@
         var nativeStreamUrl = "";
         var nativeStartupAttemptId = 0;
         var nativeStartupWatchdogId = null;
+        var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 2500;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
@@ -185,6 +186,29 @@
           return trackActive || masterActive;
         }
 
+        function maybeStartLowLatencyPlayout(reason) {
+          if (window._receiverShutdownInProgress) {
+            return false;
+          }
+          if (nativeStreamActive || nativeStreamStarting || audioInitializing || workletNode) {
+            return true;
+          }
+          if (!configReceived || !currentBridgeIp) {
+            return false;
+          }
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN || !window._handshakeAcked) {
+            return false;
+          }
+          if (reason) {
+            relayLogToStudio("▶️ Receiver: Starting PCM worklet on " + reason + ".");
+          }
+          initAudio().catch((e) => {
+            relayLogToStudio("⚠️ Receiver: initAudio failed: " + (e && e.message ? e.message : e));
+          });
+          armLowLatencyStartupWatchdog();
+          return true;
+        }
+
         function maybeStartNativeStream(reason) {
           if (window._receiverShutdownInProgress) {
             return false;
@@ -195,6 +219,16 @@
           if (!configReceived || !currentBridgeIp) {
             return false;
           }
+          if (audioInitializing || workletNode) {
+            return true;
+          }
+          if (window._handshakeAcked && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            return maybeStartLowLatencyPlayout(reason);
+          }
+          if (configReceived && !window._handshakeAcked) {
+            armLowLatencyStartupWatchdog();
+            return true;
+          }
           if (reason) {
             relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
           }
@@ -202,6 +236,9 @@
         }
 
         function requestNativePlaybackStart(reason) {
+          if (maybeStartLowLatencyPlayout(reason)) {
+            return true;
+          }
           return maybeStartNativeStream(reason);
         }
 
@@ -311,6 +348,34 @@
             clearTimeout(nativeStartupWatchdogId);
             nativeStartupWatchdogId = null;
           }
+        }
+
+        function clearLowLatencyStartupWatchdog() {
+          if (lowLatencyStartupWatchdogId) {
+            clearTimeout(lowLatencyStartupWatchdogId);
+            lowLatencyStartupWatchdogId = null;
+          }
+        }
+
+        function armLowLatencyStartupWatchdog() {
+          clearLowLatencyStartupWatchdog();
+          lowLatencyStartupWatchdogId = setTimeout(() => {
+            lowLatencyStartupWatchdogId = null;
+            if (window._receiverShutdownInProgress) {
+              return;
+            }
+            if (workletNode && workletReady) {
+              return;
+            }
+            if (nativeStreamActive || nativeStreamStarting) {
+              return;
+            }
+            if (!configReceived || !currentBridgeIp) {
+              return;
+            }
+            relayLogToStudio("⚠️ Receiver: PCM worklet startup timed out; starting native stream fallback.");
+            startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+          }, NATIVE_STARTUP_TIMEOUT_MS);
         }
 
         function isCurrentNativeAttempt(attemptId) {
@@ -508,6 +573,27 @@
           }
         }
 
+        function resetBinaryPlayoutState(reason) {
+          pendingBinaryFrames = [];
+          window._isDrainingStartup = false;
+          window._binaryActive = false;
+          window._lastBinaryTime = 0;
+          if (workletNode && workletNode.port) {
+            try {
+              workletNode.port.postMessage({ type: "RESET" });
+            } catch (e) {}
+          }
+          clearLowLatencyStartupWatchdog();
+          if (reason) {
+            relayLogToStudio("🛑 Receiver: Binary playout reset (" + reason + ").");
+          }
+        }
+
+        function stopAllPlayout(reason) {
+          resetBinaryPlayoutState(reason || "playback_stop");
+          stopNativeStreamPlayout(reason || "playback_stop");
+        }
+
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
           const nativeAudio = document.getElementById("native-stream-audio");
           if (!nativeAudio) {
@@ -694,6 +780,7 @@
           window._receiverShutdownInProgress = true;
           suppressBinaryReconnect = true;
           clearBinaryReconnectTimer();
+          clearLowLatencyStartupWatchdog();
           window._wsReconnectAttempts = 0;
           window._handshakeAcked = false;
           window._sendHandshake = null;
@@ -977,9 +1064,9 @@
           if (nativeStreamStarting || nativeStreamActive || window._playbackMode === "native") {
             return;
           }
-          // [v13.9.510] Native CAF playout is now the primary cast-audio path.
-          // This AudioWorklet path remains fallback-only for receivers that cannot
-          // sustain the native /stream.wav media pipeline.
+          // [v13.9.510] PCM AudioWorklet is the low-latency primary cast path.
+          // Native /stream.wav playout remains fallback-only for receivers that
+          // cannot sustain the direct PCM bridge.
           // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
           if (window._useWebRTC) {
             relayLogToStudio("📡 Receiver: initAudio (Legacy) skipped because WebRTC is primary.");
@@ -1138,9 +1225,10 @@
                   setTimeout(() => {
                     window._isDrainingStartup = false;
                     workletReady = true;
+                    clearLowLatencyStartupWatchdog();
                     flushPendingBinaryFrames();
                     relayLogToStudio("✅ Receiver: Startup packets drained. Playout active.");
-                  }, 1000);
+                  }, 250);
                 }
                 relayLogToStudio(e.data.msg);
               }
@@ -1910,7 +1998,16 @@
                   lastMirroredState = d.state;
                   if (isPlaybackActiveState(d.state)) {
                     requestNativePlaybackStart("state_update");
+                  } else if (
+                    nativeStreamActive ||
+                    nativeStreamStarting ||
+                    window._binaryActive ||
+                    pendingBinaryFrames.length > 0
+                  ) {
+                    stopAllPlayout("state_update_inactive");
                   }
+                } else if (d.type === "PLAYBACK_STOP") {
+                  stopAllPlayout(d.reason || "playback_stop");
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
                    if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
@@ -1958,6 +2055,7 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
+                  maybeStartLowLatencyPlayout("handshake_ack");
                   // Configure worklet bit depth after init
                   setTimeout(() => {
                     if (workletNode) {
@@ -2000,9 +2098,9 @@
                         });
                       }
                     }
+                    maybeStartLowLatencyPlayout("bridge_config");
                   }
                   if (d.ip) {
-                    startNativeStreamPlayout(d.ip, d.port);
                     triggerWakeLockLoad();
                   }
                 } else if (d.type === "WEBRTC_OFFER") {
@@ -2020,13 +2118,14 @@
 
           binaryWS.onclose = () => {
             if (generation !== binaryConnectionGeneration) return;
+            clearLowLatencyStartupWatchdog();
             window._binaryActive = false;
             configReceived = false;
             wakeLockLoadingOrLoaded = false;
             pendingBinaryFrames = [];
             workletReady = false;
             window._isDrainingStartup = false;
-            stopNativeStreamPlayout("websocket_closed");
+            stopAllPlayout("websocket_closed");
             if (workletNode) {
               try {
                 workletNode.port.postMessage({ type: "RESET" });
@@ -2150,26 +2249,23 @@
             if (d.type === "BRIDGE_CONFIG") {
               const newRate = d.config ? d.config.sampleRate : null;
               configReceived = true;
-              if (newRate) {
-                if (window._studioRate !== newRate) {
-                  window._studioRate = newRate;
-                  relayLogToStudio(
-                    `🔄 Receiver: Studio rate updated via signaling to ${newRate}Hz`,
-                  );
-                  if (workletNode && audioCtx && !nativeStreamActive && !nativeStreamStarting) {
-                    const newBaseRateRatio = 1.0;
-                    workletNode.port.postMessage({
-                      type: "CONFIG",
-                      baseRateRatio: newBaseRateRatio,
-                    });
-                  }
-                  }
+              if (newRate && window._studioRate !== newRate) {
+                window._studioRate = newRate;
+                relayLogToStudio(
+                  `🔄 Receiver: Studio rate updated via signaling to ${newRate}Hz`,
+                );
+                if (workletNode && audioCtx && !nativeStreamActive && !nativeStreamStarting) {
+                  workletNode.port.postMessage({
+                    type: "CONFIG",
+                    baseRateRatio: 1.0,
+                  });
                 }
-                if (d.ip) {
-                  connectBinaryBridge(d.ip, d.port, d.token);
-                  startNativeStreamPlayout(d.ip, d.port);
-                  triggerWakeLockLoad();
-                }
+              }
+              if (d.ip) {
+                connectBinaryBridge(d.ip, d.port, d.token);
+                triggerWakeLockLoad();
+              }
+              maybeStartLowLatencyPlayout("bridge_config");
               return;
             }
 
@@ -2209,6 +2305,21 @@
               return;
             }
 
+            if (d.type === "PLAYBACK_START") {
+              const immediateState = buildImmediatePlaybackState(d.trackId);
+              if (immediateState) {
+                renderState(immediateState, true);
+                lastMirroredState = immediateState;
+              }
+              requestNativePlaybackStart("playback_start");
+              return;
+            }
+
+            if (d.type === "PLAYBACK_STOP") {
+              stopAllPlayout(d.reason || "playback_stop");
+              return;
+            }
+
             // 2. High-Fidelity Audio Relay (Fallback Path)
             if (d.type === "PCM_RELAY") {
               // If Binary WS is active, IGNORE Relay to prevent doubling/echo
@@ -2245,11 +2356,17 @@
 
             // 4. GUI Mirroring
             if (d.type === "STATE_UPDATE") {
-              if (window._binaryActive) return;
               renderState(d.state);
               lastMirroredState = d.state;
               if (isPlaybackActiveState(d.state)) {
                 requestNativePlaybackStart("state_update");
+              } else if (
+                nativeStreamActive ||
+                nativeStreamStarting ||
+                window._binaryActive ||
+                pendingBinaryFrames.length > 0
+              ) {
+                stopAllPlayout("state_update_inactive");
               }
             }
           } catch (e) {
