@@ -3518,6 +3518,7 @@ select option {
 /* --- [V13.9.497] RECEIVER MODE OVERRIDES --- */
 body.receiver-mode {
   background: #000 !important;
+  transition: opacity 0.5s ease-in-out !important;
 }
 body.receiver-mode #cursor-mirror {
   position: absolute;

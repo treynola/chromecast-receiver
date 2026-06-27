@@ -1927,7 +1927,6 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  document.body.classList.remove("app-loading");
                   // Configure worklet bit depth after init
                   setTimeout(() => {
                     if (workletNode) {
