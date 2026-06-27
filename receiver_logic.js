@@ -42,7 +42,6 @@
         var nativeStreamUrl = "";
         var nativeStartupAttemptId = 0;
         var nativeStartupWatchdogId = null;
-        var pendingNativePlaybackStart = false;
         const NATIVE_STARTUP_TIMEOUT_MS = 2500;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
@@ -203,12 +202,7 @@
         }
 
         function requestNativePlaybackStart(reason) {
-          pendingNativePlaybackStart = true;
-          const started = maybeStartNativeStream(reason);
-          if (started) {
-            pendingNativePlaybackStart = false;
-          }
-          return started;
+          return maybeStartNativeStream(reason);
         }
 
         function configureCafLoadInterceptor() {
@@ -506,7 +500,6 @@
           nativeStreamStarting = false;
           nativeStreamActive = false;
           nativeStreamUrl = "";
-          pendingNativePlaybackStart = false;
           window._nativeStreamActive = false;
           stopCafNativeCompanion();
           stopHtmlAudioNativeCompanion();
@@ -620,7 +613,6 @@
             }
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
-            loadRequestData.currentTime = 0;
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
@@ -714,7 +706,6 @@
           workletReady = false;
           window._lastBinaryTime = 0;
           window._lastWorkletDiagTime = 0;
-          pendingNativePlaybackStart = false;
           stopNativeStreamPlayout(reason || "shutdown");
           if (autoDiscoveryFallbackTimeoutId) {
             clearTimeout(autoDiscoveryFallbackTimeoutId);
@@ -1417,7 +1408,7 @@
         }
 
         let lastRenderTime = 0;
-        const RENDER_THROTTLE_MS = 2000; // [v13.9.504] Throttle to 0.5 FPS — UI is decorative, audio is critical
+        const RENDER_THROTTLE_MS = 250; // Keep UI near-live without hammering the DOM.
 
         const _lastParamsCache = [];
         const _lastFxCache = [];
@@ -2331,6 +2322,7 @@
               configureCafPlayerDebugEvents();
               const options = new cast.framework.CastReceiverOptions();
               const playbackConfig = new cast.framework.PlaybackConfig();
+              playbackConfig.autoPauseDuration = 0;
               playbackConfig.autoResumeDuration = 0;
               options.playbackConfig = playbackConfig;
               options.disableIdleTimeout = true;
