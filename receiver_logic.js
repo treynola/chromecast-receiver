@@ -223,7 +223,9 @@
             return true;
           }
           if (window._handshakeAcked && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-            return maybeStartLowLatencyPlayout(reason);
+            if (maybeStartLowLatencyPlayout(reason)) {
+              return true;
+            }
           }
           if (configReceived && !window._handshakeAcked) {
             armLowLatencyStartupWatchdog();
@@ -562,6 +564,7 @@
         function stopNativeStreamPlayout(reason) {
           nativeStartupAttemptId++;
           clearNativeStartupWatchdog();
+          clearLowLatencyStartupWatchdog();
           nativeStreamStarting = false;
           nativeStreamActive = false;
           nativeStreamUrl = "";
@@ -1910,8 +1913,8 @@
               sendHandshake();
             }, 1500);
 
-            // Native playback waits for actual audio activity so the live stream
-            // does not spend seconds buffering silence before the first play.
+            // Keep the wake-lock primed; low-latency PCM startup now begins only
+            // once the handshake/configuration path is ready.
             triggerWakeLockLoad();
           };
           binaryWS.onmessage = (event) => {
@@ -2043,7 +2046,7 @@
                   }, 500);
                 } else if (d.type === "HANDSHAKE_ACK") {
                   // [v13.9.504] Server confirmed handshake — keep the receiver primed
-                  // and let actual playback activity trigger native stream startup.
+                  // and allow the low-latency PCM path to initialize immediately.
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
@@ -2079,13 +2082,13 @@
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
                     configReceived = true;
-                    
+
                     // Proactive fallback: If we haven't received HANDSHAKE_ACK yet, resend HANDSHAKE
                     if (!window._handshakeAcked && typeof window._sendHandshake === "function") {
                       window._sendHandshake();
                     }
 
-                  if (window._studioRate !== newStudioRate) {
+                    if (window._studioRate !== newStudioRate) {
                       window._studioRate = newStudioRate;
                       relayLogToStudio(
                         `🔄 Receiver: Studio rate updated to ${newStudioRate}Hz`,
