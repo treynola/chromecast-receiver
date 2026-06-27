@@ -412,9 +412,9 @@
           } else {
             stopCafNativeCompanion();
           }
-          teardownPcmPlayout("native_active", true);
           notifyPlaybackMode("native", modeReason);
           document.body.classList.remove("app-loading");
+          teardownPcmPlayout("native_active", true);
           if (logMessage) {
             relayLogToStudio(logMessage);
           }
