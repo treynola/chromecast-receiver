@@ -1966,6 +1966,7 @@
                     }
                   }
                   if (d.ip) {
+                    startNativeStreamPlayout(d.ip, d.port);
                     triggerWakeLockLoad();
                   }
                 } else if (d.type === "WEBRTC_OFFER") {
@@ -2130,6 +2131,7 @@
                 }
                 if (d.ip) {
                   connectBinaryBridge(d.ip, d.port, d.token);
+                  startNativeStreamPlayout(d.ip, d.port);
                   triggerWakeLockLoad();
                 }
               return;
