@@ -17,12 +17,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Favor live sync over heavy startup cushioning.
-    // Stereo sample counts: 12288=6144 frames (~128ms), 8192=4096 frames (~85ms).
-    this._TARGET_BUFFER = 12288;
-    this._MIN_BUFFER = 4096;
-    this._PREBUFFER = 8192;
-    this._FLUSH_THRESHOLD = 24576;
+    // Favor live sync, but keep enough headroom to avoid constant lag flushes.
+    // Stereo sample counts: 16384=8192 frames (~171ms), 12288=6144 frames (~128ms).
+    this._TARGET_BUFFER = 16384;
+    this._MIN_BUFFER = 6144;
+    this._PREBUFFER = 12288;
+    this._FLUSH_THRESHOLD = 32768;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -65,10 +65,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 12288;
-          this._MIN_BUFFER = 4096;
-          this._PREBUFFER = 8192;
-          this._FLUSH_THRESHOLD = 24576;
+          this._TARGET_BUFFER = 16384;
+          this._MIN_BUFFER = 6144;
+          this._PREBUFFER = 12288;
+          this._FLUSH_THRESHOLD = 32768;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
