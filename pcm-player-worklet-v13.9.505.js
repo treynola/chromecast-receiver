@@ -207,16 +207,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Gently speed up only when the backlog rises above the target window.
-      // The correction is smoothed so we trim latency without the audible
-      // wobble that comes from abrupt per-block rate swings.
+      // Use only micro-correction here. Larger receiver-side resampling keeps
+      // the queue smaller, but it audibly bends pitch on Chromecast hardware.
+      // Sender-side pacing is the primary latency control.
       const bufferOvershoot = Math.max(0, available - this._TARGET_BUFFER);
       const overshootRatio = bufferOvershoot / Math.max(1, this._TARGET_BUFFER);
       const targetPlaybackRate = overshootRatio > 0
-        ? Math.min(1.018, 1.0 + (overshootRatio * 0.018))
+        ? Math.min(1.004, 1.0 + (overshootRatio * 0.004))
         : 1.0;
       this._smoothedPlaybackRate += (targetPlaybackRate - this._smoothedPlaybackRate) * 0.12;
-      const playbackRate = Math.max(1.0, Math.min(1.018, this._smoothedPlaybackRate));
+      const playbackRate = Math.max(1.0, Math.min(1.004, this._smoothedPlaybackRate));
 
       if (renderSilence) {
         channel0.fill(0);
