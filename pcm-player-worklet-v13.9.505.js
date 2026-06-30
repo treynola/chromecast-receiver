@@ -204,7 +204,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      const playbackRate = 1.0;
+      // Gently speed up only when the backlog rises above the target window.
+      // This keeps the queue from reaching hard-flush territory without
+      // resorting to audible sample drops in normal playback.
+      const bufferOvershoot = Math.max(0, available - this._TARGET_BUFFER);
+      const overshootRatio = bufferOvershoot / Math.max(1, this._TARGET_BUFFER);
+      const playbackRate = overshootRatio > 0
+        ? Math.min(1.05, 1.0 + (overshootRatio * 0.04))
+        : 1.0;
 
       if (renderSilence) {
         channel0.fill(0);
