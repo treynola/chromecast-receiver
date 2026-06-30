@@ -213,10 +213,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const bufferOvershoot = Math.max(0, available - this._TARGET_BUFFER);
       const overshootRatio = bufferOvershoot / Math.max(1, this._TARGET_BUFFER);
       const targetPlaybackRate = overshootRatio > 0
-        ? Math.min(1.04, 1.0 + (overshootRatio * 0.03))
+        ? Math.min(1.018, 1.0 + (overshootRatio * 0.018))
         : 1.0;
       this._smoothedPlaybackRate += (targetPlaybackRate - this._smoothedPlaybackRate) * 0.12;
-      const playbackRate = Math.max(1.0, Math.min(1.04, this._smoothedPlaybackRate));
+      const playbackRate = Math.max(1.0, Math.min(1.018, this._smoothedPlaybackRate));
 
       if (renderSilence) {
         channel0.fill(0);
