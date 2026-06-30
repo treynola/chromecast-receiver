@@ -17,15 +17,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // [v13.9.510] Tightened jitter-buffer parameters.
-    // TV drains at ~32kHz but receives 48kHz PCM — buffer fills at ~16k samples/sec.
-    // Lower TARGET and FLUSH_THRESHOLD to minimise the drop size when overrun occurs.
-    // The permanent fix is the Rust resampler lock (v13.9.509) once Tauri is rebuilt.
-    // Interleaved samples: 16384 stereo samples = ~170ms at 48kHz
-    this._TARGET_BUFFER = 16384;   // was 32768
-    this._MIN_BUFFER = 4096;        // was 8192
-    this._PREBUFFER = 12288;        // was 24576 — pre-buffer to ~128ms before playout
-    this._FLUSH_THRESHOLD = 49152; // was 98304 — flush at ~512ms to reduce pop size
+    // [v13.9.511] Wider steady-state jitter buffer.
+    // The recent QA runs show clean sync but audible quality loss when the
+    // receiver hard-flushes a large backlog. Keep a larger operating window so
+    // the worklet can absorb startup jitter without repeating those skips.
+    this._TARGET_BUFFER = 32768;   // ~341ms of stereo PCM at 48kHz
+    this._MIN_BUFFER = 8192;       // ~85ms guard rail before we rebuffer
+    this._PREBUFFER = 24576;       // ~256ms before enabling playout
+    this._FLUSH_THRESHOLD = 65536; // ~682ms before a hard backlog reset
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -68,10 +67,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 16384;
-          this._MIN_BUFFER = 4096;
-          this._PREBUFFER = 12288;
-          this._FLUSH_THRESHOLD = 49152;
+          this._TARGET_BUFFER = 32768;
+          this._MIN_BUFFER = 8192;
+          this._PREBUFFER = 24576;
+          this._FLUSH_THRESHOLD = 65536;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }

@@ -843,11 +843,9 @@
             binaryWS = null;
           }
           try {
-            if (reason !== "beforeunload" && reason !== "pagehide") {
-              const context = getCastReceiverContext();
-              if (context && typeof context.stop === "function") {
-                context.stop();
-              }
+            const context = getCastReceiverContext();
+            if (context && typeof context.stop === "function") {
+              context.stop();
             }
           } catch (e) {
             relayLogToStudio(`⚠️ Receiver: Cast receiver stop failed: ${e.message}`);
