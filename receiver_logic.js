@@ -18,7 +18,8 @@
         var masterGain = null;
         var workletNode = null;
         var peerConnection = null;
-        window._useWebRTC = false; // [v13.9.504] APOR V2 Primary (LOCK)
+        window._useWebRTC = false; // Legacy flag retained for compatibility; receiver WebRTC fallback is hard-disabled.
+        const ENABLE_WEBRTC_FALLBACK = false;
         window._receiverShutdownInProgress = false;
         var configReceived = false;
         var targetRate = 48000;
@@ -2105,9 +2106,9 @@
                     triggerWakeLockLoad();
                   }
                 } else if (d.type === "WEBRTC_OFFER") {
-                  handleWebRTCOffer(d.sdp);
+                  relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
-                  if (peerConnection && d.candidate) {
+                  if (ENABLE_WEBRTC_FALLBACK && peerConnection && d.candidate) {
                     peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
                       relayLogToStudio("⚠️ Receiver WebRTC: Failed to add ICE candidate - " + e.message);
                     });
@@ -2187,6 +2188,10 @@
 
         async function handleWebRTCOffer(sdp) {
           if (window._receiverShutdownInProgress) return;
+          if (!ENABLE_WEBRTC_FALLBACK) {
+            relayLogToStudio("📡 Receiver: Ignoring WEBRTC_OFFER; PCM bridge is the only active cast audio path.");
+            return;
+          }
           try {
             relayLogToStudio("📡 Receiver WebRTC: Received Offer. Initializing...");
             
@@ -2293,12 +2298,12 @@
             }
 
             if (d.type === "WEBRTC_OFFER") {
-              handleWebRTCOffer(d.sdp);
+              relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on Cast channel.");
               return;
             }
 
             if (d.type === "WEBRTC_CANDIDATE") {
-              if (peerConnection && d.candidate) {
+              if (ENABLE_WEBRTC_FALLBACK && peerConnection && d.candidate) {
                 peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
                   relayLogToStudio("⚠️ Receiver WebRTC: Failed to add ICE candidate (SDK) - " + e.message);
                 });
@@ -2501,17 +2506,6 @@
             } else {
               // Only auto-init if we already have the config
               if (configReceived && !nativeStreamActive && !nativeStreamStarting) initAudio();
-            }
-
-            // [v13.9.504] APOR-WebRTC FAILOVER
-            // If binary PCM has stopped for > 2s, un-mute WebRTC track as a fallback.
-            if (window._lastBinaryTime && Date.now() - window._lastBinaryTime > 2000) {
-               const audioUnlocker = document.getElementById("audio-unlocker");
-               if (audioUnlocker && audioUnlocker.srcObject && audioUnlocker.muted) {
-                  audioUnlocker.muted = false;
-                  relayLogToStudio("⚠️ Receiver: APOR V2 Timed out. Restoring WebRTC fallback audio.");
-                  window._lastBinaryTime = 0; // Prevent loop
-               }
             }
 
             // [v13.9.504] Non-Cast fallback only — keep HTML5 audio element alive
