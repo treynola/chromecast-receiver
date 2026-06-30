@@ -17,13 +17,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Favor live sync, but keep a slightly deeper steady-state queue so the
-    // receiver does not bounce between underruns and hard flushes.
-    // Stereo sample counts: 28672=14336 frames (~299ms), 24576=12288 frames (~256ms).
-    this._TARGET_BUFFER = 28672;
-    this._MIN_BUFFER = 16384;
-    this._PREBUFFER = 24576;
-    this._FLUSH_THRESHOLD = 57344;
+    // Favor fidelity over aggressive latency trimming. A deeper steady-state
+    // queue avoids the audible hard flushes that were breaking cast quality.
+    // Stereo sample counts: 40960=20480 frames (~427ms), 32768=16384 frames (~341ms).
+    this._TARGET_BUFFER = 40960;
+    this._MIN_BUFFER = 24576;
+    this._PREBUFFER = 32768;
+    this._FLUSH_THRESHOLD = 98304;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -66,10 +66,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 28672;
-          this._MIN_BUFFER = 16384;
-          this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 57344;
+          this._TARGET_BUFFER = 40960;
+          this._MIN_BUFFER = 24576;
+          this._PREBUFFER = 32768;
+          this._FLUSH_THRESHOLD = 98304;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
