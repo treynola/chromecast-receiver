@@ -17,14 +17,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // [v13.9.511] Wider steady-state jitter buffer.
-    // The recent QA runs show clean sync but audible quality loss when the
-    // receiver hard-flushes a large backlog. Keep a larger operating window so
-    // the worklet can absorb startup jitter without repeating those skips.
-    this._TARGET_BUFFER = 32768;   // ~341ms of stereo PCM at 48kHz
-    this._MIN_BUFFER = 8192;       // ~85ms guard rail before we rebuffer
-    this._PREBUFFER = 24576;       // ~256ms before enabling playout
-    this._FLUSH_THRESHOLD = 65536; // ~682ms before a hard backlog reset
+    // Favor live sync over heavy startup cushioning.
+    // Stereo sample counts: 12288=6144 frames (~128ms), 8192=4096 frames (~85ms).
+    this._TARGET_BUFFER = 12288;
+    this._MIN_BUFFER = 4096;
+    this._PREBUFFER = 8192;
+    this._FLUSH_THRESHOLD = 24576;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -67,10 +65,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 32768;
-          this._MIN_BUFFER = 8192;
-          this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 65536;
+          this._TARGET_BUFFER = 12288;
+          this._MIN_BUFFER = 4096;
+          this._PREBUFFER = 8192;
+          this._FLUSH_THRESHOLD = 24576;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -277,7 +275,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (this._callbackCount % 120 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
         const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
-        const lockWindow = Math.max(24576, this._TARGET_BUFFER >> 1);
+        const lockWindow = Math.max(4096, this._TARGET_BUFFER >> 1);
         // Report drain rate from the most recent DIAG interval so the backend can
         // lock quickly even while the buffer is oscillating around lag flushes.
         let wallHzReported = 0;

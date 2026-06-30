@@ -1222,14 +1222,14 @@
                 if (typeof e.data.msg === "string" && e.data.msg.indexOf("Worklet message: CONFIG") !== -1) {
                   relayLogToStudio("⏳ Receiver: Draining stale startup packets...");
                   window._isDrainingStartup = true;
-                  pendingBinaryFrames = []; // Clear any queued pre-handshake packets
+                  pendingBinaryFrames = pendingBinaryFrames.slice(-2);
                   setTimeout(() => {
                     window._isDrainingStartup = false;
                     workletReady = true;
                     clearLowLatencyStartupWatchdog();
                     flushPendingBinaryFrames();
                     relayLogToStudio("✅ Receiver: Startup packets drained. Playout active.");
-                  }, 250);
+                  }, 100);
                 }
                 relayLogToStudio(e.data.msg);
               }
