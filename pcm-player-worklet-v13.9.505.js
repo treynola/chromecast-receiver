@@ -19,6 +19,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // Favor live sync, but leave a little more headroom than the ultra-tight
     // 12k target so the Chromecast fallback path does not trade sync for grit.
+    // The sender now uses 512-frame packets, which reduces queue step size and
+    // should cut down on the audible flush bursts seen with 1024-frame packets.
     // Stereo sample counts: 14336=7168 frames (~149ms), 10240=5120 frames (~107ms).
     this._TARGET_BUFFER = 14336;
     this._MIN_BUFFER = 5120;
