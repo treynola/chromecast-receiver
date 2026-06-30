@@ -24,7 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 32768;
     this._MIN_BUFFER = 16384;
     this._PREBUFFER = 24576;
-    this._FLUSH_THRESHOLD = 65536;
+    this._FLUSH_THRESHOLD = 98304;
     this._smoothedPlaybackRate = 1.0;
 
     this._isBuffering = true;
@@ -71,7 +71,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 32768;
           this._MIN_BUFFER = 16384;
           this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 65536;
+          this._FLUSH_THRESHOLD = 98304;
           this._smoothedPlaybackRate = 1.0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
