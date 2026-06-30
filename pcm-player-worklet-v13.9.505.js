@@ -100,7 +100,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (!arrayBuffer) return;
 
         const packetWallMs = typeof Date !== "undefined" ? Date.now() : 0;
-        const delayedPacket = this._lastPacketWallMs > 0 && packetWallMs && (packetWallMs - this._lastPacketWallMs > 32);
+        const packetGapMs = this._lastPacketWallMs > 0 && packetWallMs
+          ? packetWallMs - this._lastPacketWallMs
+          : 0;
+        const delayedPacket = packetGapMs > 9;
         this._lastPacketWallMs = packetWallMs || this._lastPacketWallMs;
 
         if (this._bitDepth === 24) {
@@ -121,7 +124,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             const packetLastL = pcm16[len - 2];
             const packetLastR = pcm16[len - 1];
             if (delayedPacket && this._hasLastWrite) {
-              const smoothFrames = Math.min(48, len >> 1);
+              const smoothFrames = Math.min(96, len >> 1);
               for (let f = 0; f < smoothFrames; f++) {
                 const t = (f + 1) / (smoothFrames + 1);
                 const idx = f * 2;
