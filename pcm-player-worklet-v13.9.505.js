@@ -17,15 +17,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Favor live sync, but leave a little more headroom than the ultra-tight
-    // 12k target so the Chromecast fallback path does not trade sync for grit.
-    // The sender now uses 512-frame packets, which reduces queue step size and
-    // should cut down on the audible flush bursts seen with 1024-frame packets.
-    // Stereo sample counts: 14336=7168 frames (~149ms), 10240=5120 frames (~107ms).
-    this._TARGET_BUFFER = 14336;
-    this._MIN_BUFFER = 5120;
-    this._PREBUFFER = 10240;
-    this._FLUSH_THRESHOLD = 32768;
+    // Favor live sync, but keep enough headroom that the Chromecast fallback
+    // path does not turn queue trims into audible waviness.
+    // Stereo sample counts: 16384=8192 frames (~171ms), 12288=6144 frames (~128ms).
+    this._TARGET_BUFFER = 16384;
+    this._MIN_BUFFER = 6144;
+    this._PREBUFFER = 12288;
+    this._FLUSH_THRESHOLD = 34816;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -68,10 +66,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 14336;
-          this._MIN_BUFFER = 5120;
-          this._PREBUFFER = 10240;
-          this._FLUSH_THRESHOLD = 32768;
+          this._TARGET_BUFFER = 16384;
+          this._MIN_BUFFER = 6144;
+          this._PREBUFFER = 12288;
+          this._FLUSH_THRESHOLD = 34816;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
