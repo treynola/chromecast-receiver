@@ -24,7 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 32768;
     this._MIN_BUFFER = 16384;
     this._PREBUFFER = 24576;
-    this._FLUSH_THRESHOLD = 98304;
+    this._FLUSH_THRESHOLD = 65536;
     this._smoothedPlaybackRate = 1.0;
 
     this._isBuffering = true;
@@ -71,7 +71,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 32768;
           this._MIN_BUFFER = 16384;
           this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 98304;
+          this._FLUSH_THRESHOLD = 65536;
           this._smoothedPlaybackRate = 1.0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
@@ -213,10 +213,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const bufferOvershoot = Math.max(0, available - this._TARGET_BUFFER);
       const overshootRatio = bufferOvershoot / Math.max(1, this._TARGET_BUFFER);
       const targetPlaybackRate = overshootRatio > 0
-        ? Math.min(1.12, 1.0 + (overshootRatio * 0.07))
+        ? Math.min(1.04, 1.0 + (overshootRatio * 0.03))
         : 1.0;
-      this._smoothedPlaybackRate += (targetPlaybackRate - this._smoothedPlaybackRate) * 0.2;
-      const playbackRate = Math.max(1.0, Math.min(1.12, this._smoothedPlaybackRate));
+      this._smoothedPlaybackRate += (targetPlaybackRate - this._smoothedPlaybackRate) * 0.12;
+      const playbackRate = Math.max(1.0, Math.min(1.04, this._smoothedPlaybackRate));
 
       if (renderSilence) {
         channel0.fill(0);
