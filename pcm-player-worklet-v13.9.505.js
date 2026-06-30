@@ -17,13 +17,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Favor fidelity over aggressive latency trimming. A deeper steady-state
-    // queue avoids the audible hard flushes that were breaking cast quality.
-    // Stereo sample counts: 40960=20480 frames (~427ms), 32768=16384 frames (~341ms).
-    this._TARGET_BUFFER = 40960;
-    this._MIN_BUFFER = 24576;
-    this._PREBUFFER = 32768;
+    // Favor fidelity over aggressive latency trimming, but keep the queue
+    // shallow enough that the receiver can stay close to live without hitting
+    // lag-flush territory.
+    // Stereo sample counts: 32768=16384 frames (~341ms), 24576=12288 frames (~256ms).
+    this._TARGET_BUFFER = 32768;
+    this._MIN_BUFFER = 16384;
+    this._PREBUFFER = 24576;
     this._FLUSH_THRESHOLD = 98304;
+    this._smoothedPlaybackRate = 1.0;
 
     this._isBuffering = true;
     this._stallCount = 0;
@@ -66,10 +68,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 40960;
-          this._MIN_BUFFER = 24576;
-          this._PREBUFFER = 32768;
+          this._TARGET_BUFFER = 32768;
+          this._MIN_BUFFER = 16384;
+          this._PREBUFFER = 24576;
           this._FLUSH_THRESHOLD = 98304;
+          this._smoothedPlaybackRate = 1.0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
@@ -205,13 +208,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
 
       // Gently speed up only when the backlog rises above the target window.
-      // This keeps the queue from reaching hard-flush territory without
-      // resorting to audible sample drops in normal playback.
+      // The correction is smoothed so we trim latency without the audible
+      // wobble that comes from abrupt per-block rate swings.
       const bufferOvershoot = Math.max(0, available - this._TARGET_BUFFER);
       const overshootRatio = bufferOvershoot / Math.max(1, this._TARGET_BUFFER);
-      const playbackRate = overshootRatio > 0
-        ? Math.min(1.05, 1.0 + (overshootRatio * 0.04))
+      const targetPlaybackRate = overshootRatio > 0
+        ? Math.min(1.12, 1.0 + (overshootRatio * 0.07))
         : 1.0;
+      this._smoothedPlaybackRate += (targetPlaybackRate - this._smoothedPlaybackRate) * 0.2;
+      const playbackRate = Math.max(1.0, Math.min(1.12, this._smoothedPlaybackRate));
 
       if (renderSilence) {
         channel0.fill(0);
