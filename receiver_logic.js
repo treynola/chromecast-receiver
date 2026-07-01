@@ -1126,6 +1126,7 @@
                 processorOptions: {
                   baseRateRatio: baseRateRatio,
                   studioRate: studioRate,
+                  bitDepth: window._negotiatedBitDepth || 16,
                 },
               },
             );
@@ -1214,6 +1215,13 @@
                 relayLogToStudio(e.data.msg);
               }
             };
+            workletNode.port.postMessage({
+              type: "CONFIG",
+              bitDepth: window._negotiatedBitDepth || 16,
+            });
+            relayLogToStudio(
+              `🔧 Receiver: Worklet configured for ${window._negotiatedBitDepth || 16}-bit decode`,
+            );
             resumeAudio();
           } catch (e) {
             relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
@@ -2037,18 +2045,15 @@
                   configReceived = true;
                   window._handshakeAcked = true;
                   maybeStartLowLatencyPlayout("handshake_ack");
-                  // Configure worklet bit depth after init
-                  setTimeout(() => {
-                    if (workletNode) {
-                      workletNode.port.postMessage({
-                        type: "CONFIG",
-                        bitDepth: ackBitDepth,
-                      });
-                      relayLogToStudio(
-                        `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
-                      );
-                    }
-                  }, 500);
+                  if (workletNode) {
+                    workletNode.port.postMessage({
+                      type: "CONFIG",
+                      bitDepth: ackBitDepth,
+                    });
+                    relayLogToStudio(
+                      `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
+                    );
+                  }
                 } else if (d.type === "PLAYBACK_START") {
                   const immediateState = buildImmediatePlaybackState(d.trackId);
                   if (immediateState) {

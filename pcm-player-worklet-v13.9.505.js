@@ -26,9 +26,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._PREBUFFER = 24576;
     this._FLUSH_THRESHOLD = 147456;
     this._smoothedPlaybackRate = 1.0;
-    this._hasLastWrite = false;
-    this._lastWriteL = 0;
-    this._lastWriteR = 0;
     this._lastPacketWallMs = 0;
 
     this._isBuffering = true;
@@ -81,9 +78,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._stallCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
-          this._hasLastWrite = false;
-          this._lastWriteL = 0;
-          this._lastWriteR = 0;
           this._lastPacketWallMs = 0;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
@@ -104,10 +98,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (!arrayBuffer) return;
 
         const packetWallMs = typeof Date !== "undefined" ? Date.now() : 0;
-        const packetGapMs = this._lastPacketWallMs > 0 && packetWallMs
-          ? packetWallMs - this._lastPacketWallMs
-          : 0;
-        const delayedPacket = packetGapMs > 9;
         this._lastPacketWallMs = packetWallMs || this._lastPacketWallMs;
 
         if (this._bitDepth === 24) {
@@ -124,22 +114,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         } else {
           const pcm16 = new Int16Array(arrayBuffer);
           const len = pcm16.length;
-          if (len >= 2) {
-            const packetLastL = pcm16[len - 2];
-            const packetLastR = pcm16[len - 1];
-            if (delayedPacket && this._hasLastWrite) {
-              const smoothFrames = Math.min(96, len >> 1);
-              for (let f = 0; f < smoothFrames; f++) {
-                const t = (f + 1) / (smoothFrames + 1);
-                const idx = f * 2;
-                pcm16[idx] = ((this._lastWriteL * (1 - t)) + (pcm16[idx] * t)) | 0;
-                pcm16[idx + 1] = ((this._lastWriteR * (1 - t)) + (pcm16[idx + 1] * t)) | 0;
-              }
-            }
-            this._lastWriteL = packetLastL;
-            this._lastWriteR = packetLastR;
-            this._hasLastWrite = true;
-          }
           if (this._writePtr + len <= this._ringLen) {
             this._ringBuffer.set(pcm16, this._writePtr);
             this._writePtr = (this._writePtr + len) % this._ringLen;
