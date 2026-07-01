@@ -189,7 +189,11 @@
             return !!(track && (track.isPlaying || track.isRecording));
           });
           const masterActive = !!(state.master && state.master.isRecording);
-          return trackActive || masterActive;
+          const sampler = Array.isArray(state.sampler) ? state.sampler : [];
+          const samplerActive = sampler.some(function (pad) {
+            return !!(pad && pad.active);
+          });
+          return trackActive || masterActive || samplerActive;
         }
 
         function maybeStartLowLatencyPlayout(reason) {
