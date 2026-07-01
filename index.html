@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="head_init.js?v=13.9.505-0cce987847a1"></script>
+    <script src="head_init.js?v=13.9.505-3d37cf35f833"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -234,7 +234,7 @@
             BUF: -- | STALLS: -- | WS: DISCONNECTED
           </div>
           <!-- [v13.9.462] FIX: castMediaElement class removed — Cast SDK was hijacking this
-               element and fighting the custom AudioContext/WebRTC pipeline for audio output. -->
+               element and fighting the custom PCM AudioWorklet pipeline for audio output. -->
           <audio
             id="audio-unlocker"
             crossorigin="anonymous"
@@ -300,6 +300,6 @@
       </div>
     </div>
 
-    <script src="receiver_logic.js?v=13.9.505-0cce987847a1"></script>
+    <script src="receiver_logic.js?v=13.9.505-3d37cf35f833"></script>
   </body>
 </html>

@@ -17,12 +17,8 @@
         var audioCtx = null;
         var masterGain = null;
         var workletNode = null;
-        var peerConnection = null;
-        window._useWebRTC = false; // Legacy flag retained for compatibility; receiver WebRTC fallback is hard-disabled.
-        const ENABLE_WEBRTC_FALLBACK = false;
         window._receiverShutdownInProgress = false;
         var configReceived = false;
-        var targetRate = 48000;
         window._studioRate = 48000;
         window._hwRate = 48000;
         var autoDiscoveryFallbackTimeoutId = null;
@@ -30,7 +26,7 @@
         var noSenderShutdownTimeoutId = null;
         var pendingBinaryFrames = [];
         var workletReady = false;
-        const PENDING_BINARY_FRAMES_MAX = 4; // Keep only a tiny live prebuffer; stale PCM increases cast latency.
+        const PENDING_BINARY_FRAMES_MAX = 1; // Keep only the newest startup packet; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.505-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
@@ -808,7 +804,7 @@
           }
           clearNoSenderShutdownTimer();
           relayLogToStudio(`🛑 Receiver: Shutdown requested${reason ? ` (${reason})` : ""}`);
-          teardownWebRtcFallback();
+          clearLegacyMediaStream();
           if (workletNode) {
             try {
               if (workletNode.port) {
@@ -884,7 +880,7 @@
             return;
           }
 
-          if (pendingBinaryFrames.length > PENDING_BINARY_FRAMES_MAX) {
+          if (pendingBinaryFrames.length >= PENDING_BINARY_FRAMES_MAX) {
             pendingBinaryFrames.shift();
           }
           pendingBinaryFrames.push(buffer);
@@ -893,13 +889,13 @@
         function flushPendingBinaryFrames() {
           if (!workletNode || !workletReady || pendingBinaryFrames.length === 0) return;
           // Drop stale startup PCM instead of replaying it all into the worklet.
-          // The Receiver should start with fresh live audio, not a buffered tail.
-          const queued = pendingBinaryFrames.slice(-2);
+          // The receiver should start with the freshest live packet, not a buffered tail.
+          const queued = pendingBinaryFrames.slice(-1);
           pendingBinaryFrames.length = 0;
           queued.forEach((buffer) => queueBinaryFrame(buffer));
         }
 
-        function teardownWebRtcFallback() {
+        function clearLegacyMediaStream() {
           const audioUnlocker = document.getElementById("audio-unlocker");
           if (audioUnlocker) {
             try {
@@ -907,16 +903,6 @@
               audioUnlocker.pause();
             } catch (e) {}
             audioUnlocker.srcObject = null;
-          }
-
-          if (peerConnection) {
-            try {
-              peerConnection.onicecandidate = null;
-              peerConnection.ontrack = null;
-              peerConnection.onconnectionstatechange = null;
-              peerConnection.close();
-            } catch (e) {}
-            peerConnection = null;
           }
         }
         const KNOB_CONFIGS = [
@@ -1069,13 +1055,6 @@
           // [v13.9.510] PCM AudioWorklet is the low-latency primary cast path.
           // Native /stream.wav playout remains fallback-only for receivers that
           // cannot sustain the direct PCM bridge.
-          // [v13.9.504] WebRTC TRANSITION: Disable legacy PCM worklet if WebRTC is the goal
-          if (window._useWebRTC) {
-            relayLogToStudio("📡 Receiver: initAudio (Legacy) skipped because WebRTC is primary.");
-            preInitAudioContext(); // Still ensure native context is warmed up
-            return;
-          }
-
           // [v13.9.504] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
             relayLogToStudio("⏳ Receiver: Waiting for BRIDGE_CONFIG handshake...");
@@ -1220,17 +1199,17 @@
                   window._lastDiagSent = Date.now();
                 }
               } else if (e.data.type === "LOG") {
-                if (typeof e.data.msg === "string" && e.data.msg.indexOf("Worklet message: CONFIG") !== -1) {
-                  relayLogToStudio("⏳ Receiver: Draining stale startup packets...");
-                  window._isDrainingStartup = true;
-                  pendingBinaryFrames = pendingBinaryFrames.slice(-2);
-                  setTimeout(() => {
-                    window._isDrainingStartup = false;
-                    workletReady = true;
-                    clearLowLatencyStartupWatchdog();
-                    flushPendingBinaryFrames();
-                    relayLogToStudio("✅ Receiver: Startup packets drained. Playout active.");
-                  }, 100);
+                if (
+                  typeof e.data.msg === "string" &&
+                  e.data.msg.indexOf("Worklet message: CONFIG") !== -1 &&
+                  !workletReady
+                ) {
+                  pendingBinaryFrames = pendingBinaryFrames.slice(-1);
+                  window._isDrainingStartup = false;
+                  workletReady = true;
+                  clearLowLatencyStartupWatchdog();
+                  flushPendingBinaryFrames();
+                  relayLogToStudio("✅ Receiver: Live PCM playout active.");
                 }
                 relayLogToStudio(e.data.msg);
               }
@@ -1947,12 +1926,12 @@
                 window._lastBinaryTime = Date.now();
                 window._binaryActive = true;
 
-                // Terminate WebRTC stream entirely to save Receiver CPU
+                // Clear any legacy media-stream source so PCM remains the only live audio path.
                 const audioUnlocker = document.getElementById("audio-unlocker");
                 if (audioUnlocker && audioUnlocker.srcObject) {
                   audioUnlocker.srcObject = null;
                   relayLogToStudio(
-                    "🛡️ Receiver: Binary Bridge Active. Terminated redundant WebRTC decoder.",
+                    "🛡️ Receiver: Binary Bridge Active. Cleared redundant media-stream source.",
                   );
                 }
 
@@ -1972,10 +1951,10 @@
               if (!window._binaryActive) {
                 window._binaryActive = true;
                 const audioUnlocker = document.getElementById("audio-unlocker");
-                if (audioUnlocker && audioUnlocker.srcObject) {
-                  audioUnlocker.srcObject = null;
-                  relayLogToStudio("🛡️ Receiver: Binary Bridge Active (Blob). Terminated redundant WebRTC decoder.");
-                }
+                  if (audioUnlocker && audioUnlocker.srcObject) {
+                    audioUnlocker.srcObject = null;
+                    relayLogToStudio("🛡️ Receiver: Binary Bridge Active (Blob). Cleared redundant media-stream source.");
+                  }
               }
 
               if (audioCtx && audioCtx.state === "suspended") resumeAudio();
@@ -2108,11 +2087,7 @@
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
-                  if (ENABLE_WEBRTC_FALLBACK && peerConnection && d.candidate) {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
-                      relayLogToStudio("⚠️ Receiver WebRTC: Failed to add ICE candidate - " + e.message);
-                    });
-                  }
+                  relayLogToStudio("📡 Receiver: Ignored WEBRTC_CANDIDATE on binary bridge.");
                 }
               } catch (e) {}
             }
@@ -2135,7 +2110,7 @@
             }
             window._lastBinaryTime = 0;
             window._lastWorkletDiagTime = 0;
-            teardownWebRtcFallback();
+            clearLegacyMediaStream();
             const conn = document.getElementById("bridge-status-dot");
             if (conn) {
               conn.style.backgroundColor = "var(--red)";
@@ -2184,65 +2159,6 @@
             // [v13.9.504] Retry with full connection params (port + token preserved)
             scheduleBinaryReconnect(ip, customPort, customToken, 5000);
           };
-        }
-
-        async function handleWebRTCOffer(sdp) {
-          if (window._receiverShutdownInProgress) return;
-          if (!ENABLE_WEBRTC_FALLBACK) {
-            relayLogToStudio("📡 Receiver: Ignoring WEBRTC_OFFER; PCM bridge is the only active cast audio path.");
-            return;
-          }
-          try {
-            relayLogToStudio("📡 Receiver WebRTC: Received Offer. Initializing...");
-            
-            if (peerConnection) {
-              peerConnection.close();
-            }
-
-            const config = {
-              iceServers: [
-                { urls: "stun:stun.l.google.com:19302" },
-                { urls: "stun:stun1.l.google.com:19302" }
-              ]
-            };
-
-            peerConnection = new RTCPeerConnection(config);
-
-            peerConnection.onicecandidate = (event) => {
-              if (event.candidate && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-                binaryWS.send(JSON.stringify({
-                  type: "WEBRTC_CANDIDATE",
-                  candidate: event.candidate
-                }));
-              }
-            };
-
-            peerConnection.ontrack = (event) => {
-              relayLogToStudio("✅ Receiver WebRTC: Track received! Kind: " + event.track.kind);
-              const audioUnlocker = document.getElementById("audio-unlocker");
-              if (audioUnlocker) {
-                audioUnlocker.srcObject = event.streams[0];
-                audioUnlocker.play().catch(e => {
-                  relayLogToStudio("⚠️ Receiver WebRTC: Play failed - " + e.message);
-                });
-                resumeAudio();
-              }
-            };
-
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-
-            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-              binaryWS.send(JSON.stringify({
-                type: "WEBRTC_ANSWER",
-                sdp: answer
-              }));
-              relayLogToStudio("📡 Receiver WebRTC: Answer sent to Studio.");
-            }
-          } catch (e) {
-            relayLogToStudio("❌ Receiver WebRTC Error: " + e.message);
-          }
         }
 
         function handleInboundData(data) {
@@ -2303,11 +2219,7 @@
             }
 
             if (d.type === "WEBRTC_CANDIDATE") {
-              if (ENABLE_WEBRTC_FALLBACK && peerConnection && d.candidate) {
-                peerConnection.addIceCandidate(new RTCIceCandidate(d.candidate)).catch(e => {
-                  relayLogToStudio("⚠️ Receiver WebRTC: Failed to add ICE candidate (SDK) - " + e.message);
-                });
-              }
+              relayLogToStudio("📡 Receiver: Ignored WEBRTC_CANDIDATE on Cast channel.");
               return;
             }
 
@@ -2420,7 +2332,7 @@
                   window._lastBinaryTime = 0;
                   window._playbackMode = "unknown";
                   stopNativeStreamPlayout("sender_disconnected");
-                  teardownWebRtcFallback();
+                  clearLegacyMediaStream();
                   suppressBinaryReconnect = true;
                   binaryConnectionGeneration++;
                   clearBinaryReconnectTimer();

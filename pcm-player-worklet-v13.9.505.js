@@ -5,7 +5,7 @@
  */
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
-  constructor(options) {
+  constructor(options = {}) {
     super();
     this._ringLen = 192000; // 2 seconds of stereo 48kHz
     this._ringBuffer = new Int16Array(this._ringLen);
@@ -35,7 +35,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._stallCount = 0;
     this._currentPeak = 0;
     this._fade = 1.0;
-    this._bitDepth = options.processorOptions?.bitDepth || 16;
+    this._bitDepth = options.processorOptions?.bitDepth === 24 ? 24 : 16;
 
     this._framesProcessed = 0;
     this._callbackCount = 0;
@@ -68,6 +68,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._totalRead = 0;
           this._isBuffering = true;
           this._framesProcessed = 0;
+          this._callbackCount = 0;
           this._startTime = 0;
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
@@ -77,6 +78,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._PREBUFFER = 24576;
           this._FLUSH_THRESHOLD = 147456;
           this._smoothedPlaybackRate = 1.0;
+          this._stallCount = 0;
+          this._currentPeak = 0;
+          this._fade = 1.0;
           this._hasLastWrite = false;
           this._lastWriteL = 0;
           this._lastWriteR = 0;
@@ -85,7 +89,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           return;
         }
         if (e.data && e.data.type === "CONFIG") {
-          if (e.data.bitDepth) this._bitDepth = e.data.bitDepth;
+          if (e.data.bitDepth) this._bitDepth = e.data.bitDepth === 24 ? 24 : 16;
           return;
         }
 
@@ -310,7 +314,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       this._framesProcessed += framesInBlock;
 
-      if (this._callbackCount % 120 === 0) {
+      if (this._callbackCount % 60 === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
         const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
         const lockWindow = Math.max(4096, this._TARGET_BUFFER >> 1);
