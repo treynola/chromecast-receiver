@@ -326,10 +326,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           const deltaFrames = this._framesProcessed - this._lastDiagFramesProcessed;
           if (deltaWallMs >= 250 && deltaFrames > 0) {
             wallHzReported = Math.round((deltaFrames * 1000) / deltaWallMs);
+            this._lastDiagWallMs = wallNow;
+            this._lastDiagFramesProcessed = this._framesProcessed;
           }
+        } else {
+          this._lastDiagWallMs = wallNow;
+          this._lastDiagFramesProcessed = this._framesProcessed;
         }
-        this._lastDiagWallMs = wallNow || this._lastDiagWallMs;
-        this._lastDiagFramesProcessed = this._framesProcessed;
         const hzReported = wallHzReported;
         this.port.postMessage({
           type: "DIAG",
