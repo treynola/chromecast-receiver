@@ -43,6 +43,9 @@
         const NATIVE_STARTUP_TIMEOUT_MS = 2500;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
+        var playbackModeSocketGeneration = 0;
+        var playbackModeLastSentGeneration = -1;
+        var playbackModeLastSent = "";
         var cafLoadInterceptorConfigured = false;
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
@@ -153,11 +156,15 @@
           if (!mode) {
             return;
           }
-          if (window._playbackMode === mode) {
-            return;
-          }
+          const duplicateOnCurrentSocket =
+            window._playbackMode === mode &&
+            playbackModeLastSent === mode &&
+            playbackModeLastSentGeneration === playbackModeSocketGeneration;
           window._playbackMode = mode;
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
+            return;
+          }
+          if (duplicateOnCurrentSocket) {
             return;
           }
           try {
@@ -168,6 +175,8 @@
                 reason: reason || "",
               }),
             );
+            playbackModeLastSent = mode;
+            playbackModeLastSentGeneration = playbackModeSocketGeneration;
           } catch (e) {}
         }
 
@@ -790,6 +799,8 @@
           wakeLockLoadingOrLoaded = false;
           pendingBinaryFrames = [];
           window._playbackMode = "unknown";
+          playbackModeLastSent = "";
+          playbackModeLastSentGeneration = -1;
           workletReady = false;
           window._lastBinaryTime = 0;
           window._lastWorkletDiagTime = 0;
@@ -1767,21 +1778,20 @@
           }
           suppressBinaryReconnect = false;
           clearBinaryReconnectTimer();
+          const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
+          const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
           if (
             binaryWS &&
             (binaryWS.readyState === WebSocket.OPEN || binaryWS.readyState === WebSocket.CONNECTING) &&
             currentBridgeIp === ip &&
-            currentBridgePort === customPort &&
-            currentBridgeToken === customToken
+            currentBridgePort === targetPort &&
+            currentBridgeToken === targetToken
           ) {
             // [v13.9.504] Already connected or connecting to this Studio IP. Ignore heartbeat redundancy.
             return;
           }
 
           const generation = ++binaryConnectionGeneration;
-
-          const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
 
           currentBridgeIp = ip;
           currentBridgePort = targetPort;
@@ -1814,6 +1824,7 @@
           binaryWS.onopen = async () => {
             if (generation !== binaryConnectionGeneration) return;
             if (window._receiverShutdownInProgress) return;
+            playbackModeSocketGeneration++;
             console.log("✅ Binary Bridge Connected");
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             // [v13.9.504] Reset reconnect backoff counter on success
@@ -1902,6 +1913,11 @@
             // Keep the wake-lock primed; low-latency PCM startup now begins only
             // once the handshake/configuration path is ready.
             triggerWakeLockLoad();
+            if (nativeStreamActive || nativeStreamStarting) {
+              notifyPlaybackMode("native", "socket_reconnected");
+            } else if (workletNode || workletReady || window._binaryActive) {
+              notifyPlaybackMode("pcm_fallback", "socket_reconnected");
+            }
           };
           binaryWS.onmessage = (event) => {
             if (generation !== binaryConnectionGeneration) return;
