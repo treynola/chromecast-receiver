@@ -2518,7 +2518,7 @@ select option {
 .close-dialog-btn {
   position: absolute;
   top: 4px;
-  right: 4px;
+  right: 7px;
   width: 18px;
   height: 18px;
   display: flex;
@@ -4573,7 +4573,7 @@ dialog.input-prompt-dialog {
 .mxs-dialog .close-dialog-btn {
   position: absolute;
   top: 4px;
-  right: 4px;
+  right: 7px;
   width: 18px;
   height: 18px;
   display: flex;
