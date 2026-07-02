@@ -2421,11 +2421,20 @@ select option {
   overflow: hidden;
   display: none;
   flex-direction: column;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   display: flex;
+}
+
+.effect-params-dialog:focus,
+.effect-params-dialog:focus-visible,
+.audition-params-dialog:focus,
+.audition-params-dialog:focus-visible {
+  outline: none;
 }
 
 .effect-params-dialog::backdrop,
@@ -2457,6 +2466,65 @@ select option {
   box-sizing: border-box !important;
   justify-items: stretch !important;
   align-items: start !important;
+}
+
+.effect-params-dialog .effect-param-slider,
+.audition-params-dialog .effect-param-slider {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  margin: 0;
+  cursor: pointer;
+  background: var(--mid-gray);
+  border-radius: 5px;
+  outline: none;
+  accent-color: var(--gold);
+}
+
+.effect-params-dialog .effect-param-slider::-webkit-slider-runnable-track,
+.audition-params-dialog .effect-param-slider::-webkit-slider-runnable-track {
+  height: 5px;
+  background: var(--mid-gray);
+  border-radius: 5px;
+}
+
+.effect-params-dialog .effect-param-slider::-webkit-slider-thumb,
+.audition-params-dialog .effect-param-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4.5px;
+  background: var(--gold);
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.effect-params-dialog .effect-param-slider::-moz-range-track,
+.audition-params-dialog .effect-param-slider::-moz-range-track {
+  height: 5px;
+  background: var(--mid-gray);
+  border-radius: 5px;
+}
+
+.effect-params-dialog .effect-param-slider::-moz-range-thumb,
+.audition-params-dialog .effect-param-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--gold);
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.effect-params-dialog .effect-param-slider:focus,
+.effect-params-dialog .effect-param-slider:focus-visible,
+.audition-params-dialog .effect-param-slider:focus,
+.audition-params-dialog .effect-param-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold);
 }
 
 .effect-params-dialog .dialog-header,
