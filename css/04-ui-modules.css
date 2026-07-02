@@ -2524,7 +2524,7 @@ select option {
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 1.4em;
+  font-size: 1.2em;
   line-height: 1;
   padding: 0;
   margin: 0;
@@ -4564,7 +4564,7 @@ dialog.input-prompt-dialog {
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 1.4em;
+  font-size: 1.2em;
   padding: 0 8px;
   line-height: 1;
   width: auto;
