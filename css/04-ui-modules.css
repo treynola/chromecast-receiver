@@ -2526,7 +2526,7 @@ select option {
   justify-content: center;
   background: transparent;
   border: 2px solid var(--green);
-  border-radius: 0;
+  border-radius: 3px;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
@@ -4581,7 +4581,7 @@ dialog.input-prompt-dialog {
   justify-content: center;
   background: transparent;
   border: 2px solid var(--green);
-  border-radius: 0;
+  border-radius: 3px;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
