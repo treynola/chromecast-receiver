@@ -2531,6 +2531,7 @@ select option {
   z-index: 100;
   width: auto;
   flex-shrink: 0;
+  text-transform: lowercase !important;
 }
 
 /* Ensure z-index stacking for 7 slots - increased to stay above other UI */
@@ -4567,6 +4568,7 @@ dialog.input-prompt-dialog {
   padding: 0 8px;
   line-height: 1;
   width: auto;
+  text-transform: lowercase !important;
 }
 .mxs-dialog .close-dialog-btn:hover {
   filter: brightness(1.5);
