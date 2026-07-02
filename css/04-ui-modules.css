@@ -2463,7 +2463,7 @@ select option {
 .audition-params-dialog .dialog-header {
   display: flex;
   flex-direction: column;
-  padding: 10px 30px 10px 12px;
+  padding: 26px 30px 10px 12px;
   background: #222;
   border-bottom: 1px solid #444;
   border-radius: 11px 11px 0 0;
