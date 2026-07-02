@@ -2517,8 +2517,8 @@ select option {
 
 .close-dialog-btn {
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: 2px;
+  right: 2px;
   background: transparent;
   border: none;
   color: var(--red);
