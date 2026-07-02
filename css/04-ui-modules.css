@@ -2517,20 +2517,24 @@ select option {
 
 .close-dialog-btn {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid var(--green);
-  border-radius: 0 11px 0 4px;
+  border-radius: 0;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 1.2em;
+  font-size: 10px;
   line-height: 1;
-  padding: 3px 8px;
+  padding: 0;
   margin: 0;
   z-index: 100;
-  width: auto;
   flex-shrink: 0;
   text-transform: lowercase !important;
   outline: none !important;
@@ -4567,16 +4571,25 @@ dialog.input-prompt-dialog {
 }
 
 .mxs-dialog .close-dialog-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: 1px solid var(--green);
-  border-radius: 3px;
+  border-radius: 0;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 1.2em;
-  padding: 2px 6px;
+  font-size: 10px;
   line-height: 1;
-  width: auto;
+  padding: 0;
+  margin: 0;
+  z-index: 100;
   text-transform: lowercase !important;
   outline: none !important;
   box-shadow: none !important;
