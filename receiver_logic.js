@@ -579,6 +579,9 @@
           nativeStreamActive = false;
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
+          window._playbackMode = "unknown";
+          playbackModeLastSent = "";
+          playbackModeLastSentGeneration = -1;
           stopCafNativeCompanion();
           stopHtmlAudioNativeCompanion();
           if (reason) {
@@ -591,6 +594,9 @@
           window._isDrainingStartup = false;
           window._binaryActive = false;
           window._lastBinaryTime = 0;
+          window._playbackMode = "unknown";
+          playbackModeLastSent = "";
+          playbackModeLastSentGeneration = -1;
           if (workletNode && workletNode.port) {
             try {
               workletNode.port.postMessage({ type: "RESET" });
