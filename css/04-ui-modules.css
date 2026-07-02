@@ -2517,21 +2517,29 @@ select option {
 
 .close-dialog-btn {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 0;
+  right: 0;
   background: transparent;
-  border: none;
+  border: 1px solid var(--green);
+  border-radius: 0 11px 0 4px;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
   font-size: 1.2em;
   line-height: 1;
-  padding: 0;
+  padding: 3px 8px;
   margin: 0;
   z-index: 100;
   width: auto;
   flex-shrink: 0;
   text-transform: lowercase !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.close-dialog-btn:focus,
+.close-dialog-btn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Ensure z-index stacking for 7 slots - increased to stay above other UI */
@@ -4560,15 +4568,23 @@ dialog.input-prompt-dialog {
 
 .mxs-dialog .close-dialog-btn {
   background: transparent;
-  border: none;
+  border: 1px solid var(--green);
+  border-radius: 3px;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
   font-size: 1.2em;
-  padding: 0 8px;
+  padding: 2px 6px;
   line-height: 1;
   width: auto;
   text-transform: lowercase !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.mxs-dialog .close-dialog-btn:focus,
+.mxs-dialog .close-dialog-btn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 .mxs-dialog .close-dialog-btn:hover {
   filter: brightness(1.5);
