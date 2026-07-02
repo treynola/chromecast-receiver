@@ -2519,8 +2519,8 @@ select option {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2530,7 +2530,7 @@ select option {
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   padding: 0;
   margin: 0;
@@ -4574,8 +4574,8 @@ dialog.input-prompt-dialog {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4585,7 +4585,7 @@ dialog.input-prompt-dialog {
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   padding: 0;
   margin: 0;
