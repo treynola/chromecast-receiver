@@ -1004,7 +1004,7 @@
               relayLogToStudio("🛠️ Receiver: Creating new AudioContext...");
               audioCtx = new window.AudioContext({
                 sampleRate: requestedRate,
-                latencyHint: "interactive",
+                latencyHint: "playback",
               });
               if (audioCtx.sampleRate && audioCtx.sampleRate !== requestedRate) {
                 relayLogToStudio(

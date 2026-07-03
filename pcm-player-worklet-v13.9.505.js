@@ -24,6 +24,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._MIN_BUFFER = 16384;
     this._PREBUFFER = 20480;
     this._FLUSH_THRESHOLD = 65536;
+    this._DIAG_INTERVAL_CALLBACKS = 30;
     this._lastPacketWallMs = 0;
 
     this._isBuffering = true;
@@ -72,6 +73,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._MIN_BUFFER = 16384;
           this._PREBUFFER = 20480;
           this._FLUSH_THRESHOLD = 65536;
+          this._DIAG_INTERVAL_CALLBACKS = 30;
           this._stallCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
@@ -284,7 +286,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       this._framesProcessed += framesInBlock;
 
-      if (this._callbackCount % 60 === 0) {
+      if (this._callbackCount % this._DIAG_INTERVAL_CALLBACKS === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
         const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
         const lockWindow = Math.max(4096, this._TARGET_BUFFER >> 1);
