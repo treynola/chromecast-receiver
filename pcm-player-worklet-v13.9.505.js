@@ -17,15 +17,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
 
-    // Favor fidelity over aggressive latency trimming, but keep the queue
-    // shallow enough that the receiver can stay close to live without hitting
-    // lag-flush territory.
-    // Stereo sample counts: 32768=16384 frames (~341ms), 24576=12288 frames (~256ms).
-    this._TARGET_BUFFER = 32768;
-    this._MIN_BUFFER = 16384;
-    this._PREBUFFER = 24576;
-    this._FLUSH_THRESHOLD = 147456;
-    this._smoothedPlaybackRate = 1.0;
+    // Keep the queue shallow so the receiver stays close to live while still
+    // leaving enough headroom for Chromecast scheduling jitter.
+    // Stereo sample counts: 12288=6144 frames (~128ms), 8192=4096 frames (~85ms).
+    this._TARGET_BUFFER = 12288;
+    this._MIN_BUFFER = 6144;
+    this._PREBUFFER = 8192;
+    this._FLUSH_THRESHOLD = 49152;
     this._lastPacketWallMs = 0;
 
     this._isBuffering = true;
@@ -70,11 +68,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 32768;
-          this._MIN_BUFFER = 16384;
-          this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 147456;
-          this._smoothedPlaybackRate = 1.0;
+          this._TARGET_BUFFER = 12288;
+          this._MIN_BUFFER = 6144;
+          this._PREBUFFER = 8192;
+          this._FLUSH_THRESHOLD = 49152;
           this._stallCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
@@ -216,9 +213,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Keep receiver playback pitch-neutral. Sender-side pacing controls
-      // backlog; receiver-side speed correction was the source of wavy pitch.
-      this._smoothedPlaybackRate += (1.0 - this._smoothedPlaybackRate) * 0.12;
+      // Keep receiver playback pitch-neutral. Backpressure is handled by the
+      // sender; the worklet only hard-fails back to the live target window.
       const playbackRate = 1.0;
 
       if (renderSilence) {
