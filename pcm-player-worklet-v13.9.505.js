@@ -20,11 +20,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // Keep the queue moderate so the receiver stays close to live while still
     // leaving enough headroom for Chromecast scheduling jitter.
     // Stereo sample counts: 24576=12288 frames (~256ms), 20480=10240 frames (~213ms).
+    // The live target is intentionally conservative so the receiver keeps
+    // enough headroom for Chromecast scheduling jitter without drifting into
+    // multi-second backlog.
     this._TARGET_BUFFER = 24576;
     this._MIN_BUFFER = 16384;
     this._PREBUFFER = 20480;
-    this._FLUSH_THRESHOLD = 65536;
-    this._DIAG_INTERVAL_CALLBACKS = 30;
+    this._FLUSH_THRESHOLD = 49152;
+    this._DIAG_INTERVAL_CALLBACKS = 20;
     this._lastPacketWallMs = 0;
 
     this._isBuffering = true;
@@ -72,8 +75,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 24576;
           this._MIN_BUFFER = 16384;
           this._PREBUFFER = 20480;
-          this._FLUSH_THRESHOLD = 65536;
-          this._DIAG_INTERVAL_CALLBACKS = 30;
+          this._FLUSH_THRESHOLD = 49152;
+          this._DIAG_INTERVAL_CALLBACKS = 20;
           this._stallCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
