@@ -27,7 +27,7 @@
         var pendingBinaryFrames = [];
         var workletReady = false;
         const PENDING_BINARY_FRAMES_MAX = 1; // Keep only the newest startup packet; stale PCM increases cast latency.
-        const VERSION_TAG = "v13.9.507-APORv2";
+        const VERSION_TAG = "v13.9.508-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         // Do not run CAF PlayerManager media in parallel with the custom PCM
@@ -40,7 +40,7 @@
         var nativeStartupAttemptId = 0;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
-        const NATIVE_STARTUP_TIMEOUT_MS = 2500;
+        const NATIVE_STARTUP_TIMEOUT_MS = 7500;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
@@ -1088,7 +1088,7 @@
               return;
             }
 
-            let workletUrl = `pcm-player-worklet-v13.9.507.js?cb=${Date.now()}`;
+            let workletUrl = `pcm-player-worklet-v13.9.508.js?cb=${Date.now()}`;
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
