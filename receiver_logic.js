@@ -1002,10 +1002,9 @@
             }
             try {
               relayLogToStudio("🛠️ Receiver: Creating new AudioContext...");
-              audioCtx = new window.AudioContext({
-                sampleRate: requestedRate,
-                latencyHint: "interactive",
-              });
+              // Create default AudioContext with no options to ensure the browser uses
+              // the high-performance native hardware output fast-path.
+              audioCtx = new window.AudioContext();
               if (audioCtx.sampleRate && audioCtx.sampleRate !== requestedRate) {
                 relayLogToStudio(
                   `⚠️ Receiver: AudioContext resolved ${audioCtx.sampleRate}Hz instead of receiver rate ${requestedRate}Hz.`,
