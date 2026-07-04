@@ -245,11 +245,6 @@
           if (audioInitializing || workletNode) {
             return true;
           }
-          if (window._handshakeAcked && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-            if (maybeStartLowLatencyPlayout(reason)) {
-              return true;
-            }
-          }
           if (configReceived && !window._handshakeAcked) {
             armLowLatencyStartupWatchdog();
             return true;
@@ -261,10 +256,10 @@
         }
 
         function requestNativePlaybackStart(reason) {
-          if (maybeStartLowLatencyPlayout(reason)) {
+          if (maybeStartNativeStream(reason)) {
             return true;
           }
-          return maybeStartNativeStream(reason);
+          return maybeStartLowLatencyPlayout(reason);
         }
 
         function configureCafLoadInterceptor() {
@@ -2084,7 +2079,9 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  maybeStartLowLatencyPlayout("handshake_ack");
+                  if (isPlaybackActiveState(lastMirroredState)) {
+                    requestNativePlaybackStart("handshake_ack");
+                  }
                   if (workletNode) {
                     workletNode.port.postMessage({
                       type: "CONFIG",
@@ -2124,7 +2121,6 @@
                         });
                       }
                     }
-                    maybeStartLowLatencyPlayout("bridge_config");
                   }
                   if (d.ip) {
                     triggerWakeLockLoad();
@@ -2232,7 +2228,6 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
-              maybeStartLowLatencyPlayout("bridge_config");
               return;
             }
 
