@@ -27,7 +27,7 @@
         var pendingBinaryFrames = [];
         var workletReady = false;
         const PENDING_BINARY_FRAMES_MAX = 1; // Keep only the newest startup packet; stale PCM increases cast latency.
-        const VERSION_TAG = "v13.9.508-APORv2";
+        const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         // Do not run CAF PlayerManager media in parallel with the custom PCM
@@ -150,6 +150,19 @@
           } catch (e) {
             console.warn("⚠️ Receiver: CastDebugLogger setup failed:", e);
           }
+        }
+
+        function revealReceiverUi(reason) {
+          if (!document.body || window._receiverUiRevealed) {
+            return;
+          }
+          window._receiverUiRevealed = true;
+          document.body.classList.remove("app-loading");
+          relayLogToStudio(
+            "✅ Receiver: Receiver UI revealed (app-loading removed" +
+              (reason ? " / " + reason : "") +
+              ").",
+          );
         }
 
         function notifyPlaybackMode(mode, reason) {
@@ -484,7 +497,7 @@
             stopCafNativeCompanion();
           }
           notifyPlaybackMode("native", modeReason);
-          document.body.classList.remove("app-loading");
+          revealReceiverUi("native_active");
           teardownPcmPlayout("native_active", true);
           if (logMessage) {
             relayLogToStudio(logMessage);
@@ -1088,7 +1101,7 @@
               return;
             }
 
-            let workletUrl = `pcm-player-worklet-v13.9.508.js?cb=${Date.now()}`;
+            let workletUrl = `pcm-player-worklet-v13.9.509.js?cb=${Date.now()}`;
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
@@ -1145,9 +1158,7 @@
             workletNode.connect(masterGain);
             window._lastWorkletDiagTime = Date.now(); // Prevent premature watchdog triggers during startup
 
-            // [v13.9.505] Reveal UI — single authoritative point, fires once via workletNode guard above
-            document.body.classList.remove("app-loading");
-            relayLogToStudio("✅ Receiver: Receiver UI revealed (app-loading removed).");
+            revealReceiverUi("worklet_ready");
 
             relayLogToStudio(`✅ Receiver sink active @ ${actualRate}Hz`);
 
@@ -2504,6 +2515,7 @@
           }
 
           window.addEventListener("resize", updateScale);
+          revealReceiverUi("startup_ready");
           relayLogToStudio("🎬 Receiver: Startup Complete [" + VERSION_TAG + "].");
         };
       })();
