@@ -27,7 +27,7 @@
         var pendingBinaryFrames = [];
         var workletReady = false;
         const PENDING_BINARY_FRAMES_MAX = 1; // Keep only the newest startup packet; stale PCM increases cast latency.
-        const VERSION_TAG = "v13.9.506-APORv2";
+        const VERSION_TAG = "v13.9.507-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         // Do not run CAF PlayerManager media in parallel with the custom PCM
@@ -1088,7 +1088,7 @@
               return;
             }
 
-            let workletUrl = `pcm-player-worklet-v13.9.506.js?cb=${Date.now()}`;
+            let workletUrl = `pcm-player-worklet-v13.9.507.js?cb=${Date.now()}`;
             if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
@@ -1162,7 +1162,7 @@
                 if (e.data.measuredHz && e.data.measuredHz > 0) {
                   if (e.data.measuredHz < 40000) {
                     window._lowRateCount = (window._lowRateCount || 0) + 1;
-                    if (window._lowRateCount >= 3) {
+                    if (window._lowRateCount >= 2) {
                       relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
                       window._lowRateCount = 0;
                       stopAllPlayout("pcm_degraded");

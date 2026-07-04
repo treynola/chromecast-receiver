@@ -161,6 +161,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       }
       if (this._wallStartMs === 0 && wallNow) {
         this._wallStartMs = wallNow;
+        this._lastDiagWallMs = wallNow;
+        this._lastDiagFramesProcessed = 0;
       }
       this._callbackCount++;
 
