@@ -613,6 +613,8 @@
           workletReady = false;
           window._qCount = 0;
           window._binLogCount = 0;
+          window._lowRateCount = 0;
+          window._workletDiagCount = 0;
         }
 
         function resetBinaryPlayoutState(reason) {
@@ -1152,6 +1154,8 @@
             };
             workletNode.connect(masterGain);
             window._lastWorkletDiagTime = Date.now(); // Prevent premature watchdog triggers during startup
+            window._lowRateCount = 0;
+            window._workletDiagCount = 0;
 
             revealReceiverUi("worklet_ready");
 
@@ -1160,23 +1164,28 @@
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
+                window._workletDiagCount = (window._workletDiagCount || 0) + 1;
 
                 // [v13.9.511] DEGRADED PLAYOUT DETECTOR: If the playout rate is consistently
                 // too low (e.g. < 40,000 Hz) due to TV thread scheduling issues (e.g. Cobalt
                 // channel-count scheduling bug running at exactly half-rate ~24kHz), we
                 // automatically trigger the native /stream.wav fallback to save audio quality.
-                if (e.data.measuredHz && e.data.measuredHz > 0) {
-                  if (e.data.measuredHz < 40000) {
-                    window._lowRateCount = (window._lowRateCount || 0) + 1;
-                    if (window._lowRateCount >= 2) {
-                      relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
+                // We ignore the first 10 DIAG reports (~3.2 seconds at 48kHz) to allow the
+                // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
+                if (window._workletDiagCount > 10) {
+                  if (e.data.measuredHz && e.data.measuredHz > 0) {
+                    if (e.data.measuredHz < 40000) {
+                      window._lowRateCount = (window._lowRateCount || 0) + 1;
+                      if (window._lowRateCount >= 2) {
+                        relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
+                        window._lowRateCount = 0;
+                        stopAllPlayout("pcm_degraded");
+                        startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                        return;
+                      }
+                    } else {
                       window._lowRateCount = 0;
-                      stopAllPlayout("pcm_degraded");
-                      startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
-                      return;
                     }
-                  } else {
-                    window._lowRateCount = 0;
                   }
                 }
 
