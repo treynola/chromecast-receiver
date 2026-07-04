@@ -422,6 +422,7 @@ img {
 
 .lfo-assign.reversed:checked {
   background-color: var(--red) !important;
+  border-color: var(--red) !important;
 }
 
 .param-value {
