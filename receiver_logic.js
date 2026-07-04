@@ -589,6 +589,24 @@
           }
         }
 
+        function destroyAudioWorklet() {
+          if (workletNode) {
+            try {
+              if (workletNode.port) {
+                workletNode.port.postMessage({ type: "RESET" });
+                workletNode.port.onmessage = null;
+              }
+            } catch (e) {}
+            try {
+              workletNode.disconnect();
+            } catch (e) {}
+            workletNode = null;
+          }
+          workletReady = false;
+          window._qCount = 0;
+          window._binLogCount = 0;
+        }
+
         function resetBinaryPlayoutState(reason) {
           pendingBinaryFrames = [];
           window._isDrainingStartup = false;
@@ -597,11 +615,9 @@
           window._playbackMode = "unknown";
           playbackModeLastSent = "";
           playbackModeLastSentGeneration = -1;
-          if (workletNode && workletNode.port) {
-            try {
-              workletNode.port.postMessage({ type: "RESET" });
-            } catch (e) {}
-          }
+          
+          destroyAudioWorklet();
+          
           clearLowLatencyStartupWatchdog();
           if (reason) {
             relayLogToStudio("🛑 Receiver: Binary playout reset (" + reason + ").");
@@ -826,18 +842,7 @@
           clearNoSenderShutdownTimer();
           relayLogToStudio(`🛑 Receiver: Shutdown requested${reason ? ` (${reason})` : ""}`);
           clearLegacyMediaStream();
-          if (workletNode) {
-            try {
-              if (workletNode.port) {
-                workletNode.port.postMessage({ type: "RESET" });
-                workletNode.port.onmessage = null;
-              }
-            } catch (e) {}
-            try {
-              workletNode.disconnect();
-            } catch (e) {}
-            workletNode = null;
-          }
+          destroyAudioWorklet();
           if (masterGain) {
             try {
               masterGain.disconnect();
@@ -982,86 +987,69 @@
 
         function preInitAudioContext() {
           if (window._receiverShutdownInProgress) return;
-          const isCastSupported = typeof cast !== "undefined" && cast.framework;
-          // Request 48 kHz on Cast so the receiver does not inherit an older mismatched
-          // context or force a downsample path when the hardware can run natively at 48 kHz.
-          const requestedRate = isCastSupported ? 48000 : (window._hwRate || 48000);
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
-          if (!audioCtx || window._lastHwRate !== requestedRate) {
-            window._lastHwRate = requestedRate;
-            if (audioCtx) {
-              relayLogToStudio(
-                `📡 Receiver: Resetting AudioContext for receiver rate: ${requestedRate}Hz`,
-              );
-              try {
-                audioCtx.close();
-              } catch (e) {}
-              audioCtx = null;
-              masterGain = null;
-              workletNode = null;
-            }
+          if (!audioCtx) {
             try {
               relayLogToStudio("🛠️ Receiver: Creating new AudioContext...");
-              // Create default AudioContext with no options to ensure the browser uses
-              // the high-performance native hardware output fast-path.
               audioCtx = new window.AudioContext();
-              if (audioCtx.sampleRate && audioCtx.sampleRate !== requestedRate) {
-                relayLogToStudio(
-                  `⚠️ Receiver: AudioContext resolved ${audioCtx.sampleRate}Hz instead of receiver rate ${requestedRate}Hz.`,
-                );
-              }
-              window._hwRate = audioCtx.sampleRate || requestedRate;
-              window._lastHwRate = requestedRate;
+              window._hwRate = audioCtx.sampleRate || 48000;
+              window._lastHwRate = window._hwRate;
               relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state);
+            } catch (e) {
+              relayLogToStudio(`❌ Receiver ERROR: Failed to create AudioContext - ${e.message}`);
+              return;
+            }
+          }
 
+          if (audioCtx && !masterGain) {
+            try {
               masterGain = audioCtx.createGain();
               masterGain.gain.value = 1.0;
               masterGain.connect(audioCtx.destination);
               relayLogToStudio("🛠️ Receiver: masterGain connected.");
 
               const keepAlive = audioCtx.createOscillator();
-              // Keep-alive tone must stay below Nyquist for the active context.
-              keepAlive.frequency.value = Math.min(12000, Math.floor((audioCtx.sampleRate || requestedRate || 48000) * 0.25));
+              keepAlive.frequency.value = Math.min(12000, Math.floor((audioCtx.sampleRate || 48000) * 0.25));
               const g = audioCtx.createGain();
               g.gain.value = 0.00001;
               keepAlive.connect(g);
               g.connect(audioCtx.destination);
               keepAlive.start();
               relayLogToStudio("🛠️ Receiver: keepAlive oscillator started.");
-
-              const audioUnlocker = document.getElementById("audio-unlocker");
-              relayLogToStudio("🛠️ Receiver: audioUnlocker found: " + !!audioUnlocker);
-              if (audioUnlocker) {
-                if (!audioUnlocker._hasUnlockListeners) {
-                  audioUnlocker._hasUnlockListeners = true;
-                  audioUnlocker.addEventListener("play", function() {
-                    resumeAudio();
-                  });
-                  audioUnlocker.addEventListener("playing", function() {
-                    resumeAudio();
-                  });
-                }
-
-                // [v13.9.505] Run the programmatic silent WAV fallback conditionally
-                // (only in non-Cast mode) to prevent conflict with Cast SDK PlayerManager.
-                const isCastSupported = typeof cast !== "undefined" && cast.framework;
-                if (!isCastSupported) {
-                  if (!audioUnlocker.src) {
-                    audioUnlocker.src = createSilentWavUrl();
-                  }
-                  audioUnlocker.play().catch(function(e) {
-                    relayLogToStudio("⚠️ Receiver: play silent WAV failed - " + e.message);
-                  });
-                } else {
-                  relayLogToStudio("📡 Receiver: Skipping audioUnlocker play in Cast mode; custom PCM AudioWorklet owns playout.");
-                }
-              }
-
-              resumeAudio();
             } catch (e) {
-              relayLogToStudio(`❌ Receiver ERROR: preInitAudioContext failed - ${e.message}`);
+              relayLogToStudio(`❌ Receiver ERROR: Failed to configure audio graph - ${e.message}`);
             }
           }
+
+          const audioUnlocker = document.getElementById("audio-unlocker");
+          relayLogToStudio("🛠️ Receiver: audioUnlocker found: " + !!audioUnlocker);
+          if (audioUnlocker) {
+            if (!audioUnlocker._hasUnlockListeners) {
+              audioUnlocker._hasUnlockListeners = true;
+              audioUnlocker.addEventListener("play", function () {
+                resumeAudio();
+              });
+              audioUnlocker.addEventListener("playing", function () {
+                resumeAudio();
+              });
+            }
+
+            // [v13.9.505] Run the programmatic silent WAV fallback conditionally
+            // (only in non-Cast mode) to prevent conflict with Cast SDK PlayerManager.
+            const isCastSupported = typeof cast !== "undefined" && cast.framework;
+            if (!isCastSupported) {
+              if (!audioUnlocker.src) {
+                audioUnlocker.src = createSilentWavUrl();
+              }
+              audioUnlocker.play().catch(function (e) {
+                relayLogToStudio("⚠️ Receiver: play silent WAV failed - " + e.message);
+              });
+            } else {
+              relayLogToStudio("📡 Receiver: Skipping audioUnlocker play in Cast mode; custom PCM AudioWorklet owns playout.");
+            }
+          }
+
+          resumeAudio();
         }
 
         let lastInitAttempt = 0;
@@ -1166,6 +1154,26 @@
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
+
+                // [v13.9.511] DEGRADED PLAYOUT DETECTOR: If the playout rate is consistently
+                // too low (e.g. < 40,000 Hz) due to TV thread scheduling issues (e.g. Cobalt
+                // channel-count scheduling bug running at exactly half-rate ~24kHz), we
+                // automatically trigger the native /stream.wav fallback to save audio quality.
+                if (e.data.measuredHz && e.data.measuredHz > 0) {
+                  if (e.data.measuredHz < 40000) {
+                    window._lowRateCount = (window._lowRateCount || 0) + 1;
+                    if (window._lowRateCount >= 3) {
+                      relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
+                      window._lowRateCount = 0;
+                      stopAllPlayout("pcm_degraded");
+                      startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                      return;
+                    }
+                  } else {
+                    window._lowRateCount = 0;
+                  }
+                }
+
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                   binaryWS.send(
                     JSON.stringify({
@@ -1866,22 +1874,18 @@
             // [v13.9.504] HARDWARE PROBE: Detect actual device sample rate natively
             let hwRate = 48000;
             try {
-              const probe = new window.AudioContext();
-              hwRate = probe.sampleRate; // May be 24000, 44100, 48000 etc.
+              preInitAudioContext();
+              hwRate = audioCtx ? audioCtx.sampleRate : 48000;
               window._hwRate = hwRate;
               relayLogToStudio(
                 `🔍 Receiver: Hardware probe → actual rate = ${hwRate}Hz`,
               );
-              probe.close();
             } catch (e) {
               relayLogToStudio(
                 `⚠️ Receiver: Hardware probe failed, defaulting to ${hwRate}Hz`,
               );
               window._hwRate = hwRate;
             }
-
-            // Send actual hardware capabilities
-            preInitAudioContext();
 
             function sendHandshake() {
               if (window._receiverShutdownInProgress) return;
