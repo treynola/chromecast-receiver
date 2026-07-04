@@ -213,6 +213,9 @@
           if (window._receiverShutdownInProgress) {
             return false;
           }
+          if (window._pcmDegraded) {
+            return false;
+          }
           if (nativeStreamActive || nativeStreamStarting || audioInitializing || workletNode) {
             return true;
           }
@@ -256,10 +259,10 @@
         }
 
         function requestNativePlaybackStart(reason) {
-          if (maybeStartNativeStream(reason)) {
+          if (maybeStartLowLatencyPlayout(reason)) {
             return true;
           }
-          return maybeStartLowLatencyPlayout(reason);
+          return maybeStartNativeStream(reason);
         }
 
         function configureCafLoadInterceptor() {
@@ -1179,6 +1182,7 @@
                       if (window._lowRateCount >= 2) {
                         relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
                         window._lowRateCount = 0;
+                        window._pcmDegraded = true;
                         stopAllPlayout("pcm_degraded");
                         startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
                         return;
@@ -1863,6 +1867,7 @@
             window._wsReconnectAttempts = 0;
             // [v13.9.506] Reset stale bypass flag so fresh sessions don't carry old state
             window._nativeStreamBypassLogged = false;
+            window._pcmDegraded = false;
             clearBinaryReconnectTimer();
             // Flush buffered logs
             while (logQueue.length > 0) {
