@@ -255,10 +255,10 @@
         }
 
         function requestNativePlaybackStart(reason) {
-          if (maybeStartNativeStream(reason)) {
+          if (maybeStartLowLatencyPlayout(reason)) {
             return true;
           }
-          return maybeStartLowLatencyPlayout(reason);
+          return maybeStartNativeStream(reason);
         }
 
         function configureCafLoadInterceptor() {
