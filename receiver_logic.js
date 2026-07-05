@@ -1179,7 +1179,7 @@
                 // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
                 if (window._workletDiagCount > 2) {
                   if (e.data.measuredHz && e.data.measuredHz > 0) {
-                    if (e.data.measuredHz < 40000) {
+                    if (e.data.measuredHz < 45000) {
                       window._lowRateCount = (window._lowRateCount || 0) + 1;
                       if (window._lowRateCount >= 2) {
                         relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
