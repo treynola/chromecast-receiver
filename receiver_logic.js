@@ -259,10 +259,10 @@
         }
 
         function requestNativePlaybackStart(reason) {
-          if (maybeStartLowLatencyPlayout(reason)) {
+          if (maybeStartNativeStream(reason)) {
             return true;
           }
-          return maybeStartNativeStream(reason);
+          return maybeStartLowLatencyPlayout(reason);
         }
 
         function configureCafLoadInterceptor() {
@@ -621,13 +621,16 @@
         }
 
         function resetBinaryPlayoutState(reason) {
+          const preserveNativeMode = nativeStreamActive || nativeStreamStarting || window._playbackMode === "native";
           pendingBinaryFrames = [];
           window._isDrainingStartup = false;
           window._binaryActive = false;
           window._lastBinaryTime = 0;
-          window._playbackMode = "unknown";
-          playbackModeLastSent = "";
-          playbackModeLastSentGeneration = -1;
+          if (!preserveNativeMode) {
+            window._playbackMode = "unknown";
+            playbackModeLastSent = "";
+            playbackModeLastSentGeneration = -1;
+          }
           
           destroyAudioWorklet();
           
@@ -640,6 +643,15 @@
         function stopAllPlayout(reason) {
           resetBinaryPlayoutState(reason || "playback_stop");
           stopNativeStreamPlayout(reason || "playback_stop");
+        }
+
+        function stopRealtimePlayoutKeepNativePrimed(reason) {
+          resetBinaryPlayoutState(reason || "playback_idle");
+          if (nativeStreamActive || nativeStreamStarting) {
+            relayLogToStudio("⏸️ Receiver: Native stream kept primed (" + (reason || "playback_idle") + ").");
+            return true;
+          }
+          return maybeStartNativeStream((reason || "playback_idle") + "_prime");
         }
 
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
@@ -1073,9 +1085,8 @@
           if (nativeStreamStarting || nativeStreamActive || window._playbackMode === "native") {
             return;
           }
-          // [v13.9.510] PCM AudioWorklet is the low-latency primary cast path.
-          // Native /stream.wav playout remains fallback-only for receivers that
-          // cannot sustain the direct PCM bridge.
+          // Native /stream.wav is the primary cast playout path. The PCM
+          // AudioWorklet remains a fallback when the native media path cannot load.
           // [v13.9.504] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
             relayLogToStudio("⏳ Receiver: Waiting for BRIDGE_CONFIG handshake...");
@@ -2042,10 +2053,10 @@
                     window._binaryActive ||
                     pendingBinaryFrames.length > 0
                   ) {
-                    stopAllPlayout("state_update_inactive");
+                    stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
                   }
                 } else if (d.type === "PLAYBACK_STOP") {
-                  stopAllPlayout(d.reason || "playback_stop");
+                  stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
                    if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
@@ -2080,8 +2091,8 @@
                     window.location.href = cleanUrl + "?cb=" + Date.now();
                   }, 500);
                 } else if (d.type === "HANDSHAKE_ACK") {
-                  // [v13.9.504] Server confirmed handshake — keep the receiver primed
-                  // and allow the low-latency PCM path to initialize immediately.
+                  // Server confirmed handshake. Prime the native media path now so
+                  // the TV player is already buffered before audible PCM arrives.
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
@@ -2093,9 +2104,7 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  if (isPlaybackActiveState(lastMirroredState)) {
-                    requestNativePlaybackStart("handshake_ack");
-                  }
+                  maybeStartNativeStream("handshake_ack_prime");
                   if (workletNode) {
                     workletNode.port.postMessage({
                       type: "CONFIG",
@@ -2138,6 +2147,9 @@
                   }
                   if (d.ip) {
                     triggerWakeLockLoad();
+                  }
+                  if (window._handshakeAcked) {
+                    maybeStartNativeStream("bridge_config_prime");
                   }
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
@@ -2242,6 +2254,9 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
+              if (window._handshakeAcked) {
+                maybeStartNativeStream("bridge_config_prime");
+              }
               return;
             }
 
@@ -2288,7 +2303,7 @@
             }
 
             if (d.type === "PLAYBACK_STOP") {
-              stopAllPlayout(d.reason || "playback_stop");
+              stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
               return;
             }
 
@@ -2338,7 +2353,7 @@
                 window._binaryActive ||
                 pendingBinaryFrames.length > 0
               ) {
-                stopAllPlayout("state_update_inactive");
+                stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
               }
             }
           } catch (e) {
