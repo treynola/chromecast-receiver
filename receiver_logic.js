@@ -248,10 +248,6 @@
           if (audioInitializing || workletNode) {
             return true;
           }
-          if (configReceived && !window._handshakeAcked) {
-            armLowLatencyStartupWatchdog();
-            return true;
-          }
           if (reason) {
             relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
           }
@@ -2148,9 +2144,7 @@
                   if (d.ip) {
                     triggerWakeLockLoad();
                   }
-                  if (window._handshakeAcked) {
-                    maybeStartNativeStream("bridge_config_prime");
-                  }
+                  maybeStartNativeStream("bridge_config_prime");
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
@@ -2254,9 +2248,7 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
-              if (window._handshakeAcked) {
-                maybeStartNativeStream("bridge_config_prime");
-              }
+              maybeStartNativeStream("bridge_config_prime");
               return;
             }
 
