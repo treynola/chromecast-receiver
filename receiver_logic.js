@@ -1002,7 +1002,9 @@
         }
 
         function preInitAudioContext() {
+          // [v13.9.509-32k] Real-time 32kHz playout context to bypass TV CPU lag
           if (window._receiverShutdownInProgress) return;
+
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx) {
             try {
