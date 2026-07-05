@@ -1177,7 +1177,7 @@
                 // automatically trigger the native /stream.wav fallback to save audio quality.
                 // We ignore the first 10 DIAG reports (~3.2 seconds at 48kHz) to allow the
                 // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
-                if (window._workletDiagCount > 10) {
+                if (window._workletDiagCount > 2) {
                   if (e.data.measuredHz && e.data.measuredHz > 0) {
                     if (e.data.measuredHz < 40000) {
                       window._lowRateCount = (window._lowRateCount || 0) + 1;
