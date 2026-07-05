@@ -642,23 +642,7 @@
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          if (
-            !window._binaryActive &&
-            pendingBinaryFrames.length === 0 &&
-            !workletNode &&
-            !audioInitializing
-          ) {
-            if (nativeStreamActive || nativeStreamStarting) {
-              return true;
-            }
-            return maybeStartNativeStream((reason || "playback_idle") + "_prime");
-          }
-          resetBinaryPlayoutState(reason || "playback_idle");
-          if (nativeStreamActive || nativeStreamStarting) {
-            relayLogToStudio("⏸️ Receiver: Native stream kept primed (" + (reason || "playback_idle") + ").");
-            return true;
-          }
-          return maybeStartNativeStream((reason || "playback_idle") + "_prime");
+          stopAllPlayout(reason);
         }
 
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
@@ -2111,7 +2095,6 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  maybeStartNativeStream("handshake_ack_prime");
                   if (workletNode) {
                     workletNode.port.postMessage({
                       type: "CONFIG",
@@ -2155,7 +2138,6 @@
                   if (d.ip) {
                     triggerWakeLockLoad();
                   }
-                  maybeStartNativeStream("bridge_config_prime");
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
@@ -2259,7 +2241,6 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
-              maybeStartNativeStream("bridge_config_prime");
               return;
             }
 
