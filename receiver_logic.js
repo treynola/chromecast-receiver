@@ -642,6 +642,17 @@
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
+          if (
+            !window._binaryActive &&
+            pendingBinaryFrames.length === 0 &&
+            !workletNode &&
+            !audioInitializing
+          ) {
+            if (nativeStreamActive || nativeStreamStarting) {
+              return true;
+            }
+            return maybeStartNativeStream((reason || "playback_idle") + "_prime");
+          }
           resetBinaryPlayoutState(reason || "playback_idle");
           if (nativeStreamActive || nativeStreamStarting) {
             relayLogToStudio("⏸️ Receiver: Native stream kept primed (" + (reason || "playback_idle") + ").");
