@@ -1006,11 +1006,19 @@
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx) {
             try {
-              relayLogToStudio("🛠️ Receiver: Creating new AudioContext...");
-              audioCtx = new window.AudioContext();
+              relayLogToStudio("🛠️ Receiver: Creating new AudioContext (32kHz + playback latency hint)...");
+              try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                  sampleRate: 32000,
+                  latencyHint: "playback"
+                });
+              } catch (err) {
+                relayLogToStudio("⚠️ Receiver: Failed to create 32kHz AudioContext, falling back to default constructor: " + err.message);
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+              }
               window._hwRate = audioCtx.sampleRate || 48000;
               window._lastHwRate = window._hwRate;
-              relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state);
+              relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state + " | Rate: " + window._hwRate);
             } catch (e) {
               relayLogToStudio(`❌ Receiver ERROR: Failed to create AudioContext - ${e.message}`);
               return;
@@ -1179,7 +1187,9 @@
                 // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
                 if (window._workletDiagCount > 2) {
                   if (e.data.measuredHz && e.data.measuredHz > 0) {
-                    if (e.data.measuredHz < 45000) {
+                    const expectedRate = window._hwRate || 48000;
+                    const threshold = expectedRate * 0.90; // Fallback if playout rate is under 90% of expected context rate
+                    if (e.data.measuredHz < threshold) {
                       window._lowRateCount = (window._lowRateCount || 0) + 1;
                       if (window._lowRateCount >= 2) {
                         relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
