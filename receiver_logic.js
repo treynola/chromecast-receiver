@@ -255,10 +255,18 @@
         }
 
         function requestNativePlaybackStart(reason) {
-          if (maybeStartLowLatencyPlayout(reason)) {
+          if (
+            reason === "bridge_config" &&
+            !nativeStreamActive &&
+            !nativeStreamStarting &&
+            (workletNode || audioInitializing)
+          ) {
+            resetBinaryPlayoutState("native_takeover");
+          }
+          if (maybeStartNativeStream(reason)) {
             return true;
           }
-          return maybeStartNativeStream(reason);
+          return maybeStartLowLatencyPlayout(reason);
         }
 
         function configureCafLoadInterceptor() {
@@ -642,7 +650,7 @@
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          stopAllPlayout(reason);
+          resetBinaryPlayoutState(reason || "playback_stop");
         }
 
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
@@ -2150,6 +2158,7 @@
                   if (d.ip) {
                     triggerWakeLockLoad();
                   }
+                  requestNativePlaybackStart("bridge_config");
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
@@ -2253,6 +2262,7 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
+              requestNativePlaybackStart("bridge_config");
               return;
             }
 
