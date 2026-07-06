@@ -299,9 +299,13 @@
             return true;
           }
           if (nativeStreamStarting) {
+            maybeStartLowLatencyPlayout("native_boot");
             return true;
           }
           if (maybeStartNativeStream(reason)) {
+            if (nativeStreamStarting) {
+              maybeStartLowLatencyPlayout("native_boot");
+            }
             return true;
           }
           return false;
