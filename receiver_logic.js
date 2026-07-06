@@ -40,7 +40,7 @@
         var nativeStartupAttemptId = 0;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
-        const NATIVE_STARTUP_TIMEOUT_MS = 7500;
+        const NATIVE_STARTUP_TIMEOUT_MS = 3000;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
@@ -547,7 +547,7 @@
             relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
             stopNativeStreamPlayout("startup_timeout");
             if (configReceived) {
-              initAudio();
+              initAudio(true);
             }
           }, NATIVE_STARTUP_TIMEOUT_MS);
         }
@@ -752,7 +752,7 @@
               clearNativeStartupWatchdog();
               relayLogToStudio("⚠️ Receiver: HTML audio stream media error; falling back to AudioWorklet.");
               if (configReceived) {
-                initAudio();
+                initAudio(true);
               }
             };
             const playPromise = nativeAudio.play();
@@ -773,7 +773,7 @@
                   clearNativeStartupWatchdog();
                   relayLogToStudio("⚠️ Receiver: HTML audio stream play failed: " + (e && e.message ? e.message : e));
                   if (configReceived) {
-                    initAudio();
+                    initAudio(true);
                   }
                 });
             } else {
@@ -1161,7 +1161,7 @@
 
         let lastInitAttempt = 0;
         let audioInitializing = false;
-        async function initAudio() {
+        async function initAudio(force = false) {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
           if (nativeStreamActive || nativeStreamStarting || window._playbackMode === "native") {
@@ -1177,7 +1177,7 @@
 
           // [v13.9.504] THROTTLE: Prevent tight-loop retries if init fails (e.g. 404 or SyntaxError)
           const now = Date.now();
-          if (now - lastInitAttempt < 5000) return;
+          if (!force && now - lastInitAttempt < 5000) return;
           lastInitAttempt = now;
           
           audioInitializing = true;
