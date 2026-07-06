@@ -907,7 +907,7 @@
           }
           // [v13.9.506] SINGLE PATH: Don't start native stream if worklet is already
           // handling playout — dual paths cause wobble from competing clock recovery.
-          if (workletNode && workletReady) {
+          if (workletNode && workletReady && window._playbackMode === "pcm_fallback") {
             relayLogToStudio("📡 Receiver: Native stream skipped; AudioWorklet already active.");
             return false;
           }
@@ -2236,6 +2236,13 @@
                     relayLogToStudio(
                       `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
                     );
+                  } else if (!nativeStreamActive && !nativeStreamStarting) {
+                    initAudio(false, true).catch((e) => {
+                      relayLogToStudio(
+                        "⚠️ Receiver: handshake prewarm initAudio failed: " +
+                          (e && e.message ? e.message : e),
+                      );
+                    });
                   }
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
