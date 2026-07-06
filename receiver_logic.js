@@ -286,6 +286,13 @@
           );
         }
 
+        function isWithinPlaybackStartGrace() {
+          return (
+            !!lastPlaybackStartSignalAt &&
+            Date.now() - lastPlaybackStartSignalAt <= PLAYBACK_START_GRACE_MS
+          );
+        }
+
         function requestNativePlaybackStart(reason) {
           if (
             reason === "bridge_config" &&
@@ -1306,6 +1313,14 @@
                 // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
                 if (window._workletDiagCount > 10) {
                   if (e.data.measuredHz && e.data.measuredHz > 0) {
+                    if (isWithinPlaybackStartGrace()) {
+                      window._lowRateCount = 0;
+                      return;
+                    }
+                    if (nativeStreamStarting || nativeStreamActive) {
+                      window._lowRateCount = 0;
+                      return;
+                    }
                     const expectedRate = window._hwRate || 48000;
                     const threshold = expectedRate * 0.90; // Fallback if playout rate is under 90% of expected context rate
                     if (e.data.measuredHz < threshold) {
