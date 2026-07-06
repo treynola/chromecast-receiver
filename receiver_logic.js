@@ -299,7 +299,7 @@
           if (maybeStartNativeStream(reason)) {
             return true;
           }
-          return maybeStartLowLatencyPlayout(reason);
+          return false;
         }
 
         function configureCafPlaybackHandlers() {
