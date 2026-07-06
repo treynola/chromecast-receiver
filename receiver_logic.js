@@ -218,7 +218,7 @@
           if (window._pcmDegraded) {
             return false;
           }
-          if (nativeStreamActive || nativeStreamStarting || audioInitializing || workletNode) {
+          if (nativeStreamActive || audioInitializing || workletNode) {
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -290,7 +290,14 @@
           ) {
             resetBinaryPlayoutState("native_takeover");
           }
+          if (nativeStreamActive) {
+            return true;
+          }
+          if (nativeStreamStarting) {
+            return maybeStartLowLatencyPlayout(reason);
+          }
           if (maybeStartNativeStream(reason)) {
+            maybeStartLowLatencyPlayout(reason);
             return true;
           }
           return maybeStartLowLatencyPlayout(reason);
@@ -826,10 +833,10 @@
             }
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
-            // Keep the sender paused until CAF actually reports the stream as active.
-            // Advertising native too early lets PCM get ahead of /stream.wav boot-up
-            // and shows up as a small but noticeable sync offset.
-            notifyPlaybackMode("native_booting", "caf_load_requested");
+            // Advertise native immediately so the sender continues to forward PCM
+            // while CAF finishes booting. The receiver will keep PCM live until
+            // activateNativeStream() flips the path to native.
+            notifyPlaybackMode("native", "caf_load_requested");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
@@ -1158,7 +1165,7 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
-          if (nativeStreamStarting || nativeStreamActive || window._playbackMode === "native") {
+          if (nativeStreamActive || (window._playbackMode === "native" && !nativeStreamStarting)) {
             return;
           }
           // Native /stream.wav is the primary cast playout path. The PCM
@@ -2063,7 +2070,7 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              if (nativeStreamActive || nativeStreamStarting) {
+              if (nativeStreamActive) {
                 return;
               }
               if (workletNode) {
@@ -2089,7 +2096,7 @@
               }
               return;
             } else if (isBlob) {
-              if (nativeStreamActive || nativeStreamStarting) {
+              if (nativeStreamActive) {
                 return;
               }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
@@ -2132,7 +2139,6 @@
                     return;
                   } else if (
                     nativeStreamActive ||
-                    nativeStreamStarting ||
                     window._binaryActive ||
                     pendingBinaryFrames.length > 0
                   ) {
@@ -2142,7 +2148,7 @@
                   stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
                 } else if (d.type === "PCM_RELAY") {
                    // [v13.9.504] Binary Superiority: Ignore relay if binary is active
-                   if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
+                   if (window._binaryActive || nativeStreamActive) return;
 
                    let buffer = d.binary || d.data;
                    if (buffer && typeof buffer === "string") {
@@ -2388,7 +2394,7 @@
             // 2. High-Fidelity Audio Relay (Fallback Path)
             if (d.type === "PCM_RELAY") {
               // If Binary WS is active, IGNORE Relay to prevent doubling/echo
-              if (window._binaryActive || nativeStreamActive || nativeStreamStarting) return;
+              if (window._binaryActive || nativeStreamActive) return;
 
               let buffer = d.binary || d.data;
               if (buffer && typeof buffer === "string") {
@@ -2430,7 +2436,6 @@
                 return;
               } else if (
                 nativeStreamActive ||
-                nativeStreamStarting ||
                 window._binaryActive ||
                 pendingBinaryFrames.length > 0
               ) {
