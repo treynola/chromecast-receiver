@@ -2912,7 +2912,11 @@ select option {
   background: transparent;
   border: none;
   padding: 0;
-  margin: auto;
+  position: fixed;
+  top: 25vh;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
   overflow: visible;
   color: white;
 }
