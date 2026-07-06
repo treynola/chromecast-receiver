@@ -225,9 +225,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // repeated sender-side audible packet drops while keeping pitch drift low.
       const backlogSamples = Math.max(0, available - this._TARGET_BUFFER);
       const playbackRate = backlogSamples >= 24576
-        ? 1.012
+        ? 1.006
         : backlogSamples >= 12288
-          ? 1.006
+          ? 1.003
           : 1.0;
 
       if (renderSilence) {

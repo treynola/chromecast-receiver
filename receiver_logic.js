@@ -782,7 +782,33 @@
           stopNativeStreamPlayout(reason || "playback_stop");
         }
 
+        function resetRealtimePlayoutKeepPcmReady(reason) {
+          clearPlaybackStartSignal();
+          pendingBinaryFrames = [];
+          window._isDrainingStartup = false;
+          window._binaryActive = false;
+          window._lastBinaryTime = 0;
+          clearLowLatencyStartupWatchdog();
+          if (workletNode && workletNode.port) {
+            try {
+              workletNode.port.postMessage({ type: "RESET" });
+            } catch (e) {}
+            workletReady = true;
+          }
+          stopNativeStreamPlayout(reason || "playback_idle");
+          if (workletNode) {
+            notifyPlaybackMode("pcm_fallback", (reason || "playback_idle") + "_pcm_ready");
+          }
+          if (reason) {
+            relayLogToStudio("🛑 Receiver: Binary playout reset, PCM bridge kept ready (" + reason + ").");
+          }
+        }
+
         function stopRealtimePlayoutKeepNativePrimed(reason) {
+          if (reason === "track_stop") {
+            resetRealtimePlayoutKeepPcmReady(reason);
+            return;
+          }
           // Do not keep /stream.wav primed while idle. Chromecast can buffer
           // backend silence and replay it before the next audible packet.
           stopAllPlayout(reason || "playback_stop");
