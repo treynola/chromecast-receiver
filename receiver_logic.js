@@ -218,7 +218,7 @@
           if (window._pcmDegraded) {
             return false;
           }
-          if (nativeStreamActive || audioInitializing || workletNode) {
+          if (nativeStreamActive || nativeStreamStarting || audioInitializing || workletNode) {
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -294,10 +294,9 @@
             return true;
           }
           if (nativeStreamStarting) {
-            return maybeStartLowLatencyPlayout(reason);
+            return true;
           }
           if (maybeStartNativeStream(reason)) {
-            maybeStartLowLatencyPlayout(reason);
             return true;
           }
           return maybeStartLowLatencyPlayout(reason);
@@ -1165,7 +1164,7 @@
         async function initAudio() {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
-          if (nativeStreamActive || (window._playbackMode === "native" && !nativeStreamStarting)) {
+          if (nativeStreamActive || nativeStreamStarting || window._playbackMode === "native") {
             return;
           }
           // Native /stream.wav is the primary cast playout path. The PCM
