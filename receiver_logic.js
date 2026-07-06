@@ -433,6 +433,20 @@
                 if (eventType === events.ERROR || eventType === events.PLAYER_STATE_CHANGED) {
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
+
+                if (
+                  eventType === events.PLAYER_STATE_CHANGED &&
+                  messages.PlayerState &&
+                  event.playerState === messages.PlayerState.PLAYING &&
+                  nativeStreamStarting &&
+                  nativeStreamUrl
+                ) {
+                  activateNativeStream(
+                    "caf_playing",
+                    "✅ Receiver: CAF native 48k stream PLAYING via /stream.wav.",
+                    nativeStartupAttemptId,
+                  );
+                }
                 
                 // [v13.9.506] Loop/Reload static wake-lock stream when finished
                 if (
@@ -771,15 +785,26 @@
             return false;
           }
           try {
+            const onNativeAudioPlaying = function onNativeAudioPlaying() {
+              if (!isCurrentNativeAttempt(attemptId)) return;
+              nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
+              activateNativeStream(
+                "html_audio_playing",
+                "✅ Receiver: HTML audio stream fallback playing via /stream.wav.",
+                attemptId,
+              );
+            };
             nativeAudio.pause();
             nativeAudio.muted = false;
             nativeAudio.loop = false;
             nativeAudio.preload = "auto";
             nativeAudio.crossOrigin = "anonymous";
             nativeAudio.src = streamUrl;
+            nativeAudio.addEventListener("playing", onNativeAudioPlaying, { once: true });
             nativeAudio.onerror = function () {
               if (!isCurrentNativeAttempt(attemptId)) return;
               if (!nativeStreamActive && !nativeStreamStarting) return;
+              nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
               nativeStreamStarting = false;
               nativeStreamActive = false;
               window._nativeStreamActive = false;
@@ -793,14 +818,11 @@
             if (playPromise && typeof playPromise.then === "function") {
               playPromise
                 .then(function () {
-                  activateNativeStream(
-                    "html_audio_active",
-                    "✅ Receiver: HTML audio stream fallback active via /stream.wav.",
-                    attemptId,
-                  );
+                  relayLogToStudio("✅ Receiver: HTML audio stream fallback load accepted via /stream.wav.");
                 })
                 .catch(function (e) {
                   if (!isCurrentNativeAttempt(attemptId)) return;
+                  nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
                   nativeStreamStarting = false;
                   nativeStreamActive = false;
                   window._nativeStreamActive = false;
@@ -869,7 +891,7 @@
             loadRequestData.autoplay = true;
             // Advertise native immediately so the sender continues to forward PCM
             // while CAF finishes booting. The receiver will keep PCM live until
-            // activateNativeStream() flips the path to native.
+            // the player reports that it is actually PLAYING.
             notifyPlaybackMode("native", "caf_load_requested");
             maybeStartLowLatencyPlayout("caf_load_requested");
 
@@ -878,12 +900,7 @@
             if (result && typeof result.then === "function") {
               result
                 .then(function () {
-                  activateNativeStream(
-                    "caf_load_active",
-                    "✅ Receiver: CAF native 48k stream LOAD active via /stream.wav.",
-                    attemptId,
-                  );
-                  writeCastDebug("info", "CAF native stream LOAD active.");
+                  writeCastDebug("info", "CAF native stream LOAD accepted.");
                 })
                 .catch(function (e) {
                   if (!isCurrentNativeAttempt(attemptId)) return;
@@ -892,11 +909,6 @@
                   startHtmlAudioStreamPlayout(streamUrl, attemptId);
                 });
             } else {
-              activateNativeStream(
-                "caf_load_started",
-                "✅ Receiver: CAF native 48k stream LOAD started via /stream.wav.",
-                attemptId,
-              );
               writeCastDebug("info", "CAF native stream LOAD started.");
             }
             return true;
