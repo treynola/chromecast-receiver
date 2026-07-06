@@ -46,6 +46,8 @@
         var playbackModeSocketGeneration = 0;
         var playbackModeLastSentGeneration = -1;
         var playbackModeLastSent = "";
+        var lastPlaybackStartSignalAt = 0;
+        const PLAYBACK_START_GRACE_MS = 2500;
         var cafLoadInterceptorConfigured = false;
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
@@ -252,6 +254,31 @@
             relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
           }
           return startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+        }
+
+        function markPlaybackStartSignal() {
+          lastPlaybackStartSignalAt = Date.now();
+        }
+
+        function clearPlaybackStartSignal() {
+          lastPlaybackStartSignalAt = 0;
+        }
+
+        function shouldIgnoreStaleInactiveState() {
+          if (!lastPlaybackStartSignalAt) {
+            return false;
+          }
+          if (Date.now() - lastPlaybackStartSignalAt > PLAYBACK_START_GRACE_MS) {
+            return false;
+          }
+          return (
+            nativeStreamActive ||
+            nativeStreamStarting ||
+            window._binaryActive ||
+            pendingBinaryFrames.length > 0 ||
+            audioInitializing ||
+            !!workletNode
+          );
         }
 
         function requestNativePlaybackStart(reason) {
@@ -588,6 +615,7 @@
 
         function stopNativeStreamPlayout(reason) {
           nativeStartupAttemptId++;
+          clearPlaybackStartSignal();
           clearNativeStartupWatchdog();
           clearLowLatencyStartupWatchdog();
           nativeStreamStarting = false;
@@ -645,12 +673,17 @@
         }
 
         function stopAllPlayout(reason) {
+          clearPlaybackStartSignal();
           resetBinaryPlayoutState(reason || "playback_stop");
           stopNativeStreamPlayout(reason || "playback_stop");
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          resetBinaryPlayoutState(reason || "playback_stop");
+          // A stale live /stream.wav session keeps buffering across pauses and
+          // can make the next resume land noticeably behind. Treat inactive /
+          // stop transitions as a true stop so the next playback start rebuilds
+          // from a fresh timestamp.
+          stopAllPlayout(reason || "playback_stop");
         }
 
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
@@ -2052,7 +2085,12 @@
                   renderState(d.state);
                   lastMirroredState = d.state;
                   if (isPlaybackActiveState(d.state)) {
+                    markPlaybackStartSignal();
                     requestNativePlaybackStart("state_update");
+                  } else if (
+                    shouldIgnoreStaleInactiveState()
+                  ) {
+                    return;
                   } else if (
                     nativeStreamActive ||
                     nativeStreamStarting ||
@@ -2120,6 +2158,7 @@
                     );
                   }
                 } else if (d.type === "PLAYBACK_START") {
+                  markPlaybackStartSignal();
                   const immediateState = buildImmediatePlaybackState(d.trackId);
                   if (immediateState) {
                     renderState(immediateState, true);
@@ -2292,6 +2331,7 @@
             }
 
             if (d.type === "PLAYBACK_START") {
+              markPlaybackStartSignal();
               const immediateState = buildImmediatePlaybackState(d.trackId);
               if (immediateState) {
                 renderState(immediateState, true);
@@ -2345,7 +2385,10 @@
               renderState(d.state);
               lastMirroredState = d.state;
               if (isPlaybackActiveState(d.state)) {
+                markPlaybackStartSignal();
                 requestNativePlaybackStart("state_update");
+              } else if (shouldIgnoreStaleInactiveState()) {
+                return;
               } else if (
                 nativeStreamActive ||
                 nativeStreamStarting ||
