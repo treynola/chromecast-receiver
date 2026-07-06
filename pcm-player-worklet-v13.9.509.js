@@ -221,9 +221,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Keep receiver playback pitch-neutral. Backpressure is handled by the
-      // sender; the worklet only hard-fails back to the live target window.
-      const playbackRate = 1.0;
+      // Use a tiny catch-up rate when the live queue is high. This avoids
+      // repeated sender-side audible packet drops while keeping pitch drift low.
+      const backlogSamples = Math.max(0, available - this._TARGET_BUFFER);
+      const playbackRate = backlogSamples >= 24576
+        ? 1.012
+        : backlogSamples >= 12288
+          ? 1.006
+          : 1.0;
 
       if (renderSilence) {
         channel0.fill(0);
