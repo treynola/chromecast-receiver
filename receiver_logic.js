@@ -2236,8 +2236,11 @@
                     relayLogToStudio(
                       `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
                     );
-                  } else if (!nativeStreamActive && !nativeStreamStarting) {
-                    initAudio(false, true).catch((e) => {
+                  } else {
+                    relayLogToStudio(
+                      "🛠️ Receiver: Prewarming PCM bridge from HANDSHAKE_ACK.",
+                    );
+                    initAudio(true, true).catch((e) => {
                       relayLogToStudio(
                         "⚠️ Receiver: handshake prewarm initAudio failed: " +
                           (e && e.message ? e.message : e),
