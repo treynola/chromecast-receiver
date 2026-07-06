@@ -864,6 +864,7 @@
             // while CAF finishes booting. The receiver will keep PCM live until
             // activateNativeStream() flips the path to native.
             notifyPlaybackMode("native", "caf_load_requested");
+            maybeStartLowLatencyPlayout("caf_load_requested");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
