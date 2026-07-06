@@ -759,19 +759,9 @@
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          // Keep the native /stream.wav session warm across pauses so the next
-          // PLAYBACK_START can resume immediately. Only the PCM/worklet path is
-          // torn down here; receiver shutdown and websocket teardown still use
-          // stopAllPlayout().
-          clearPlaybackStartSignal();
-          resetBinaryPlayoutState(reason || "playback_stop");
-          if (nativeStreamActive || nativeStreamStarting || window._playbackMode === "native") {
-            if (reason) {
-              relayLogToStudio("🛑 Receiver: Native stream left primed (" + reason + ").");
-            }
-            return;
-          }
-          stopNativeStreamPlayout(reason || "playback_stop");
+          // Do not keep /stream.wav primed while idle. Chromecast can buffer
+          // backend silence and replay it before the next audible packet.
+          stopAllPlayout(reason || "playback_stop");
         }
 
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
