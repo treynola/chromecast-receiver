@@ -1259,7 +1259,7 @@
                 // automatically trigger the native /stream.wav fallback to save audio quality.
                 // We ignore the first 10 DIAG reports (~3.2 seconds at 48kHz) to allow the
                 // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
-                if (window._workletDiagCount > 2) {
+                if (window._workletDiagCount > 10) {
                   if (e.data.measuredHz && e.data.measuredHz > 0) {
                     const expectedRate = window._hwRate || 48000;
                     const threshold = expectedRate * 0.90; // Fallback if playout rate is under 90% of expected context rate
