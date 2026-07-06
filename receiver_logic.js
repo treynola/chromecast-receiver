@@ -218,7 +218,7 @@
           if (window._pcmDegraded) {
             return false;
           }
-          if (nativeStreamActive || nativeStreamStarting || audioInitializing || workletNode) {
+          if (nativeStreamActive || audioInitializing || workletNode) {
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -227,10 +227,15 @@
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN || !window._handshakeAcked) {
             return false;
           }
+          const preserveNativeMode = nativeStreamStarting || window._playbackMode === "native";
           if (reason) {
-            relayLogToStudio("▶️ Receiver: Starting PCM worklet on " + reason + ".");
+            relayLogToStudio(
+              "▶️ Receiver: Starting PCM worklet on " +
+                reason +
+                (preserveNativeMode ? " (native boot bridge)." : "."),
+            );
           }
-          initAudio().catch((e) => {
+          initAudio(false, preserveNativeMode).catch((e) => {
             relayLogToStudio("⚠️ Receiver: initAudio failed: " + (e && e.message ? e.message : e));
           });
           armLowLatencyStartupWatchdog();
@@ -551,13 +556,13 @@
             if (window._receiverShutdownInProgress) {
               return;
             }
-            if (window._playbackMode === "native" || nativeStreamActive) {
+            if (window._playbackMode === "native" || nativeStreamActive || workletNode || audioInitializing) {
               return;
             }
             relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
             stopNativeStreamPlayout("startup_timeout");
             if (configReceived) {
-              initAudio(true);
+              initAudio(true, false);
             }
           }, NATIVE_STARTUP_TIMEOUT_MS);
         }
@@ -1180,10 +1185,13 @@
 
         let lastInitAttempt = 0;
         let audioInitializing = false;
-        async function initAudio(force = false) {
+        async function initAudio(force = false, preserveNativeMode = false) {
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
-          if (nativeStreamActive || nativeStreamStarting || window._playbackMode === "native") {
+          if (nativeStreamActive || workletNode) {
+            return;
+          }
+          if (!preserveNativeMode && (nativeStreamStarting || window._playbackMode === "native")) {
             return;
           }
           // Native /stream.wav is the primary cast playout path. The PCM
@@ -1201,7 +1209,11 @@
           
           audioInitializing = true;
           try {
-            notifyPlaybackMode("pcm_fallback", "native_stream_unavailable");
+            if (!preserveNativeMode) {
+              notifyPlaybackMode("pcm_fallback", "native_stream_unavailable");
+            } else {
+              relayLogToStudio("🛠️ Receiver: PCM bridge initializing while native stream boots.");
+            }
             preInitAudioContext();
 
             if (!audioCtx) {
