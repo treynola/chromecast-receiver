@@ -317,6 +317,8 @@
               const streamUrl =
                 media && media.customData && typeof media.customData.streamUrl === "string"
                   ? media.customData.streamUrl
+                  : media && typeof media.contentUrl === "string" && media.contentUrl
+                    ? media.contentUrl
                   : "";
               if (streamUrl) {
                 return streamUrl;
@@ -358,7 +360,10 @@
                 return error;
               }
               if (request.media.contentId === "mxs-native-stream") {
-                if (!request.media.customData || !request.media.customData.streamUrl) {
+                const streamUrl =
+                  (request.media.customData && request.media.customData.streamUrl) ||
+                  request.media.contentUrl;
+                if (!streamUrl) {
                   const error = new cast.framework.messages.ErrorData(
                     cast.framework.messages.ErrorType.LOAD_FAILED,
                   );
@@ -368,8 +373,13 @@
                 }
                 request.media.contentType = "audio/wav";
                 request.media.streamType = cast.framework.messages.StreamType.LIVE;
-                request.media.duration = -1;
-                writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + request.media.customData.streamUrl);
+                request.media.duration = null;
+                request.media.contentUrl = streamUrl;
+                if (!request.media.customData) {
+                  request.media.customData = {};
+                }
+                request.media.customData.streamUrl = streamUrl;
+                writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + streamUrl);
               } else {
                 const contentId = request && request.media ? request.media.contentId : "unknown";
                 writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
@@ -719,11 +729,19 @@
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          // A stale live /stream.wav session keeps buffering across pauses and
-          // can make the next resume land noticeably behind. Treat inactive /
-          // stop transitions as a true stop so the next playback start rebuilds
-          // from a fresh timestamp.
-          stopAllPlayout(reason || "playback_stop");
+          // Keep the native /stream.wav session warm across pauses so the next
+          // PLAYBACK_START can resume immediately. Only the PCM/worklet path is
+          // torn down here; receiver shutdown and websocket teardown still use
+          // stopAllPlayout().
+          clearPlaybackStartSignal();
+          resetBinaryPlayoutState(reason || "playback_stop");
+          if (nativeStreamActive || nativeStreamStarting || window._playbackMode === "native") {
+            if (reason) {
+              relayLogToStudio("🛑 Receiver: Native stream left primed (" + reason + ").");
+            }
+            return;
+          }
+          stopNativeStreamPlayout(reason || "playback_stop");
         }
 
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
@@ -821,8 +839,9 @@
             media.contentId = "mxs-native-stream";
             media.contentType = "audio/wav";
             media.streamType = messages.StreamType.LIVE;
-            media.duration = -1;
+            media.duration = null;
             media.startAbsoluteTime = Date.now() / 1000;
+            media.contentUrl = streamUrl;
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
             if (typeof messages.GenericMediaMetadata === "function") {
               const metadata = new messages.GenericMediaMetadata();
