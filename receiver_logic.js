@@ -41,6 +41,7 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
+        const DEGRADED_FALLBACK_GRACE_MS = 10000;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
@@ -293,6 +294,25 @@
           );
         }
 
+        function isWithinDegradedFallbackGrace() {
+          return (
+            !!lastPlaybackStartSignalAt &&
+            Date.now() - lastPlaybackStartSignalAt <= DEGRADED_FALLBACK_GRACE_MS
+          );
+        }
+
+        function hasAudiblePlaybackSignal(diag) {
+          if (!lastPlaybackStartSignalAt) {
+            return false;
+          }
+          const peak = Number(diag && diag.peak ? diag.peak : 0);
+          return (
+            window._binaryActive ||
+            pendingBinaryFrames.length > 0 ||
+            peak > 0.0001
+          );
+        }
+
         function requestNativePlaybackStart(reason) {
           if (
             reason === "bridge_config" &&
@@ -303,6 +323,10 @@
             resetBinaryPlayoutState("native_takeover");
           }
           if (nativeStreamActive) {
+            return true;
+          }
+          if (workletNode || workletReady) {
+            notifyPlaybackMode("pcm_fallback", (reason || "playback_start") + "_pcm_ready");
             return true;
           }
           if (nativeStreamStarting) {
@@ -1315,28 +1339,30 @@
                 // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
                 if (window._workletDiagCount > 10) {
                   if (e.data.measuredHz && e.data.measuredHz > 0) {
-                    if (isWithinPlaybackStartGrace()) {
+                    if (
+                      !hasAudiblePlaybackSignal(e.data) ||
+                      isWithinPlaybackStartGrace() ||
+                      isWithinDegradedFallbackGrace()
+                    ) {
                       window._lowRateCount = 0;
-                      return;
-                    }
-                    if (nativeStreamStarting || nativeStreamActive) {
+                    } else if (nativeStreamStarting || nativeStreamActive) {
                       window._lowRateCount = 0;
-                      return;
-                    }
-                    const expectedRate = window._hwRate || 48000;
-                    const threshold = expectedRate * 0.90; // Fallback if playout rate is under 90% of expected context rate
-                    if (e.data.measuredHz < threshold) {
-                      window._lowRateCount = (window._lowRateCount || 0) + 1;
-                      if (window._lowRateCount >= 2) {
-                        relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
-                        window._lowRateCount = 0;
-                        window._pcmDegraded = true;
-                        stopAllPlayout("pcm_degraded");
-                        startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
-                        return;
-                      }
                     } else {
-                      window._lowRateCount = 0;
+                      const expectedRate = window._hwRate || 48000;
+                      const threshold = expectedRate * 0.90; // Fallback if playout rate is under 90% of expected context rate
+                      if (e.data.measuredHz < threshold) {
+                        window._lowRateCount = (window._lowRateCount || 0) + 1;
+                        if (window._lowRateCount >= 2) {
+                          relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
+                          window._lowRateCount = 0;
+                          window._pcmDegraded = true;
+                          stopAllPlayout("pcm_degraded");
+                          startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                          return;
+                        }
+                      } else {
+                        window._lowRateCount = 0;
+                      }
                     }
                   }
                 }
