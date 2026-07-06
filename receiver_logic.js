@@ -826,7 +826,10 @@
             }
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
-            notifyPlaybackMode("native", "caf_load_requested");
+            // Keep the sender paused until CAF actually reports the stream as active.
+            // Advertising native too early lets PCM get ahead of /stream.wav boot-up
+            // and shows up as a small but noticeable sync offset.
+            notifyPlaybackMode("native_booting", "caf_load_requested");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
