@@ -2153,7 +2153,6 @@
                   if (d.ip) {
                     triggerWakeLockLoad();
                   }
-                  requestNativePlaybackStart("bridge_config");
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
@@ -2257,7 +2256,6 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
-              requestNativePlaybackStart("bridge_config");
               return;
             }
 
