@@ -296,49 +296,83 @@
           return maybeStartLowLatencyPlayout(reason);
         }
 
-        function configureCafLoadInterceptor() {
+        function configureCafPlaybackHandlers() {
           if (cafLoadInterceptorConfigured) {
             return;
           }
           const pm = getCastPlayerManager();
-          if (!pm || !cast.framework.messages || typeof pm.setMessageInterceptor !== "function") {
+          if (!pm || !cast.framework.messages) {
             return;
           }
           const messageType = cast.framework.messages.MessageType;
-          if (!messageType || !messageType.LOAD) {
-            return;
+          if (typeof pm.setMediaUrlResolver === "function") {
+            pm.setMediaUrlResolver(function (request) {
+              const media = request && request.media ? request.media : null;
+              const streamUrl =
+                media && media.customData && typeof media.customData.streamUrl === "string"
+                  ? media.customData.streamUrl
+                  : "";
+              if (streamUrl) {
+                return streamUrl;
+              }
+              if (media && typeof media.contentUrl === "string" && media.contentUrl) {
+                return media.contentUrl;
+              }
+              return media && typeof media.contentId === "string" ? media.contentId : null;
+            });
           }
-          pm.setMessageInterceptor(messageType.LOAD, function (request) {
-            writeCastDebug("info", "Intercepting LOAD request");
-            if (!request || !request.media) {
-              const error = new cast.framework.messages.ErrorData(
-                cast.framework.messages.ErrorType.LOAD_FAILED,
-              );
-              error.reason = cast.framework.messages.ErrorReason.INVALID_REQUEST;
-              writeCastDebug("error", "Rejected malformed LOAD request with no media payload.");
-              return error;
-            }
-            if (request.media.contentId === "mxs-native-stream") {
-              if (!request.media.customData || !request.media.customData.streamUrl) {
+
+          if (typeof pm.setMediaPlaybackInfoHandler === "function") {
+            pm.setMediaPlaybackInfoHandler(function (loadRequest, defaultPlaybackConfig) {
+              const media = loadRequest && loadRequest.media ? loadRequest.media : null;
+              const isNativeStream =
+                !!media &&
+                (media.contentId === "mxs-native-stream" ||
+                  (media.customData && media.customData.source === "mxs004-native-stream"));
+              if (!isNativeStream) {
+                return defaultPlaybackConfig;
+              }
+              const playbackConfig =
+                defaultPlaybackConfig || new cast.framework.PlaybackConfig();
+              playbackConfig.autoPauseDuration = 0;
+              playbackConfig.autoResumeDuration = 0;
+              return playbackConfig;
+            });
+          }
+
+          if (typeof pm.setMessageInterceptor === "function" && messageType && messageType.LOAD) {
+            pm.setMessageInterceptor(messageType.LOAD, function (request) {
+              writeCastDebug("info", "Intercepting LOAD request");
+              if (!request || !request.media) {
                 const error = new cast.framework.messages.ErrorData(
                   cast.framework.messages.ErrorType.LOAD_FAILED,
                 );
                 error.reason = cast.framework.messages.ErrorReason.INVALID_REQUEST;
-                writeCastDebug("error", "Rejected mxs-native-stream LOAD request with no streamUrl.");
+                writeCastDebug("error", "Rejected malformed LOAD request with no media payload.");
                 return error;
               }
-              request.media.contentUrl = request.media.customData.streamUrl;
-              request.media.contentType = "audio/wav";
-              request.media.streamType = cast.framework.messages.StreamType.LIVE;
-              writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + request.media.contentUrl);
-            } else {
-              const contentId = request && request.media ? request.media.contentId : "unknown";
-              writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
-            }
-            return request;
-          });
+              if (request.media.contentId === "mxs-native-stream") {
+                if (!request.media.customData || !request.media.customData.streamUrl) {
+                  const error = new cast.framework.messages.ErrorData(
+                    cast.framework.messages.ErrorType.LOAD_FAILED,
+                  );
+                  error.reason = cast.framework.messages.ErrorReason.INVALID_REQUEST;
+                  writeCastDebug("error", "Rejected mxs-native-stream LOAD request with no streamUrl.");
+                  return error;
+                }
+                request.media.contentType = "audio/wav";
+                request.media.streamType = cast.framework.messages.StreamType.LIVE;
+                request.media.duration = -1;
+                writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + request.media.customData.streamUrl);
+              } else {
+                const contentId = request && request.media ? request.media.contentId : "unknown";
+                writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
+              }
+              return request;
+            });
+          }
           cafLoadInterceptorConfigured = true;
-          relayLogToStudio("✅ Receiver: CAF LOAD interceptor configured for native stream.");
+          relayLogToStudio("✅ Receiver: CAF playback handlers configured for native stream.");
         }
 
         function configureCafPlayerDebugEvents() {
@@ -758,7 +792,7 @@
           if (typeof cast === "undefined" || !cast.framework || !cast.framework.messages) {
             return false;
           }
-          configureCafLoadInterceptor();
+          configureCafPlaybackHandlers();
           const context = getCastReceiverContext();
           if (context && typeof context.canDisplayType === "function") {
             try {
@@ -779,9 +813,10 @@
             const loadRequestData = new messages.LoadRequestData();
             const media = new messages.MediaInformation();
             media.contentId = "mxs-native-stream";
-            media.contentUrl = streamUrl;
             media.contentType = "audio/wav";
             media.streamType = messages.StreamType.LIVE;
+            media.duration = -1;
+            media.startAbsoluteTime = Date.now() / 1000;
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
             if (typeof messages.GenericMediaMetadata === "function") {
               const metadata = new messages.GenericMediaMetadata();
@@ -791,6 +826,7 @@
             }
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
+            notifyPlaybackMode("native", "caf_load_requested");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
@@ -2463,7 +2499,7 @@
               });
 
               configureCastDebugLogger(context);
-              configureCafLoadInterceptor();
+              configureCafPlaybackHandlers();
               configureCafPlayerDebugEvents();
               const options = new cast.framework.CastReceiverOptions();
               const playbackConfig = new cast.framework.PlaybackConfig();
