@@ -247,7 +247,7 @@
           if (!configReceived || !currentBridgeIp) {
             return false;
           }
-          if (audioInitializing || workletNode) {
+          if (workletNode) {
             return true;
           }
           if (reason) {
