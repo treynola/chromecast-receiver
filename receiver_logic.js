@@ -1010,22 +1010,17 @@
         }
 
         function preInitAudioContext() {
-          // [v13.9.509-32k] Real-time 32kHz playout context to bypass TV CPU lag
+          // Keep the audio graph lazy until we actually need PCM fallback.
+          // Native-first sessions should not force a low-rate context probe.
           if (window._receiverShutdownInProgress) return;
 
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx) {
             try {
-              relayLogToStudio("🛠️ Receiver: Creating new AudioContext (32kHz + playback latency hint)...");
-              try {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                  sampleRate: 32000,
-                  latencyHint: "playback"
-                });
-              } catch (err) {
-                relayLogToStudio("⚠️ Receiver: Failed to create 32kHz AudioContext, falling back to default constructor: " + err.message);
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-              }
+              relayLogToStudio("🛠️ Receiver: Creating new AudioContext (playback latency hint)...");
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+                latencyHint: "playback",
+              });
               window._hwRate = audioCtx.sampleRate || 48000;
               window._lastHwRate = window._hwRate;
               relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state + " | Rate: " + window._hwRate);
@@ -1913,10 +1908,10 @@
               conn.classList.add("bridge-connected-pulse");
             }
 
-            // [v13.9.504] HARDWARE PROBE: Detect actual device sample rate natively
+            // [v13.9.504] HARDWARE PROBE: Record the active audio clock when one already exists.
+            // Do not force AudioContext creation here; native-first sessions should stay native-first.
             let hwRate = 48000;
             try {
-              preInitAudioContext();
               hwRate = audioCtx ? audioCtx.sampleRate : 48000;
               window._hwRate = hwRate;
               relayLogToStudio(
@@ -2387,15 +2382,14 @@
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_CONNECTED,
                 () => {
-                  if (window._receiverShutdownInProgress) return;
-                  console.log("📡 Sender connected.");
-                  clearNoSenderShutdownTimer();
-                  isSenderConnected = true;
-                  preInitAudioContext();
-                  resumeAudio();
-                  triggerWakeLockLoad();
-                },
-              );
+                if (window._receiverShutdownInProgress) return;
+                console.log("📡 Sender connected.");
+                clearNoSenderShutdownTimer();
+                isSenderConnected = true;
+                resumeAudio();
+                triggerWakeLockLoad();
+              },
+            );
 
               context.addEventListener(
                 cast.framework.events.EventType.SENDER_DISCONNECTED,
@@ -2491,8 +2485,16 @@
                 hideUnlockOverlay();
               }
             } else {
-              // Only auto-init if we already have the config
-              if (configReceived && !nativeStreamActive && !nativeStreamStarting) initAudio();
+              // Only auto-init PCM fallback when we are not already in a cast session.
+              // Native /stream.wav should get the first chance to come up cleanly.
+              if (
+                configReceived &&
+                !currentBridgeIp &&
+                !nativeStreamActive &&
+                !nativeStreamStarting
+              ) {
+                initAudio();
+              }
             }
 
             // [v13.9.504] Non-Cast fallback only — keep HTML5 audio element alive
