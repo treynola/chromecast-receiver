@@ -82,6 +82,8 @@
         let deviceCapabilitiesLogged = false;
         let pendingStudioLogQueue = [];
         let flushingPendingStudioLogs = false;
+        let hardwareTelemetryRetryId = null;
+        let hardwareTelemetryRetryCount = 0;
 
         function formatTelemetryValue(value) {
           if (value === null) {
@@ -194,9 +196,17 @@
           return telemetry;
         }
 
-        function logReceiverHardwareTelemetry(context) {
+        function clearReceiverHardwareTelemetryRetry() {
+          if (hardwareTelemetryRetryId) {
+            clearTimeout(hardwareTelemetryRetryId);
+            hardwareTelemetryRetryId = null;
+          }
+          hardwareTelemetryRetryCount = 0;
+        }
+
+        function emitReceiverHardwareTelemetry(context) {
           if (deviceCapabilitiesLogged || !context) {
-            return;
+            return false;
           }
 
           const telemetry = collectReceiverHardwareTelemetry(context);
@@ -206,11 +216,11 @@
             telemetry.mediaSupport.length > 0;
 
           if (!hasTelemetry) {
-            relayLogToStudio("⚠️ Receiver: Hardware telemetry unavailable.");
-            return;
+            return false;
           }
 
           deviceCapabilitiesLogged = true;
+          clearReceiverHardwareTelemetryRetry();
           relayLogToStudio("📟 Receiver: Hardware telemetry snapshot begin.");
           relayLogToStudio(
             "📟 Receiver Hardware Capabilities: " +
@@ -232,6 +242,38 @@
               " | screen=" +
               telemetry.host.screen,
           );
+          return true;
+        }
+
+        function logReceiverHardwareTelemetry(context) {
+          if (deviceCapabilitiesLogged || !context) {
+            return;
+          }
+
+          if (emitReceiverHardwareTelemetry(context)) {
+            return;
+          }
+
+          if (hardwareTelemetryRetryId || hardwareTelemetryRetryCount >= 5) {
+            return;
+          }
+
+          const retryDelaysMs = [100, 400, 1000, 2000, 4000];
+          const delayMs = retryDelaysMs[hardwareTelemetryRetryCount];
+          hardwareTelemetryRetryCount += 1;
+          hardwareTelemetryRetryId = setTimeout(() => {
+            hardwareTelemetryRetryId = null;
+            if (!deviceCapabilitiesLogged) {
+              if (!emitReceiverHardwareTelemetry(context) && hardwareTelemetryRetryCount >= retryDelaysMs.length) {
+                relayLogToStudio("⚠️ Receiver: Hardware telemetry unavailable after startup retries.");
+                clearReceiverHardwareTelemetryRetry();
+                return;
+              }
+              if (!deviceCapabilitiesLogged) {
+                logReceiverHardwareTelemetry(context);
+              }
+            }
+          }, delayMs);
         }
 
         function isCastDebugOverlayRequested() {
@@ -2815,6 +2857,7 @@
               });
 
               configureCastDebugLogger(context);
+              clearReceiverHardwareTelemetryRetry();
               logReceiverHardwareTelemetry(context);
               configureCafPlaybackHandlers();
               configureCafPlayerDebugEvents();
