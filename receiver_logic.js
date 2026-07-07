@@ -79,6 +79,70 @@
           return context.getPlayerManager();
         }
 
+        let deviceCapabilitiesLogged = false;
+
+        function formatTelemetryValue(value) {
+          if (value === null) {
+            return "null";
+          }
+          if (value === undefined) {
+            return "undefined";
+          }
+          if (typeof value === "string") {
+            return value;
+          }
+          if (typeof value === "number" || typeof value === "boolean") {
+            return String(value);
+          }
+          try {
+            return JSON.stringify(value);
+          } catch (e) {
+            return "[unserializable]";
+          }
+        }
+
+        function logReceiverDeviceCapabilities(context) {
+          if (deviceCapabilitiesLogged || !context || typeof context.getDeviceCapabilities !== "function") {
+            return;
+          }
+          deviceCapabilitiesLogged = true;
+
+          let capabilities = null;
+          try {
+            capabilities = context.getDeviceCapabilities();
+          } catch (e) {
+            relayLogToStudio("⚠️ Receiver: getDeviceCapabilities() failed: " + e.message);
+            return;
+          }
+
+          if (!capabilities || typeof capabilities !== "object") {
+            relayLogToStudio("⚠️ Receiver: Device capabilities unavailable.");
+            return;
+          }
+
+          const capabilityKeys = Object.keys(capabilities).sort();
+          relayLogToStudio(
+            "📟 Receiver: Device capabilities snapshot begin (" + capabilityKeys.length + " keys).",
+          );
+          capabilityKeys.forEach(function (key) {
+            relayLogToStudio(
+              "📟 Receiver Capability: " + key + "=" + formatTelemetryValue(capabilities[key]),
+            );
+          });
+          relayLogToStudio(
+            "📟 Receiver: Device capabilities snapshot end; userAgent=" +
+              navigator.userAgent +
+              " | platform=" +
+              (navigator.platform || "unknown") +
+              " | screen=" +
+              window.screen.width +
+              "x" +
+              window.screen.height +
+              "@" +
+              window.devicePixelRatio,
+          );
+        }
+
         function isCastDebugOverlayRequested() {
           return /(?:^|[?&])castDebugOverlay=1(?:&|$)/.test(window.location.search);
         }
@@ -147,6 +211,7 @@
                     logger.clearDebugLogs();
                   }
                   writeCastDebug("info", "Cast debug logger ready; overlay=" + isCastDebugOverlayRequested());
+                  logReceiverDeviceCapabilities(context);
                 } catch (e) {}
               });
             }
@@ -2610,6 +2675,7 @@
               });
 
               configureCastDebugLogger(context);
+              logReceiverDeviceCapabilities(context);
               configureCafPlaybackHandlers();
               configureCafPlayerDebugEvents();
               const options = new cast.framework.CastReceiverOptions();
