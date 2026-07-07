@@ -29,7 +29,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 32768;
     this._MIN_BUFFER = 16384;
     this._PREBUFFER = 32768;
-    this._FLUSH_THRESHOLD = 131072;
+    this._FLUSH_THRESHOLD = 122880;
     this._DIAG_INTERVAL_CALLBACKS = 60; // ~160ms intervals (60 * 128 / 48000)
     this._lastPacketWallMs = 0;
 
@@ -78,7 +78,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 32768;
           this._MIN_BUFFER = 16384;
           this._PREBUFFER = 32768;
-          this._FLUSH_THRESHOLD = 131072;
+          this._FLUSH_THRESHOLD = 122880;
           this._DIAG_INTERVAL_CALLBACKS = 60;
           this._stallCount = 0;
           this._currentPeak = 0;
@@ -223,13 +223,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Use a tiny catch-up rate when the live queue is high. This avoids
-      // repeated sender-side audible packet drops while keeping pitch drift low.
+      // Use a small catch-up rate when the live queue is high. This keeps the
+      // buffer from drifting into lag-flush territory without audible warble.
       const backlogSamples = Math.max(0, available - this._TARGET_BUFFER);
       const playbackRate = backlogSamples >= 65536
-        ? 1.002
+        ? 1.005
         : backlogSamples >= 49152
-          ? 1.001
+          ? 1.003
           : 1.0;
 
       if (renderSilence) {
