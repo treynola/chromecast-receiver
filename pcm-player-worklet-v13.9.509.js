@@ -19,18 +19,20 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // Keep the queue centered around a few hundred milliseconds of headroom.
     // Stereo sample counts:
-    // - 16384 = 8192 frames (~171ms)
-    // - 20480 = 10240 frames (~213ms)
-    // - 32768 = 16384 frames (~341ms)
+    //  -  8192 =  4096 frames  (~85ms)
+    // - 16384 =  8192 frames (~171ms)
+    // - 24576 = 12288 frames (~256ms)
+    // - 40960 = 20480 frames (~427ms)
     // - 49152 = 24576 frames (~512ms)
     // - 65536 = 32768 frames (~683ms)
-    // This keeps the receiver stable on Chromecast-class devices without
-    // letting the queue drift back into multi-second backlog.
-    this._TARGET_BUFFER = 32768;
-    this._MIN_BUFFER = 16384;
-    this._PREBUFFER = 32768;
-    this._FLUSH_THRESHOLD = 122880;
-    this._DIAG_INTERVAL_CALLBACKS = 60; // ~160ms intervals (60 * 128 / 48000)
+    // - 81920 = 40960 frames (~853ms)
+    // Tighter target + aggressive catch-up rates keep the buffer near
+    // target without drifting into lag-flush territory.
+    this._TARGET_BUFFER = 24576;
+    this._MIN_BUFFER = 8192;
+    this._PREBUFFER = 24576;
+    this._FLUSH_THRESHOLD = 81920;
+    this._DIAG_INTERVAL_CALLBACKS = 120; // ~320ms intervals (120 * 128 / 48000)
     this._lastPacketWallMs = 0;
 
     this._isBuffering = true;
@@ -75,11 +77,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._wallStartMs = 0;
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 32768;
-          this._MIN_BUFFER = 16384;
-          this._PREBUFFER = 32768;
-          this._FLUSH_THRESHOLD = 122880;
-          this._DIAG_INTERVAL_CALLBACKS = 60;
+          this._TARGET_BUFFER = 24576;
+          this._MIN_BUFFER = 8192;
+          this._PREBUFFER = 24576;
+          this._FLUSH_THRESHOLD = 81920;
+          this._DIAG_INTERVAL_CALLBACKS = 120;
           this._stallCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
@@ -223,14 +225,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Use a small catch-up rate when the live queue is high. This keeps the
-      // buffer from drifting into lag-flush territory without audible warble.
+      // Use a graduated catch-up rate when the live queue is high. Steeper
+      // rates actively drain backlog before it reaches the flush threshold.
+      // At 1.02x the pitch shift is ~35 cents — below awareness threshold.
       const backlogSamples = Math.max(0, available - this._TARGET_BUFFER);
       const playbackRate = backlogSamples >= 65536
-        ? 1.005
+        ? 1.02
         : backlogSamples >= 49152
-          ? 1.003
-          : 1.0;
+          ? 1.01
+          : backlogSamples >= 40960
+            ? 1.005
+            : 1.0;
 
       if (renderSilence) {
         channel0.fill(0);

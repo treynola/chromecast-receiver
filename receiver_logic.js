@@ -41,7 +41,8 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
-        const DEGRADED_FALLBACK_GRACE_MS = 10000;
+        const DEGRADED_PLAYOUT_HZ_THRESHOLD = 40000;
+        const DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT = 3;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
@@ -291,13 +292,6 @@
           return (
             !!lastPlaybackStartSignalAt &&
             Date.now() - lastPlaybackStartSignalAt <= PLAYBACK_START_GRACE_MS
-          );
-        }
-
-        function isWithinDegradedFallbackGrace() {
-          return (
-            !!lastPlaybackStartSignalAt &&
-            Date.now() - lastPlaybackStartSignalAt <= DEGRADED_FALLBACK_GRACE_MS
           );
         }
 
@@ -1357,39 +1351,31 @@
                 window._lastWorkletDiagTime = Date.now();
                 window._workletDiagCount = (window._workletDiagCount || 0) + 1;
 
-                // [v13.9.511] DEGRADED PLAYOUT DETECTOR: If the playout rate is consistently
-                // too low (e.g. < 40,000 Hz) due to TV thread scheduling issues (e.g. Cobalt
-                // channel-count scheduling bug running at exactly half-rate ~24kHz), we
-                // automatically trigger the native /stream.wav fallback to save audio quality.
-                // We ignore the first 10 DIAG reports (~3.2 seconds at 48kHz) to allow the
-                // AudioContext and thread scheduler to stabilize at startup and avoid false fallbacks.
-                if (window._workletDiagCount > 10) {
-                  if (e.data.measuredHz && e.data.measuredHz > 0) {
-                    if (
-                      !hasAudiblePlaybackSignal(e.data) ||
-                      isWithinPlaybackStartGrace() ||
-                      isWithinDegradedFallbackGrace()
-                    ) {
+                // Trigger native fallback only after repeated low-rate DIAG
+                // samples. That avoids reacting to a one-off scheduler hiccup
+                // while still catching a sustained degraded playout path.
+                if (e.data.measuredHz && e.data.measuredHz > 0) {
+                  if (
+                    !hasAudiblePlaybackSignal(e.data) ||
+                    isWithinPlaybackStartGrace()
+                  ) {
+                    window._lowRateCount = 0;
+                  } else if (nativeStreamStarting || nativeStreamActive) {
+                    window._lowRateCount = 0;
+                  } else if (e.data.measuredHz < DEGRADED_PLAYOUT_HZ_THRESHOLD) {
+                    window._lowRateCount = (window._lowRateCount || 0) + 1;
+                    if (window._lowRateCount >= DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT) {
+                      relayLogToStudio(
+                        `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles). Automatically falling back to native stream.`,
+                      );
                       window._lowRateCount = 0;
-                    } else if (nativeStreamStarting || nativeStreamActive) {
-                      window._lowRateCount = 0;
-                    } else {
-                      const expectedRate = window._hwRate || 48000;
-                      const threshold = expectedRate * 0.90; // Fallback if playout rate is under 90% of expected context rate
-                      if (e.data.measuredHz < threshold) {
-                        window._lowRateCount = (window._lowRateCount || 0) + 1;
-                        if (window._lowRateCount >= 2) {
-                          relayLogToStudio(`⚠️ Receiver: Playout rate degraded (${e.data.measuredHz}Hz). Automatically falling back to native stream.`);
-                          window._lowRateCount = 0;
-                          window._pcmDegraded = true;
-                          stopAllPlayout("pcm_degraded");
-                          startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
-                          return;
-                        }
-                      } else {
-                        window._lowRateCount = 0;
-                      }
+                      window._pcmDegraded = true;
+                      stopAllPlayout("pcm_degraded");
+                      startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                      return;
                     }
+                  } else {
+                    window._lowRateCount = 0;
                   }
                 }
 
