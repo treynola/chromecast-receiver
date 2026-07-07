@@ -19,6 +19,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     // Keep the queue centered around a few hundred milliseconds of headroom.
     // Stereo sample counts:
+    // - 16384 = 8192 frames (~171ms)
     // - 20480 = 10240 frames (~213ms)
     // - 32768 = 16384 frames (~341ms)
     // - 49152 = 24576 frames (~512ms)
@@ -26,7 +27,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // This keeps the receiver stable on Chromecast-class devices without
     // letting the queue drift back into multi-second backlog.
     this._TARGET_BUFFER = 32768;
-    this._MIN_BUFFER = 20480;
+    this._MIN_BUFFER = 16384;
     this._PREBUFFER = 32768;
     this._FLUSH_THRESHOLD = 147456;
     this._DIAG_INTERVAL_CALLBACKS = 120; // ~320ms intervals (120 * 128 / 48000)
@@ -75,7 +76,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._lastDiagWallMs = 0;
           this._lastDiagFramesProcessed = 0;
           this._TARGET_BUFFER = 32768;
-          this._MIN_BUFFER = 20480;
+          this._MIN_BUFFER = 16384;
           this._PREBUFFER = 32768;
           this._FLUSH_THRESHOLD = 147456;
           this._DIAG_INTERVAL_CALLBACKS = 120;
