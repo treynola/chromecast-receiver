@@ -29,8 +29,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_BUFFER = 32768;
     this._MIN_BUFFER = 16384;
     this._PREBUFFER = 32768;
-    this._FLUSH_THRESHOLD = 147456;
-    this._DIAG_INTERVAL_CALLBACKS = 120; // ~320ms intervals (120 * 128 / 48000)
+    this._FLUSH_THRESHOLD = 131072;
+    this._DIAG_INTERVAL_CALLBACKS = 60; // ~160ms intervals (60 * 128 / 48000)
     this._lastPacketWallMs = 0;
 
     this._isBuffering = true;
@@ -78,8 +78,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 32768;
           this._MIN_BUFFER = 16384;
           this._PREBUFFER = 32768;
-          this._FLUSH_THRESHOLD = 147456;
-          this._DIAG_INTERVAL_CALLBACKS = 120;
+          this._FLUSH_THRESHOLD = 131072;
+          this._DIAG_INTERVAL_CALLBACKS = 60;
           this._stallCount = 0;
           this._currentPeak = 0;
           this._fade = 1.0;
