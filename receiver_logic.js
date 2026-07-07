@@ -103,45 +103,134 @@
           }
         }
 
-        function logReceiverDeviceCapabilities(context) {
-          if (deviceCapabilitiesLogged || !context || typeof context.getDeviceCapabilities !== "function") {
+        function collectReceiverHardwareTelemetry(context) {
+          const telemetry = {
+            capabilities: null,
+            deviceInformation: null,
+            mediaSupport: [],
+            host: {
+              userAgent: navigator.userAgent,
+              platform: navigator.platform || "unknown",
+              screen: window.screen.width + "x" + window.screen.height + "@" + window.devicePixelRatio,
+            },
+          };
+
+          if (context && typeof context.getDeviceCapabilities === "function") {
+            try {
+              telemetry.capabilities = context.getDeviceCapabilities();
+            } catch (e) {
+              telemetry.capabilities = { error: "getDeviceCapabilities failed: " + e.message };
+            }
+          }
+
+          if (context && typeof context.getDeviceInformation === "function") {
+            try {
+              telemetry.deviceInformation = context.getDeviceInformation();
+            } catch (e) {
+              telemetry.deviceInformation = { error: "getDeviceInformation failed: " + e.message };
+            }
+          }
+
+          if (context && typeof context.canDisplayType === "function") {
+            const probes = [
+              {
+                label: "pcm16_wav_48k",
+                mimeType: "audio/wav",
+                codecs: "",
+              },
+              {
+                label: "aac_lc_mp4_48k",
+                mimeType: "audio/mp4",
+                codecs: 'mp4a.40.2',
+              },
+              {
+                label: "opus_webm_48k",
+                mimeType: "audio/webm",
+                codecs: 'opus',
+              },
+              {
+                label: "h264_mp4_720p30",
+                mimeType: "video/mp4",
+                codecs: 'avc1.42E01E, mp4a.40.2',
+                width: 1280,
+                height: 720,
+                framerate: 30,
+              },
+              {
+                label: "vp9_webm_720p30",
+                mimeType: "video/webm",
+                codecs: 'vp9, opus',
+                width: 1280,
+                height: 720,
+                framerate: 30,
+              },
+            ];
+            probes.forEach(function (probe) {
+              try {
+                telemetry.mediaSupport.push({
+                  label: probe.label,
+                  mimeType: probe.mimeType,
+                  codecs: probe.codecs,
+                  width: probe.width,
+                  height: probe.height,
+                  framerate: probe.framerate,
+                  supported: context.canDisplayType(
+                    probe.mimeType,
+                    probe.codecs,
+                    probe.width,
+                    probe.height,
+                    probe.framerate,
+                  ),
+                });
+              } catch (e) {
+                telemetry.mediaSupport.push({
+                  label: probe.label,
+                  error: e.message,
+                });
+              }
+            });
+          }
+
+          return telemetry;
+        }
+
+        function logReceiverHardwareTelemetry(context) {
+          if (deviceCapabilitiesLogged || !context) {
             return;
           }
+
+          const telemetry = collectReceiverHardwareTelemetry(context);
+          const hasTelemetry =
+            telemetry.capabilities !== null ||
+            telemetry.deviceInformation !== null ||
+            telemetry.mediaSupport.length > 0;
+
+          if (!hasTelemetry) {
+            relayLogToStudio("⚠️ Receiver: Hardware telemetry unavailable.");
+            return;
+          }
+
           deviceCapabilitiesLogged = true;
-
-          let capabilities = null;
-          try {
-            capabilities = context.getDeviceCapabilities();
-          } catch (e) {
-            relayLogToStudio("⚠️ Receiver: getDeviceCapabilities() failed: " + e.message);
-            return;
-          }
-
-          if (!capabilities || typeof capabilities !== "object") {
-            relayLogToStudio("⚠️ Receiver: Device capabilities unavailable.");
-            return;
-          }
-
-          const capabilityKeys = Object.keys(capabilities).sort();
+          relayLogToStudio("📟 Receiver: Hardware telemetry snapshot begin.");
           relayLogToStudio(
-            "📟 Receiver: Device capabilities snapshot begin (" + capabilityKeys.length + " keys).",
+            "📟 Receiver Hardware Capabilities: " +
+              formatTelemetryValue(telemetry.capabilities),
           );
-          capabilityKeys.forEach(function (key) {
-            relayLogToStudio(
-              "📟 Receiver Capability: " + key + "=" + formatTelemetryValue(capabilities[key]),
-            );
-          });
           relayLogToStudio(
-            "📟 Receiver: Device capabilities snapshot end; userAgent=" +
-              navigator.userAgent +
+            "📟 Receiver Device Information: " +
+              formatTelemetryValue(telemetry.deviceInformation),
+          );
+          relayLogToStudio(
+            "📟 Receiver Media Support Matrix: " +
+              formatTelemetryValue(telemetry.mediaSupport),
+          );
+          relayLogToStudio(
+            "📟 Receiver: Hardware telemetry snapshot end; userAgent=" +
+              telemetry.host.userAgent +
               " | platform=" +
-              (navigator.platform || "unknown") +
+              telemetry.host.platform +
               " | screen=" +
-              window.screen.width +
-              "x" +
-              window.screen.height +
-              "@" +
-              window.devicePixelRatio,
+              telemetry.host.screen,
           );
         }
 
@@ -213,7 +302,7 @@
                     logger.clearDebugLogs();
                   }
                   writeCastDebug("info", "Cast debug logger ready; overlay=" + isCastDebugOverlayRequested());
-                  logReceiverDeviceCapabilities(context);
+                  logReceiverHardwareTelemetry(context);
                 } catch (e) {}
               });
             }
@@ -2688,7 +2777,7 @@
                 console.log("📡 Sender connected.");
                 clearNoSenderShutdownTimer();
                 flushPendingStudioLogs();
-                logReceiverDeviceCapabilities(context);
+                logReceiverHardwareTelemetry(context);
                 isSenderConnected = true;
                 resumeAudio();
                 triggerWakeLockLoad();
@@ -2726,7 +2815,7 @@
               });
 
               configureCastDebugLogger(context);
-              logReceiverDeviceCapabilities(context);
+              logReceiverHardwareTelemetry(context);
               configureCafPlaybackHandlers();
               configureCafPlayerDebugEvents();
               const options = new cast.framework.CastReceiverOptions();
