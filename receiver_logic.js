@@ -80,6 +80,8 @@
         }
 
         let deviceCapabilitiesLogged = false;
+        let pendingStudioLogQueue = [];
+        let flushingPendingStudioLogs = false;
 
         function formatTelemetryValue(value) {
           if (value === null) {
@@ -1685,7 +1687,7 @@
                   : msg.indexOf("✅") !== -1 || msg.indexOf("📡") !== -1 || msg.indexOf("🤝") !== -1
                     ? "info"
                     : "debug";
-            writeCastDebug(debugLevel, msg);
+              writeCastDebug(debugLevel, msg);
           }
           // [v13.9.504] Suppress DOM updates during active streaming to reduce Receiver CPU overhead
           if (!isHighFreq && !workletNode) {
@@ -1698,6 +1700,19 @@
                 inner.removeChild(inner.firstChild);
             }
           }
+          let sent = trySendLogToStudio(msg);
+          if (!sent && !isHighFreq) {
+            pendingStudioLogQueue.push(msg);
+            if (pendingStudioLogQueue.length > 100) {
+              pendingStudioLogQueue.shift();
+            }
+          }
+          if (sent) {
+            flushPendingStudioLogs();
+          }
+        }
+
+        function trySendLogToStudio(msg) {
           let sent = false;
           // [v13.9.504] PREFER BINARY WS: Fastest and most reliable path
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
@@ -1706,7 +1721,7 @@
               sent = true;
             } catch (e) {}
           }
-          
+
           // [v13.9.504] FALLBACK: Google Cast SDK Namespace
           if (!sent && typeof cast !== "undefined" && cast.framework) {
             try {
@@ -1723,21 +1738,55 @@
               }
             } catch (e) {}
           }
-          
+
           // [v13.9.504] ULTIMATE FALLBACK: HTTP Beacon (Log Server)
-          if (!sent && !isHighFreq) {
-            logQueue.push(msg);
-            if (logQueue.length > 100) logQueue.shift();
-            const targetIp = currentBridgeIp || (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" && window.location.hostname !== "" ? window.location.hostname : null);
+          if (!sent) {
+            const targetIp =
+              currentBridgeIp ||
+              (window.location.hostname !== "localhost" &&
+              window.location.hostname !== "127.0.0.1" &&
+              window.location.hostname !== ""
+                ? window.location.hostname
+                : null);
             if (targetIp) {
-              const port = currentBridgePort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
+              const port =
+                currentBridgePort ||
+                (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{")
+                  ? window.SERVER_PORT
+                  : "8080");
               const url = "http://" + targetIp + ":" + port + "/log?m=" + encodeURIComponent(msg);
-              if (navigator.sendBeacon) {
-                navigator.sendBeacon(url);
-              } else {
-                fetch(url).catch(() => {});
-              }
+              try {
+                if (navigator.sendBeacon) {
+                  navigator.sendBeacon(url);
+                } else {
+                  fetch(url).catch(() => {});
+                }
+                sent = true;
+              } catch (e) {}
             }
+          }
+
+          return sent;
+        }
+
+        function flushPendingStudioLogs() {
+          if (flushingPendingStudioLogs || pendingStudioLogQueue.length === 0) {
+            return;
+          }
+          flushingPendingStudioLogs = true;
+          try {
+            const queuedLogs = pendingStudioLogQueue.slice();
+            pendingStudioLogQueue = [];
+            queuedLogs.forEach(function (msg) {
+              if (!trySendLogToStudio(msg)) {
+                pendingStudioLogQueue.push(msg);
+              }
+            });
+            if (pendingStudioLogQueue.length > 100) {
+              pendingStudioLogQueue = pendingStudioLogQueue.slice(-100);
+            }
+          } finally {
+            flushingPendingStudioLogs = false;
           }
         }
 
@@ -2638,6 +2687,8 @@
                 if (window._receiverShutdownInProgress) return;
                 console.log("📡 Sender connected.");
                 clearNoSenderShutdownTimer();
+                flushPendingStudioLogs();
+                logReceiverDeviceCapabilities(context);
                 isSenderConnected = true;
                 resumeAudio();
                 triggerWakeLockLoad();
