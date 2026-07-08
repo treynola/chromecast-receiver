@@ -560,9 +560,6 @@
           if (nativeStreamActive) {
             return true;
           }
-          if (receiverPlayoutPreference === "pcm_fallback") {
-            return maybeStartLowLatencyPlayout((reason || "playback_start") + "_pcm_preferred");
-          }
           if (workletNode || workletReady) {
             notifyPlaybackMode("pcm_fallback", (reason || "playback_start") + "_pcm_ready");
             return true;
@@ -1165,11 +1162,7 @@
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
             notifyPlaybackMode("native", "caf_load_requested");
-            if (receiverPlayoutPreference === "pcm_fallback") {
-              maybeStartLowLatencyPlayout("caf_load_requested");
-            } else {
-              relayLogToStudio("🧭 Receiver: Native playback preferred; PCM bridge stays idle until fallback is required.");
-            }
+            relayLogToStudio("🧭 Receiver: Native playback preferred; PCM bridge stays idle until fallback is required.");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
@@ -2584,21 +2577,9 @@
                       `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
                     );
                   } else {
-                    if (receiverPlayoutPreference === "pcm_fallback") {
-                      relayLogToStudio(
-                        "🛠️ Receiver: Prewarming PCM bridge from HANDSHAKE_ACK.",
-                      );
-                      initAudio(true, true).catch((e) => {
-                        relayLogToStudio(
-                          "⚠️ Receiver: handshake prewarm initAudio failed: " +
-                            (e && e.message ? e.message : e),
-                        );
-                      });
-                    } else {
-                      relayLogToStudio(
-                        "🧭 Receiver: HANDSHAKE_ACK received; native playback remains primary, PCM stays idle.",
-                      );
-                    }
+                    relayLogToStudio(
+                      "🧭 Receiver: HANDSHAKE_ACK received; native playback remains primary, PCM stays idle until native fallback is required.",
+                    );
                   }
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
