@@ -205,17 +205,13 @@
                 return probe && probe.label === "pcm16_wav_48k";
               })
             : null;
+          // Live cast audio is control-sensitive, so the receiver should favor
+          // the PCM worklet path even when the device can also play WAV natively.
+          // Native media remains a fallback for worklet failure or degradation.
           if (wavProbe && wavProbe.supported === false) {
             return "pcm_fallback";
           }
-          if (context && typeof context.canDisplayType === "function") {
-            try {
-              if (context.canDisplayType("audio/wav") === false) {
-                return "pcm_fallback";
-              }
-            } catch (e) {}
-          }
-          return "native";
+          return "pcm_fallback";
         }
 
         function setReceiverPlayoutPreference(mode, reason) {
@@ -558,6 +554,9 @@
             resetBinaryPlayoutState("native_takeover");
           }
           if (nativeStreamActive) {
+            return true;
+          }
+          if (maybeStartLowLatencyPlayout(reason)) {
             return true;
           }
           if (workletNode || workletReady) {
@@ -1487,8 +1486,9 @@
           if (!preserveNativeMode && (nativeStreamStarting || window._playbackMode === "native")) {
             return;
           }
-          // Native /stream.wav is the primary cast playout path. The PCM
-          // AudioWorklet remains a fallback when the native media path cannot load.
+          // The PCM AudioWorklet is the primary live-sync playout path.
+          // Native /stream.wav remains available as a fallback if PCM cannot
+          // initialize or later degrades.
           // [v13.9.504] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
             relayLogToStudio("⏳ Receiver: Waiting for BRIDGE_CONFIG handshake...");
@@ -2578,9 +2578,10 @@
                     );
                   } else {
                     relayLogToStudio(
-                      "🧭 Receiver: HANDSHAKE_ACK received; native playback remains primary, PCM stays idle until native fallback is required.",
+                      "🧭 Receiver: HANDSHAKE_ACK received; PCM worklet will be started for live-sync playout.",
                     );
                   }
+                  maybeStartLowLatencyPlayout("handshake_ack");
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
                   const immediateState = buildImmediatePlaybackState(d.trackId);
