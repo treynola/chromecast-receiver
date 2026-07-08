@@ -84,6 +84,8 @@
         let flushingPendingStudioLogs = false;
         let hardwareTelemetryRetryId = null;
         let hardwareTelemetryRetryCount = 0;
+        let receiverPlayoutPreference = "native";
+        window._receiverPlayoutPreference = receiverPlayoutPreference;
 
         function formatTelemetryValue(value) {
           if (value === null) {
@@ -110,6 +112,7 @@
             capabilities: null,
             deviceInformation: null,
             mediaSupport: [],
+            playbackPreference: receiverPlayoutPreference,
             host: {
               userAgent: navigator.userAgent,
               platform: navigator.platform || "unknown",
@@ -196,6 +199,39 @@
           return telemetry;
         }
 
+        function determineReceiverPlayoutPreference(context, telemetry) {
+          const wavProbe = telemetry && Array.isArray(telemetry.mediaSupport)
+            ? telemetry.mediaSupport.find(function (probe) {
+                return probe && probe.label === "pcm16_wav_48k";
+              })
+            : null;
+          if (wavProbe && wavProbe.supported === false) {
+            return "pcm_fallback";
+          }
+          if (context && typeof context.canDisplayType === "function") {
+            try {
+              if (context.canDisplayType("audio/wav") === false) {
+                return "pcm_fallback";
+              }
+            } catch (e) {}
+          }
+          return "native";
+        }
+
+        function setReceiverPlayoutPreference(mode, reason) {
+          if (!mode || receiverPlayoutPreference === mode) {
+            return;
+          }
+          receiverPlayoutPreference = mode;
+          window._receiverPlayoutPreference = mode;
+          relayLogToStudio(
+            "📟 Receiver: Playback preference set to " +
+              mode +
+              (reason ? " (" + reason + ")" : "") +
+              ".",
+          );
+        }
+
         function clearReceiverHardwareTelemetryRetry() {
           if (hardwareTelemetryRetryId) {
             clearTimeout(hardwareTelemetryRetryId);
@@ -221,6 +257,8 @@
 
           deviceCapabilitiesLogged = true;
           clearReceiverHardwareTelemetryRetry();
+          telemetry.playbackPreference = determineReceiverPlayoutPreference(context, telemetry);
+          setReceiverPlayoutPreference(telemetry.playbackPreference, "hardware_telemetry");
           relayLogToStudio("📟 Receiver: Hardware telemetry snapshot begin.");
           relayLogToStudio(
             "📟 Receiver Hardware Capabilities: " +
@@ -240,7 +278,9 @@
               " | platform=" +
               telemetry.host.platform +
               " | screen=" +
-              telemetry.host.screen,
+              telemetry.host.screen +
+              " | playbackPreference=" +
+              telemetry.playbackPreference,
           );
           return true;
         }
@@ -418,6 +458,9 @@
           if (window._pcmDegraded) {
             return false;
           }
+          if (receiverPlayoutPreference !== "pcm_fallback") {
+            return false;
+          }
           if (nativeStreamActive || audioInitializing || workletNode) {
             return true;
           }
@@ -517,18 +560,17 @@
           if (nativeStreamActive) {
             return true;
           }
+          if (receiverPlayoutPreference === "pcm_fallback") {
+            return maybeStartLowLatencyPlayout((reason || "playback_start") + "_pcm_preferred");
+          }
           if (workletNode || workletReady) {
             notifyPlaybackMode("pcm_fallback", (reason || "playback_start") + "_pcm_ready");
             return true;
           }
           if (nativeStreamStarting) {
-            maybeStartLowLatencyPlayout("native_boot");
             return true;
           }
           if (maybeStartNativeStream(reason)) {
-            if (nativeStreamStarting) {
-              maybeStartLowLatencyPlayout("native_boot");
-            }
             return true;
           }
           return false;
@@ -802,6 +844,7 @@
             }
             relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
             stopNativeStreamPlayout("startup_timeout");
+            setReceiverPlayoutPreference("pcm_fallback", "native_startup_timeout");
             if (configReceived) {
               initAudio(true, false);
             }
@@ -1121,11 +1164,12 @@
             }
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
-            // Advertise native immediately so the sender continues to forward PCM
-            // while CAF finishes booting. The receiver will keep PCM live until
-            // the player reports that it is actually PLAYING.
             notifyPlaybackMode("native", "caf_load_requested");
-            maybeStartLowLatencyPlayout("caf_load_requested");
+            if (receiverPlayoutPreference === "pcm_fallback") {
+              maybeStartLowLatencyPlayout("caf_load_requested");
+            } else {
+              relayLogToStudio("🧭 Receiver: Native playback preferred; PCM bridge stays idle until fallback is required.");
+            }
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
             const result = pm.load(loadRequestData);
@@ -2540,15 +2584,21 @@
                       `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
                     );
                   } else {
-                    relayLogToStudio(
-                      "🛠️ Receiver: Prewarming PCM bridge from HANDSHAKE_ACK.",
-                    );
-                    initAudio(true, true).catch((e) => {
+                    if (receiverPlayoutPreference === "pcm_fallback") {
                       relayLogToStudio(
-                        "⚠️ Receiver: handshake prewarm initAudio failed: " +
-                          (e && e.message ? e.message : e),
+                        "🛠️ Receiver: Prewarming PCM bridge from HANDSHAKE_ACK.",
                       );
-                    });
+                      initAudio(true, true).catch((e) => {
+                        relayLogToStudio(
+                          "⚠️ Receiver: handshake prewarm initAudio failed: " +
+                            (e && e.message ? e.message : e),
+                        );
+                      });
+                    } else {
+                      relayLogToStudio(
+                        "🧭 Receiver: HANDSHAKE_ACK received; native playback remains primary, PCM stays idle.",
+                      );
+                    }
                   }
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
@@ -2868,6 +2918,9 @@
               options.playbackConfig = playbackConfig;
               options.disableIdleTimeout = true;
               context.start(options);
+              setTimeout(function () {
+                logReceiverHardwareTelemetry(context);
+              }, 250);
             } catch (e) {
               relayLogToStudio("❌ Receiver: Cast framework start failed: " + e.message);
               console.error("❌ Receiver: Cast framework start failed:", e);
