@@ -1678,7 +1678,7 @@
                   workletReady = true;
                   clearLowLatencyStartupWatchdog();
                   flushPendingBinaryFrames();
-                  if (!nativeStreamActive && !nativeStreamStarting) {
+                  if (!nativeStreamActive) {
                     notifyPlaybackMode("pcm_fallback", "worklet_ready");
                   }
                   relayLogToStudio("✅ Receiver: Live PCM playout active.");
