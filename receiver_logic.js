@@ -501,7 +501,56 @@
         }
 
         function markPlaybackStartSignal() {
-          lastPlaybackStartSignalAt = Date.now();
+          if (!lastPlaybackStartSignalAt) {
+            lastPlaybackStartSignalAt = Date.now();
+          }
+        }
+
+        function startNativeLatencyMonitor() {
+          if (window._nativeLatencyIntervalId) {
+            clearInterval(window._nativeLatencyIntervalId);
+          }
+          window._nativeLatencyIntervalId = setInterval(() => {
+            if (!nativeStreamActive && window._playbackMode !== "native") {
+              return;
+            }
+            const htmlAudio = document.getElementById("native-stream-audio");
+            const cafAudio = document.getElementById("cast-media-element");
+            let activeAudio = null;
+            if (htmlAudio && htmlAudio.src && !htmlAudio.paused) {
+              activeAudio = htmlAudio;
+            } else if (cafAudio && !cafAudio.paused) {
+              activeAudio = cafAudio;
+            }
+
+            if (!activeAudio || activeAudio.buffered.length === 0) {
+              return;
+            }
+
+            const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
+            const playhead = activeAudio.currentTime;
+            const latency = liveEdge - playhead;
+
+            if (latency > 1.5) {
+              // Seek directly to 250ms behind the live edge to eliminate large lag instantly
+              const targetTime = Math.max(0, liveEdge - 0.25);
+              relayLogToStudio(`🧭 Receiver: Native stream latency high (${latency.toFixed(2)}s). Seeking to ${targetTime.toFixed(2)}s.`);
+              activeAudio.currentTime = targetTime;
+              activeAudio.playbackRate = 1.0;
+            } else if (latency > 0.4) {
+              // Graduated catch-up rate (1.04x speedup is completely natural/inaudible for speech/music)
+              if (activeAudio.playbackRate !== 1.04) {
+                activeAudio.playbackRate = 1.04;
+                relayLogToStudio(`🧭 Receiver: Native stream catching up (${latency.toFixed(2)}s delay, rate=1.04).`);
+              }
+            } else if (latency < 0.2) {
+              // Lock back to normal speed
+              if (activeAudio.playbackRate !== 1.0) {
+                activeAudio.playbackRate = 1.0;
+                relayLogToStudio(`🧭 Receiver: Native stream locked to live edge (${latency.toFixed(2)}s delay, rate=1.0).`);
+              }
+            }
+          }, 500);
         }
 
         function clearPlaybackStartSignal() {
@@ -962,6 +1011,12 @@
           playbackModeLastSentGeneration = -1;
           stopCafNativeCompanion();
           stopHtmlAudioNativeCompanion();
+          
+          const htmlAudio = document.getElementById("native-stream-audio");
+          const cafAudio = document.getElementById("cast-media-element");
+          if (htmlAudio) htmlAudio.playbackRate = 1.0;
+          if (cafAudio) cafAudio.playbackRate = 1.0;
+
           if (reason) {
             relayLogToStudio("🛑 Receiver: Native stream stopped (" + reason + ").");
           }
@@ -1249,6 +1304,10 @@
           window._lastBinaryTime = 0;
           window._lastWorkletDiagTime = 0;
           stopNativeStreamPlayout(reason || "shutdown");
+          if (window._nativeLatencyIntervalId) {
+            clearInterval(window._nativeLatencyIntervalId);
+            window._nativeLatencyIntervalId = null;
+          }
           if (autoDiscoveryFallbackTimeoutId) {
             clearTimeout(autoDiscoveryFallbackTimeoutId);
             autoDiscoveryFallbackTimeoutId = null;
@@ -2829,6 +2888,7 @@
 
         window.onload = function () {
           buildGUI();
+          startNativeLatencyMonitor();
 
           // [V13.9.40] Aggressive Startup Trace
           console.log("🎬 Receiver: Startup sequence initiated.");
