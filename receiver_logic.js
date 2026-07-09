@@ -107,6 +107,49 @@
           }
         }
 
+        function summarizeTelemetryValue(value, depth) {
+          const currentDepth = depth || 0;
+          if (value === null || value === undefined) {
+            return value;
+          }
+          if (typeof value !== "object") {
+            return value;
+          }
+          if (Array.isArray(value)) {
+            return value.map(function (item) {
+              return summarizeTelemetryValue(item, currentDepth + 1);
+            });
+          }
+          if (currentDepth >= 2) {
+            return "[object]";
+          }
+
+          const summary = {};
+          Object.keys(value)
+            .sort()
+            .forEach(function (key) {
+              const entry = value[key];
+              if (
+                entry === null ||
+                entry === undefined ||
+                typeof entry === "string" ||
+                typeof entry === "number" ||
+                typeof entry === "boolean"
+              ) {
+                summary[key] = entry;
+              } else if (Array.isArray(entry)) {
+                summary[key] = summarizeTelemetryValue(entry, currentDepth + 1);
+              } else {
+                summary[key] = summarizeTelemetryValue(entry, currentDepth + 1);
+              }
+          });
+          return summary;
+        }
+
+        function deriveReceiverBitDepth(telemetry) {
+          return 16;
+        }
+
         function collectReceiverHardwareTelemetry(context) {
           const telemetry = {
             capabilities: null,
@@ -253,20 +296,22 @@
 
           deviceCapabilitiesLogged = true;
           clearReceiverHardwareTelemetryRetry();
+          telemetry.preferredBitDepth = deriveReceiverBitDepth(telemetry);
           telemetry.playbackPreference = determineReceiverPlayoutPreference(context, telemetry);
+          window._receiverHardwareTelemetry = telemetry;
           setReceiverPlayoutPreference(telemetry.playbackPreference, "hardware_telemetry");
           relayLogToStudio("📟 Receiver: Hardware telemetry snapshot begin.");
           relayLogToStudio(
             "📟 Receiver Hardware Capabilities: " +
-              formatTelemetryValue(telemetry.capabilities),
+              formatTelemetryValue(summarizeTelemetryValue(telemetry.capabilities)),
           );
           relayLogToStudio(
             "📟 Receiver Device Information: " +
-              formatTelemetryValue(telemetry.deviceInformation),
+              formatTelemetryValue(summarizeTelemetryValue(telemetry.deviceInformation)),
           );
           relayLogToStudio(
             "📟 Receiver Media Support Matrix: " +
-              formatTelemetryValue(telemetry.mediaSupport),
+              formatTelemetryValue(summarizeTelemetryValue(telemetry.mediaSupport)),
           );
           relayLogToStudio(
             "📟 Receiver: Hardware telemetry snapshot end; userAgent=" +
@@ -275,6 +320,8 @@
               telemetry.host.platform +
               " | screen=" +
               telemetry.host.screen +
+              " | preferredBitDepth=" +
+              telemetry.preferredBitDepth +
               " | playbackPreference=" +
               telemetry.playbackPreference,
           );
@@ -485,6 +532,10 @@
           if (window._receiverShutdownInProgress) {
             return false;
           }
+          if (window._pcmDegraded) {
+            relayLogToStudio("📡 Receiver: Native stream skipped; PCM degradation recovery stays on the worklet path.");
+            return false;
+          }
           if (nativeStreamActive || nativeStreamStarting) {
             return true;
           }
@@ -631,11 +682,15 @@
             notifyPlaybackMode("pcm_fallback", (reason || "playback_start") + "_pcm_ready");
             return true;
           }
+          if (window._pcmDegraded) {
+            resetRealtimePlayoutKeepPcmReady("pcm_degraded_recover");
+            if (maybeStartLowLatencyPlayout("pcm_degraded_recover")) {
+              return true;
+            }
+            return false;
+          }
           if (nativeStreamStarting) {
             return true;
-          }
-          if (window._pcmDegraded && (workletNode || workletReady)) {
-            resetBinaryPlayoutState("native_fallback_pre_init");
           }
           if (maybeStartNativeStream(reason)) {
             return true;
@@ -830,6 +885,10 @@
               return;
             }
             if (!configReceived || !currentBridgeIp) {
+              return;
+            }
+            if (window._pcmDegraded) {
+              relayLogToStudio("⚠️ Receiver: PCM worklet startup timed out during PCM recovery; keeping playback on the worklet path.");
               return;
             }
             relayLogToStudio("⚠️ Receiver: PCM worklet startup timed out; starting native stream fallback.");
@@ -1636,6 +1695,7 @@
             const actualRate = audioCtx.sampleRate;
             const requestedRate = window._lastHwRate || window._hwRate || 48000;
             const baseRateRatio = 1.0; // Backend Resampled Alignment
+            const negotiatedBitDepth = 16;
 
             console.log(
               `📏 Receiver Clock: receiverRate=${requestedRate}Hz actual=${actualRate}Hz | Studio: ${studioRate}Hz | Unity Sync Active`,
@@ -1654,7 +1714,7 @@
                 processorOptions: {
                   baseRateRatio: baseRateRatio,
                   studioRate: studioRate,
-                  bitDepth: window._negotiatedBitDepth || 16,
+                  bitDepth: negotiatedBitDepth,
                 },
               },
             );
@@ -1694,6 +1754,7 @@
                         `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles). Resetting PCM bridge instead of switching to native.`,
                       );
                       window._lowRateCount = 0;
+                      window._pcmDegraded = true;
                       if (workletNode && workletReady) {
                         resetRealtimePlayoutKeepPcmReady("pcm_degraded");
                       } else {
@@ -1781,10 +1842,10 @@
             };
             workletNode.port.postMessage({
               type: "CONFIG",
-              bitDepth: window._negotiatedBitDepth || 16,
+              bitDepth: negotiatedBitDepth,
             });
             relayLogToStudio(
-              `🔧 Receiver: Worklet configured for ${window._negotiatedBitDepth || 16}-bit decode`,
+              `🔧 Receiver: Worklet configured for ${negotiatedBitDepth}-bit decode`,
             );
             resumeAudio();
           } catch (e) {
@@ -2481,7 +2542,7 @@
                 type: "HANDSHAKE",
                 config: {
                   sampleRate: rate,
-                  bitDepth: 16, // Request 16-bit pipeline for lower CPU overhead
+                  bitDepth: 16,
                   maxChannels: 2,
                 },
               };
