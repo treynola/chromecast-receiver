@@ -523,9 +523,22 @@
               activeAudio = cafAudio;
             }
 
-            if (!activeAudio || activeAudio.buffered.length === 0) {
-              return;
-            }
+             if (!activeAudio) {
+               return;
+             }
+
+             // CRITICAL: Skip latency checks and reset speed if player is still buffering or loading (readyState < 3)
+             if (activeAudio.readyState < 3) {
+               if (activeAudio.playbackRate !== 1.0) {
+                 activeAudio.playbackRate = 1.0;
+                 relayLogToStudio(`🧭 Receiver: Player is buffering/loading (readyState=${activeAudio.readyState}). Resetting playbackRate to 1.0.`);
+               }
+               return;
+             }
+
+             if (activeAudio.buffered.length === 0) {
+               return;
+             }
 
             const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const playhead = activeAudio.currentTime;
@@ -1023,6 +1036,7 @@
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
           window._playbackMode = "unknown";
+          window._pcmDegraded = false;
           playbackModeLastSent = "";
           playbackModeLastSentGeneration = -1;
           stopCafNativeCompanion();
@@ -1090,6 +1104,7 @@
           window._isDrainingStartup = false;
           window._binaryActive = false;
           window._lastBinaryTime = 0;
+          window._pcmDegraded = false;
           clearLowLatencyStartupWatchdog();
           if (workletNode && workletNode.port) {
             try {
@@ -1676,12 +1691,15 @@
                     window._lowRateCount = (window._lowRateCount || 0) + 1;
                     if (window._lowRateCount >= DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT) {
                       relayLogToStudio(
-                        `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles). Automatically falling back to native stream.`,
+                        `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles). Resetting PCM bridge instead of switching to native.`,
                       );
                       window._lowRateCount = 0;
-                      window._pcmDegraded = true;
-                      stopAllPlayout("pcm_degraded");
-                      startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+                      if (workletNode && workletReady) {
+                        resetRealtimePlayoutKeepPcmReady("pcm_degraded");
+                      } else {
+                        setReceiverPlayoutPreference("pcm_fallback", "pcm_degraded_recover");
+                        maybeStartLowLatencyPlayout("pcm_degraded_recover");
+                      }
                       return;
                     }
                   } else {
