@@ -1718,9 +1718,10 @@
                 window._lastWorkletDiagTime = Date.now();
                 window._workletDiagCount = (window._workletDiagCount || 0) + 1;
 
-                // Trigger native fallback only after repeated low-rate DIAG
-                // samples. That avoids reacting to a one-off scheduler hiccup
-                // while still catching a sustained degraded playout path.
+                // Treat low-rate DIAG as a signal, not an automatic failure.
+                // Brief scheduler jitter can depress the reported drain rate
+                // while the buffer is still healthy, so only reset the bridge
+                // when the low-rate condition lines up with real buffer stress.
                 if (e.data.measuredHz && e.data.measuredHz > 0) {
                   if (
                     !hasAudiblePlaybackSignal(e.data) ||
@@ -1732,18 +1733,27 @@
                   } else if (e.data.measuredHz < DEGRADED_PLAYOUT_HZ_THRESHOLD) {
                     window._lowRateCount = (window._lowRateCount || 0) + 1;
                     if (window._lowRateCount >= DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT) {
+                      const stalled = Number(e.data.stalled || 0) > 0;
+                      const lowBuffer = Number(e.data.available || 0) > 0 && Number(e.data.available || 0) < 16384;
+                      if (stalled || lowBuffer) {
+                        relayLogToStudio(
+                          `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles) and buffer health dropped (available=${Math.round(e.data.available || 0)}, stalled=${Number(e.data.stalled || 0)}). Resetting PCM bridge.`,
+                        );
+                        window._lowRateCount = 0;
+                        window._pcmDegraded = true;
+                        if (workletNode && workletReady) {
+                          resetRealtimePlayoutKeepPcmReady("pcm_degraded");
+                        } else {
+                          setReceiverPlayoutPreference("pcm_fallback", "pcm_degraded_recover");
+                          maybeStartLowLatencyPlayout("pcm_degraded_recover");
+                        }
+                        return;
+                      }
+
                       relayLogToStudio(
-                        `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles). Resetting PCM bridge instead of switching to native.`,
+                        `⚠️ Receiver: Low playout rate observed (${Math.round(e.data.measuredHz)}Hz) but buffer remains healthy (available=${Math.round(e.data.available || 0)}, stalled=${Number(e.data.stalled || 0)}). Keeping PCM bridge active.`,
                       );
                       window._lowRateCount = 0;
-                      window._pcmDegraded = true;
-                      if (workletNode && workletReady) {
-                        resetRealtimePlayoutKeepPcmReady("pcm_degraded");
-                      } else {
-                        setReceiverPlayoutPreference("pcm_fallback", "pcm_degraded_recover");
-                        maybeStartLowLatencyPlayout("pcm_degraded_recover");
-                      }
-                      return;
                     }
                   } else {
                     window._lowRateCount = 0;
