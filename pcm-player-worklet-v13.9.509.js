@@ -225,17 +225,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Use a graduated catch-up rate when the live queue is high. Steeper
-      // rates actively drain backlog before it reaches the flush threshold.
-      // At 1.02x the pitch shift is ~35 cents — below awareness threshold.
-      const backlogSamples = Math.max(0, available - this._TARGET_BUFFER);
-      const playbackRate = backlogSamples >= 65536
-        ? 1.02
-        : backlogSamples >= 49152
-          ? 1.01
-          : backlogSamples >= 40960
-            ? 1.005
-            : 1.0;
+      // Keep playout pitch-stable. Buffer control is handled by sender pacing
+      // and only the lag-flush path should make a discontinuous correction.
+      const playbackRate = 1.0;
 
       if (renderSilence) {
         channel0.fill(0);

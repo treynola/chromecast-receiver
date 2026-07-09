@@ -578,22 +578,22 @@
             const latency = liveEdge - playhead;
 
             if (latency > 2.0) {
-              // Steeper catch-up rate for high latency
-              if (activeAudio.playbackRate !== 1.15) {
-                activeAudio.playbackRate = 1.15;
-                relayLogToStudio(`🧭 Receiver: Native stream latency high (${latency.toFixed(2)}s). Speeding up (rate=1.15).`);
+              // Gentle catch-up rate for high latency.
+              if (activeAudio.playbackRate !== 1.02) {
+                activeAudio.playbackRate = 1.02;
+                relayLogToStudio(`🧭 Receiver: Native stream latency high (${latency.toFixed(2)}s). Speeding up (rate=1.02).`);
               }
             } else if (latency > 1.0) {
-              // Moderate catch-up rate
-              if (activeAudio.playbackRate !== 1.08) {
-                activeAudio.playbackRate = 1.08;
-                relayLogToStudio(`🧭 Receiver: Native stream latency moderate (${latency.toFixed(2)}s). Speeding up (rate=1.08).`);
+              // Gentle catch-up rate
+              if (activeAudio.playbackRate !== 1.01) {
+                activeAudio.playbackRate = 1.01;
+                relayLogToStudio(`🧭 Receiver: Native stream latency moderate (${latency.toFixed(2)}s). Speeding up (rate=1.01).`);
               }
             } else if (latency > 0.4) {
-              // Graduated catch-up rate
-              if (activeAudio.playbackRate !== 1.04) {
-                activeAudio.playbackRate = 1.04;
-                relayLogToStudio(`🧭 Receiver: Native stream catching up (${latency.toFixed(2)}s delay, rate=1.04).`);
+              // Gentle catch-up rate
+              if (activeAudio.playbackRate !== 1.005) {
+                activeAudio.playbackRate = 1.005;
+                relayLogToStudio(`🧭 Receiver: Native stream catching up (${latency.toFixed(2)}s delay, rate=1.005).`);
               }
             } else if (latency < 0.25) {
               // Lock back to normal speed
