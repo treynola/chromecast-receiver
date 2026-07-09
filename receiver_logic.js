@@ -84,7 +84,7 @@
         let flushingPendingStudioLogs = false;
         let hardwareTelemetryRetryId = null;
         let hardwareTelemetryRetryCount = 0;
-        let receiverPlayoutPreference = "native";
+        let receiverPlayoutPreference = "pcm_fallback";
         window._receiverPlayoutPreference = receiverPlayoutPreference;
 
         function formatTelemetryValue(value) {
@@ -632,6 +632,16 @@
           }
           if (nativeStreamStarting) {
             return true;
+          }
+          if (receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded) {
+            if (maybeStartLowLatencyPlayout(reason)) {
+              return true;
+            }
+            // If the WebSocket is connecting or handshaking, wait for the socket
+            // connection and handshake ACK handlers to trigger it, rather than falling back to native stream immediately.
+            if (binaryWS && (binaryWS.readyState === WebSocket.CONNECTING || (binaryWS.readyState === WebSocket.OPEN && !window._handshakeAcked))) {
+              return true;
+            }
           }
           if (maybeStartNativeStream(reason)) {
             return true;
@@ -2669,6 +2679,11 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
+
+                  // [v13.9.510] Trigger low-latency playout immediately when handshake is confirmed
+                  if (receiverPlayoutPreference === "pcm_fallback") {
+                    maybeStartLowLatencyPlayout("handshake_ack");
+                  }
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
                   const immediateState = buildImmediatePlaybackState(d.trackId);
