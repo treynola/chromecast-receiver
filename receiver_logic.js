@@ -146,10 +146,6 @@
           return summary;
         }
 
-        function deriveReceiverBitDepth(telemetry) {
-          return 16;
-        }
-
         function collectReceiverHardwareTelemetry(context) {
           const telemetry = {
             capabilities: null,
@@ -243,17 +239,6 @@
         }
 
         function determineReceiverPlayoutPreference(context, telemetry) {
-          const wavProbe = telemetry && Array.isArray(telemetry.mediaSupport)
-            ? telemetry.mediaSupport.find(function (probe) {
-                return probe && probe.label === "pcm16_wav_48k";
-              })
-            : null;
-          // Live cast audio is control-sensitive, so the receiver should favor
-          // the PCM worklet path even when the device can also play WAV natively.
-          // Native media remains a fallback for worklet failure or degradation.
-          if (wavProbe && wavProbe.supported === false) {
-            return "pcm_fallback";
-          }
           return "pcm_fallback";
         }
 
@@ -296,7 +281,6 @@
 
           deviceCapabilitiesLogged = true;
           clearReceiverHardwareTelemetryRetry();
-          telemetry.preferredBitDepth = deriveReceiverBitDepth(telemetry);
           telemetry.playbackPreference = determineReceiverPlayoutPreference(context, telemetry);
           window._receiverHardwareTelemetry = telemetry;
           setReceiverPlayoutPreference(telemetry.playbackPreference, "hardware_telemetry");
@@ -320,8 +304,6 @@
               telemetry.host.platform +
               " | screen=" +
               telemetry.host.screen +
-              " | preferredBitDepth=" +
-              telemetry.preferredBitDepth +
               " | playbackPreference=" +
               telemetry.playbackPreference,
           );
@@ -2603,8 +2585,8 @@
                 return;
               }
               if (workletNode) {
-                // [v13.9.504] BINARY SUPERIORITY LOCK
-                // We have a direct high-fidelity bridge. Kill all fallback paths to save Receiver CPU.
+                // [v13.9.504] PCM BRIDGE LOCK
+                // Keep the direct PCM bridge as the only live audio path to save Receiver CPU.
                 window._lastBinaryTime = Date.now();
                 window._binaryActive = true;
 
