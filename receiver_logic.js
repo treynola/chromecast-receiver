@@ -845,6 +845,13 @@
               pm.stop();
             } catch (e) {}
           }
+          const cafAudio = document.getElementById("cast-media-element");
+          if (cafAudio) {
+            try {
+              cafAudio.removeAttribute("src");
+              cafAudio.load();
+            } catch (e) {}
+          }
         }
 
         function teardownPcmPlayout(reason, closeAudioContext) {
