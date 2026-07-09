@@ -514,18 +514,14 @@
           if (window._receiverShutdownInProgress) {
             return false;
           }
-          if (window._pcmDegraded) {
-            relayLogToStudio("📡 Receiver: Native stream skipped; PCM degradation recovery stays on the worklet path.");
-            return false;
-          }
           if (nativeStreamActive || nativeStreamStarting) {
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
             return false;
           }
-          if (workletNode) {
-            return true;
+          if (workletNode || audioInitializing || window._binaryActive) {
+            resetBinaryPlayoutState("native_takeover");
           }
           if (reason) {
             relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
@@ -556,51 +552,29 @@
               activeAudio = cafAudio;
             }
 
-             if (!activeAudio) {
-               return;
-             }
+            if (!activeAudio) {
+              return;
+            }
 
-             // CRITICAL: Skip latency checks and reset speed if player is still buffering or loading (readyState < 3)
-             if (activeAudio.readyState < 3) {
-               if (activeAudio.playbackRate !== 1.0) {
-                 activeAudio.playbackRate = 1.0;
-                 relayLogToStudio(`🧭 Receiver: Player is buffering/loading (readyState=${activeAudio.readyState}). Resetting playbackRate to 1.0.`);
-               }
-               return;
-             }
+            if (activeAudio.playbackRate !== 1.0) {
+              activeAudio.playbackRate = 1.0;
+            }
 
-             if (activeAudio.buffered.length === 0) {
-               return;
-             }
+            if (activeAudio.readyState < 3 || activeAudio.buffered.length === 0) {
+              return;
+            }
 
             const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const playhead = activeAudio.currentTime;
             const latency = liveEdge - playhead;
 
-            if (latency > 2.0) {
-              // Gentle catch-up rate for high latency.
-              if (activeAudio.playbackRate !== 1.02) {
-                activeAudio.playbackRate = 1.02;
-                relayLogToStudio(`🧭 Receiver: Native stream latency high (${latency.toFixed(2)}s). Speeding up (rate=1.02).`);
-              }
-            } else if (latency > 1.0) {
-              // Gentle catch-up rate
-              if (activeAudio.playbackRate !== 1.01) {
-                activeAudio.playbackRate = 1.01;
-                relayLogToStudio(`🧭 Receiver: Native stream latency moderate (${latency.toFixed(2)}s). Speeding up (rate=1.01).`);
-              }
-            } else if (latency > 0.4) {
-              // Gentle catch-up rate
-              if (activeAudio.playbackRate !== 1.005) {
-                activeAudio.playbackRate = 1.005;
-                relayLogToStudio(`🧭 Receiver: Native stream catching up (${latency.toFixed(2)}s delay, rate=1.005).`);
-              }
-            } else if (latency < 0.25) {
-              // Lock back to normal speed
-              if (activeAudio.playbackRate !== 1.0) {
-                activeAudio.playbackRate = 1.0;
-                relayLogToStudio(`🧭 Receiver: Native stream locked to live edge (${latency.toFixed(2)}s delay, rate=1.0).`);
-              }
+            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+              binaryWS.send(
+                JSON.stringify({
+                  type: "NATIVE_LATENCY_REPORT",
+                  latency: latency,
+                }),
+              );
             }
           }, 500);
         }
@@ -649,27 +623,12 @@
           if (
             reason === "bridge_config" &&
             !nativeStreamActive &&
-            !nativeStreamStarting &&
-            (workletNode || audioInitializing)
+            !nativeStreamStarting
           ) {
             resetBinaryPlayoutState("native_takeover");
           }
           if (nativeStreamActive) {
             return true;
-          }
-          if (maybeStartLowLatencyPlayout(reason)) {
-            return true;
-          }
-          if ((workletNode || workletReady) && !window._pcmDegraded) {
-            notifyPlaybackMode("pcm_fallback", (reason || "playback_start") + "_pcm_ready");
-            return true;
-          }
-          if (window._pcmDegraded) {
-            resetRealtimePlayoutKeepPcmReady("pcm_degraded_recover");
-            if (maybeStartLowLatencyPlayout("pcm_degraded_recover")) {
-              return true;
-            }
-            return false;
           }
           if (nativeStreamStarting) {
             return true;
@@ -1741,12 +1700,8 @@
                         );
                         window._lowRateCount = 0;
                         window._pcmDegraded = true;
-                        if (workletNode && workletReady) {
-                          resetRealtimePlayoutKeepPcmReady("pcm_degraded");
-                        } else {
-                          setReceiverPlayoutPreference("pcm_fallback", "pcm_degraded_recover");
-                          maybeStartLowLatencyPlayout("pcm_degraded_recover");
-                        }
+                        stopRealtimePlayoutKeepNativePrimed("pcm_degraded");
+                        requestNativePlaybackStart("pcm_degraded_recover");
                         return;
                       }
 
@@ -2714,20 +2669,7 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  if (workletNode) {
-                    workletNode.port.postMessage({
-                      type: "CONFIG",
-                      bitDepth: ackBitDepth,
-                    });
-                    relayLogToStudio(
-                      `🔧 Receiver: Worklet configured for ${ackBitDepth}-bit decode`,
-                    );
-                  } else {
-                    relayLogToStudio(
-                      "🧭 Receiver: HANDSHAKE_ACK received; PCM worklet will be started for live-sync playout.",
-                    );
-                  }
-                  maybeStartLowLatencyPlayout("handshake_ack");
+                  requestNativePlaybackStart("handshake_ack");
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
                   const immediateState = buildImmediatePlaybackState(d.trackId);
