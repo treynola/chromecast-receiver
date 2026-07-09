@@ -2669,7 +2669,6 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
-                  requestNativePlaybackStart("handshake_ack");
                 } else if (d.type === "PLAYBACK_START") {
                   markPlaybackStartSignal();
                   const immediateState = buildImmediatePlaybackState(d.trackId);
