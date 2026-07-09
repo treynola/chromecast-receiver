@@ -531,19 +531,25 @@
             const playhead = activeAudio.currentTime;
             const latency = liveEdge - playhead;
 
-            if (latency > 1.5) {
-              // Seek directly to 250ms behind the live edge to eliminate large lag instantly
-              const targetTime = Math.max(0, liveEdge - 0.25);
-              relayLogToStudio(`🧭 Receiver: Native stream latency high (${latency.toFixed(2)}s). Seeking to ${targetTime.toFixed(2)}s.`);
-              activeAudio.currentTime = targetTime;
-              activeAudio.playbackRate = 1.0;
+            if (latency > 2.0) {
+              // Steeper catch-up rate for high latency
+              if (activeAudio.playbackRate !== 1.15) {
+                activeAudio.playbackRate = 1.15;
+                relayLogToStudio(`🧭 Receiver: Native stream latency high (${latency.toFixed(2)}s). Speeding up (rate=1.15).`);
+              }
+            } else if (latency > 1.0) {
+              // Moderate catch-up rate
+              if (activeAudio.playbackRate !== 1.08) {
+                activeAudio.playbackRate = 1.08;
+                relayLogToStudio(`🧭 Receiver: Native stream latency moderate (${latency.toFixed(2)}s). Speeding up (rate=1.08).`);
+              }
             } else if (latency > 0.4) {
-              // Graduated catch-up rate (1.04x speedup is completely natural/inaudible for speech/music)
+              // Graduated catch-up rate
               if (activeAudio.playbackRate !== 1.04) {
                 activeAudio.playbackRate = 1.04;
                 relayLogToStudio(`🧭 Receiver: Native stream catching up (${latency.toFixed(2)}s delay, rate=1.04).`);
               }
-            } else if (latency < 0.2) {
+            } else if (latency < 0.25) {
               // Lock back to normal speed
               if (activeAudio.playbackRate !== 1.0) {
                 activeAudio.playbackRate = 1.0;
@@ -608,12 +614,15 @@
           if (maybeStartLowLatencyPlayout(reason)) {
             return true;
           }
-          if (workletNode || workletReady) {
+          if ((workletNode || workletReady) && !window._pcmDegraded) {
             notifyPlaybackMode("pcm_fallback", (reason || "playback_start") + "_pcm_ready");
             return true;
           }
           if (nativeStreamStarting) {
             return true;
+          }
+          if (window._pcmDegraded && (workletNode || workletReady)) {
+            resetBinaryPlayoutState("native_fallback_pre_init");
           }
           if (maybeStartNativeStream(reason)) {
             return true;
@@ -654,7 +663,7 @@
               const media = loadRequest && loadRequest.media ? loadRequest.media : null;
               const isNativeStream =
                 !!media &&
-                (media.contentId === "mxs-native-stream" ||
+                ((typeof media.contentId === "string" && media.contentId.indexOf("mxs-native-stream") === 0) ||
                   (media.customData && media.customData.source === "mxs004-native-stream"));
               if (!isNativeStream) {
                 return defaultPlaybackConfig;
@@ -678,7 +687,7 @@
                 writeCastDebug("error", "Rejected malformed LOAD request with no media payload.");
                 return error;
               }
-              if (request.media.contentId === "mxs-native-stream") {
+              if (typeof request.media.contentId === "string" && request.media.contentId.indexOf("mxs-native-stream") === 0) {
                 const streamUrl =
                   (request.media.customData && request.media.customData.streamUrl) ||
                   request.media.contentUrl;
@@ -1200,7 +1209,7 @@
             const messages = cast.framework.messages;
             const loadRequestData = new messages.LoadRequestData();
             const media = new messages.MediaInformation();
-            media.contentId = "mxs-native-stream";
+            media.contentId = "mxs-native-stream-" + (attemptId !== undefined ? attemptId : Date.now());
             media.contentType = "audio/wav";
             media.streamType = messages.StreamType.LIVE;
             media.duration = null;
