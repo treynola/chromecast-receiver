@@ -2546,7 +2546,7 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              if (nativeStreamActive) {
+              if (window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
                 return;
               }
               if (workletNode) {
@@ -2572,7 +2572,7 @@
               }
               return;
             } else if (isBlob) {
-              if (nativeStreamActive) {
+              if (window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
                 return;
               }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
