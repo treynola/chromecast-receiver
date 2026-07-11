@@ -26,6 +26,18 @@
         var noSenderShutdownTimeoutId = null;
         var pendingBinaryFrames = [];
         var workletReady = false;
+        const BUILD_IDENTITY_SCHEMA = "mxs-004.clock-sync-pcm.build-identity";
+        const BUILD_IDENTITY_COMPONENTS = [
+          "senderCritical",
+          "tauriCastingBackend",
+          "receiverHtml",
+          "receiverLogic",
+          "receiverPcmWorklet",
+        ];
+        var buildIdentityAccepted = false;
+        var buildIdentityRejected = false;
+        var pendingBuildIdentityRejection = null;
+        window._buildIdentityAccepted = false;
         const PENDING_BINARY_FRAMES_MAX = 1; // Keep only the newest startup packet; stale PCM increases cast latency.
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
@@ -54,6 +66,75 @@
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
         const CAST_DEBUG_TAG = "MXS004.RECEIVER";
+
+        function isBuildIdentity(value) {
+          return (
+            value &&
+            typeof value === "object" &&
+            value.schema === BUILD_IDENTITY_SCHEMA &&
+            value.version === 1 &&
+            value.algorithm === "sha256" &&
+            Object.keys(value).length === 4 &&
+            value.components &&
+            typeof value.components === "object" &&
+            Object.keys(value.components).length === BUILD_IDENTITY_COMPONENTS.length &&
+            BUILD_IDENTITY_COMPONENTS.every(function (key) {
+              return /^[a-f0-9]{64}$/.test(value.components[key]);
+            })
+          );
+        }
+
+        function buildIdentitiesMatch(expected, received) {
+          return (
+            isBuildIdentity(expected) &&
+            isBuildIdentity(received) &&
+            BUILD_IDENTITY_COMPONENTS.every(function (key) {
+              return expected.components[key] === received.components[key];
+            })
+          );
+        }
+
+        function reportBuildIdentityRejection(reason, received) {
+          if (buildIdentityRejected) return;
+          const details = {
+            type: "BUILD_IDENTITY_REJECTED",
+            role: "receiver",
+            reason: reason,
+            expected: window.MXS_BUILD_IDENTITY || null,
+            received: received || null,
+          };
+          buildIdentityAccepted = false;
+          buildIdentityRejected = true;
+          window._buildIdentityAccepted = false;
+          pendingBuildIdentityRejection = details;
+          console.error("❌ Receiver: Build identity rejected", details);
+          relayLogToStudio("❌ Receiver build identity rejected: " + JSON.stringify(details));
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify(details));
+              pendingBuildIdentityRejection = null;
+            } catch (e) {}
+          }
+        }
+
+        function acceptBuildIdentity(received, source) {
+          if (!buildIdentitiesMatch(window.MXS_BUILD_IDENTITY, received)) {
+            reportBuildIdentityRejection(source + "_identity_missing_malformed_or_mismatched", received);
+            return false;
+          }
+          if (buildIdentityRejected) return false;
+          const wasAccepted = buildIdentityAccepted;
+          buildIdentityAccepted = true;
+          window._buildIdentityAccepted = true;
+          if (!wasAccepted) {
+            relayLogToStudio("✅ Receiver build identity verified: " + JSON.stringify(window.MXS_BUILD_IDENTITY));
+          }
+          return true;
+        }
+
+        function identityAllowsAudio() {
+          return buildIdentityAccepted && !buildIdentityRejected;
+        }
 
         function getCastReceiverContext() {
           if (typeof cast === "undefined" || !cast.framework) {
@@ -477,6 +558,7 @@
         }
 
         function maybeStartLowLatencyPlayout(reason) {
+          if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
             return false;
           }
@@ -511,6 +593,7 @@
         }
 
         function maybeStartNativeStream(reason) {
+          if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
             return false;
           }
@@ -620,6 +703,7 @@
         }
 
         function requestNativePlaybackStart(reason) {
+          if (!identityAllowsAudio()) return false;
           if (
             reason === "bridge_config" &&
             !nativeStreamActive &&
@@ -1397,6 +1481,7 @@
         }
 
         function queueBinaryFrame(buffer) {
+          if (!identityAllowsAudio()) return;
           if (window._receiverShutdownInProgress) {
             return;
           }
@@ -1576,6 +1661,10 @@
         let lastInitAttempt = 0;
         let audioInitializing = false;
         async function initAudio(force = false, preserveNativeMode = false) {
+          if (!identityAllowsAudio()) {
+            relayLogToStudio("⛔ Receiver: Audio startup blocked until build identity is verified.");
+            return;
+          }
           if (window._receiverShutdownInProgress) return;
           if (audioInitializing) return;
           if (nativeStreamActive || workletNode) {
@@ -2490,6 +2579,16 @@
             function sendHandshake() {
               if (window._receiverShutdownInProgress) return;
               if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+              if (pendingBuildIdentityRejection) {
+                binaryWS.send(JSON.stringify(pendingBuildIdentityRejection));
+                pendingBuildIdentityRejection = null;
+                return;
+              }
+              if (!isBuildIdentity(window.MXS_BUILD_IDENTITY)) {
+                reportBuildIdentityRejection("receiver_identity_missing_or_malformed", null);
+                return;
+              }
+              if (buildIdentityRejected) return;
               // Use the live AudioContext rate, not the probe rate, so the
               // backend resamples to the actual Cast playout clock.
               const rate = (audioCtx && audioCtx.sampleRate) || window._hwRate || hwRate || 48000;
@@ -2500,6 +2599,7 @@
                   bitDepth: 16,
                   maxChannels: 2,
                 },
+                buildIdentity: window.MXS_BUILD_IDENTITY,
               };
               try {
                 binaryWS.send(JSON.stringify(handshake));
@@ -2664,6 +2764,9 @@
                     window.location.href = cleanUrl + "?cb=" + Date.now();
                   }, 500);
                 } else if (d.type === "HANDSHAKE_ACK") {
+                  if (!acceptBuildIdentity(d.buildIdentity, "handshake_ack")) {
+                    return;
+                  }
                   // Server confirmed handshake. Prime the native media path now so
                   // the TV player is already buffered before audible PCM arrives.
                   const ackRate = d.config ? d.config.sampleRate : 48000;
@@ -2691,6 +2794,9 @@
                   }
                   requestNativePlaybackStart("playback_start");
                 } else if (d.type === "BRIDGE_CONFIG") {
+                  if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
+                    return;
+                  }
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
                     configReceived = true;
@@ -2717,6 +2823,8 @@
                   if (d.ip) {
                     triggerWakeLockLoad();
                   }
+                } else if (d.type === "BUILD_IDENTITY_REJECTED") {
+                  reportBuildIdentityRejection(d.reason || "backend_rejected", d.received);
                 } else if (d.type === "WEBRTC_OFFER") {
                   relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
                 } else if (d.type === "WEBRTC_CANDIDATE") {
@@ -2802,6 +2910,12 @@
 
             // 1. Hardware Alignment
             if (d.type === "BRIDGE_CONFIG") {
+              if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) {
+                // Connect only to report the rejection through the authoritative
+                // sender/backend path; no handshake or audio startup is allowed.
+                if (d.ip) connectBinaryBridge(d.ip, d.port, d.token);
+                return;
+              }
               const newRate = d.config ? d.config.sampleRate : null;
               configReceived = true;
               if (newRate && window._studioRate !== newRate) {
@@ -2820,6 +2934,11 @@
                 connectBinaryBridge(d.ip, d.port, d.token);
                 triggerWakeLockLoad();
               }
+              return;
+            }
+
+            if (d.type === "BUILD_IDENTITY_REJECTED") {
+              reportBuildIdentityRejection(d.reason || "cast_sender_rejected", d.received);
               return;
             }
 
