@@ -1511,10 +1511,8 @@
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
           if (!audioCtx) {
             try {
-              relayLogToStudio("🛠️ Receiver: Creating new AudioContext (playback latency hint)...");
-              audioCtx = new (window.AudioContext || window.webkitAudioContext)({
-                latencyHint: "playback",
-              });
+              relayLogToStudio("🛠️ Receiver: Creating new AudioContext (hardware fast-path)...");
+              audioCtx = new (window.AudioContext || window.webkitAudioContext)();
               window._hwRate = audioCtx.sampleRate || 48000;
               window._lastHwRate = window._hwRate;
               relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state + " | Rate: " + window._hwRate);
