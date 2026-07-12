@@ -1203,8 +1203,6 @@
             workletNode = null;
           }
           workletReady = false;
-          window._qCount = 0;
-          window._binLogCount = 0;
           window._lowRateCount = 0;
           window._workletDiagCount = 0;
         }
@@ -1532,14 +1530,6 @@
             return;
           }
           const buffer = packet && packet.payload ? packet.payload : packet;
-          if (!window._qCount) window._qCount = 0;
-          if (window._qCount < 10) {
-            window._qCount++;
-            const isAB = buffer instanceof ArrayBuffer;
-            const len = buffer ? buffer.byteLength : "n/a";
-            const constr = buffer && buffer.constructor ? buffer.constructor.name : "null";
-            relayLogToStudio(`🔍 Receiver queueBinaryFrame: isAB=${isAB} len=${len} constr=${constr}`);
-          }
           if (!(buffer instanceof ArrayBuffer) && (!buffer || typeof buffer.byteLength !== "number")) {
             relayLogToStudio("⚠️ Receiver queueBinaryFrame: Rejected buffer (not ArrayBuffer / no byteLength)");
             return;
@@ -2880,19 +2870,6 @@
           binaryWS.onmessage = (event) => {
             if (generation !== binaryConnectionGeneration) return;
             if (window._receiverShutdownInProgress) return;
-            
-            // Debug print for first few messages
-            if (!window._msgCount) window._msgCount = 0;
-            if (window._msgCount < 15) {
-              window._msgCount++;
-              const type = typeof event.data;
-              const isAB = event.data instanceof ArrayBuffer;
-              const isB = event.data instanceof Blob;
-              const byteLen = event.data ? event.data.byteLength : undefined;
-              const size = event.data ? event.data.size : undefined;
-              const constr = event.data && event.data.constructor ? event.data.constructor.name : "null";
-              relayLogToStudio(`🔍 Receiver MSG DEBUG: type=${type} constr=${constr} isAB=${isAB} isB=${isB} byteLen=${byteLen} size=${size}`);
-            }
 
             // [v13.9.504] PRIORITY: Binary audio data gets the fastest path
             const isArrayBuffer = event.data instanceof ArrayBuffer || (event.data && typeof event.data.byteLength === "number");
