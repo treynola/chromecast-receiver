@@ -58,7 +58,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this.port.onmessage = (e) => {
       try {
-        if (e.data && typeof e.data.type === "string") {
+        if (
+          e.data &&
+          (e.data.type === "CONFIG" || e.data.type === "RESET")
+        ) {
           this.port.postMessage({ type: "LOG", msg: `📥 Worklet message: ${e.data.type}` });
         } else {
           if (!this._binLogCount) this._binLogCount = 0;
