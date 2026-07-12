@@ -66,6 +66,7 @@
         var pcmV2Validator = null;
         var pcmV2AllowInitialOffset = true;
         var expectedPcmSessionId = null;
+        var frozenJitterTarget = null;
 
         function createPcmV2Telemetry() {
           return {
@@ -1474,6 +1475,7 @@
           window._isDrainingStartup = false;
           configReceived = false;
           expectedPcmSessionId = null;
+          frozenJitterTarget = null;
           pcmV2Validator = null;
           pcmV2AllowInitialOffset = true;
           wakeLockLoadingOrLoaded = false;
@@ -1566,6 +1568,67 @@
             return;
           }
           pendingBinaryFrames.push(packet);
+        }
+
+        function acceptFrozenJitterTarget(message) {
+          const sessionId = String(message && message.sessionId || "");
+          const targetFrames = Number(message && message.targetFrames);
+          const targetWallMs = Number(message && message.targetWallMs);
+          const drainHz = Number(message && message.drainHz);
+          const estimatorLockedWhenFrozen = message && message.estimatorLockedWhenFrozen;
+          if (
+            !message ||
+            message.type !== "PCM_V2_JITTER_TARGET" ||
+            Object.keys(message).length !== 8 ||
+            message.protocolVersion !== window.MXSPcmV2.VERSION ||
+            message.frozen !== true ||
+            sessionId.length === 0 ||
+            !Number.isInteger(targetFrames) ||
+            targetFrames <= 0 ||
+            targetWallMs !== 450 ||
+            !Number.isFinite(drainHz) ||
+            drainHz < 16000 ||
+            drainHz > 96000 ||
+            typeof estimatorLockedWhenFrozen !== "boolean" ||
+            Math.abs((targetFrames * 1000) / drainHz - targetWallMs) > 0.1
+          ) {
+            relayLogToStudio("Receiver rejected malformed PCM v2 jitter target.");
+            return false;
+          }
+          if (
+            expectedPcmSessionId !== null &&
+            expectedPcmSessionId !== 0n &&
+            sessionId !== expectedPcmSessionId.toString()
+          ) {
+            relayLogToStudio("Receiver rejected stale PCM v2 jitter target session.");
+            return false;
+          }
+          if (frozenJitterTarget && frozenJitterTarget.sessionId === sessionId) {
+            const unchanged =
+              frozenJitterTarget.targetFrames === targetFrames &&
+              frozenJitterTarget.targetWallMs === targetWallMs &&
+              frozenJitterTarget.drainHz === drainHz &&
+              frozenJitterTarget.estimatorLockedWhenFrozen === estimatorLockedWhenFrozen;
+            if (!unchanged) {
+              relayLogToStudio("Receiver rejected an audible PCM v2 jitter target change.");
+            }
+            return unchanged;
+          }
+          frozenJitterTarget = {
+            type: "JITTER_TARGET",
+            sessionId,
+            targetFrames,
+            targetWallMs,
+            drainHz,
+            estimatorLockedWhenFrozen,
+          };
+          if (workletNode && workletNode.port) {
+            workletNode.port.postMessage(frozenJitterTarget);
+          }
+          relayLogToStudio(
+            `PCM v2 jitter target frozen: ${targetWallMs}ms / ${targetFrames} frames @ ${drainHz.toFixed(2)}Hz.`,
+          );
+          return true;
         }
 
         function recordPcmV2QueueDrop(packet, reason) {
@@ -1688,6 +1751,7 @@
                 pcmV2Telemetry.sessionChanges++;
               }
               expectedPcmSessionId = sessionId;
+              frozenJitterTarget = null;
               pcmV2Validator = null;
               // The backend validates the sender from sequence zero, but the
               // direct receiver may join later after native-mode gating.
@@ -2041,9 +2105,43 @@
                         silenceFrames: e.data.silenceFrames,
                         droppedFrames: e.data.droppedFrames,
                         queuedFrames: e.data.queuedFrames,
+                        buffering: e.data.buffering,
+                        targetSessionId: e.data.targetSessionId,
+                        targetLocked: e.data.targetLocked,
+                        targetWallMs: e.data.targetWallMs,
+                        targetToleranceMs: e.data.targetToleranceMs,
+                        targetFrames: e.data.targetFrames,
+                        targetDrainHz: e.data.targetDrainHz,
+                        targetEstimatorLockedWhenFrozen: e.data.targetEstimatorLockedWhenFrozen,
+                        crossfadeLengthFrames: e.data.crossfadeLengthFrames,
+                        crossfadeWallMs: e.data.crossfadeWallMs,
+                        queueWallMs: e.data.queueWallMs,
+                        queueErrorMs: e.data.queueErrorMs,
+                        targetAcquired: e.data.targetAcquired,
+                        targetAdherenceSamples: e.data.targetAdherenceSamples,
+                        targetWithinToleranceSamples: e.data.targetWithinToleranceSamples,
+                        targetAdherencePercent: e.data.targetAdherencePercent,
+                        targetConfigAccepts: e.data.targetConfigAccepts,
+                        targetConfigRejects: e.data.targetConfigRejects,
+                        startupPrebuffers: e.data.startupPrebuffers,
                         normalLagFlushes: e.data.normalLagFlushes,
+                        routineFlushes: e.data.routineFlushes,
+                        playbackRateModulations: e.data.playbackRateModulations,
+                        intentionalResets: e.data.intentionalResets,
+                        intentionalResetDroppedFrames: e.data.intentionalResetDroppedFrames,
+                        underruns: e.data.underruns,
                         emergencyOverruns: e.data.emergencyOverruns,
                         emergencyFailures: e.data.emergencyFailures,
+                        emergencyRecoveries: e.data.emergencyRecoveries,
+                        emergencyCursorJumps: e.data.emergencyCursorJumps,
+                        emergencyDroppedFrames: e.data.emergencyDroppedFrames,
+                        qualityRunFailed: e.data.qualityRunFailed,
+                        lastEmergencyReason: e.data.lastEmergencyReason,
+                        crossfadeKind: e.data.crossfadeKind,
+                        crossfadesStarted: e.data.crossfadesStarted,
+                        crossfadesCompleted: e.data.crossfadesCompleted,
+                        crossfadeFrames: e.data.crossfadeFrames,
+                        crossfadeMaxSampleStep: e.data.crossfadeMaxSampleStep,
                         resets: e.data.resets,
                         lifecycleGeneration: workletLifecycleGeneration,
                         initializations: workletInitializationCount,
@@ -2057,27 +2155,6 @@
                     }),
                   );
                 }
-                const diagEl = document.getElementById("bridge-diag-text");
-                if (diagEl) {
-                  const wsStatus =
-                    binaryWS && binaryWS.readyState === WebSocket.OPEN
-                      ? "CONNECTED"
-                      : "DISCONNECTED";
-                  const peakPercent = Math.round((e.data.peak || 0) * 100);
-                  const rate = e.data.rate
-                    ? e.data.rate.toFixed(4)
-                    : "1.0000";
-                  const lockStatus = e.data.locked ? "LOCKED" : "SYNCING";
-                  const relayInfo =
-                    window._relayPkts > 0
-                      ? `RELAY: ${window._relayPkts} | `
-                      : "";
-                  const hzInfo = e.data.measuredHz
-                    ? ` | HZ: ${e.data.measuredHz}`
-                    : "";
-                  diagEl.textContent = `${relayInfo}BUF: ${e.data.available}${hzInfo} | RATE: ${rate}x | ${lockStatus} | WS: ${wsStatus} [DIRECT BRIDGE]`;
-                }
-
                 // [v13.9.504] TRIPLE CHECK: Relay lock status to Studio every ~10s
                 if (
                   !window._lastDiagSent ||
@@ -2096,6 +2173,10 @@
                   );
                   window._lastDiagSent = Date.now();
                 }
+              } else if (e.data.type === "TARGET_CONFIGURED") {
+                relayLogToStudio(
+                  `Worklet confirmed frozen jitter target: ${e.data.targetWallMs}ms / ${e.data.targetFrames} frames.`,
+                );
               } else if (e.data.type === "LOG") {
                 if (
                   typeof e.data.msg === "string" &&
@@ -2114,6 +2195,9 @@
                 relayLogToStudio(e.data.msg);
               }
             };
+            if (frozenJitterTarget) {
+              workletNode.port.postMessage(frozenJitterTarget);
+            }
             workletNode.port.postMessage({
               type: "CONFIG",
               bitDepth: negotiatedBitDepth,
@@ -2993,6 +3077,8 @@
                     const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
                     window.location.href = cleanUrl + "?cb=" + Date.now();
                   }, 500);
+                } else if (d.type === "PCM_V2_JITTER_TARGET") {
+                  acceptFrozenJitterTarget(d);
                 } else if (d.type === "HANDSHAKE_ACK") {
                   if (!acceptBuildIdentity(d.buildIdentity, "handshake_ack")) {
                     return;

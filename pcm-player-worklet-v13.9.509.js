@@ -1,164 +1,392 @@
-/* global AudioWorkletProcessor, registerProcessor, currentTime, sampleRate */
+/* global AudioWorkletProcessor, registerProcessor, currentFrame, currentTime, sampleRate */
 /**
- * pcm-player-worklet.js
- * [v13.9.505] CONCRETE SYNC - High-Stability PCM Playout
+ * Clock-Sync PCM v2 fixed-target receiver jitter buffer.
+ * Rust owns drift correction. This processor always dequeues at unity rate.
  */
 
 class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options = {}) {
     super();
-    this._ringLen = 192000; // 2 seconds of stereo 48kHz
+    this._channels = 2;
+    this._ringLen = 192000; // 96,000 stereo frames, two seconds at 48 kHz.
     this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
     this._readFrameIdx = 0;
-    this._readFrac = 0;
     this._totalWritten = 0;
     this._totalRead = 0;
 
     this._studioRate = options.processorOptions?.studioRate || 48000;
-
-    // Keep the queue centered around a few hundred milliseconds of headroom.
-    // Stereo sample counts:
-    //  -  8192 =  4096 frames  (~85ms)
-    // - 16384 =  8192 frames (~171ms)
-    // - 24576 = 12288 frames (~256ms)
-    // - 40960 = 20480 frames (~427ms)
-    // - 49152 = 24576 frames (~512ms)
-    // - 65536 = 32768 frames (~683ms)
-    // - 81920 = 40960 frames (~853ms)
-    // The target is presentation headroom only. Phase 3 never changes
-    // playout rate or flushes normal backlog.
-    this._TARGET_BUFFER = 24576;
-    this._MIN_BUFFER = 8192;
-    this._PREBUFFER = 24576;
-    this._DIAG_INTERVAL_CALLBACKS = 120; // ~320ms intervals (120 * 128 / 48000)
-    this._lastPacketWallMs = 0;
-
-    this._isBuffering = true;
-    this._stallCount = 0;
-    this._currentPeak = 0;
-    this._fade = 1.0;
     this._bitDepth = options.processorOptions?.bitDepth === 24 ? 24 : 16;
 
-    this._framesProcessed = 0;
+    // Rust sends one exact frame target before the first PCM packet. The wall
+    // target never changes during that PCM session.
+    this._TARGET_WALL_MS = 450;
+    this._TARGET_TOLERANCE_MS = 25;
+    this._EMERGENCY_FLOOR_MS = 75;
+    this._CROSSFADE_MS = 12;
+    this._DIAG_INTERVAL_CALLBACKS = 120;
+    this._targetSessionId = null;
+    this._targetFrames = 0;
+    this._targetSamples = 0;
+    this._targetDrainHz = 0;
+    this._targetEstimatorLockedWhenFrozen = null;
+    this._targetLocked = false;
+    this._targetConfigAccepts = 0;
+    this._targetConfigRejects = 0;
+    this._emergencyFloorFrames = 0;
+    this._crossfadeLengthFrames = Math.max(
+      128,
+      Math.round((this._studioRate * this._CROSSFADE_MS) / 1000),
+    );
+
+    this._isBuffering = true;
+    this._playoutStarted = false;
+    this._emergencyAwaitingRecovery = false;
+    this._crossfadeKind = null;
+    this._crossfadeFramesRemaining = 0;
+    this._crossfadeFramesTotal = 0;
+    this._crossfadeFromL = 0;
+    this._crossfadeFromR = 0;
+    this._lastOutputL = 0;
+    this._lastOutputR = 0;
+
     this._callbackCount = 0;
-    this._startTime = 0; // [v13.9.504] Local worklet timer for accurate Hz reporting
-    this._wallStartMs = 0;
-    this._lastDiagWallMs = 0;
-    this._lastDiagFramesProcessed = 0;
-    this._normalLagFlushCount = 0;
-    this._overrunCount = 0;
-    this._emergencyFailureCount = 0;
-    this._resetCount = 0;
+    this._framesProcessed = 0;
     this._outputFrames = 0;
     this._renderedFrames = 0;
     this._silenceFrames = 0;
     this._droppedFrames = 0;
+    this._currentPeak = 0;
+    this._wallStartMs = 0;
+    this._lastDiagWallMs = 0;
+    this._lastDiagFramesProcessed = 0;
+    this._lastPacketWallMs = 0;
     this._lastPacketMetadata = null;
 
-    this.port.onmessage = (e) => {
-      try {
-        if (
-          e.data &&
-          (e.data.type === "CONFIG" || e.data.type === "RESET")
-        ) {
-          this.port.postMessage({ type: "LOG", msg: `📥 Worklet message: ${e.data.type}` });
-        }
+    this._startupPrebuffers = 0;
+    this._intentionalResetCount = 0;
+    this._intentionalResetDroppedFrames = 0;
+    this._underrunCount = 0;
+    this._overrunCount = 0;
+    this._emergencyFailureCount = 0;
+    this._emergencyRecoveryCount = 0;
+    this._emergencyCursorJumps = 0;
+    this._emergencyDroppedFrames = 0;
+    this._qualityRunFailed = false;
+    this._lastEmergencyReason = null;
+    this._routineFlushCount = 0;
+    this._playbackRateModulations = 0;
+    this._crossfadesStarted = 0;
+    this._crossfadesCompleted = 0;
+    this._crossfadeFramesRendered = 0;
+    this._crossfadeMaxSampleStep = 0;
 
-        if (e.data && e.data.type === "RESET") {
-          this._droppedFrames += Math.floor(
-            Math.max(0, this._totalWritten - this._totalRead) / 2,
-          );
-          this._resetCount++;
-          this._ringBuffer.fill(0);
-          this._writePtr = 0;
-          this._readFrameIdx = 0;
-          this._readFrac = 0;
-          this._totalWritten = 0;
-          this._totalRead = 0;
-          this._isBuffering = true;
-          this._framesProcessed = 0;
-          this._callbackCount = 0;
-          this._startTime = 0;
-          this._wallStartMs = 0;
-          this._lastDiagWallMs = 0;
-          this._lastDiagFramesProcessed = 0;
-          this._TARGET_BUFFER = 24576;
-          this._MIN_BUFFER = 8192;
-          this._PREBUFFER = 24576;
-          this._DIAG_INTERVAL_CALLBACKS = 120;
-          this._stallCount = 0;
-          this._currentPeak = 0;
-          this._fade = 1.0;
-          this._lastPacketWallMs = 0;
-          this._lastPacketMetadata = null;
-          this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
+    this._targetAcquired = false;
+    this._targetAcquisitionFrames = 0;
+    this._targetAdherenceSamples = 0;
+    this._targetWithinToleranceSamples = 0;
+
+    this.port.onmessage = (event) => {
+      try {
+        const message = event.data;
+        if (message && message.type === "RESET") {
+          this._intentionalReset();
           return;
         }
-        if (e.data && e.data.type === "CONFIG") {
-          if (e.data.bitDepth) this._bitDepth = e.data.bitDepth === 24 ? 24 : 16;
+        if (message && message.type === "CONFIG") {
+          if (message.bitDepth) this._bitDepth = message.bitDepth === 24 ? 24 : 16;
+          this.port.postMessage({ type: "LOG", msg: "Worklet message: CONFIG" });
+          return;
+        }
+        if (message && message.type === "JITTER_TARGET") {
+          this._configureFrozenTarget(message);
           return;
         }
 
         let packetMetadata = null;
-        if (e.data && e.data.type === "PCM_PACKET") {
-          packetMetadata = e.data.metadata || null;
-          e = { data: e.data.payload };
+        let payload = message;
+        if (message && message.type === "PCM_PACKET") {
+          packetMetadata = message.metadata || null;
+          payload = message.payload;
         }
-
-        let arrayBuffer = null;
-        if (e.data) {
-          if (e.data instanceof ArrayBuffer || typeof e.data.byteLength === "number") {
-            arrayBuffer = e.data;
-          } else if (e.data.buffer && (e.data.buffer instanceof ArrayBuffer || typeof e.data.buffer.byteLength === "number")) {
-            arrayBuffer = e.data.buffer;
-          }
-        }
+        const arrayBuffer = this._extractArrayBuffer(payload);
         if (!arrayBuffer) return;
 
-        const packetWallMs = typeof Date !== "undefined" ? Date.now() : 0;
-        this._lastPacketWallMs = packetWallMs || this._lastPacketWallMs;
+        this._lastPacketWallMs = typeof Date !== "undefined" ? Date.now() : 0;
         this._lastPacketMetadata = packetMetadata;
-
-        if (this._bitDepth === 24) {
-          const bytes = new Uint8Array(arrayBuffer);
-          const numSamples = Math.floor(bytes.length / 3);
-          for (let i = 0; i < numSamples; i++) {
-            const offset = i * 3;
-            let val = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
-            if (val & 0x800000) val |= 0xFF000000;
-            this._ringBuffer[this._writePtr] = val >> 8;
-            this._writePtr = (this._writePtr + 1) % this._ringLen;
-            this._totalWritten++;
-          }
-        } else {
-          const pcm16 = new Int16Array(arrayBuffer);
-          const len = pcm16.length;
-          if (this._writePtr + len <= this._ringLen) {
-            this._ringBuffer.set(pcm16, this._writePtr);
-            this._writePtr = (this._writePtr + len) % this._ringLen;
-          } else {
-            const firstPart = this._ringLen - this._writePtr;
-            this._ringBuffer.set(pcm16.subarray(0, firstPart), this._writePtr);
-            this._ringBuffer.set(pcm16.subarray(firstPart), 0);
-            this._writePtr = len - firstPart;
-          }
-          this._totalWritten += len;
-        }
-      } catch (err) {
-        this.port.postMessage({ type: "LOG", msg: `❌ Worklet Error: ${err.message}` });
+        this._writePcm(arrayBuffer);
+      } catch (error) {
+        this.port.postMessage({ type: "LOG", msg: `Worklet error: ${error.message}` });
       }
     };
   }
 
-  _reanchorReadCursor(targetSamples = this._TARGET_BUFFER) {
+  _extractArrayBuffer(payload) {
+    if (!payload) return null;
+    if (payload instanceof ArrayBuffer || typeof payload.byteLength === "number") {
+      return payload;
+    }
+    if (
+      payload.buffer &&
+      (payload.buffer instanceof ArrayBuffer || typeof payload.buffer.byteLength === "number")
+    ) {
+      return payload.buffer;
+    }
+    return null;
+  }
+
+  _writePcm(arrayBuffer) {
+    if (this._bitDepth === 24) {
+      const bytes = new Uint8Array(arrayBuffer);
+      const numSamples = Math.floor(bytes.length / 3);
+      for (let i = 0; i < numSamples; i++) {
+        const offset = i * 3;
+        let value = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+        if (value & 0x800000) value |= 0xff000000;
+        this._ringBuffer[this._writePtr] = value >> 8;
+        this._writePtr = (this._writePtr + 1) % this._ringLen;
+        this._totalWritten++;
+      }
+      return;
+    }
+
+    const pcm16 = new Int16Array(arrayBuffer);
+    const len = pcm16.length;
+    if (this._writePtr + len <= this._ringLen) {
+      this._ringBuffer.set(pcm16, this._writePtr);
+      this._writePtr = (this._writePtr + len) % this._ringLen;
+    } else {
+      const firstPart = this._ringLen - this._writePtr;
+      this._ringBuffer.set(pcm16.subarray(0, firstPart), this._writePtr);
+      this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+      this._writePtr = len - firstPart;
+    }
+    this._totalWritten += len;
+  }
+
+  _configureFrozenTarget(message) {
+    const sessionId = String(message.sessionId || "");
+    const targetFrames = Number(message.targetFrames);
+    const targetWallMs = Number(message.targetWallMs);
+    const drainHz = Number(message.drainHz);
+    const estimatorLockedWhenFrozen = message.estimatorLockedWhenFrozen;
+    const valid =
+      sessionId.length > 0 &&
+      Number.isInteger(targetFrames) &&
+      targetFrames > 0 &&
+      targetFrames < this._ringLen / this._channels &&
+      targetWallMs === this._TARGET_WALL_MS &&
+      Number.isFinite(drainHz) &&
+      drainHz >= 16000 &&
+      drainHz <= 96000 &&
+      typeof estimatorLockedWhenFrozen === "boolean" &&
+      Math.abs((targetFrames * 1000) / drainHz - targetWallMs) <= 0.1;
+
+    if (!valid) {
+      this._targetConfigRejects++;
+      this._qualityRunFailed = true;
+      this._lastEmergencyReason = "invalid_target_config";
+      this.port.postMessage({ type: "LOG", msg: "Jitter target rejected: invalid configuration." });
+      return;
+    }
+
+    if (this._targetLocked && this._targetSessionId === sessionId) {
+      const unchanged =
+        this._targetFrames === targetFrames &&
+        this._targetDrainHz === drainHz &&
+        this._targetEstimatorLockedWhenFrozen === estimatorLockedWhenFrozen;
+      if (unchanged) return;
+      this._targetConfigRejects++;
+      this._qualityRunFailed = true;
+      this._lastEmergencyReason = "audible_target_change_rejected";
+      this.port.postMessage({ type: "LOG", msg: "Jitter target change rejected for active session." });
+      return;
+    }
+
+    if (this._playoutStarted && this._targetSessionId !== sessionId) {
+      this._targetConfigRejects++;
+      this._qualityRunFailed = true;
+      this._lastEmergencyReason = "session_target_change_without_reset";
+      this.port.postMessage({ type: "LOG", msg: "Jitter target rejected: active session was not reset." });
+      return;
+    }
+
+    this._targetSessionId = sessionId;
+    this._targetFrames = targetFrames;
+    this._targetSamples = targetFrames * this._channels;
+    this._targetDrainHz = drainHz;
+    this._targetEstimatorLockedWhenFrozen = estimatorLockedWhenFrozen;
+    this._crossfadeLengthFrames = Math.max(
+      128,
+      Math.round((drainHz * this._CROSSFADE_MS) / 1000),
+    );
+    this._emergencyFloorFrames = Math.max(
+      this._crossfadeLengthFrames + 128,
+      Math.round((drainHz * this._EMERGENCY_FLOOR_MS) / 1000),
+    );
+    this._targetLocked = true;
+    this._targetConfigAccepts++;
+    this.port.postMessage({
+      type: "TARGET_CONFIGURED",
+      sessionId,
+      targetFrames,
+      targetWallMs,
+      drainHz,
+      estimatorLockedWhenFrozen,
+    });
+  }
+
+  _intentionalReset() {
+    const queuedFrames = Math.floor(Math.max(0, this._totalWritten - this._totalRead) / 2);
+    this._droppedFrames += queuedFrames;
+    this._intentionalResetDroppedFrames += queuedFrames;
+    this._intentionalResetCount++;
+    this._ringBuffer.fill(0);
+    this._writePtr = 0;
+    this._readFrameIdx = 0;
+    this._totalWritten = 0;
+    this._totalRead = 0;
+    this._isBuffering = true;
+    this._playoutStarted = false;
+    this._emergencyAwaitingRecovery = false;
+    this._crossfadeKind = null;
+    this._crossfadeFramesRemaining = 0;
+    this._lastOutputL = 0;
+    this._lastOutputR = 0;
+    this._currentPeak = 0;
+    this._lastPacketWallMs = 0;
+    this._lastPacketMetadata = null;
+    this._targetAcquired = false;
+    this._targetAcquisitionFrames = 0;
+    this.port.postMessage({ type: "LOG", msg: "Worklet intentional queue RESET complete." });
+  }
+
+  _markEmergency(reason) {
+    this._emergencyFailureCount++;
+    this._qualityRunFailed = true;
+    this._lastEmergencyReason = reason;
+  }
+
+  _startCrossfade(kind, fromL, fromR) {
+    this._crossfadeKind = kind;
+    this._crossfadeFramesTotal = this._crossfadeLengthFrames;
+    this._crossfadeFramesRemaining = this._crossfadeLengthFrames;
+    this._crossfadeFromL = fromL;
+    this._crossfadeFromR = fromR;
+    this._crossfadesStarted++;
+  }
+
+  _finishCrossfade(kind) {
+    this._crossfadesCompleted++;
+    this._crossfadeKind = null;
+    this._crossfadeFramesRemaining = 0;
+    if (kind === "underrun_fade_out") {
+      this._isBuffering = true;
+      this._emergencyAwaitingRecovery = true;
+    }
+  }
+
+  _reanchorReadCursor(targetSamples = this._targetSamples) {
     const ringLenFrames = this._ringLen >> 1;
     const target = Math.max(0, Math.min(targetSamples & ~1, this._ringLen));
     const targetFrames = target >> 1;
     this._totalRead = Math.max(0, this._totalWritten - target);
     this._readFrameIdx = ((this._writePtr >> 1) - targetFrames + ringLenFrames) % ringLenFrames;
-    this._readFrac = 0;
     return target;
+  }
+
+  _handleOverrun(available) {
+    this._overrunCount++;
+    this._markEmergency("ring_overrun");
+    const retainedSamples = this._targetLocked ? this._targetSamples : this._ringLen >> 1;
+    const droppedFrames = Math.floor(Math.max(0, available - retainedSamples) / 2);
+    this._droppedFrames += droppedFrames;
+    this._emergencyDroppedFrames += droppedFrames;
+    this._emergencyCursorJumps++;
+    const reanchored = this._reanchorReadCursor(retainedSamples);
+    if (!this._isBuffering) {
+      this._emergencyRecoveryCount++;
+      this._startCrossfade("overrun_reanchor", this._lastOutputL, this._lastOutputR);
+    }
+    this.port.postMessage({
+      type: "LOG",
+      msg: `Emergency ring overrun: dropped ${droppedFrames} frames; quality run failed.`,
+    });
+    return reanchored;
+  }
+
+  _startUnderrunRecovery() {
+    this._underrunCount++;
+    this._markEmergency("queue_underrun");
+    this._startCrossfade("underrun_fade_out", 0, 0);
+    this.port.postMessage({
+      type: "LOG",
+      msg: "Emergency queue underrun: fading out and rebuffering; quality run failed.",
+    });
+  }
+
+  _startBufferedPlayout() {
+    this._isBuffering = false;
+    this._playoutStarted = true;
+    this._targetAcquired = false;
+    this._targetAcquisitionFrames = 0;
+    if (this._emergencyAwaitingRecovery) {
+      this._emergencyAwaitingRecovery = false;
+      this._emergencyRecoveryCount++;
+      this._startCrossfade("underrun_recovery", 0, 0);
+      return;
+    }
+    this._startupPrebuffers++;
+    this._startCrossfade("startup", 0, 0);
+  }
+
+  _queueErrorMs(queuedFrames) {
+    if (!this._targetLocked || this._targetDrainHz <= 0) return null;
+    return ((queuedFrames - this._targetFrames) * 1000) / this._targetDrainHz;
+  }
+
+  _recordTargetAdherence(queueErrorMs, framesInBlock) {
+    if (queueErrorMs === null || this._isBuffering || this._crossfadeKind) return;
+    if (!this._targetAcquired) {
+      if (Math.abs(queueErrorMs) <= this._TARGET_TOLERANCE_MS) {
+        this._targetAcquisitionFrames += framesInBlock;
+        if (this._targetAcquisitionFrames >= this._targetDrainHz) {
+          this._targetAcquired = true;
+        }
+      } else {
+        this._targetAcquisitionFrames = 0;
+      }
+      return;
+    }
+    this._targetAdherenceSamples++;
+    if (Math.abs(queueErrorMs) <= this._TARGET_TOLERANCE_MS) {
+      this._targetWithinToleranceSamples++;
+    }
+  }
+
+  _applyCrossfade(sampleL, sampleR) {
+    const kind = this._crossfadeKind;
+    if (!kind || this._crossfadeFramesRemaining <= 0) {
+      return [sampleL, sampleR, false];
+    }
+    const progress =
+      (this._crossfadeFramesTotal - this._crossfadeFramesRemaining + 1) /
+      this._crossfadeFramesTotal;
+    let outputL;
+    let outputR;
+    if (kind === "underrun_fade_out") {
+      const gain = 1 - progress;
+      outputL = sampleL * gain;
+      outputR = sampleR * gain;
+    } else {
+      outputL = this._crossfadeFromL + (sampleL - this._crossfadeFromL) * progress;
+      outputR = this._crossfadeFromR + (sampleR - this._crossfadeFromR) * progress;
+    }
+    this._crossfadeFramesRemaining--;
+    this._crossfadeFramesRendered++;
+    const finished = this._crossfadeFramesRemaining === 0;
+    if (finished) this._finishCrossfade(kind);
+    return [outputL, outputR, finished && kind === "underrun_fade_out"];
   }
 
   process(inputs, outputs) {
@@ -167,142 +395,93 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const channel0 = output?.[0];
       const channel1 = output?.[1] || channel0;
       if (!channel0) return true;
-      const ringLen = this._ringLen;
-      const ringLenFrames = ringLen >> 1; 
-      const framesInBlock = channel0.length;
-      const now = currentTime;
-      const wallNow = typeof Date !== "undefined" ? Date.now() : 0;
 
-      if (this._startTime === 0) {
-        this._startTime = now;
-      }
+      const framesInBlock = channel0.length;
+      const wallNow = typeof Date !== "undefined" ? Date.now() : 0;
       if (this._wallStartMs === 0 && wallNow) {
         this._wallStartMs = wallNow;
         this._lastDiagWallMs = wallNow;
-        this._lastDiagFramesProcessed = 0;
       }
       this._callbackCount++;
 
-      let frameIdx = this._readFrameIdx;
-      let frac = this._readFrac;
       let available = Math.round(this._totalWritten - this._totalRead);
-      let consumed = 0;
-
-      // 1. HARD OVERRUN PROTECTION
-      if (available > ringLen) {
-        this._overrunCount++;
-        this._emergencyFailureCount++;
-        this._droppedFrames += Math.floor((available - this._TARGET_BUFFER) / 2);
-        available = this._reanchorReadCursor(this._TARGET_BUFFER);
-        frameIdx = this._readFrameIdx;
-        frac = this._readFrac;
+      if (available > this._ringLen) {
+        available = this._handleOverrun(available);
       }
 
-      let renderSilence = false;
+      if (
+        this._isBuffering &&
+        this._targetLocked &&
+        available >= this._targetSamples
+      ) {
+        this._startBufferedPlayout();
+      }
 
-      // 3. PRE-BUFFERING
-      if (this._isBuffering) {
-        if (available >= this._PREBUFFER) {
-          this._isBuffering = false;
-        } else {
+      if (
+        !this._isBuffering &&
+        this._crossfadeKind !== "underrun_fade_out" &&
+        available / 2 < this._emergencyFloorFrames
+      ) {
+        this._startUnderrunRecovery();
+      }
+
+      let frameIdx = this._readFrameIdx;
+      let consumed = 0;
+      let rendered = 0;
+      let renderSilence = this._isBuffering;
+      const ringLenFrames = this._ringLen >> 1;
+      const inversePcm16 = 1 / 32768;
+
+      for (let i = 0; i < framesInBlock; i++) {
+        let outputL = 0;
+        let outputR = 0;
+        const crossfadeWasActive = !!this._crossfadeKind;
+        if (!renderSilence && available - consumed >= 2) {
+          const sampleIndex = frameIdx * 2;
+          const sampleL = this._ringBuffer[sampleIndex] * inversePcm16;
+          const sampleR = this._ringBuffer[sampleIndex + 1] * inversePcm16;
+          const crossfaded = this._applyCrossfade(sampleL, sampleR);
+          outputL = crossfaded[0];
+          outputR = crossfaded[1];
+          renderSilence = crossfaded[2];
+          frameIdx = (frameIdx + 1) % ringLenFrames;
+          consumed += 2;
+          rendered++;
+        } else if (!renderSilence) {
+          // The emergency floor should make this unreachable. Keep it explicit
+          // so a scheduling failure cannot masquerade as normal silence.
+          this._startUnderrunRecovery();
+          this._finishCrossfade("underrun_fade_out");
           renderSilence = true;
         }
-      }
 
-      // 4. STALL PROTECTION
-      if (!renderSilence && available < this._MIN_BUFFER) {
-        this._isBuffering = true;
-        this._fade = 0;
-        this._stallCount++;
-
-        this.port.postMessage({
-          type: "LOG",
-          msg: `⚠️ Receiver Stall detected! Rebuffering at ${Math.round((this._TARGET_BUFFER / 2) / this._studioRate * 1000)}ms target.`
-        });
-
-        renderSilence = true;
-      }
-
-      // Keep playout pitch-stable. Clock recovery belongs to Rust Phase 4.
-      const playbackRate = 1.0;
-
-      if (renderSilence) {
-        channel0.fill(0);
-        channel1.fill(0);
-        this._silenceFrames += framesInBlock;
-      } else {
-        let fade = this._fade;
-        const INV_32768 = 3.0517578125e-5;
-
-        if (playbackRate === 1.0 && frac === 0) {
-          // Optimized fast-path: direct samples lookup
-          const scale = INV_32768 * fade;
-          for (let i = 0; i < framesInBlock; i++) {
-            if (available - consumed >= 2) {
-              const idxL = frameIdx * 2;
-              channel0[i] = this._ringBuffer[idxL] * scale;
-              channel1[i] = this._ringBuffer[idxL + 1] * scale;
-              frameIdx = (frameIdx + 1) % ringLenFrames;
-              consumed += 2;
-              if (fade < 1.0) {
-                fade += 0.01;
-                if (fade > 1.0) fade = 1.0;
-              }
-            } else {
-              channel0[i] = 0;
-              channel1[i] = 0;
-            }
-          }
-          if (framesInBlock > 0) {
-            this._currentPeak = Math.abs(channel0[0]);
-          }
-        } else {
-          // Standard linear interpolation fallback
-          for (let i = 0; i < framesInBlock; i++) {
-            if (available - consumed >= 2) {
-              const idxL1 = frameIdx * 2;
-              const nextFrameIdx = (frameIdx + 1) % ringLenFrames;
-              const idxL2 = nextFrameIdx * 2;
-              const scale = INV_32768 * fade;
-              channel0[i] = (this._ringBuffer[idxL1] + ((this._ringBuffer[idxL2] - this._ringBuffer[idxL1]) * frac)) * scale;
-              channel1[i] = (this._ringBuffer[idxL1 + 1] + ((this._ringBuffer[idxL2 + 1] - this._ringBuffer[idxL1 + 1]) * frac)) * scale;
-              frac += playbackRate;
-              while (frac >= 1.0) {
-                frac -= 1.0;
-                frameIdx = (frameIdx + 1) % ringLenFrames;
-                consumed += 2;
-              }
-              if (fade < 1.0) {
-                fade += 0.01;
-                if (fade > 1.0) fade = 1.0;
-              }
-              if (i === 0) this._currentPeak = Math.abs(channel0[i]);
-            } else {
-              channel0[i] = 0;
-              channel1[i] = 0;
-            }
-          }
+        if (crossfadeWasActive) {
+          const step = Math.max(
+            Math.abs(outputL - this._lastOutputL),
+            Math.abs(outputR - this._lastOutputR),
+          );
+          this._crossfadeMaxSampleStep = Math.max(this._crossfadeMaxSampleStep, step);
         }
-
-        this._readFrameIdx = frameIdx;
-        this._readFrac = frac;
-        this._totalRead += consumed;
-        this._fade = fade;
-        const renderedFrames = Math.floor(consumed / 2);
-        this._renderedFrames += renderedFrames;
-        this._silenceFrames += Math.max(0, framesInBlock - renderedFrames);
-        // Keep the receiver target fixed. The previous adaptive shrink/expand loop
-        // created audible oscillation on Chromecast-class receivers.
+        channel0[i] = outputL;
+        channel1[i] = outputR;
+        this._lastOutputL = outputL;
+        this._lastOutputR = outputR;
+        this._currentPeak = Math.max(this._currentPeak, Math.abs(outputL), Math.abs(outputR));
       }
 
+      this._readFrameIdx = frameIdx;
+      this._totalRead += consumed;
+      this._renderedFrames += rendered;
+      this._silenceFrames += Math.max(0, framesInBlock - rendered);
       this._framesProcessed += framesInBlock;
       this._outputFrames += framesInBlock;
 
+      const queuedSamples = Math.max(0, this._totalWritten - this._totalRead);
+      const queuedFrames = Math.floor(queuedSamples / 2);
+      const queueErrorMs = this._queueErrorMs(queuedFrames);
+      this._recordTargetAdherence(queueErrorMs, framesInBlock);
+
       if (this._callbackCount % this._DIAG_INTERVAL_CALLBACKS === 0) {
-        const elapsed = Math.max(0.1, now - this._startTime);
-        const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
-        const lockWindow = Math.max(4096, this._TARGET_BUFFER >> 1);
-        // Report drain rate for Phase 4 clock recovery diagnostics.
         let wallHzReported = 0;
         if (this._lastDiagWallMs && wallNow) {
           const deltaWallMs = wallNow - this._lastDiagWallMs;
@@ -312,39 +491,79 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             this._lastDiagWallMs = wallNow;
             this._lastDiagFramesProcessed = this._framesProcessed;
           }
-        } else {
-          this._lastDiagWallMs = wallNow;
-          this._lastDiagFramesProcessed = this._framesProcessed;
         }
-        const hzReported = wallHzReported;
-        const queuedSamples = Math.max(0, this._totalWritten - this._totalRead);
+        const adherencePercent = this._targetAdherenceSamples > 0
+          ? (this._targetWithinToleranceSamples * 100) / this._targetAdherenceSamples
+          : null;
+        const queueWallMs = this._targetDrainHz > 0
+          ? (queuedFrames * 1000) / this._targetDrainHz
+          : null;
         this.port.postMessage({
           type: "DIAG",
-          available: available,
-          stalled: this._stallCount,
-          rate: playbackRate,
-          measuredHz: hzReported,
+          available: queuedSamples,
+          stalled: this._underrunCount,
+          rate: 1.0,
+          measuredHz: wallHzReported,
           wallHz: wallHzReported,
           peak: this._currentPeak,
-          locked: !renderSilence && Math.abs(queuedSamples - this._TARGET_BUFFER) <= lockWindow,
+          locked:
+            this._targetAcquired &&
+            queueErrorMs !== null &&
+            Math.abs(queueErrorMs) <= this._TARGET_TOLERANCE_MS,
+          buffering: this._isBuffering,
           outputFrames: this._outputFrames,
           renderedFrames: this._renderedFrames,
           silenceFrames: this._silenceFrames,
           droppedFrames: this._droppedFrames,
-          queuedFrames: Math.floor(queuedSamples / 2),
-          normalLagFlushes: this._normalLagFlushCount,
+          queuedFrames,
+          targetSessionId: this._targetSessionId,
+          targetLocked: this._targetLocked,
+          targetWallMs: this._TARGET_WALL_MS,
+          targetToleranceMs: this._TARGET_TOLERANCE_MS,
+          targetFrames: this._targetFrames,
+          targetDrainHz: this._targetDrainHz,
+          targetEstimatorLockedWhenFrozen: this._targetEstimatorLockedWhenFrozen,
+          crossfadeLengthFrames: this._crossfadeLengthFrames,
+          crossfadeWallMs: this._targetDrainHz > 0
+            ? (this._crossfadeLengthFrames * 1000) / this._targetDrainHz
+            : null,
+          queueWallMs,
+          queueErrorMs,
+          targetAcquired: this._targetAcquired,
+          targetAdherenceSamples: this._targetAdherenceSamples,
+          targetWithinToleranceSamples: this._targetWithinToleranceSamples,
+          targetAdherencePercent: adherencePercent,
+          targetConfigAccepts: this._targetConfigAccepts,
+          targetConfigRejects: this._targetConfigRejects,
+          startupPrebuffers: this._startupPrebuffers,
+          normalLagFlushes: this._routineFlushCount,
+          routineFlushes: this._routineFlushCount,
+          playbackRateModulations: this._playbackRateModulations,
+          intentionalResets: this._intentionalResetCount,
+          intentionalResetDroppedFrames: this._intentionalResetDroppedFrames,
+          underruns: this._underrunCount,
           emergencyOverruns: this._overrunCount,
           emergencyFailures: this._emergencyFailureCount,
-          resets: this._resetCount,
+          emergencyRecoveries: this._emergencyRecoveryCount,
+          emergencyCursorJumps: this._emergencyCursorJumps,
+          emergencyDroppedFrames: this._emergencyDroppedFrames,
+          qualityRunFailed: this._qualityRunFailed,
+          lastEmergencyReason: this._lastEmergencyReason,
+          crossfadeKind: this._crossfadeKind,
+          crossfadesStarted: this._crossfadesStarted,
+          crossfadesCompleted: this._crossfadesCompleted,
+          crossfadeFrames: this._crossfadeFramesRendered,
+          crossfadeMaxSampleStep: this._crossfadeMaxSampleStep,
+          resets: this._intentionalResetCount,
           currentFrame: typeof currentFrame === "number" ? currentFrame : null,
-          audioCurrentTimeSeconds: now,
+          audioCurrentTimeSeconds: currentTime,
           wallClockMs: wallNow,
-          lastPacket: this._lastPacketMetadata || null
+          lastPacket: this._lastPacketMetadata || null,
         });
         this._currentPeak = 0;
       }
-    } catch (err) {
-      this.port.postMessage({ type: "LOG", msg: `❌ Process Error: ${err.message}` });
+    } catch (error) {
+      this.port.postMessage({ type: "LOG", msg: `Process error: ${error.message}` });
     }
     return true;
   }
