@@ -58,6 +58,37 @@
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
+        var pcmV2Validator = null;
+        var pcmV2AllowInitialOffset = true;
+        var expectedPcmSessionId = null;
+
+        function createPcmV2Telemetry() {
+          return {
+            binaryPackets: 0,
+            receivedPackets: 0,
+            inputFrames: 0,
+            rejectedPackets: 0,
+            sequenceGapEvents: 0,
+            missingPackets: 0,
+            sourceFrameGapEvents: 0,
+            missingSourceFrames: 0,
+            duplicates: 0,
+            outOfOrder: 0,
+            sourceFrameRegressions: 0,
+            staleSession: 0,
+            sampleRateChanges: 0,
+            receiverRateMismatches: 0,
+            queueDroppedPackets: 0,
+            queueDroppedFrames: 0,
+            lastQueueDropReason: null,
+            sessionStarts: 0,
+            sessionChanges: 0,
+            baselineSequence: null,
+            baselineSourceFrame: null,
+          };
+        }
+
+        var pcmV2Telemetry = createPcmV2Telemetry();
         var playbackModeLastSentGeneration = -1;
         var playbackModeLastSent = "";
         var lastPlaybackStartSignalAt = 0;
@@ -1431,6 +1462,9 @@
           window._binaryActive = false;
           window._isDrainingStartup = false;
           configReceived = false;
+          expectedPcmSessionId = null;
+          pcmV2Validator = null;
+          pcmV2AllowInitialOffset = true;
           wakeLockLoadingOrLoaded = false;
           pendingBinaryFrames = [];
           window._playbackMode = "unknown";
@@ -1491,14 +1525,16 @@
           currentBridgeToken = null;
         }
 
-        function queueBinaryFrame(buffer) {
+        function queueBinaryFrame(packet) {
           if (!identityAllowsAudio()) return;
           if (window._receiverShutdownInProgress) {
             return;
           }
           if (window._isDrainingStartup) {
+            recordPcmV2QueueDrop(packet, "startup_drain");
             return; // Discard stale startup burst packets to prevent backlog build-up
           }
+          const buffer = packet && packet.payload ? packet.payload : packet;
           if (!window._qCount) window._qCount = 0;
           if (window._qCount < 10) {
             window._qCount++;
@@ -1512,27 +1548,193 @@
             return;
           }
           if (workletNode && workletReady) {
+            const message = packet && packet.payload
+              ? { type: "PCM_PACKET", payload: buffer, metadata: packet.metadata }
+              : buffer;
             try {
-              workletNode.port.postMessage(buffer, [buffer]);
+              workletNode.port.postMessage(message, [buffer]);
             } catch (e) {
-              workletNode.port.postMessage(buffer);
+              workletNode.port.postMessage(message);
             }
             return;
           }
 
           if (pendingBinaryFrames.length >= PENDING_BINARY_FRAMES_MAX) {
-            pendingBinaryFrames.shift();
+            recordPcmV2QueueDrop(pendingBinaryFrames.shift(), "pending_queue_overflow");
           }
-          pendingBinaryFrames.push(buffer);
+          pendingBinaryFrames.push(packet);
+        }
+
+        function recordPcmV2QueueDrop(packet, reason) {
+          pcmV2Telemetry.queueDroppedPackets++;
+          pcmV2Telemetry.queueDroppedFrames += Number(
+            packet && packet.metadata && packet.metadata.frameCount || 0,
+          );
+          pcmV2Telemetry.lastQueueDropReason = reason;
         }
 
         function flushPendingBinaryFrames() {
           if (!workletNode || !workletReady || pendingBinaryFrames.length === 0) return;
           // Drop stale startup PCM instead of replaying it all into the worklet.
           // The receiver should start with the freshest live packet, not a buffered tail.
+          const dropped = pendingBinaryFrames.slice(0, -1);
+          dropped.forEach((packet) => recordPcmV2QueueDrop(packet, "startup_keep_latest"));
           const queued = pendingBinaryFrames.slice(-1);
           pendingBinaryFrames.length = 0;
-          queued.forEach((buffer) => queueBinaryFrame(buffer));
+          queued.forEach((packet) => queueBinaryFrame(packet));
+        }
+
+        function validatePcmV2Packet(buffer) {
+          pcmV2Telemetry.binaryPackets++;
+          try {
+            if (!window.MXSPcmV2) throw new Error("protocol_unavailable");
+            const decoded = window.MXSPcmV2.decode(buffer);
+            const header = decoded.header;
+
+            if (expectedPcmSessionId !== null && header.sessionId !== expectedPcmSessionId) {
+              const staleError = new Error("stale_session");
+              staleError.code = "stale_session";
+              throw staleError;
+            }
+
+            if (pcmV2Validator && pcmV2Validator.sessionId !== header.sessionId) {
+              if (header.sequence !== 0n || header.sourceFrame !== 0n) {
+                const staleError = new Error("stale_session");
+                staleError.code = "stale_session";
+                throw staleError;
+              }
+              pcmV2Validator = null;
+              pcmV2AllowInitialOffset = false;
+              pcmV2Telemetry.sessionChanges++;
+            }
+
+            if (!pcmV2Validator) {
+              pcmV2Validator = new window.MXSPcmV2.SequenceValidator(header.sessionId, {
+                allowInitialOffset: pcmV2AllowInitialOffset,
+              });
+              pcmV2AllowInitialOffset = false;
+              pcmV2Telemetry.sessionStarts++;
+            }
+
+            const receiverRate = audioCtx && audioCtx.sampleRate
+              ? audioCtx.sampleRate
+              : Number(window._hwRate || 0);
+            if (receiverRate && header.sampleRate !== receiverRate) {
+              const rateError = new Error("receiver_sample_rate_mismatch");
+              rateError.code = "receiver_sample_rate_mismatch";
+              throw rateError;
+            }
+
+            const continuity = pcmV2Validator.accept(header);
+            if (continuity.baseline) {
+              pcmV2Telemetry.baselineSequence = continuity.baselineSequence.toString();
+              pcmV2Telemetry.baselineSourceFrame = continuity.baselineSourceFrame.toString();
+            }
+            if (continuity.sequenceGap > 0n) {
+              pcmV2Telemetry.sequenceGapEvents++;
+              pcmV2Telemetry.missingPackets += Number(continuity.sequenceGap);
+            }
+            if (continuity.sourceFrameGap > 0n) {
+              pcmV2Telemetry.sourceFrameGapEvents++;
+              pcmV2Telemetry.missingSourceFrames += Number(continuity.sourceFrameGap);
+            }
+            pcmV2Telemetry.receivedPackets++;
+            pcmV2Telemetry.inputFrames += header.frameCount;
+            return {
+              payload: decoded.payload,
+              metadata: {
+                protocolVersion: header.version,
+                sessionId: header.sessionId.toString(),
+                sequence: header.sequence.toString(),
+                sourceFrame: header.sourceFrame.toString(),
+                frameCount: header.frameCount,
+                sampleRate: header.sampleRate,
+                captureTimeUs: header.captureTimeUs.toString(),
+              },
+            };
+          } catch (error) {
+            pcmV2Telemetry.rejectedPackets++;
+            const code = error && error.code || error && error.message || "malformed";
+            if (code === "duplicate_packet") pcmV2Telemetry.duplicates++;
+            if (code === "out_of_order_packet") pcmV2Telemetry.outOfOrder++;
+            if (code === "source_frame_regression") pcmV2Telemetry.sourceFrameRegressions++;
+            if (code === "stale_session") pcmV2Telemetry.staleSession++;
+            if (code === "sample_rate_change") pcmV2Telemetry.sampleRateChanges++;
+            if (code === "receiver_sample_rate_mismatch") pcmV2Telemetry.receiverRateMismatches++;
+            return null;
+          }
+        }
+
+        function acceptPcmV2ProtocolConfig(config, source) {
+          try {
+            if (
+              !config ||
+              config.version !== window.MXSPcmV2.VERSION ||
+              config.channels !== window.MXSPcmV2.CHANNELS ||
+              config.bitDepth !== window.MXSPcmV2.BIT_DEPTH ||
+              config.format !== "s16le"
+            ) {
+              throw new Error("unsupported_protocol_config");
+            }
+            const sessionId = BigInt(config.sessionId);
+            if (sessionId <= 0n) throw new Error("invalid_session");
+            if (expectedPcmSessionId !== sessionId) {
+              if (expectedPcmSessionId !== null && expectedPcmSessionId !== 0n) {
+                pcmV2Telemetry.sessionChanges++;
+              }
+              expectedPcmSessionId = sessionId;
+              pcmV2Validator = null;
+              // The backend validates the sender from sequence zero, but the
+              // direct receiver may join later after native-mode gating.
+              pcmV2AllowInitialOffset = true;
+              relayLogToStudio(
+                `PCM v2 session configured: source=${source} session=${sessionId.toString()} version=${config.version}`,
+              );
+            }
+            return true;
+          } catch (error) {
+            expectedPcmSessionId = 0n;
+            pcmV2Validator = null;
+            pcmV2AllowInitialOffset = false;
+            relayLogToStudio(
+              `Receiver rejected PCM v2 protocol config from ${source}: ${error.message}`,
+            );
+            return false;
+          }
+        }
+
+        function getAudioContextTelemetry() {
+          if (!audioCtx) return null;
+          const outputTimestampSupported = typeof audioCtx.getOutputTimestamp === "function";
+          let outputTimestamp = null;
+          if (outputTimestampSupported) {
+            try {
+              const timestamp = audioCtx.getOutputTimestamp();
+              if (timestamp) {
+                outputTimestamp = {
+                  contextTime: Number.isFinite(timestamp.contextTime)
+                    ? timestamp.contextTime
+                    : null,
+                  performanceTime: Number.isFinite(timestamp.performanceTime)
+                    ? timestamp.performanceTime
+                    : null,
+                };
+              }
+            } catch (error) {}
+          }
+          return {
+            sampleRate: audioCtx.sampleRate,
+            state: audioCtx.state,
+            baseLatency: Number.isFinite(audioCtx.baseLatency) ? audioCtx.baseLatency : null,
+            outputLatency: Number.isFinite(audioCtx.outputLatency) ? audioCtx.outputLatency : null,
+            outputTimestampSupported,
+            outputTimestamp,
+            receiverPerformanceNowMs:
+              typeof performance !== "undefined" && typeof performance.now === "function"
+                ? performance.now()
+                : null,
+            receiverWallClockMs: Date.now(),
+          };
         }
 
         function clearLegacyMediaStream() {
@@ -1843,6 +2045,23 @@
                       rate: e.data.rate,
                       peak: e.data.peak,
                       locked: e.data.locked,
+                      protocolVersion: window.MXSPcmV2 ? window.MXSPcmV2.VERSION : null,
+                      sessionId: e.data.lastPacket && e.data.lastPacket.sessionId || null,
+                      receiver: { ...pcmV2Telemetry },
+                      worklet: {
+                        outputFrames: e.data.outputFrames,
+                        renderedFrames: e.data.renderedFrames,
+                        silenceFrames: e.data.silenceFrames,
+                        droppedFrames: e.data.droppedFrames,
+                        queuedFrames: e.data.queuedFrames,
+                        lagFlushes: e.data.lagFlushes,
+                        overruns: e.data.overruns,
+                        resets: e.data.resets,
+                        currentFrame: e.data.currentFrame,
+                        audioCurrentTimeSeconds: e.data.audioCurrentTimeSeconds,
+                        wallClockMs: e.data.wallClockMs,
+                      },
+                      audioContext: getAudioContextTelemetry(),
                     }),
                   );
                 }
@@ -2549,6 +2768,9 @@
           binaryWS.onopen = async () => {
             if (generation !== binaryConnectionGeneration) return;
             if (window._receiverShutdownInProgress) return;
+            pcmV2Validator = null;
+            pcmV2AllowInitialOffset = true;
+            pcmV2Telemetry = createPcmV2Telemetry();
             playbackModeSocketGeneration++;
             console.log("✅ Binary Bridge Connected");
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
@@ -2693,10 +2915,12 @@
                 }
 
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                queueBinaryFrame(event.data);
+                const packet = validatePcmV2Packet(event.data);
+                if (packet) queueBinaryFrame(packet);
               } else {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                queueBinaryFrame(event.data);
+                const packet = validatePcmV2Packet(event.data);
+                if (packet) queueBinaryFrame(packet);
               }
               return;
             } else if (isBlob) {
@@ -2717,7 +2941,8 @@
               if (audioCtx && audioCtx.state === "suspended") resumeAudio();
               var reader = new FileReader();
               reader.onload = function() {
-                queueBinaryFrame(this.result);
+                const packet = validatePcmV2Packet(this.result);
+                if (packet) queueBinaryFrame(packet);
               };
               reader.onerror = function() {
                 relayLogToStudio("⚠️ Receiver: FileReader failed to read Blob.");
@@ -2771,11 +2996,8 @@
 
                    if (buffer) {
                      if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                     try {
-                       queueBinaryFrame(buffer);
-                     } catch (e) {
-                       queueBinaryFrame(buffer);
-                     }
+                     const packet = validatePcmV2Packet(buffer);
+                     if (packet) queueBinaryFrame(packet);
                    }
                 } else if (d.type === "RELOAD") {
                   relayLogToStudio("🔄 Receiver: RELOAD command received. Reloading page with cache-buster...");
@@ -2815,6 +3037,9 @@
                   requestNativePlaybackStart("playback_start");
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
+                    return;
+                  }
+                  if (!acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
                     return;
                   }
                   if (d.config && d.config.sampleRate) {
@@ -2938,6 +3163,12 @@
                 if (d.ip) connectBinaryBridge(d.ip, d.port, d.token);
                 return;
               }
+              if (
+                d.pcmProtocol &&
+                !acceptPcmV2ProtocolConfig(d.pcmProtocol, "cast_control")
+              ) {
+                return;
+              }
               const newRate = d.config ? d.config.sampleRate : null;
               configReceived = true;
               if (newRate && window._studioRate !== newRate) {
@@ -3034,8 +3265,11 @@
 
               if (buffer && workletNode) {
                 if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                queueBinaryFrame(buffer);
-                window._relayPkts = (window._relayPkts || 0) + 1;
+                const packet = validatePcmV2Packet(buffer);
+                if (packet) {
+                  queueBinaryFrame(packet);
+                  window._relayPkts = (window._relayPkts || 0) + 1;
+                }
               }
             }
 

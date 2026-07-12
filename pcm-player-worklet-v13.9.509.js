@@ -47,6 +47,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._wallStartMs = 0;
     this._lastDiagWallMs = 0;
     this._lastDiagFramesProcessed = 0;
+    this._lagFlushCount = 0;
+    this._overrunCount = 0;
+    this._resetCount = 0;
+    this._outputFrames = 0;
+    this._renderedFrames = 0;
+    this._silenceFrames = 0;
+    this._droppedFrames = 0;
+    this._lastPacketMetadata = null;
 
     this.port.onmessage = (e) => {
       try {
@@ -64,6 +72,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         }
 
         if (e.data && e.data.type === "RESET") {
+          this._droppedFrames += Math.floor(
+            Math.max(0, this._totalWritten - this._totalRead) / 2,
+          );
+          this._resetCount++;
           this._ringBuffer.fill(0);
           this._writePtr = 0;
           this._readFrameIdx = 0;
@@ -86,12 +98,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._currentPeak = 0;
           this._fade = 1.0;
           this._lastPacketWallMs = 0;
+          this._lastPacketMetadata = null;
           this.port.postMessage({ type: "LOG", msg: "🔄 Worklet: State reset complete." });
           return;
         }
         if (e.data && e.data.type === "CONFIG") {
           if (e.data.bitDepth) this._bitDepth = e.data.bitDepth === 24 ? 24 : 16;
           return;
+        }
+
+        let packetMetadata = null;
+        if (e.data && e.data.type === "PCM_PACKET") {
+          packetMetadata = e.data.metadata || null;
+          e = { data: e.data.payload };
         }
 
         let arrayBuffer = null;
@@ -106,6 +125,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
         const packetWallMs = typeof Date !== "undefined" ? Date.now() : 0;
         this._lastPacketWallMs = packetWallMs || this._lastPacketWallMs;
+        this._lastPacketMetadata = packetMetadata;
 
         if (this._bitDepth === 24) {
           const bytes = new Uint8Array(arrayBuffer);
@@ -177,6 +197,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       // 1. HARD OVERRUN PROTECTION
       if (available > ringLen) {
+        this._overrunCount++;
+        this._droppedFrames += Math.floor((available - this._TARGET_BUFFER) / 2);
         available = this._reanchorReadCursor(this._TARGET_BUFFER);
         frameIdx = this._readFrameIdx;
         frac = this._readFrac;
@@ -184,8 +206,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       // 2. SEVERE BACKLOG GUARD
       if (available > this._FLUSH_THRESHOLD) {
+        this._lagFlushCount++;
         const beforeFlush = available;
         const dropped = available - this._TARGET_BUFFER;
+        this._droppedFrames += Math.floor(dropped / 2);
         available = this._reanchorReadCursor(this._TARGET_BUFFER);
         frameIdx = this._readFrameIdx;
         frac = this._readFrac;
@@ -232,6 +256,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (renderSilence) {
         channel0.fill(0);
         channel1.fill(0);
+        this._silenceFrames += framesInBlock;
       } else {
         let fade = this._fade;
         const INV_32768 = 3.0517578125e-5;
@@ -290,11 +315,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._readFrac = frac;
         this._totalRead += consumed;
         this._fade = fade;
+        const renderedFrames = Math.floor(consumed / 2);
+        this._renderedFrames += renderedFrames;
+        this._silenceFrames += Math.max(0, framesInBlock - renderedFrames);
         // Keep the receiver target fixed. The previous adaptive shrink/expand loop
         // created audible oscillation on Chromecast-class receivers.
       }
 
       this._framesProcessed += framesInBlock;
+      this._outputFrames += framesInBlock;
 
       if (this._callbackCount % this._DIAG_INTERVAL_CALLBACKS === 0) {
         const elapsed = Math.max(0.1, now - this._startTime);
@@ -316,6 +345,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._lastDiagFramesProcessed = this._framesProcessed;
         }
         const hzReported = wallHzReported;
+        const queuedSamples = Math.max(0, this._totalWritten - this._totalRead);
         this.port.postMessage({
           type: "DIAG",
           available: available,
@@ -324,7 +354,19 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           measuredHz: hzReported,
           wallHz: wallHzReported,
           peak: this._currentPeak,
-          locked: !renderSilence && Math.abs(available - this._TARGET_BUFFER) <= lockWindow
+          locked: !renderSilence && Math.abs(queuedSamples - this._TARGET_BUFFER) <= lockWindow,
+          outputFrames: this._outputFrames,
+          renderedFrames: this._renderedFrames,
+          silenceFrames: this._silenceFrames,
+          droppedFrames: this._droppedFrames,
+          queuedFrames: Math.floor(queuedSamples / 2),
+          lagFlushes: this._lagFlushCount,
+          overruns: this._overrunCount,
+          resets: this._resetCount,
+          currentFrame: typeof currentFrame === "number" ? currentFrame : null,
+          audioCurrentTimeSeconds: now,
+          wallClockMs: wallNow,
+          lastPacket: this._lastPacketMetadata || null
         });
         this._currentPeak = 0;
       }
