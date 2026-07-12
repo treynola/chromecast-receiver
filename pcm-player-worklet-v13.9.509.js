@@ -8,7 +8,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   constructor(options = {}) {
     super();
     this._channels = 2;
-    this._ringLen = 192000; // 96,000 stereo frames, two seconds at 48 kHz.
+    // The robust drain estimator needs at least three seconds before it can
+    // freeze a target. Keep enough silent startup history to reach that lock
+    // without misclassifying expected pre-target buildup as a ring emergency.
+    this._ringLen = 768000; // 384,000 stereo frames, eight seconds at 48 kHz.
     this._ringBuffer = new Int16Array(this._ringLen);
     this._writePtr = 0;
     this._readFrameIdx = 0;
@@ -64,6 +67,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastPacketMetadata = null;
 
     this._startupPrebuffers = 0;
+    this._startupAlignmentCount = 0;
+    this._startupAlignmentDroppedFrames = 0;
     this._intentionalResetCount = 0;
     this._intentionalResetDroppedFrames = 0;
     this._underrunCount = 0;
@@ -226,6 +231,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     );
     this._targetLocked = true;
     this._targetConfigAccepts++;
+    this._alignSilentStartupBacklog();
     this.port.postMessage({
       type: "TARGET_CONFIGURED",
       sessionId,
@@ -233,6 +239,22 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       targetWallMs,
       drainHz,
       estimatorLockedWhenFrozen,
+    });
+  }
+
+  _alignSilentStartupBacklog() {
+    if (this._playoutStarted || !this._isBuffering || !this._targetLocked) return;
+    const availableSamples = Math.max(0, this._totalWritten - this._totalRead);
+    if (availableSamples <= this._targetSamples) return;
+
+    const droppedFrames = Math.floor((availableSamples - this._targetSamples) / this._channels);
+    this._reanchorReadCursor(this._targetSamples);
+    this._droppedFrames += droppedFrames;
+    this._startupAlignmentDroppedFrames += droppedFrames;
+    this._startupAlignmentCount++;
+    this.port.postMessage({
+      type: "LOG",
+      msg: `Startup backlog aligned: discarded ${droppedFrames} pre-audible frames.`,
     });
   }
 
@@ -536,6 +558,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           targetConfigAccepts: this._targetConfigAccepts,
           targetConfigRejects: this._targetConfigRejects,
           startupPrebuffers: this._startupPrebuffers,
+          startupAlignments: this._startupAlignmentCount,
+          startupAlignmentDroppedFrames: this._startupAlignmentDroppedFrames,
           normalLagFlushes: this._routineFlushCount,
           routineFlushes: this._routineFlushCount,
           playbackRateModulations: this._playbackRateModulations,
