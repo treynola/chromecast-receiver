@@ -26,6 +26,12 @@
         var noSenderShutdownTimeoutId = null;
         var pendingBinaryFrames = [];
         var workletReady = false;
+        var workletInitPromise = null;
+        var workletLifecycleGeneration = 0;
+        var workletInitializationCount = 0;
+        var workletHardTeardownCount = 0;
+        var workletQueueResetCount = 0;
+        var lastPcmQueueResetAt = 0;
         const BUILD_IDENTITY_SCHEMA = "mxs-004.clock-sync-pcm.build-identity";
         const BUILD_IDENTITY_COMPONENTS = [
           "senderCritical",
@@ -53,8 +59,7 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
-        const DEGRADED_PLAYOUT_HZ_THRESHOLD = 40000;
-        const DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT = 3;
+        const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
@@ -611,7 +616,7 @@
           if (receiverPlayoutPreference !== "pcm_fallback") {
             return false;
           }
-          if (nativeStreamActive || audioInitializing || workletNode) {
+          if (nativeStreamActive || audioInitializing || workletInitPromise || workletNode) {
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -621,6 +626,10 @@
             return false;
           }
           const preserveNativeMode = nativeStreamStarting || window._playbackMode === "native";
+          const initPromise = initAudio(false, preserveNativeMode);
+          if (!initPromise) {
+            return false;
+          }
           if (reason) {
             relayLogToStudio(
               "▶️ Receiver: Starting PCM worklet on " +
@@ -628,7 +637,7 @@
                 (preserveNativeMode ? " (native boot bridge)." : "."),
             );
           }
-          initAudio(false, preserveNativeMode).catch((e) => {
+          initPromise.catch((e) => {
             relayLogToStudio("⚠️ Receiver: initAudio failed: " + (e && e.message ? e.message : e));
           });
           armLowLatencyStartupWatchdog();
@@ -656,6 +665,7 @@
         }
 
         function markPlaybackStartSignal() {
+          lastPcmQueueResetAt = 0;
           if (!lastPlaybackStartSignalAt) {
             lastPlaybackStartSignalAt = Date.now();
           }
@@ -723,25 +733,6 @@
             pendingBinaryFrames.length > 0 ||
             audioInitializing ||
             !!workletNode
-          );
-        }
-
-        function isWithinPlaybackStartGrace() {
-          return (
-            !!lastPlaybackStartSignalAt &&
-            Date.now() - lastPlaybackStartSignalAt <= PLAYBACK_START_GRACE_MS
-          );
-        }
-
-        function hasAudiblePlaybackSignal(diag) {
-          if (!lastPlaybackStartSignalAt) {
-            return false;
-          }
-          const peak = Number(diag && diag.peak ? diag.peak : 0);
-          return (
-            window._binaryActive ||
-            pendingBinaryFrames.length > 0 ||
-            peak > 0.0001
           );
         }
 
@@ -1004,7 +995,16 @@
           }
         }
 
+        function invalidateWorkletInitialization() {
+          workletLifecycleGeneration += 1;
+          lastInitAttempt = 0;
+        }
+
         function teardownPcmPlayout(reason, closeAudioContext) {
+          if (workletNode || workletInitPromise) {
+            workletHardTeardownCount += 1;
+          }
+          invalidateWorkletInitialization();
           pendingBinaryFrames = [];
           workletReady = false;
           window._isDrainingStartup = false;
@@ -1190,6 +1190,10 @@
         }
 
         function destroyAudioWorklet() {
+          if (workletNode || workletInitPromise) {
+            workletHardTeardownCount += 1;
+          }
+          invalidateWorkletInitialization();
           if (workletNode) {
             try {
               if (workletNode.port) {
@@ -1203,7 +1207,6 @@
             workletNode = null;
           }
           workletReady = false;
-          window._lowRateCount = 0;
           window._workletDiagCount = 0;
         }
 
@@ -1241,9 +1244,15 @@
           window._lastBinaryTime = 0;
           window._pcmDegraded = false;
           clearLowLatencyStartupWatchdog();
-          if (workletNode && workletNode.port) {
+          const now = Date.now();
+          const duplicateReset =
+            lastPcmQueueResetAt > 0 &&
+            now - lastPcmQueueResetAt <= PCM_QUEUE_RESET_DEDUPE_MS;
+          if (workletNode && workletNode.port && !duplicateReset) {
             try {
               workletNode.port.postMessage({ type: "RESET" });
+              workletQueueResetCount += 1;
+              lastPcmQueueResetAt = now;
             } catch (e) {}
             workletReady = true;
           }
@@ -1251,13 +1260,16 @@
           if (workletNode) {
             notifyPlaybackMode("pcm_fallback", (reason || "playback_idle") + "_pcm_ready");
           }
-          if (reason) {
+          if (reason && !duplicateReset) {
             relayLogToStudio("🛑 Receiver: Binary playout reset, PCM bridge kept ready (" + reason + ").");
           }
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          if (reason === "track_stop") {
+          if (
+            receiverPlayoutPreference === "pcm_fallback" &&
+            (workletNode || workletInitPromise || audioInitializing)
+          ) {
             resetRealtimePlayoutKeepPcmReady(reason);
             return;
           }
@@ -1875,18 +1887,18 @@
 
         let lastInitAttempt = 0;
         let audioInitializing = false;
-        async function initAudio(force = false, preserveNativeMode = false) {
+        function initAudio(force = false, preserveNativeMode = false) {
           if (!identityAllowsAudio()) {
             relayLogToStudio("⛔ Receiver: Audio startup blocked until build identity is verified.");
-            return;
+            return null;
           }
-          if (window._receiverShutdownInProgress) return;
-          if (audioInitializing) return;
+          if (window._receiverShutdownInProgress) return null;
+          if (workletInitPromise) return workletInitPromise;
           if (nativeStreamActive || workletNode) {
-            return;
+            return null;
           }
           if (!preserveNativeMode && (nativeStreamStarting || window._playbackMode === "native")) {
-            return;
+            return null;
           }
           // The PCM AudioWorklet is the primary live-sync playout path.
           // Native /stream.wav remains available as a fallback if PCM cannot
@@ -1894,31 +1906,33 @@
           // [v13.9.504] HARDWARE LOCK: Never initialize until we have a verified sample rate from the Studio.
           if (!configReceived) {
             relayLogToStudio("⏳ Receiver: Waiting for BRIDGE_CONFIG handshake...");
-            return;
+            return null;
           }
 
           // [v13.9.504] THROTTLE: Prevent tight-loop retries if init fails (e.g. 404 or SyntaxError)
           const now = Date.now();
-          if (!force && now - lastInitAttempt < 5000) return;
+          if (!force && now - lastInitAttempt < 5000) return null;
           lastInitAttempt = now;
-          
+
+          const initGeneration = workletLifecycleGeneration;
           audioInitializing = true;
-          try {
-            if (!preserveNativeMode) {
-              notifyPlaybackMode("pcm_fallback", "native_stream_unavailable");
-            } else {
-              relayLogToStudio("🛠️ Receiver: PCM bridge initializing while native stream boots.");
-            }
-            preInitAudioContext();
+          const initPromise = (async function initializeWorklet() {
+            try {
+              if (!preserveNativeMode) {
+                notifyPlaybackMode("pcm_fallback", "native_stream_unavailable");
+              } else {
+                relayLogToStudio("🛠️ Receiver: PCM bridge initializing while native stream boots.");
+              }
+              preInitAudioContext();
 
-            if (!audioCtx) {
-              relayLogToStudio("❌ Receiver ERROR: initAudio failed - audioCtx is null");
-              return;
-            }
+              if (!audioCtx) {
+                relayLogToStudio("❌ Receiver ERROR: initAudio failed - audioCtx is null");
+                return false;
+              }
 
-            if (workletNode) {
-              return;
-            }
+              if (workletNode) {
+                return true;
+              }
 
             let workletUrl = `pcm-player-worklet-v13.9.509.js?cb=${Date.now()}`;
             if (currentBridgeIp && currentBridgePort) {
@@ -1928,10 +1942,22 @@
             }
 
             const workletResponse = await fetch(workletUrl, { cache: "no-store" });
+            if (
+              initGeneration !== workletLifecycleGeneration ||
+              window._receiverShutdownInProgress
+            ) {
+              return false;
+            }
             if (!workletResponse.ok) {
               throw new Error(`Worklet fetch failed (${workletResponse.status})`);
             }
             const workletSource = await workletResponse.text();
+            if (
+              initGeneration !== workletLifecycleGeneration ||
+              window._receiverShutdownInProgress
+            ) {
+              return false;
+            }
             const workletBlobUrl = URL.createObjectURL(
               new Blob([workletSource], { type: "application/javascript" }),
             );
@@ -1939,6 +1965,12 @@
               await audioCtx.audioWorklet.addModule(workletBlobUrl);
             } finally {
               URL.revokeObjectURL(workletBlobUrl);
+            }
+            if (
+              initGeneration !== workletLifecycleGeneration ||
+              window._receiverShutdownInProgress
+            ) {
+              return false;
             }
 
             // [v13.9.504] DYNAMIC RATE TRANSFORMATION
@@ -1971,13 +2003,13 @@
                 },
               },
             );
+            workletInitializationCount += 1;
             workletNode.onprocessorerror = (e) => {
               console.error("❌ Receiver: workletNode processor error:", e);
               relayLogToStudio(`❌ Receiver: workletNode processor error: ${e.message || e}`);
             };
             workletNode.connect(masterGain);
             window._lastWorkletDiagTime = Date.now(); // Prevent premature watchdog triggers during startup
-            window._lowRateCount = 0;
             window._workletDiagCount = 0;
 
             revealReceiverUi("worklet_ready");
@@ -1988,44 +2020,6 @@
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
                 window._workletDiagCount = (window._workletDiagCount || 0) + 1;
-
-                // Treat low-rate DIAG as a signal, not an automatic failure.
-                // Brief scheduler jitter can depress the reported drain rate
-                // while the buffer is still healthy, so only reset the bridge
-                // when the low-rate condition lines up with real buffer stress.
-                if (e.data.measuredHz && e.data.measuredHz > 0) {
-                  if (
-                    !hasAudiblePlaybackSignal(e.data) ||
-                    isWithinPlaybackStartGrace()
-                  ) {
-                    window._lowRateCount = 0;
-                  } else if (nativeStreamStarting || nativeStreamActive) {
-                    window._lowRateCount = 0;
-                  } else if (e.data.measuredHz < DEGRADED_PLAYOUT_HZ_THRESHOLD) {
-                    window._lowRateCount = (window._lowRateCount || 0) + 1;
-                    if (window._lowRateCount >= DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT) {
-                      const stalled = Number(e.data.stalled || 0) > 0;
-                      const lowBuffer = Number(e.data.available || 0) > 0 && Number(e.data.available || 0) < 16384;
-                      if (stalled || lowBuffer) {
-                        relayLogToStudio(
-                          `⚠️ Receiver: Playout rate degraded (${Math.round(e.data.measuredHz)}Hz < ${DEGRADED_PLAYOUT_HZ_THRESHOLD}Hz for ${DEGRADED_PLAYOUT_CONSECUTIVE_DIAG_COUNT} DIAG cycles) and buffer health dropped (available=${Math.round(e.data.available || 0)}, stalled=${Number(e.data.stalled || 0)}). Resetting PCM bridge.`,
-                        );
-                        window._lowRateCount = 0;
-                        window._pcmDegraded = true;
-                        stopRealtimePlayoutKeepNativePrimed("pcm_degraded");
-                        requestNativePlaybackStart("pcm_degraded_recover");
-                        return;
-                      }
-
-                      relayLogToStudio(
-                        `⚠️ Receiver: Low playout rate observed (${Math.round(e.data.measuredHz)}Hz) but buffer remains healthy (available=${Math.round(e.data.available || 0)}, stalled=${Number(e.data.stalled || 0)}). Keeping PCM bridge active.`,
-                      );
-                      window._lowRateCount = 0;
-                    }
-                  } else {
-                    window._lowRateCount = 0;
-                  }
-                }
 
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                   binaryWS.send(
@@ -2051,6 +2045,10 @@
                         emergencyOverruns: e.data.emergencyOverruns,
                         emergencyFailures: e.data.emergencyFailures,
                         resets: e.data.resets,
+                        lifecycleGeneration: workletLifecycleGeneration,
+                        initializations: workletInitializationCount,
+                        hardTeardowns: workletHardTeardownCount,
+                        queueResets: workletQueueResetCount,
                         currentFrame: e.data.currentFrame,
                         audioCurrentTimeSeconds: e.data.audioCurrentTimeSeconds,
                         wallClockMs: e.data.wallClockMs,
@@ -2124,11 +2122,21 @@
               `🔧 Receiver: Worklet configured for ${negotiatedBitDepth}-bit decode`,
             );
             resumeAudio();
-          } catch (e) {
-            relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
-          } finally {
-            audioInitializing = false;
-          }
+            return true;
+            } catch (e) {
+              relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
+              return false;
+            }
+          })();
+          workletInitPromise = initPromise;
+          const clearInitState = function clearInitState() {
+            if (workletInitPromise === initPromise) {
+              workletInitPromise = null;
+              audioInitializing = false;
+            }
+          };
+          initPromise.then(clearInitState, clearInitState);
+          return initPromise;
         }
 
         function showUnlockOverlay() {
