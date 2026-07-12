@@ -68,7 +68,7 @@
         const CAST_DEBUG_TAG = "MXS004.RECEIVER";
 
         function isBuildIdentity(value) {
-          return (
+          return !!(
             value &&
             typeof value === "object" &&
             value.schema === BUILD_IDENTITY_SCHEMA &&
@@ -98,8 +98,10 @@
           if (buildIdentityRejected) return;
           const details = {
             type: "BUILD_IDENTITY_REJECTED",
+            event: "build_identity_rejected",
             role: "receiver",
             reason: reason,
+            match: false,
             expected: window.MXS_BUILD_IDENTITY || null,
             received: received || null,
           };
@@ -127,7 +129,16 @@
           buildIdentityAccepted = true;
           window._buildIdentityAccepted = true;
           if (!wasAccepted) {
-            relayLogToStudio("✅ Receiver build identity verified: " + JSON.stringify(window.MXS_BUILD_IDENTITY));
+            relayLogToStudio(
+              "✅ Receiver build identity verified: " +
+                JSON.stringify({
+                  event: "build_identity_verified",
+                  role: "receiver",
+                  match: true,
+                  expected: window.MXS_BUILD_IDENTITY,
+                  received: received,
+                }),
+            );
           }
           return true;
         }
@@ -1601,6 +1612,15 @@
               window._hwRate = audioCtx.sampleRate || 48000;
               window._lastHwRate = window._hwRate;
               relayLogToStudio("🛠️ Receiver: AudioContext created. State: " + audioCtx.state + " | Rate: " + window._hwRate);
+              relayLogToStudio(
+                "✅ Receiver hardware fast-path active: " +
+                  JSON.stringify({
+                    event: "receiver_hardware_fast_path_active",
+                    audioContextOptions: "none",
+                    sampleRate: window._hwRate,
+                    buildIdentity: window.MXS_BUILD_IDENTITY || null,
+                  }),
+              );
             } catch (e) {
               relayLogToStudio(`❌ Receiver ERROR: Failed to create AudioContext - ${e.message}`);
               return;
@@ -2836,6 +2856,8 @@
 
           binaryWS.onclose = () => {
             if (generation !== binaryConnectionGeneration) return;
+            buildIdentityAccepted = false;
+            window._buildIdentityAccepted = false;
             clearLowLatencyStartupWatchdog();
             window._binaryActive = false;
             configReceived = false;
@@ -3083,6 +3105,8 @@
                 () => {
                   if (window._receiverShutdownInProgress) return;
                   isSenderConnected = false;
+                  buildIdentityAccepted = false;
+                  window._buildIdentityAccepted = false;
                   wakeLockLoadingOrLoaded = false;
                   window._binaryActive = false; 
                   window._lastBinaryTime = 0;
