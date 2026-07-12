@@ -26,12 +26,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // - 49152 = 24576 frames (~512ms)
     // - 65536 = 32768 frames (~683ms)
     // - 81920 = 40960 frames (~853ms)
-    // Tighter target + aggressive catch-up rates keep the buffer near
-    // target without drifting into lag-flush territory.
+    // The target is presentation headroom only. Phase 3 never changes
+    // playout rate or flushes normal backlog.
     this._TARGET_BUFFER = 24576;
     this._MIN_BUFFER = 8192;
     this._PREBUFFER = 24576;
-    this._FLUSH_THRESHOLD = 81920;
     this._DIAG_INTERVAL_CALLBACKS = 120; // ~320ms intervals (120 * 128 / 48000)
     this._lastPacketWallMs = 0;
 
@@ -47,8 +46,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._wallStartMs = 0;
     this._lastDiagWallMs = 0;
     this._lastDiagFramesProcessed = 0;
-    this._lagFlushCount = 0;
+    this._normalLagFlushCount = 0;
     this._overrunCount = 0;
+    this._emergencyFailureCount = 0;
     this._resetCount = 0;
     this._outputFrames = 0;
     this._renderedFrames = 0;
@@ -95,7 +95,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._TARGET_BUFFER = 24576;
           this._MIN_BUFFER = 8192;
           this._PREBUFFER = 24576;
-          this._FLUSH_THRESHOLD = 81920;
           this._DIAG_INTERVAL_CALLBACKS = 120;
           this._stallCount = 0;
           this._currentPeak = 0;
@@ -201,30 +200,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       // 1. HARD OVERRUN PROTECTION
       if (available > ringLen) {
         this._overrunCount++;
+        this._emergencyFailureCount++;
         this._droppedFrames += Math.floor((available - this._TARGET_BUFFER) / 2);
         available = this._reanchorReadCursor(this._TARGET_BUFFER);
         frameIdx = this._readFrameIdx;
         frac = this._readFrac;
-      }
-
-      // 2. SEVERE BACKLOG GUARD
-      if (available > this._FLUSH_THRESHOLD) {
-        this._lagFlushCount++;
-        const beforeFlush = available;
-        const dropped = available - this._TARGET_BUFFER;
-        this._droppedFrames += Math.floor(dropped / 2);
-        available = this._reanchorReadCursor(this._TARGET_BUFFER);
-        frameIdx = this._readFrameIdx;
-        frac = this._readFrac;
-        this._fade = 0; // Quick fade-in after the jump to eliminate transient clicks/pops
-        
-        // Keep telemetry time running across lag flushes. The backend needs a
-        // continuous wall-clock drain estimate to lock its resampler target.
-
-        this.port.postMessage({
-          type: "LOG",
-          msg: `⚠️ Quartz: Lag-Flush available=${beforeFlush} target=${this._TARGET_BUFFER} threshold=${this._FLUSH_THRESHOLD} dropped=${dropped}`
-        });
       }
 
       let renderSilence = false;
@@ -252,8 +232,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         renderSilence = true;
       }
 
-      // Keep playout pitch-stable. Buffer control is handled by sender pacing
-      // and only the lag-flush path should make a discontinuous correction.
+      // Keep playout pitch-stable. Clock recovery belongs to Rust Phase 4.
       const playbackRate = 1.0;
 
       if (renderSilence) {
@@ -332,8 +311,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const elapsed = Math.max(0.1, now - this._startTime);
         const wallElapsed = this._wallStartMs && wallNow ? Math.max(0.1, (wallNow - this._wallStartMs) / 1000) : 0;
         const lockWindow = Math.max(4096, this._TARGET_BUFFER >> 1);
-        // Report drain rate from the most recent DIAG interval so the backend can
-        // lock quickly even while the buffer is oscillating around lag flushes.
+        // Report drain rate for Phase 4 clock recovery diagnostics.
         let wallHzReported = 0;
         if (this._lastDiagWallMs && wallNow) {
           const deltaWallMs = wallNow - this._lastDiagWallMs;
@@ -363,8 +341,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           silenceFrames: this._silenceFrames,
           droppedFrames: this._droppedFrames,
           queuedFrames: Math.floor(queuedSamples / 2),
-          lagFlushes: this._lagFlushCount,
-          overruns: this._overrunCount,
+          normalLagFlushes: this._normalLagFlushCount,
+          emergencyOverruns: this._overrunCount,
+          emergencyFailures: this._emergencyFailureCount,
           resets: this._resetCount,
           currentFrame: typeof currentFrame === "number" ? currentFrame : null,
           audioCurrentTimeSeconds: now,

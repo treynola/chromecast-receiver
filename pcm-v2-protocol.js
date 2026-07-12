@@ -6,9 +6,10 @@
   const VERSION = 2;
   const HEADER_BYTES = 64;
   const FORMAT_PCM_SIGNED = 1;
+  const FORMAT_PCM_FLOAT = 3;
   const CHANNELS = 2;
-  const BIT_DEPTH = 16;
-  const BYTES_PER_FRAME = 4;
+  const INPUT_FORMAT = Object.freeze({ name: "f32le", format: FORMAT_PCM_FLOAT, bitDepth: 32, bytesPerFrame: 8 });
+  const OUTPUT_FORMAT = Object.freeze({ name: "s16le", format: FORMAT_PCM_SIGNED, bitDepth: 16, bytesPerFrame: 4 });
   const MAX_U64 = (1n << 64n) - 1n;
 
   function fail(code) {
@@ -46,6 +47,24 @@
     }
   }
 
+  function formatForHeader(header) {
+    if (header.channels !== CHANNELS) fail("unsupported_format");
+    if (header.format === INPUT_FORMAT.format && header.bitDepth === INPUT_FORMAT.bitDepth) return INPUT_FORMAT;
+    if (header.format === OUTPUT_FORMAT.format && header.bitDepth === OUTPUT_FORMAT.bitDepth) return OUTPUT_FORMAT;
+    fail("unsupported_format");
+  }
+
+  function assertFormat(header, expectedFormat) {
+    const actual = formatForHeader(header);
+    if (!expectedFormat || actual !== expectedFormat) fail("wrong_boundary_format");
+    return actual;
+  }
+
+  function normalizeFormat(format) {
+    if (format === INPUT_FORMAT || format === OUTPUT_FORMAT) return format;
+    fail("unsupported_format");
+  }
+
   function validateHeader(header, payloadBytes) {
     if (
       header.magic !== MAGIC ||
@@ -55,20 +74,14 @@
       fail("unsupported_header");
     }
     if (header.flags !== 0 || header.reserved !== 0n) fail("unsupported_flags");
-    if (
-      header.channels !== CHANNELS ||
-      header.format !== FORMAT_PCM_SIGNED ||
-      header.bitDepth !== BIT_DEPTH
-    ) {
-      fail("unsupported_format");
-    }
+    const payloadFormat = formatForHeader(header);
     if (header.sessionId === 0n) fail("invalid_session");
     validateSampleRate(header.sampleRate);
     if (
       !Number.isInteger(header.frameCount) ||
       header.frameCount < 1 ||
-      header.frameCount > Math.floor(0xffffffff / BYTES_PER_FRAME) ||
-      header.payloadBytes !== header.frameCount * BYTES_PER_FRAME
+      header.frameCount > Math.floor(0xffffffff / payloadFormat.bytesPerFrame) ||
+      header.payloadBytes !== header.frameCount * payloadFormat.bytesPerFrame
     ) {
       fail("inconsistent_frame_count");
     }
@@ -82,12 +95,14 @@
     captureTimeUs,
     sampleRate,
     payload,
+    format = INPUT_FORMAT,
   }) {
     const bytes = asBytes(payload);
+    const payloadFormat = normalizeFormat(format);
     if (
       bytes.byteLength === 0 ||
       bytes.byteLength > 0xffffffff ||
-      bytes.byteLength % BYTES_PER_FRAME !== 0
+      bytes.byteLength % payloadFormat.bytesPerFrame !== 0
     ) {
       fail("inconsistent_frame_count");
     }
@@ -111,10 +126,10 @@
     view.setBigUint64(32, normalizedCaptureTimeUs, true);
     view.setUint32(40, sampleRate, true);
     view.setUint32(44, bytes.byteLength, true);
-    view.setUint32(48, bytes.byteLength / BYTES_PER_FRAME, true);
+    view.setUint32(48, bytes.byteLength / payloadFormat.bytesPerFrame, true);
     view.setUint16(52, CHANNELS, true);
-    view.setUint8(54, FORMAT_PCM_SIGNED);
-    view.setUint8(55, BIT_DEPTH);
+    view.setUint8(54, payloadFormat.format);
+    view.setUint8(55, payloadFormat.bitDepth);
     view.setBigUint64(56, 0n, true);
     output.set(bytes, HEADER_BYTES);
     return output.buffer;
@@ -216,9 +231,13 @@
     VERSION,
     HEADER_BYTES,
     FORMAT_PCM_SIGNED,
+    FORMAT_PCM_FLOAT,
     CHANNELS,
-    BIT_DEPTH,
-    BYTES_PER_FRAME,
+    INPUT_FORMAT,
+    OUTPUT_FORMAT,
+    formatForHeader,
+    assertFormat,
+    normalizeFormat,
     encode,
     decode,
     SequenceValidator,

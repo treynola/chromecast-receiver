@@ -38,7 +38,7 @@
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
         window._buildIdentityAccepted = false;
-        const PENDING_BINARY_FRAMES_MAX = 1; // Keep only the newest startup packet; stale PCM increases cast latency.
+        const PENDING_BINARY_FRAMES_MAX = 256; // Emergency startup guard, never routine queue control.
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
@@ -81,6 +81,7 @@
             queueDroppedPackets: 0,
             queueDroppedFrames: 0,
             lastQueueDropReason: null,
+            emergencyFailures: 0,
             sessionStarts: 0,
             sessionChanges: 0,
             baselineSequence: null,
@@ -1530,10 +1531,6 @@
           if (window._receiverShutdownInProgress) {
             return;
           }
-          if (window._isDrainingStartup) {
-            recordPcmV2QueueDrop(packet, "startup_drain");
-            return; // Discard stale startup burst packets to prevent backlog build-up
-          }
           const buffer = packet && packet.payload ? packet.payload : packet;
           if (!window._qCount) window._qCount = 0;
           if (window._qCount < 10) {
@@ -1560,7 +1557,11 @@
           }
 
           if (pendingBinaryFrames.length >= PENDING_BINARY_FRAMES_MAX) {
-            recordPcmV2QueueDrop(pendingBinaryFrames.shift(), "pending_queue_overflow");
+            // This is a receiver startup failure, never routine queue control.
+            recordPcmV2QueueDrop(packet, "emergency_pending_overrun");
+            pcmV2Telemetry.emergencyFailures = (pcmV2Telemetry.emergencyFailures || 0) + 1;
+            relayLogToStudio("⛔ Receiver: pending PCM queue overrun; failing closed instead of deleting continuity.");
+            return;
           }
           pendingBinaryFrames.push(packet);
         }
@@ -1575,11 +1576,7 @@
 
         function flushPendingBinaryFrames() {
           if (!workletNode || !workletReady || pendingBinaryFrames.length === 0) return;
-          // Drop stale startup PCM instead of replaying it all into the worklet.
-          // The receiver should start with the freshest live packet, not a buffered tail.
-          const dropped = pendingBinaryFrames.slice(0, -1);
-          dropped.forEach((packet) => recordPcmV2QueueDrop(packet, "startup_keep_latest"));
-          const queued = pendingBinaryFrames.slice(-1);
+          const queued = pendingBinaryFrames.slice();
           pendingBinaryFrames.length = 0;
           queued.forEach((packet) => queueBinaryFrame(packet));
         }
@@ -1590,6 +1587,7 @@
             if (!window.MXSPcmV2) throw new Error("protocol_unavailable");
             const decoded = window.MXSPcmV2.decode(buffer);
             const header = decoded.header;
+            window.MXSPcmV2.assertFormat(header, window.MXSPcmV2.OUTPUT_FORMAT);
 
             if (expectedPcmSessionId !== null && header.sessionId !== expectedPcmSessionId) {
               const staleError = new Error("stale_session");
@@ -1669,10 +1667,15 @@
           try {
             if (
               !config ||
+              typeof config !== "object" ||
+              Array.isArray(config) ||
+              Object.keys(config).length !== 7 ||
               config.version !== window.MXSPcmV2.VERSION ||
               config.channels !== window.MXSPcmV2.CHANNELS ||
-              config.bitDepth !== window.MXSPcmV2.BIT_DEPTH ||
-              config.format !== "s16le"
+              config.ingressBitDepth !== window.MXSPcmV2.INPUT_FORMAT.bitDepth ||
+              config.ingressFormat !== window.MXSPcmV2.INPUT_FORMAT.name ||
+              config.outputBitDepth !== window.MXSPcmV2.OUTPUT_FORMAT.bitDepth ||
+              config.outputFormat !== window.MXSPcmV2.OUTPUT_FORMAT.name
             ) {
               throw new Error("unsupported_protocol_config");
             }
@@ -2054,8 +2057,9 @@
                         silenceFrames: e.data.silenceFrames,
                         droppedFrames: e.data.droppedFrames,
                         queuedFrames: e.data.queuedFrames,
-                        lagFlushes: e.data.lagFlushes,
-                        overruns: e.data.overruns,
+                        normalLagFlushes: e.data.normalLagFlushes,
+                        emergencyOverruns: e.data.emergencyOverruns,
+                        emergencyFailures: e.data.emergencyFailures,
                         resets: e.data.resets,
                         currentFrame: e.data.currentFrame,
                         audioCurrentTimeSeconds: e.data.audioCurrentTimeSeconds,
@@ -2110,7 +2114,6 @@
                   e.data.msg.indexOf("Worklet message: CONFIG") !== -1 &&
                   !workletReady
                 ) {
-                  pendingBinaryFrames = pendingBinaryFrames.slice(-1);
                   window._isDrainingStartup = false;
                   workletReady = true;
                   clearLowLatencyStartupWatchdog();
