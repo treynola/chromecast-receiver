@@ -27,6 +27,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_TOLERANCE_MS = 25;
     this._EMERGENCY_FLOOR_MS = 75;
     this._CROSSFADE_MS = 12;
+    this._STARTUP_SETTLE_MS = 750;
     this._DIAG_INTERVAL_CALLBACKS = 120;
     this._targetSessionId = null;
     this._targetFrames = 0;
@@ -36,6 +37,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._targetLocked = false;
     this._targetConfigAccepts = 0;
     this._targetConfigRejects = 0;
+    this._startupAlignmentRequired = false;
+    this._startupSettleFramesRemaining = 0;
     this._emergencyFloorFrames = 0;
     this._crossfadeLengthFrames = Math.max(
       128,
@@ -231,7 +234,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     );
     this._targetLocked = true;
     this._targetConfigAccepts++;
-    this._alignSilentStartupBacklog();
+    const queuedFrames = Math.floor(
+      Math.max(0, this._totalWritten - this._totalRead) / this._channels,
+    );
+    this._startupAlignmentRequired = queuedFrames > this._targetFrames;
+    this._startupSettleFramesRemaining = this._startupAlignmentRequired
+      ? Math.round((drainHz * this._STARTUP_SETTLE_MS) / 1000)
+      : 0;
     this.port.postMessage({
       type: "TARGET_CONFIGURED",
       sessionId,
@@ -252,6 +261,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._droppedFrames += droppedFrames;
     this._startupAlignmentDroppedFrames += droppedFrames;
     this._startupAlignmentCount++;
+    this._startupAlignmentRequired = false;
     this.port.postMessage({
       type: "LOG",
       msg: `Startup backlog aligned: discarded ${droppedFrames} pre-audible frames.`,
@@ -280,6 +290,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastPacketMetadata = null;
     this._targetAcquired = false;
     this._targetAcquisitionFrames = 0;
+    this._startupAlignmentRequired = false;
+    this._startupSettleFramesRemaining = 0;
     this.port.postMessage({ type: "LOG", msg: "Worklet intentional queue RESET complete." });
   }
 
@@ -433,7 +445,31 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
       if (
         this._isBuffering &&
+        !this._playoutStarted &&
         this._targetLocked &&
+        this._startupSettleFramesRemaining > 0
+      ) {
+        this._startupSettleFramesRemaining = Math.max(
+          0,
+          this._startupSettleFramesRemaining - framesInBlock,
+        );
+      }
+
+      if (
+        this._isBuffering &&
+        !this._playoutStarted &&
+        this._targetLocked &&
+        this._startupAlignmentRequired &&
+        this._startupSettleFramesRemaining === 0
+      ) {
+        this._alignSilentStartupBacklog();
+        available = Math.round(this._totalWritten - this._totalRead);
+      }
+
+      if (
+        this._isBuffering &&
+        this._targetLocked &&
+        this._startupSettleFramesRemaining === 0 &&
         available >= this._targetSamples
       ) {
         this._startBufferedPlayout();
@@ -558,6 +594,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           targetConfigAccepts: this._targetConfigAccepts,
           targetConfigRejects: this._targetConfigRejects,
           startupPrebuffers: this._startupPrebuffers,
+          startupSettleMs: this._STARTUP_SETTLE_MS,
+          startupAlignmentRequired: this._startupAlignmentRequired,
+          startupSettleFramesRemaining: this._startupSettleFramesRemaining,
           startupAlignments: this._startupAlignmentCount,
           startupAlignmentDroppedFrames: this._startupAlignmentDroppedFrames,
           normalLagFlushes: this._routineFlushCount,
