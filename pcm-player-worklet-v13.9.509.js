@@ -28,6 +28,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._EMERGENCY_FLOOR_MS = 75;
     this._CROSSFADE_MS = 12;
     this._STARTUP_SETTLE_MS = 750;
+    this._QUEUE_CONTROL_FILTER_MS = 1000;
     this._DIAG_INTERVAL_CALLBACKS = 120;
     this._targetSessionId = null;
     this._targetFrames = 0;
@@ -39,6 +40,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._targetConfigRejects = 0;
     this._startupAlignmentRequired = false;
     this._startupSettleFramesRemaining = 0;
+    this._queueFilterAlphaPerBlock = 0;
+    this._queueControlFrames = null;
     this._emergencyFloorFrames = 0;
     this._crossfadeLengthFrames = Math.max(
       128,
@@ -93,6 +96,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._targetAcquisitionFrames = 0;
     this._targetAdherenceSamples = 0;
     this._targetWithinToleranceSamples = 0;
+    this._rawTargetAdherenceSamples = 0;
+    this._rawTargetWithinToleranceSamples = 0;
 
     this.port.onmessage = (event) => {
       try {
@@ -232,6 +237,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._crossfadeLengthFrames + 128,
       Math.round((drainHz * this._EMERGENCY_FLOOR_MS) / 1000),
     );
+    this._queueFilterAlphaPerBlock = 1 - Math.exp(
+      -(128 * 1000) / (drainHz * this._QUEUE_CONTROL_FILTER_MS),
+    );
     this._targetLocked = true;
     this._targetConfigAccepts++;
     this._startupAlignmentRequired = true;
@@ -288,6 +296,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastPacketMetadata = null;
     this._targetAcquired = false;
     this._targetAcquisitionFrames = 0;
+    this._queueControlFrames = null;
     this._startupAlignmentRequired = this._targetLocked && !hadStartedPlayout;
     this._startupSettleFramesRemaining = this._startupAlignmentRequired
       ? Math.round((this._targetDrainHz * this._STARTUP_SETTLE_MS) / 1000)
@@ -364,6 +373,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._playoutStarted = true;
     this._targetAcquired = false;
     this._targetAcquisitionFrames = 0;
+    this._queueControlFrames = null;
     if (this._emergencyAwaitingRecovery) {
       this._emergencyAwaitingRecovery = false;
       this._emergencyRecoveryCount++;
@@ -379,7 +389,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     return ((queuedFrames - this._targetFrames) * 1000) / this._targetDrainHz;
   }
 
-  _recordTargetAdherence(queueErrorMs, framesInBlock) {
+  _recordTargetAdherence(queueErrorMs, rawQueueErrorMs, framesInBlock) {
     if (queueErrorMs === null || this._isBuffering || this._crossfadeKind) return;
     if (!this._targetAcquired) {
       if (Math.abs(queueErrorMs) <= this._TARGET_TOLERANCE_MS) {
@@ -395,6 +405,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._targetAdherenceSamples++;
     if (Math.abs(queueErrorMs) <= this._TARGET_TOLERANCE_MS) {
       this._targetWithinToleranceSamples++;
+    }
+    this._rawTargetAdherenceSamples++;
+    if (Math.abs(rawQueueErrorMs) <= this._TARGET_TOLERANCE_MS) {
+      this._rawTargetWithinToleranceSamples++;
     }
   }
 
@@ -534,10 +548,21 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._framesProcessed += framesInBlock;
       this._outputFrames += framesInBlock;
 
-      const queuedSamples = Math.max(0, this._totalWritten - this._totalRead);
-      const queuedFrames = Math.floor(queuedSamples / 2);
+      const rawQueuedSamples = Math.max(0, this._totalWritten - this._totalRead);
+      const rawQueuedFrames = Math.floor(rawQueuedSamples / 2);
+      if (this._isBuffering || this._queueControlFrames === null) {
+        this._queueControlFrames = rawQueuedFrames;
+      } else {
+        const alpha = Math.min(
+          1,
+          this._queueFilterAlphaPerBlock * (framesInBlock / 128),
+        );
+        this._queueControlFrames += alpha * (rawQueuedFrames - this._queueControlFrames);
+      }
+      const queuedFrames = Math.round(this._queueControlFrames);
       const queueErrorMs = this._queueErrorMs(queuedFrames);
-      this._recordTargetAdherence(queueErrorMs, framesInBlock);
+      const rawQueueErrorMs = this._queueErrorMs(rawQueuedFrames);
+      this._recordTargetAdherence(queueErrorMs, rawQueueErrorMs, framesInBlock);
 
       if (this._callbackCount % this._DIAG_INTERVAL_CALLBACKS === 0) {
         let wallHzReported = 0;
@@ -553,12 +578,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const adherencePercent = this._targetAdherenceSamples > 0
           ? (this._targetWithinToleranceSamples * 100) / this._targetAdherenceSamples
           : null;
+        const rawAdherencePercent = this._rawTargetAdherenceSamples > 0
+          ? (this._rawTargetWithinToleranceSamples * 100) / this._rawTargetAdherenceSamples
+          : null;
         const queueWallMs = this._targetDrainHz > 0
           ? (queuedFrames * 1000) / this._targetDrainHz
           : null;
+        const rawQueueWallMs = this._targetDrainHz > 0
+          ? (rawQueuedFrames * 1000) / this._targetDrainHz
+          : null;
         this.port.postMessage({
           type: "DIAG",
-          available: queuedSamples,
+          available: rawQueuedSamples,
           stalled: this._underrunCount,
           rate: 1.0,
           measuredHz: wallHzReported,
@@ -574,6 +605,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           silenceFrames: this._silenceFrames,
           droppedFrames: this._droppedFrames,
           queuedFrames,
+          controlQueuedFrames: queuedFrames,
+          rawQueuedFrames,
           targetSessionId: this._targetSessionId,
           targetLocked: this._targetLocked,
           targetWallMs: this._TARGET_WALL_MS,
@@ -587,10 +620,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
             : null,
           queueWallMs,
           queueErrorMs,
+          rawQueueWallMs,
+          rawQueueErrorMs,
+          queueControlFilterMs: this._QUEUE_CONTROL_FILTER_MS,
           targetAcquired: this._targetAcquired,
           targetAdherenceSamples: this._targetAdherenceSamples,
           targetWithinToleranceSamples: this._targetWithinToleranceSamples,
           targetAdherencePercent: adherencePercent,
+          rawTargetAdherenceSamples: this._rawTargetAdherenceSamples,
+          rawTargetWithinToleranceSamples: this._rawTargetWithinToleranceSamples,
+          rawTargetAdherencePercent: rawAdherencePercent,
           targetConfigAccepts: this._targetConfigAccepts,
           targetConfigRejects: this._targetConfigRejects,
           startupPrebuffers: this._startupPrebuffers,
