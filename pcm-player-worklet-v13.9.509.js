@@ -21,7 +21,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._studioRate = options.processorOptions?.studioRate || 48000;
     this._bitDepth = options.processorOptions?.bitDepth === 24 ? 24 : 16;
 
-    // Rust sends one exact frame target before the first PCM packet. The wall
+    // Rust sends one exact frame target before audible dequeue. The wall
     // target never changes during that PCM session.
     this._TARGET_WALL_MS = 450;
     this._TARGET_TOLERANCE_MS = 25;
@@ -234,13 +234,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     );
     this._targetLocked = true;
     this._targetConfigAccepts++;
-    const queuedFrames = Math.floor(
-      Math.max(0, this._totalWritten - this._totalRead) / this._channels,
+    this._startupAlignmentRequired = true;
+    this._startupSettleFramesRemaining = Math.round(
+      (drainHz * this._STARTUP_SETTLE_MS) / 1000,
     );
-    this._startupAlignmentRequired = queuedFrames > this._targetFrames;
-    this._startupSettleFramesRemaining = this._startupAlignmentRequired
-      ? Math.round((drainHz * this._STARTUP_SETTLE_MS) / 1000)
-      : 0;
     this.port.postMessage({
       type: "TARGET_CONFIGURED",
       sessionId,
@@ -269,6 +266,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   }
 
   _intentionalReset() {
+    const hadStartedPlayout = this._playoutStarted;
     const queuedFrames = Math.floor(Math.max(0, this._totalWritten - this._totalRead) / 2);
     this._droppedFrames += queuedFrames;
     this._intentionalResetDroppedFrames += queuedFrames;
@@ -290,8 +288,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastPacketMetadata = null;
     this._targetAcquired = false;
     this._targetAcquisitionFrames = 0;
-    this._startupAlignmentRequired = false;
-    this._startupSettleFramesRemaining = 0;
+    this._startupAlignmentRequired = this._targetLocked && !hadStartedPlayout;
+    this._startupSettleFramesRemaining = this._startupAlignmentRequired
+      ? Math.round((this._targetDrainHz * this._STARTUP_SETTLE_MS) / 1000)
+      : 0;
     this.port.postMessage({ type: "LOG", msg: "Worklet intentional queue RESET complete." });
   }
 
