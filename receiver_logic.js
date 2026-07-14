@@ -33,6 +33,10 @@
         var workletHardTeardownCount = 0;
         var workletQueueResetCount = 0;
         var lastPcmQueueResetAt = 0;
+        var lastBinaryResetReason = "";
+        var lastBinaryResetAt = 0;
+        var lastNativeStopReason = "";
+        var lastNativeStopAt = 0;
         const BUILD_IDENTITY_SCHEMA = "mxs-004.clock-sync-pcm.build-identity";
         const BUILD_IDENTITY_COMPONENTS = [
           "senderCritical",
@@ -1215,6 +1219,17 @@
         }
 
         function stopNativeStreamPlayout(reason) {
+          const hadNativePlayout =
+            nativeStreamActive ||
+            nativeStreamStarting ||
+            !!nativeStreamUrl ||
+            window._nativeStreamActive ||
+            window._playbackMode === "native";
+          const now = Date.now();
+          const duplicateStop =
+            reason &&
+            reason === lastNativeStopReason &&
+            now - lastNativeStopAt <= PCM_QUEUE_RESET_DEDUPE_MS;
           nativeStartupAttemptId++;
           clearPlaybackStartSignal();
           clearNativeStartupWatchdog();
@@ -1235,8 +1250,12 @@
           if (htmlAudio) htmlAudio.playbackRate = 1.0;
           if (cafAudio) cafAudio.playbackRate = 1.0;
 
-          if (reason) {
+          if (reason && hadNativePlayout && !duplicateStop) {
             relayLogToStudio("🛑 Receiver: Native stream stopped (" + reason + ").");
+          }
+          if (reason) {
+            lastNativeStopReason = reason;
+            lastNativeStopAt = now;
           }
         }
 
@@ -1263,6 +1282,19 @@
 
         function resetBinaryPlayoutState(reason) {
           const preserveNativeMode = nativeStreamActive || nativeStreamStarting || window._playbackMode === "native";
+          const hadBinaryPlayout =
+            pendingBinaryFrames.length > 0 ||
+            window._isDrainingStartup ||
+            window._binaryActive ||
+            !!workletNode ||
+            !!workletInitPromise ||
+            audioInitializing ||
+            workletReady;
+          const now = Date.now();
+          const duplicateReset =
+            reason &&
+            reason === lastBinaryResetReason &&
+            now - lastBinaryResetAt <= PCM_QUEUE_RESET_DEDUPE_MS;
           pendingBinaryFrames = [];
           window._isDrainingStartup = false;
           window._binaryActive = false;
@@ -1276,8 +1308,12 @@
           destroyAudioWorklet();
           
           clearLowLatencyStartupWatchdog();
-          if (reason) {
+          if (reason && hadBinaryPlayout && !duplicateReset) {
             relayLogToStudio("🛑 Receiver: Binary playout reset (" + reason + ").");
+          }
+          if (reason) {
+            lastBinaryResetReason = reason;
+            lastBinaryResetAt = now;
           }
         }
 
