@@ -60,6 +60,7 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
+        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 2;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
@@ -951,6 +952,24 @@
           }
         }
 
+        function degradePcmStartupToNative(reason) {
+          if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
+            return false;
+          }
+          window._pcmDegraded = true;
+          setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
+          relayLogToStudio(
+            "⚠️ Receiver: PCM worklet startup failed repeatedly; falling back to native stream (" +
+              (reason || "pcm_startup_degraded") +
+              ").",
+          );
+          invalidateWorkletInitialization();
+          audioInitializing = false;
+          workletInitPromise = null;
+          pendingBinaryFrames = [];
+          return maybeStartNativeStream(reason || "pcm_startup_degraded");
+        }
+
         function armLowLatencyStartupWatchdog() {
           clearLowLatencyStartupWatchdog();
           lowLatencyStartupWatchdogId = setTimeout(() => {
@@ -973,6 +992,10 @@
               return;
             }
             lowLatencyStartupRetryCount += 1;
+            if (lowLatencyStartupRetryCount >= PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE) {
+              degradePcmStartupToNative("pcm_startup_timeout");
+              return;
+            }
             relayLogToStudio(
               "⚠️ Receiver: PCM worklet startup timed out; retrying PCM path (" +
                 lowLatencyStartupRetryCount +
