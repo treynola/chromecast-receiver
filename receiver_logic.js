@@ -67,7 +67,11 @@
         const NATIVE_LATENCY_TARGET_SEC = 3.0;
         const NATIVE_LATENCY_TRIM_THRESHOLD_SEC = 4.0;
         const NATIVE_LATENCY_TRIM_COOLDOWN_MS = 4500;
-        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 1;
+        // A Chromecast can abort the first AudioWorklet module/context startup
+        // while the receiver is still bringing up its audio thread. Allow one
+        // clean, fresh-context retry before selecting native fallback; repeated
+        // attempts beyond this point only create startup races and silence.
+        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 2;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         var lastNativeLatencyTrimAt = 0;
         window._nativeStreamActive = false;
@@ -1111,6 +1115,31 @@
           lastInitAttempt = 0;
         }
 
+        function schedulePcmStartupRetry(reason) {
+          if (
+            window._receiverShutdownInProgress ||
+            nativeStreamActive ||
+            nativeStreamStarting ||
+            receiverPlayoutPreference !== "pcm_fallback" ||
+            window._pcmDegraded
+          ) {
+            return false;
+          }
+          setTimeout(() => {
+            if (
+              window._receiverShutdownInProgress ||
+              nativeStreamActive ||
+              nativeStreamStarting ||
+              receiverPlayoutPreference !== "pcm_fallback" ||
+              window._pcmDegraded
+            ) {
+              return;
+            }
+            maybeStartLowLatencyPlayout(reason || "pcm_startup_retry");
+          }, 250);
+          return true;
+        }
+
         function teardownPcmPlayout(reason, closeAudioContext) {
           if (workletNode || workletInitPromise) {
             workletHardTeardownCount += 1;
@@ -2146,6 +2175,13 @@
                 return false;
               }
 
+              if (!audioCtx.audioWorklet || typeof audioCtx.audioWorklet.addModule !== "function") {
+                throw new Error("AudioWorklet API unavailable");
+              }
+              if (!masterGain) {
+                throw new Error("PCM audio graph sink unavailable");
+              }
+
               if (workletNode) {
                 return true;
               }
@@ -2372,6 +2408,9 @@
             resumeAudio();
             return true;
             } catch (e) {
+              const staleInitialization =
+                initGeneration !== workletLifecycleGeneration ||
+                window._receiverShutdownInProgress;
               if (workletNode) {
                 try {
                   workletNode.disconnect();
@@ -2379,10 +2418,37 @@
                 workletNode = null;
               }
               workletReady = false;
+              if (staleInitialization) {
+                relayLogToStudio(
+                  "⚠️ Receiver: Ignored stale PCM startup failure after teardown.",
+                );
+                return false;
+              }
               relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
               if (shouldFastFallbackPcmStartup(e, preserveNativeMode)) {
-                relayLogToStudio("⚠️ Receiver: PCM worklet startup aborted; switching to native stream immediately.");
-                degradePcmStartupToNative("pcm_worklet_abort");
+                lowLatencyStartupRetryCount += 1;
+                teardownPcmPlayout(
+                  lowLatencyStartupRetryCount < PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE
+                    ? "pcm_worklet_abort_retry"
+                    : "pcm_worklet_abort",
+                  true,
+                );
+                workletInitPromise = null;
+                if (lowLatencyStartupRetryCount < PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE) {
+                  relayLogToStudio(
+                    "⚠️ Receiver: PCM worklet startup aborted; retrying with a fresh AudioContext (" +
+                      lowLatencyStartupRetryCount +
+                      "/" +
+                      PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE +
+                      ").",
+                  );
+                  schedulePcmStartupRetry("pcm_worklet_abort_retry");
+                } else {
+                  relayLogToStudio(
+                    "⚠️ Receiver: PCM worklet startup aborted after bounded retry; switching to native stream.",
+                  );
+                  degradePcmStartupToNative("pcm_worklet_abort");
+                }
               }
               return false;
             }
