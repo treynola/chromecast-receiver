@@ -85,8 +85,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._emergencyDroppedFrames = 0;
     this._qualityRunFailed = false;
     this._lastEmergencyReason = null;
-    this._routineFlushCount = 0;
-    this._playbackRateModulations = 0;
     this._crossfadesStarted = 0;
     this._crossfadesCompleted = 0;
     this._crossfadeFramesRendered = 0;
@@ -638,9 +636,6 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           startupSettleFramesRemaining: this._startupSettleFramesRemaining,
           startupAlignments: this._startupAlignmentCount,
           startupAlignmentDroppedFrames: this._startupAlignmentDroppedFrames,
-          normalLagFlushes: this._routineFlushCount,
-          routineFlushes: this._routineFlushCount,
-          playbackRateModulations: this._playbackRateModulations,
           intentionalResets: this._intentionalResetCount,
           intentionalResetDroppedFrames: this._intentionalResetDroppedFrames,
           underruns: this._underrunCount,

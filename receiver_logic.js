@@ -908,12 +908,12 @@
                 ) {
                   activateNativeStream(
                     "caf_playing",
-                    "✅ Receiver: CAF native 48k stream PLAYING via /stream.wav.",
+                    "✅ Receiver: CAF native LAN stream PLAYING via /stream.wav.",
                     nativeStartupAttemptId,
                   );
                 }
                 
-                // [v13.9.506] Loop/Reload static wake-lock stream when finished
+                // [v13.9.506] Keep the active native LAN stream alive if CAF reports FINISHED.
                 if (
                   eventType === events.PLAYER_STATE_CHANGED &&
                   messages.PlayerState &&
@@ -921,7 +921,7 @@
                   event.idleReason === messages.IdleReason.FINISHED
                 ) {
                   if (nativeStreamActive && nativeStreamUrl) {
-                    relayLogToStudio("🔄 Receiver: Wake-lock finished playing; reloading silent stream...");
+                    relayLogToStudio("🔄 Receiver: Native stream finished; reloading /stream.wav...");
                     setTimeout(() => {
                       if (nativeStreamActive && nativeStreamUrl) {
                         startCafStreamPlayout(nativeStreamUrl);
@@ -1180,7 +1180,7 @@
           return raw;
         }
 
-        // [v13.9.504] Dynamically build a valid 2-second silent WAV loop for Receiver OS media wake-lock
+        // [v13.9.504] Dynamically build a valid 2-second silent WAV loop for non-Cast audio unlock fallback.
         function createSilentWavUrl() {
           const sampleRate = 8000;
           const numSamples = sampleRate * 2; // 2 seconds
@@ -1475,7 +1475,7 @@
             if (typeof messages.GenericMediaMetadata === "function") {
               const metadata = new messages.GenericMediaMetadata();
               metadata.title = "MXS-004 Studio";
-              metadata.subtitle = "Native 48k LAN audio stream";
+              metadata.subtitle = "Native LAN audio stream";
               media.metadata = metadata;
             }
             loadRequestData.media = media;
@@ -1564,7 +1564,7 @@
           frozenJitterTarget = null;
           pcmV2Validator = null;
           pcmV2AllowInitialOffset = true;
-          wakeLockLoadingOrLoaded = false;
+          playoutPathLogged = false;
           pendingBinaryFrames = [];
           window._playbackMode = "unknown";
           playbackModeLastSent = "";
@@ -2233,9 +2233,6 @@
                         startupSettleFramesRemaining: e.data.startupSettleFramesRemaining,
                         startupAlignments: e.data.startupAlignments,
                         startupAlignmentDroppedFrames: e.data.startupAlignmentDroppedFrames,
-                        normalLagFlushes: e.data.normalLagFlushes,
-                        routineFlushes: e.data.routineFlushes,
-                        playbackRateModulations: e.data.playbackRateModulations,
                         intentionalResets: e.data.intentionalResets,
                         intentionalResetDroppedFrames: e.data.intentionalResetDroppedFrames,
                         underruns: e.data.underruns,
@@ -2401,12 +2398,12 @@
             }
 
             if (castMediaElement) {
-              // Keep the wake-lock element out of the Web Audio graph.
+              // Keep the CAF media element out of the Web Audio graph.
               // Connecting media elements to the graph forced Chromium to sync
               // decoding and audio rendering, which throttled the worklet thread.
-              if (!castMediaElement._wakeLockLogged) {
-                castMediaElement._wakeLockLogged = true;
-                relayLogToStudio("🛠️ Receiver: Cast media element present; keeping wake-lock playback offline.");
+              if (!castMediaElement._cafMediaElementLogged) {
+                castMediaElement._cafMediaElementLogged = true;
+                relayLogToStudio("🛠️ Receiver: Cast media element present; keeping CAF playback offline from Web Audio.");
               }
               if (castMediaElement.crossOrigin !== "anonymous") {
                 castMediaElement.crossOrigin = "anonymous";
@@ -2889,7 +2886,7 @@
         let binaryWS = null;
         let wsConnectTimeout = null;
         let isSenderConnected = false;
-        let wakeLockLoadingOrLoaded = false;
+        let playoutPathLogged = false;
         let suppressBinaryReconnect = false;
         let binaryConnectionGeneration = 0;
 
@@ -2910,11 +2907,131 @@
           }, delayMs);
         }
 
-        function triggerWakeLockLoad() {
+        function markReceiverPlayoutPathReady() {
           if (window._receiverShutdownInProgress) return;
-          if (!wakeLockLoadingOrLoaded) {
-            wakeLockLoadingOrLoaded = true;
-            relayLogToStudio("📡 Receiver: CAF PlayerManager wake-lock disabled; native stream/worklet path owns audio output.");
+          if (!playoutPathLogged) {
+            playoutPathLogged = true;
+            relayLogToStudio("📡 Receiver: native stream/worklet path owns audio output.");
+          }
+        }
+
+        function reloadReceiver(logMessage, delayMs) {
+          relayLogToStudio(logMessage || "🔄 Receiver: RELOAD command received. Reloading page...");
+          setTimeout(() => {
+            const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+            window.location.href = cleanUrl + "?cb=" + Date.now();
+          }, delayMs || 500);
+        }
+
+        function handlePlaybackStartCommand(d, reason) {
+          markPlaybackStartSignal();
+          const immediateState = buildImmediatePlaybackState(d.trackId);
+          if (immediateState) {
+            renderState(immediateState, true);
+            lastMirroredState = immediateState;
+          }
+          requestNativePlaybackStart(reason || "playback_start");
+        }
+
+        function handleStateUpdateCommand(state) {
+          renderState(state);
+          lastMirroredState = state;
+          if (isPlaybackActiveState(state)) {
+            markPlaybackStartSignal();
+            requestNativePlaybackStart("state_update");
+          } else if (shouldIgnoreStaleInactiveState()) {
+            return;
+          } else if (
+            nativeStreamActive ||
+            window._binaryActive ||
+            pendingBinaryFrames.length > 0
+          ) {
+            stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
+          }
+        }
+
+        function decodePcmRelayBuffer(d) {
+          let buffer = d.binary || d.data;
+          if (buffer && typeof buffer === "string") {
+            try {
+              const binary = window.atob(buffer);
+              const len = binary.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                bytes[i] = binary.charCodeAt(i);
+              }
+              buffer = bytes.buffer;
+            } catch (e) {
+              return null;
+            }
+          }
+          return buffer || null;
+        }
+
+        function handlePcmRelayCommand(d, options) {
+          if (window._binaryActive || nativeStreamActive) return;
+          const buffer = decodePcmRelayBuffer(d);
+          if (!buffer) return;
+          if (options && options.requireWorklet && !workletNode) return;
+          if (audioCtx && audioCtx.state === "suspended") resumeAudio();
+          const packet = validatePcmV2Packet(buffer);
+          if (packet) {
+            queueBinaryFrame(packet);
+            if (options && options.countRelayPacket) {
+              window._relayPkts = (window._relayPkts || 0) + 1;
+            }
+          }
+        }
+
+        function handleReceiverCommand(d, source) {
+          switch (d.type) {
+            case "RECEIVER_SHUTDOWN":
+              shutdownReceiver(d.reason || "signal");
+              return true;
+            case "STATE_UPDATE":
+              handleStateUpdateCommand(d.state);
+              return true;
+            case "PLAYBACK_START":
+              handlePlaybackStartCommand(d, "playback_start");
+              return true;
+            case "PLAYBACK_STOP":
+              stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
+              return true;
+            case "PCM_RELAY":
+              handlePcmRelayCommand(d, {
+                requireWorklet: source === "Cast channel",
+                countRelayPacket: source === "Cast channel",
+              });
+              return true;
+            case "RELOAD":
+              reloadReceiver(
+                source === "Cast channel"
+                  ? "🔄 Receiver: RELOAD command received via Cast SDK. Reloading page..."
+                  : "🔄 Receiver: RELOAD command received. Reloading page with cache-buster...",
+              );
+              return true;
+            case "PCM_V2_JITTER_TARGET":
+              acceptFrozenJitterTarget(d);
+              return true;
+            case "SINE_TEST":
+              playSineTest().catch((e) => {
+                relayLogToStudio("⚠️ Receiver: Sine test failed: " + e.message);
+              });
+              return true;
+            case "BUILD_IDENTITY_REJECTED":
+              reportBuildIdentityRejection(
+                d.reason || (source === "Cast channel" ? "cast_sender_rejected" : "backend_rejected"),
+                d.received,
+              );
+              return true;
+            case "WEBRTC_OFFER":
+              relayLogToStudio(`📡 Receiver: Ignored WEBRTC_OFFER on ${source}.`);
+              return true;
+            case "WEBRTC_CANDIDATE":
+              relayLogToStudio(`📡 Receiver: Ignored WEBRTC_CANDIDATE on ${source}.`);
+              return true;
+            default:
+              return false;
           }
         }
 
@@ -3068,9 +3185,9 @@
               sendHandshake();
             }, 1500);
 
-            // Keep the wake-lock primed; low-latency PCM startup now begins only
+            // Record that the receiver audio path is ready; low-latency PCM startup begins only
             // once the handshake/configuration path is ready.
-            triggerWakeLockLoad();
+            markReceiverPlayoutPathReady();
             if (nativeStreamActive || nativeStreamStarting) {
               notifyPlaybackMode("native", "socket_reconnected");
             } else if (workletNode || workletReady || window._binaryActive) {
@@ -3142,67 +3259,12 @@
             } else if (typeof event.data === "string") {
               try {
                 const d = JSON.parse(event.data);
-                if (d.type === "RECEIVER_SHUTDOWN") {
-                  shutdownReceiver(d.reason || "signal");
-                  return;
-                }
-                if (d.type === "STATE_UPDATE") {
-                  renderState(d.state);
-                  lastMirroredState = d.state;
-                  if (isPlaybackActiveState(d.state)) {
-                    markPlaybackStartSignal();
-                    requestNativePlaybackStart("state_update");
-                  } else if (
-                    shouldIgnoreStaleInactiveState()
-                  ) {
-                    return;
-                  } else if (
-                    nativeStreamActive ||
-                    window._binaryActive ||
-                    pendingBinaryFrames.length > 0
-                  ) {
-                    stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
-                  }
-                } else if (d.type === "PLAYBACK_STOP") {
-                  stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
-                } else if (d.type === "PCM_RELAY") {
-                   // [v13.9.504] Binary Superiority: Ignore relay if binary is active
-                   if (window._binaryActive || nativeStreamActive) return;
-
-                   let buffer = d.binary || d.data;
-                   if (buffer && typeof buffer === "string") {
-                     try {
-                       const binary = window.atob(buffer);
-                       const len = binary.length;
-                       const bytes = new Uint8Array(len);
-                       for (let i = 0; i < len; i++) {
-                         bytes[i] = binary.charCodeAt(i);
-                       }
-                       buffer = bytes.buffer;
-                     } catch (e) {
-                       return;
-                     }
-                   }
-
-                   if (buffer) {
-                     if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                     const packet = validatePcmV2Packet(buffer);
-                     if (packet) queueBinaryFrame(packet);
-                   }
-                } else if (d.type === "RELOAD") {
-                  relayLogToStudio("🔄 Receiver: RELOAD command received. Reloading page with cache-buster...");
-                  setTimeout(() => {
-                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                    window.location.href = cleanUrl + "?cb=" + Date.now();
-                  }, 500);
-                } else if (d.type === "PCM_V2_JITTER_TARGET") {
-                  acceptFrozenJitterTarget(d);
-                } else if (d.type === "HANDSHAKE_ACK") {
+                if (d.type === "HANDSHAKE_ACK") {
                   if (!acceptBuildIdentity(d.buildIdentity, "handshake_ack")) {
                     return;
                   }
-                  // Server confirmed handshake. Prime the native media path now so
-                  // the TV player is already buffered before audible PCM arrives.
+                  // Server confirmed handshake. Low-latency PCM starts only when
+                  // the receiver is explicitly in PCM fallback mode.
                   const ackRate = d.config ? d.config.sampleRate : 48000;
                   const ackBitDepth = d.config ? d.config.bitDepth : 16;
                   relayLogToStudio(
@@ -3219,14 +3281,6 @@
                   if (receiverPlayoutPreference === "pcm_fallback") {
                     maybeStartLowLatencyPlayout("handshake_ack");
                   }
-                } else if (d.type === "PLAYBACK_START") {
-                  markPlaybackStartSignal();
-                  const immediateState = buildImmediatePlaybackState(d.trackId);
-                  if (immediateState) {
-                    renderState(immediateState, true);
-                    lastMirroredState = immediateState;
-                  }
-                  requestNativePlaybackStart("playback_start");
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
                     return;
@@ -3258,14 +3312,10 @@
                     }
                   }
                   if (d.ip) {
-                    triggerWakeLockLoad();
+                    markReceiverPlayoutPathReady();
                   }
-                } else if (d.type === "BUILD_IDENTITY_REJECTED") {
-                  reportBuildIdentityRejection(d.reason || "backend_rejected", d.received);
-                } else if (d.type === "WEBRTC_OFFER") {
-                  relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on binary bridge.");
-                } else if (d.type === "WEBRTC_CANDIDATE") {
-                  relayLogToStudio("📡 Receiver: Ignored WEBRTC_CANDIDATE on binary bridge.");
+                } else {
+                  handleReceiverCommand(d, "binary bridge");
                 }
               } catch (e) {}
             }
@@ -3278,7 +3328,7 @@
             clearLowLatencyStartupWatchdog();
             window._binaryActive = false;
             configReceived = false;
-            wakeLockLoadingOrLoaded = false;
+            playoutPathLogged = false;
             pendingBinaryFrames = [];
             workletReady = false;
             window._isDrainingStartup = false;
@@ -3377,118 +3427,17 @@
               }
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
-                triggerWakeLockLoad();
+                markReceiverPlayoutPathReady();
               }
               return;
             }
 
             if (d.type === "BUILD_IDENTITY_REJECTED") {
-              reportBuildIdentityRejection(d.reason || "cast_sender_rejected", d.received);
+              handleReceiverCommand(d, "Cast channel");
               return;
             }
 
-            if (d.type === "RECEIVER_SHUTDOWN") {
-              shutdownReceiver(d.reason || "signal");
-              return;
-            }
-
-            // 3. Command Relay
-            if (d.type === "RELOAD") {
-              relayLogToStudio("🔄 Receiver: RELOAD command received via Cast SDK. Reloading page...");
-              setTimeout(() => {
-                const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-                window.location.href = cleanUrl + "?cb=" + Date.now();
-              }, 500);
-              return;
-            }
-
-            if (d.type === "SINE_TEST") {
-              playSineTest().catch((e) => {
-                relayLogToStudio("⚠️ Receiver: Sine test failed: " + e.message);
-              });
-              return;
-            }
-
-            if (d.type === "WEBRTC_OFFER") {
-              relayLogToStudio("📡 Receiver: Ignored WEBRTC_OFFER on Cast channel.");
-              return;
-            }
-
-            if (d.type === "WEBRTC_CANDIDATE") {
-              relayLogToStudio("📡 Receiver: Ignored WEBRTC_CANDIDATE on Cast channel.");
-              return;
-            }
-
-            if (d.type === "PLAYBACK_START") {
-              markPlaybackStartSignal();
-              const immediateState = buildImmediatePlaybackState(d.trackId);
-              if (immediateState) {
-                renderState(immediateState, true);
-                lastMirroredState = immediateState;
-              }
-              requestNativePlaybackStart("playback_start");
-              return;
-            }
-
-            if (d.type === "PLAYBACK_STOP") {
-              stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
-              return;
-            }
-
-            // 2. High-Fidelity Audio Relay (Fallback Path)
-            if (d.type === "PCM_RELAY") {
-              // If Binary WS is active, IGNORE Relay to prevent doubling/echo
-              if (window._binaryActive || nativeStreamActive) return;
-
-              let buffer = d.binary || d.data;
-              if (buffer && typeof buffer === "string") {
-                try {
-                  const binary = window.atob(buffer);
-                  const len = binary.length;
-                  const bytes = new Uint8Array(len);
-                  for (let i = 0; i < len; i++) {
-                    bytes[i] = binary.charCodeAt(i);
-                  }
-                  buffer = bytes.buffer;
-                } catch (e) {
-                  return;
-                }
-              }
-
-              if (buffer && workletNode) {
-                if (audioCtx && audioCtx.state === "suspended") resumeAudio();
-                const packet = validatePcmV2Packet(buffer);
-                if (packet) {
-                  queueBinaryFrame(packet);
-                  window._relayPkts = (window._relayPkts || 0) + 1;
-                }
-              }
-            }
-
-            // 3. Diagnostics & Testing
-            if (d.type === "SINE_TEST") {
-              playSineTest().catch((e) => {
-                relayLogToStudio("⚠️ Receiver: Sine test failed: " + e.message);
-              });
-            }
-
-            // 4. GUI Mirroring
-            if (d.type === "STATE_UPDATE") {
-              renderState(d.state);
-              lastMirroredState = d.state;
-              if (isPlaybackActiveState(d.state)) {
-                markPlaybackStartSignal();
-                requestNativePlaybackStart("state_update");
-              } else if (shouldIgnoreStaleInactiveState()) {
-                return;
-              } else if (
-                nativeStreamActive ||
-                window._binaryActive ||
-                pendingBinaryFrames.length > 0
-              ) {
-                stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
-              }
-            }
+            handleReceiverCommand(d, "Cast channel");
           } catch (e) {
             relayLogToStudio("⚠️ Receiver: Inbound Cast message failed: " + e.message);
           }
@@ -3522,7 +3471,7 @@
                 logReceiverHardwareTelemetry(context);
                 isSenderConnected = true;
                 resumeAudio();
-                triggerWakeLockLoad();
+                markReceiverPlayoutPathReady();
               },
             );
 
@@ -3533,7 +3482,7 @@
                   isSenderConnected = false;
                   buildIdentityAccepted = false;
                   window._buildIdentityAccepted = false;
-                  wakeLockLoadingOrLoaded = false;
+                  playoutPathLogged = false;
                   window._binaryActive = false; 
                   window._lastBinaryTime = 0;
                   window._playbackMode = "unknown";
@@ -3639,8 +3588,8 @@
               }
             }
 
-            // [v13.9.504] Non-Cast fallback only — keep HTML5 audio element alive
-            // In Cast mode, the PlayerManager wake-lock with REPEAT_SINGLE handles this.
+            // [v13.9.504] Non-Cast fallback only — keep HTML5 audio element alive.
+            // Cast mode uses explicit native stream or PCM fallback startup paths.
             const isCastSupported = typeof cast !== "undefined" && cast.framework;
             if (!isCastSupported) {
               const audioUnlocker = document.getElementById("audio-unlocker");

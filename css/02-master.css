@@ -1,3 +1,4 @@
+/* Receiver build: pruned 1 Studio-only modal/session CSS blocks. */
 /*
  * 02-master.css
  * Phase 2: Master Column & Components
@@ -91,12 +92,6 @@
 
 /* Hide old master-controls if any remain */
 .master-controls {
-  display: none;
-}
-
-/* Hide duplicate buttons in recordings-section (now in master column) */
-.sessions-header #import-files-button,
-.sessions-header #show-docs-button {
   display: none;
 }
 
