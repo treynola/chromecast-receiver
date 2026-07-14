@@ -64,8 +64,12 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
+        const NATIVE_LATENCY_TARGET_SEC = 2.4;
+        const NATIVE_LATENCY_TRIM_THRESHOLD_SEC = 3.35;
+        const NATIVE_LATENCY_TRIM_COOLDOWN_MS = 1800;
         const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 1;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
+        var lastNativeLatencyTrimAt = 0;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
@@ -735,7 +739,35 @@
 
             const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const playhead = activeAudio.currentTime;
-            const latency = liveEdge - playhead;
+            let latency = liveEdge - playhead;
+            if (
+              latency > NATIVE_LATENCY_TRIM_THRESHOLD_SEC &&
+              Date.now() - lastNativeLatencyTrimAt >= NATIVE_LATENCY_TRIM_COOLDOWN_MS
+            ) {
+              try {
+                const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+                const trimTarget = Math.max(
+                  bufferedStart,
+                  liveEdge - NATIVE_LATENCY_TARGET_SEC,
+                );
+                if (trimTarget > playhead + 0.25) {
+                  activeAudio.currentTime = trimTarget;
+                  lastNativeLatencyTrimAt = Date.now();
+                  latency = Math.max(0, liveEdge - trimTarget);
+                  relayLogToStudio(
+                    "✂️ Receiver: Native stream latency trimmed to " +
+                      latency.toFixed(3) +
+                      "s.",
+                  );
+                }
+              } catch (trimError) {
+                relayLogToStudio(
+                  "⚠️ Receiver: Native stream latency trim failed: " +
+                    (trimError && trimError.message ? trimError.message : trimError),
+                );
+                lastNativeLatencyTrimAt = Date.now();
+              }
+            }
 
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               binaryWS.send(
