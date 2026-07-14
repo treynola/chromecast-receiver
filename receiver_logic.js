@@ -215,6 +215,7 @@
         let hardwareTelemetryRetryId = null;
         let hardwareTelemetryRetryCount = 0;
         let receiverPlayoutPreference = "pcm_fallback";
+        let lowLatencyStartupRetryCount = 0;
         window._receiverPlayoutPreference = receiverPlayoutPreference;
 
         function formatTelemetryValue(value) {
@@ -650,6 +651,9 @@
           if (window._receiverShutdownInProgress) {
             return false;
           }
+          if (receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded) {
+            return false;
+          }
           if (nativeStreamActive || nativeStreamStarting) {
             return true;
           }
@@ -761,6 +765,11 @@
             if (binaryWS && (binaryWS.readyState === WebSocket.CONNECTING || (binaryWS.readyState === WebSocket.OPEN && !window._handshakeAcked))) {
               return true;
             }
+            // PCM fallback is the low-latency live path. If startup is throttled,
+            // retrying, or waiting on an AudioWorklet callback, do not let routine
+            // STATE_UPDATE traffic promote the receiver back to native /stream.wav.
+            relayLogToStudio("⏳ Receiver: PCM fallback preferred; native stream start suppressed (" + reason + ").");
+            return true;
           }
           if (maybeStartNativeStream(reason)) {
             return true;
@@ -949,6 +958,7 @@
               return;
             }
             if (workletNode && workletReady) {
+              lowLatencyStartupRetryCount = 0;
               return;
             }
             if (nativeStreamActive || nativeStreamStarting) {
@@ -961,8 +971,24 @@
               relayLogToStudio("⚠️ Receiver: PCM worklet startup timed out during PCM recovery; keeping playback on the worklet path.");
               return;
             }
-            relayLogToStudio("⚠️ Receiver: PCM worklet startup timed out; starting native stream fallback.");
-            startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+            lowLatencyStartupRetryCount += 1;
+            relayLogToStudio(
+              "⚠️ Receiver: PCM worklet startup timed out; retrying PCM path (" +
+                lowLatencyStartupRetryCount +
+                ").",
+            );
+            invalidateWorkletInitialization();
+            audioInitializing = false;
+            workletInitPromise = null;
+            setTimeout(() => {
+              if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
+                return;
+              }
+              if (receiverPlayoutPreference !== "pcm_fallback" || window._pcmDegraded) {
+                return;
+              }
+              maybeStartLowLatencyPlayout("pcm_startup_retry");
+            }, 250);
           }, NATIVE_STARTUP_TIMEOUT_MS);
         }
 
@@ -2198,6 +2224,7 @@
                 ) {
                   window._isDrainingStartup = false;
                   workletReady = true;
+                  lowLatencyStartupRetryCount = 0;
                   clearLowLatencyStartupWatchdog();
                   flushPendingBinaryFrames();
                   if (!nativeStreamActive) {
@@ -2221,6 +2248,13 @@
             resumeAudio();
             return true;
             } catch (e) {
+              if (workletNode) {
+                try {
+                  workletNode.disconnect();
+                } catch (disconnectError) {}
+                workletNode = null;
+              }
+              workletReady = false;
               relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
               return false;
             }
