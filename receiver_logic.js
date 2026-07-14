@@ -26,6 +26,7 @@
         var noSenderShutdownTimeoutId = null;
         var pendingBinaryFrames = [];
         var workletReady = false;
+        var pendingStartupTrimLogged = false;
         var workletInitPromise = null;
         var workletLifecycleGeneration = 0;
         var workletInitializationCount = 0;
@@ -1587,6 +1588,16 @@
           }
 
           if (pendingBinaryFrames.length >= PENDING_BINARY_FRAMES_MAX) {
+            if (audioInitializing || workletInitPromise || workletNode) {
+              const dropped = pendingBinaryFrames.shift();
+              recordPcmV2QueueDrop(dropped, "startup_pending_trim");
+              if (!pendingStartupTrimLogged) {
+                pendingStartupTrimLogged = true;
+                relayLogToStudio("⚠️ Receiver: trimming pre-ready PCM startup backlog while worklet initializes.");
+              }
+              pendingBinaryFrames.push(packet);
+              return;
+            }
             // This is a receiver startup failure, never routine queue control.
             recordPcmV2QueueDrop(packet, "emergency_pending_overrun");
             pcmV2Telemetry.emergencyFailures = (pcmV2Telemetry.emergencyFailures || 0) + 1;
@@ -2009,7 +2020,7 @@
           const initPromise = (async function initializeWorklet() {
             try {
               if (!preserveNativeMode) {
-                notifyPlaybackMode("pcm_fallback", "native_stream_unavailable");
+                relayLogToStudio("🛠️ Receiver: PCM bridge initializing; playback mode will advertise after worklet CONFIG.");
               } else {
                 relayLogToStudio("🛠️ Receiver: PCM bridge initializing while native stream boots.");
               }
@@ -2224,6 +2235,7 @@
                 ) {
                   window._isDrainingStartup = false;
                   workletReady = true;
+                  pendingStartupTrimLogged = false;
                   lowLatencyStartupRetryCount = 0;
                   clearLowLatencyStartupWatchdog();
                   flushPendingBinaryFrames();
