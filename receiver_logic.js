@@ -64,9 +64,9 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
-        const NATIVE_LATENCY_TARGET_SEC = 2.4;
-        const NATIVE_LATENCY_TRIM_THRESHOLD_SEC = 3.35;
-        const NATIVE_LATENCY_TRIM_COOLDOWN_MS = 1800;
+        const NATIVE_LATENCY_TARGET_SEC = 3.0;
+        const NATIVE_LATENCY_TRIM_THRESHOLD_SEC = 4.0;
+        const NATIVE_LATENCY_TRIM_COOLDOWN_MS = 4500;
         const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 1;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         var lastNativeLatencyTrimAt = 0;
