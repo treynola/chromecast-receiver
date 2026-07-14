@@ -64,7 +64,7 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
-        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 2;
+        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 1;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
@@ -613,6 +613,28 @@
           return trackActive || masterActive || samplerActive;
         }
 
+        function isPcmStartupAbortError(error) {
+          const errorText = String(
+            error
+              ? [error.name, error.message, error.code].filter(Boolean).join(" ")
+              : "",
+          );
+          return /abort|aborted|user aborted/i.test(errorText);
+        }
+
+        function shouldFastFallbackPcmStartup(error, preserveNativeMode) {
+          if (preserveNativeMode || window._receiverShutdownInProgress) {
+            return false;
+          }
+          if (!isPcmStartupAbortError(error)) {
+            return false;
+          }
+          if (window._pcmDegraded || receiverPlayoutPreference !== "pcm_fallback") {
+            return false;
+          }
+          return !nativeStreamActive && !nativeStreamStarting;
+        }
+
         function maybeStartLowLatencyPlayout(reason) {
           if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
@@ -960,10 +982,12 @@
           if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
             return false;
           }
+          clearLowLatencyStartupWatchdog();
+          lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
           window._pcmDegraded = true;
           setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
           relayLogToStudio(
-            "⚠️ Receiver: PCM worklet startup failed repeatedly; falling back to native stream (" +
+            "⚠️ Receiver: PCM worklet startup failed; falling back to native stream (" +
               (reason || "pcm_startup_degraded") +
               ").",
           );
@@ -2324,6 +2348,10 @@
               }
               workletReady = false;
               relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
+              if (shouldFastFallbackPcmStartup(e, preserveNativeMode)) {
+                relayLogToStudio("⚠️ Receiver: PCM worklet startup aborted; switching to native stream immediately.");
+                degradePcmStartupToNative("pcm_worklet_abort");
+              }
               return false;
             }
           })();
