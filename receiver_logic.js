@@ -3285,7 +3285,7 @@
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
                     return;
                   }
-                  if (!acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
+                  if (d.pcmProtocol && !acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
                     return;
                   }
                   if (d.config && d.config.sampleRate) {
