@@ -2052,6 +2052,14 @@
           if (window._receiverShutdownInProgress) return;
 
           relayLogToStudio("🛠️ Receiver: preInitAudioContext called. audioCtx=" + !!audioCtx);
+          if (audioCtx && audioCtx.state === "closed") {
+            // A failed AudioWorklet startup can leave a closed context behind.
+            // Never let the next bounded retry reuse that dead context: Chromium
+            // reports the resulting addModule failure as a misleading AbortError.
+            relayLogToStudio("⚠️ Receiver: Discarding closed AudioContext before PCM startup retry.");
+            audioCtx = null;
+            masterGain = null;
+          }
           if (!audioCtx) {
             try {
               relayLogToStudio("🛠️ Receiver: Creating new AudioContext (hardware fast-path)...");
@@ -2188,31 +2196,17 @@
               relayLogToStudio(`📡 Receiver: Loading Worklet from Studio: ${workletUrl}`);
             }
 
-            const workletResponse = await fetch(workletUrl, { cache: "no-store" });
-            if (
-              initGeneration !== workletLifecycleGeneration ||
-              window._receiverShutdownInProgress
-            ) {
-              return false;
+            // Load the module from the Studio's CORS-enabled, versioned URL.
+            // The previous fetch -> Blob URL path made Chromecast's AudioWorklet
+            // loader abort intermittently even after the HTTP fetch succeeded.
+            // Direct loading keeps the module request and AudioContext lifecycle
+            // in one browser-managed operation and preserves cache-busting.
+            await resumeAudio();
+            if (audioCtx.state !== "running") {
+              throw new Error("AudioContext did not reach running state before PCM module load");
             }
-            if (!workletResponse.ok) {
-              throw new Error(`Worklet fetch failed (${workletResponse.status})`);
-            }
-            const workletSource = await workletResponse.text();
-            if (
-              initGeneration !== workletLifecycleGeneration ||
-              window._receiverShutdownInProgress
-            ) {
-              return false;
-            }
-            const workletBlobUrl = URL.createObjectURL(
-              new Blob([workletSource], { type: "application/javascript" }),
-            );
-            try {
-              await audioCtx.audioWorklet.addModule(workletBlobUrl);
-            } finally {
-              URL.revokeObjectURL(workletBlobUrl);
-            }
+            relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${workletUrl}`);
+            await audioCtx.audioWorklet.addModule(workletUrl);
             if (
               initGeneration !== workletLifecycleGeneration ||
               window._receiverShutdownInProgress
