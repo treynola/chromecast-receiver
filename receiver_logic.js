@@ -53,10 +53,6 @@
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
-        // Do not run CAF PlayerManager media in parallel with the custom PCM
-        // AudioWorklet path. On Chromecast-class devices that extra native
-        // media pipeline contends with Web Audio and causes periodic lag flushes.
-        const ENABLE_PLAYERMANAGER_WAKE_LOCK = false;
         var nativeStreamActive = false;
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
@@ -1362,7 +1358,6 @@
             workletNode = null;
           }
           workletReady = false;
-          window._workletDiagCount = 0;
         }
 
         function resetBinaryPlayoutState(reason) {
@@ -2225,13 +2220,11 @@
               return false;
             }
 
-            // [v13.9.504] DYNAMIC RATE TRANSFORMATION
-            // Since the Rust backend now handles authoritative resampling (Studio -> TV),
-            // the receiver worklet should operate at unity rate (1.0).
+            // The Rust backend handles authoritative resampling (Studio -> TV);
+            // the receiver worklet operates at unity rate.
             const studioRate = window._studioRate || 48000;
             const actualRate = audioCtx.sampleRate;
             const requestedRate = window._lastHwRate || window._hwRate || 48000;
-            const baseRateRatio = 1.0; // Backend Resampled Alignment
             const negotiatedBitDepth = 16;
 
             console.log(
@@ -2249,7 +2242,6 @@
                 numberOfOutputs: 1,
                 outputChannelCount: [2],
                 processorOptions: {
-                  baseRateRatio: baseRateRatio,
                   studioRate: studioRate,
                   bitDepth: negotiatedBitDepth,
                 },
@@ -2262,7 +2254,6 @@
             };
             workletNode.connect(masterGain);
             window._lastWorkletDiagTime = Date.now(); // Prevent premature watchdog triggers during startup
-            window._workletDiagCount = 0;
 
             revealReceiverUi("worklet_ready");
 
@@ -2271,7 +2262,6 @@
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
-                window._workletDiagCount = (window._workletDiagCount || 0) + 1;
 
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                   binaryWS.send(
@@ -3011,7 +3001,6 @@
         let currentBridgeToken = null;
         let binaryWS = null;
         let wsConnectTimeout = null;
-        let isSenderConnected = false;
         let playoutPathLogged = false;
         let suppressBinaryReconnect = false;
         let binaryConnectionGeneration = 0;
@@ -3428,13 +3417,6 @@
                       relayLogToStudio(
                         `🔄 Receiver: Studio rate updated to ${newStudioRate}Hz`,
                       );
-                      if (workletNode && audioCtx) {
-                        const newBaseRateRatio = 1.0;
-                        workletNode.port.postMessage({
-                          type: "CONFIG",
-                          baseRateRatio: newBaseRateRatio,
-                        });
-                      }
                     }
                   }
                   if (d.ip) {
@@ -3544,12 +3526,6 @@
                 relayLogToStudio(
                   `🔄 Receiver: Studio rate updated via signaling to ${newRate}Hz`,
                 );
-                if (workletNode && audioCtx && !nativeStreamActive && !nativeStreamStarting) {
-                  workletNode.port.postMessage({
-                    type: "CONFIG",
-                    baseRateRatio: 1.0,
-                  });
-                }
               }
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
@@ -3595,7 +3571,6 @@
                 clearNoSenderShutdownTimer();
                 flushPendingStudioLogs();
                 logReceiverHardwareTelemetry(context);
-                isSenderConnected = true;
                 resumeAudio();
                 markReceiverPlayoutPathReady();
               },
@@ -3605,7 +3580,6 @@
                 cast.framework.events.EventType.SENDER_DISCONNECTED,
                 () => {
                   if (window._receiverShutdownInProgress) return;
-                  isSenderConnected = false;
                   buildIdentityAccepted = false;
                   window._buildIdentityAccepted = false;
                   playoutPathLogged = false;
