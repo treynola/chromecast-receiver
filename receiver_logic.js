@@ -226,6 +226,8 @@
         let hardwareTelemetryRetryCount = 0;
         let receiverPlayoutPreference = "pcm_fallback";
         let lowLatencyStartupRetryCount = 0;
+        let pcmStartupRetryTimerId = null;
+        let pcmWorkletUseBlobLoader = false;
         window._receiverPlayoutPreference = receiverPlayoutPreference;
 
         function formatTelemetryValue(value) {
@@ -661,6 +663,13 @@
           if (receiverPlayoutPreference !== "pcm_fallback") {
             return false;
           }
+          if (
+            pcmStartupRetryTimerId &&
+            reason !== "pcm_worklet_abort_retry" &&
+            reason !== "pcm_startup_timeout_retry"
+          ) {
+            return true;
+          }
           if (nativeStreamActive || audioInitializing || workletInitPromise || workletNode) {
             return true;
           }
@@ -1021,11 +1030,19 @@
           }
         }
 
+        function clearPcmStartupRetryTimer() {
+          if (pcmStartupRetryTimerId) {
+            clearTimeout(pcmStartupRetryTimerId);
+            pcmStartupRetryTimerId = null;
+          }
+        }
+
         function degradePcmStartupToNative(reason) {
           if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
             return false;
           }
           clearLowLatencyStartupWatchdog();
+          clearPcmStartupRetryTimer();
           lowLatencyStartupRetryCount = PCM_STARTUP_RETRY_BACKOFF_MS.length;
           window._pcmDegraded = true;
           setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
@@ -1122,6 +1139,9 @@
           ) {
             return false;
           }
+          if (pcmStartupRetryTimerId) {
+            return true;
+          }
           const retryDelayMs = Number.isFinite(delayMs) && delayMs >= 0
             ? delayMs
             : getPcmStartupRetryDelayMs();
@@ -1132,7 +1152,8 @@
               (reason || "pcm_startup_retry") +
               ").",
           );
-          setTimeout(() => {
+          pcmStartupRetryTimerId = setTimeout(() => {
+            pcmStartupRetryTimerId = null;
             if (
               window._receiverShutdownInProgress ||
               nativeStreamActive ||
@@ -2217,7 +2238,28 @@
               throw new Error("AudioContext did not reach running state before PCM module load");
             }
             relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${workletUrl}`);
-            await audioCtx.audioWorklet.addModule(workletUrl);
+            if (pcmWorkletUseBlobLoader) {
+              relayLogToStudio(`📡 Receiver: Fetching PCM worklet for blob module fallback: ${workletUrl}`);
+              const workletResponse = await fetch(workletUrl, { cache: "no-store" });
+              if (!workletResponse || !workletResponse.ok) {
+                throw new Error(
+                  "PCM worklet fetch failed: " +
+                    (workletResponse ? workletResponse.status : "no_response"),
+                );
+              }
+              const workletSource = await workletResponse.text();
+              const workletBlobUrl = URL.createObjectURL(
+                new Blob([workletSource], { type: "application/javascript" }),
+              );
+              try {
+                relayLogToStudio("📡 Receiver: Adding PCM worklet module from blob fallback.");
+                await audioCtx.audioWorklet.addModule(workletBlobUrl);
+              } finally {
+                URL.revokeObjectURL(workletBlobUrl);
+              }
+            } else {
+              await audioCtx.audioWorklet.addModule(workletUrl);
+            }
             if (
               initGeneration !== workletLifecycleGeneration ||
               window._receiverShutdownInProgress
@@ -2253,6 +2295,7 @@
               },
             );
             workletInitializationCount += 1;
+            pcmWorkletUseBlobLoader = false;
             workletNode.onprocessorerror = (e) => {
               console.error("❌ Receiver: workletNode processor error:", e);
               relayLogToStudio(`❌ Receiver: workletNode processor error: ${e.message || e}`);
@@ -2378,6 +2421,7 @@
                 ) {
                   window._isDrainingStartup = false;
                   workletReady = true;
+                  clearPcmStartupRetryTimer();
                   pendingStartupTrimLogged = false;
                   lowLatencyStartupRetryCount = 0;
                   clearLowLatencyStartupWatchdog();
@@ -2429,6 +2473,7 @@
                     lowLatencyStartupRetryCount +
                     ").",
                 );
+                pcmWorkletUseBlobLoader = true;
                 schedulePcmStartupRetry(
                   "pcm_worklet_abort_retry",
                   getPcmStartupRetryDelayMs(),
