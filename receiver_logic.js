@@ -60,21 +60,19 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
-        const NATIVE_LATENCY_TARGET_SEC = 3.0;
-        const NATIVE_LATENCY_TRIM_THRESHOLD_SEC = 4.0;
-        const NATIVE_LATENCY_TRIM_COOLDOWN_MS = 4500;
         // A Chromecast can abort the first AudioWorklet module/context startup
         // while the receiver is still bringing up its audio thread. Allow one
         // clean, fresh-context retry before selecting native fallback; repeated
         // attempts beyond this point only create startup races and silence.
         const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 2;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
-        var lastNativeLatencyTrimAt = 0;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
         var playbackModeSocketGeneration = 0;
         var pcmV2Validator = null;
         var pcmV2AllowInitialOffset = true;
+        var lastPlaybackEpoch = 0;
+        var lastPlaybackRevision = 0;
         var expectedPcmSessionId = null;
         var frozenJitterTarget = null;
 
@@ -644,6 +642,12 @@
           if (window._receiverShutdownInProgress) {
             return false;
           }
+          if (!lastPlaybackStartSignalAt) {
+            relayLogToStudio(
+              "⏸️ Receiver: PCM startup is armed but waiting for PLAYBACK_START.",
+            );
+            return false;
+          }
           if (window._pcmDegraded) {
             return false;
           }
@@ -683,6 +687,12 @@
           if (window._receiverShutdownInProgress) {
             return false;
           }
+          if (!lastPlaybackStartSignalAt) {
+            relayLogToStudio(
+              "⏸️ Receiver: Native fallback is armed but waiting for PLAYBACK_START.",
+            );
+            return false;
+          }
           if (receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded) {
             return false;
           }
@@ -706,6 +716,54 @@
           if (!lastPlaybackStartSignalAt) {
             lastPlaybackStartSignalAt = Date.now();
           }
+        }
+
+        function acceptPlaybackRevision(message, source) {
+          const epoch = Number(message && message.playbackEpoch);
+          const revision = Number(message && message.playbackRevision);
+          if (!Number.isSafeInteger(epoch) || epoch < 0 || !Number.isSafeInteger(revision) || revision < 0) {
+            // Preserve compatibility with older signaling frames while all
+            // current sender frames carry an ordered epoch/revision pair.
+            return true;
+          }
+          if (
+            epoch < lastPlaybackEpoch ||
+            (epoch === lastPlaybackEpoch && revision < lastPlaybackRevision)
+          ) {
+            relayLogToStudio(
+              "⏭️ Receiver: Ignored stale " +
+                (source || "playback") +
+                " command epoch=" +
+                epoch +
+                " revision=" +
+                revision +
+                "; applied epoch=" +
+                lastPlaybackEpoch +
+                " revision=" +
+                lastPlaybackRevision +
+                ".",
+            );
+            return false;
+          }
+          lastPlaybackEpoch = epoch;
+          lastPlaybackRevision = revision;
+          return true;
+        }
+
+        function acknowledgePlaybackRevision(message, action) {
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
+            return;
+          }
+          try {
+            binaryWS.send(
+              JSON.stringify({
+                type: "PLAYBACK_COMMAND_ACK",
+                action: action || "applied",
+                playbackEpoch: Number(message && message.playbackEpoch) || lastPlaybackEpoch,
+                playbackRevision: Number(message && message.playbackRevision) || lastPlaybackRevision,
+              }),
+            );
+          } catch (e) {}
         }
 
         function startNativeLatencyMonitor() {
@@ -739,35 +797,12 @@
 
             const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const playhead = activeAudio.currentTime;
-            let latency = liveEdge - playhead;
-            if (
-              latency > NATIVE_LATENCY_TRIM_THRESHOLD_SEC &&
-              Date.now() - lastNativeLatencyTrimAt >= NATIVE_LATENCY_TRIM_COOLDOWN_MS
-            ) {
-              try {
-                const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
-                const trimTarget = Math.max(
-                  bufferedStart,
-                  liveEdge - NATIVE_LATENCY_TARGET_SEC,
-                );
-                if (trimTarget > playhead + 0.25) {
-                  activeAudio.currentTime = trimTarget;
-                  lastNativeLatencyTrimAt = Date.now();
-                  latency = Math.max(0, liveEdge - trimTarget);
-                  relayLogToStudio(
-                    "✂️ Receiver: Native stream latency trimmed to " +
-                      latency.toFixed(3) +
-                      "s.",
-                  );
-                }
-              } catch (trimError) {
-                relayLogToStudio(
-                  "⚠️ Receiver: Native stream latency trim failed: " +
-                    (trimError && trimError.message ? trimError.message : trimError),
-                );
-                lastNativeLatencyTrimAt = Date.now();
-              }
-            }
+            // Report the observed transport buffer only. Seeking the live media
+            // element to chase a moving latency target creates an audible jump,
+            // breaks source-frame continuity, and makes the sender's local delay
+            // chase the receiver. Native playback remains at playbackRate 1.0;
+            // the sender applies only bounded, stable alignment updates.
+            const latency = liveEdge - playhead;
 
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               binaryWS.send(
@@ -803,6 +838,12 @@
 
         function requestNativePlaybackStart(reason) {
           if (!identityAllowsAudio()) return false;
+          if (!lastPlaybackStartSignalAt) {
+            relayLogToStudio(
+              "⏸️ Receiver: Ignored playout start without PLAYBACK_START.",
+            );
+            return false;
+          }
           if (
             reason === "bridge_config" &&
             !nativeStreamActive &&
@@ -1027,6 +1068,12 @@
           audioInitializing = false;
           workletInitPromise = null;
           pendingBinaryFrames = [];
+          if (!lastPlaybackStartSignalAt) {
+            relayLogToStudio(
+              "🛡️ Receiver: Native fallback armed; waiting for PLAYBACK_START before opening /stream.wav.",
+            );
+            return true;
+          }
           return maybeStartNativeStream(reason || "pcm_startup_degraded");
         }
 
@@ -3057,6 +3104,9 @@
         }
 
         function handlePlaybackStartCommand(d, reason) {
+          if (!acceptPlaybackRevision(d, "PLAYBACK_START")) {
+            return;
+          }
           markPlaybackStartSignal();
           const immediateState = buildImmediatePlaybackState(d.trackId);
           if (immediateState) {
@@ -3064,9 +3114,13 @@
             lastMirroredState = immediateState;
           }
           requestNativePlaybackStart(reason || "playback_start");
+          acknowledgePlaybackRevision(d, "playback_start");
         }
 
-        function handleStateUpdateCommand(state) {
+        function handleStateUpdateCommand(state, envelope) {
+          if (!acceptPlaybackRevision(envelope, "STATE_UPDATE")) {
+            return;
+          }
           renderState(state);
           lastMirroredState = state;
           if (isPlaybackActiveState(state)) {
@@ -3081,6 +3135,15 @@
           ) {
             stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
           }
+          acknowledgePlaybackRevision(envelope, "state_update");
+        }
+
+        function handlePlaybackStopCommand(d) {
+          if (!acceptPlaybackRevision(d, "PLAYBACK_STOP")) {
+            return;
+          }
+          stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
+          acknowledgePlaybackRevision(d, "playback_stop");
         }
 
         function decodePcmRelayBuffer(d) {
@@ -3122,13 +3185,13 @@
               shutdownReceiver(d.reason || "signal");
               return true;
             case "STATE_UPDATE":
-              handleStateUpdateCommand(d.state);
+              handleStateUpdateCommand(d.state, d);
               return true;
             case "PLAYBACK_START":
               handlePlaybackStartCommand(d, "playback_start");
               return true;
             case "PLAYBACK_STOP":
-              stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
+              handlePlaybackStopCommand(d);
               return true;
             case "PCM_RELAY":
               handlePcmRelayCommand(d, {
@@ -3410,7 +3473,10 @@
                   configReceived = true;
                   window._handshakeAcked = true;
 
-                  // [v13.9.510] Trigger low-latency playout immediately when handshake is confirmed
+                  // PCM startup is playback-gated. A handshake only prepares
+                  // the bridge; PLAYBACK_START/state activity owns audio
+                  // opening so an idle cast session cannot create a native or
+                  // worklet stream that later races the first file packet.
                   if (receiverPlayoutPreference === "pcm_fallback") {
                     maybeStartLowLatencyPlayout("handshake_ack");
                   }
