@@ -1161,6 +1161,7 @@
             workletNode = null;
           }
           if (closeAudioContext) {
+            audioResumePromise = null;
             if (masterGain) {
               try {
                 masterGain.disconnect();
@@ -1676,6 +1677,7 @@
             masterGain = null;
           }
           if (audioCtx) {
+            audioResumePromise = null;
             try {
               audioCtx.close();
             } catch (e) {}
@@ -2135,6 +2137,10 @@
 
         let lastInitAttempt = 0;
         let audioInitializing = false;
+        // Cast lifecycle, unlock, and PCM startup can all request resume at
+        // once. Share one promise per AudioContext so addModule never races
+        // several resume calls during receiver startup.
+        let audioResumePromise = null;
         function initAudio(force = false, preserveNativeMode = false) {
           if (!identityAllowsAudio()) {
             relayLogToStudio("⛔ Receiver: Audio startup blocked until build identity is verified.");
@@ -2526,14 +2532,24 @@
 
         async function resumeAudio() {
           if (window._receiverShutdownInProgress) return;
-          if (audioCtx) {
-            connectCastMediaElement();
-            const prevState = audioCtx.state;
+          const context = audioCtx;
+          if (!context) return;
+          if (context.state === "running") {
+            hideUnlockOverlay();
+            return;
+          }
+          if (audioResumePromise) {
+            return audioResumePromise;
+          }
+
+          connectCastMediaElement();
+          const resumePromise = (async function resumeCurrentAudioContext() {
+            const prevState = context.state;
             try {
               relayLogToStudio("🔊 Receiver: resumeAudio() calling audioCtx.resume(). State: " + prevState);
-              await audioCtx.resume();
-              relayLogToStudio("🔊 Receiver: resumeAudio() resolved. State: " + audioCtx.state);
-              if (audioCtx.state === "running") {
+              await context.resume();
+              relayLogToStudio("🔊 Receiver: resumeAudio() resolved. State: " + context.state);
+              if (audioCtx === context && context.state === "running") {
                 hideUnlockOverlay();
               } else {
                 showUnlockOverlay();
@@ -2542,6 +2558,14 @@
               console.warn("⚠️ Receiver: Resume failed", e);
               relayLogToStudio("⚠️ Receiver: resumeAudio() failed: " + e.message);
               showUnlockOverlay();
+            }
+          })();
+          audioResumePromise = resumePromise;
+          try {
+            return await resumePromise;
+          } finally {
+            if (audioResumePromise === resumePromise) {
+              audioResumePromise = null;
             }
           }
         }
