@@ -63,11 +63,11 @@
         const NATIVE_LATENCY_TARGET_SEC = 3.0;
         const NATIVE_LATENCY_TRIM_THRESHOLD_SEC = 4.0;
         const NATIVE_LATENCY_TRIM_COOLDOWN_MS = 4500;
-        // A Chromecast can abort the first AudioWorklet module/context startup
-        // while the receiver is still bringing up its audio thread. Allow one
-        // clean, fresh-context retry before selecting native fallback; repeated
-        // attempts beyond this point only create startup races and silence.
-        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 2;
+        // Chromecast can abort AudioWorklet module startup while the receiver
+        // is still bringing up its audio thread. Native /stream.wav is several
+        // seconds latent, so startup AbortError/timeout recovery must keep PCM
+        // as the primary path and retry with a calmer fresh-context backoff.
+        const PCM_STARTUP_RETRY_BACKOFF_MS = [1500, 2500, 4000, 5000];
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         var lastNativeLatencyTrimAt = 0;
         window._nativeStreamActive = false;
@@ -639,6 +639,17 @@
           return !nativeStreamActive && !nativeStreamStarting;
         }
 
+        function getPcmStartupRetryDelayMs() {
+          const index = Math.max(
+            0,
+            Math.min(
+              PCM_STARTUP_RETRY_BACKOFF_MS.length - 1,
+              lowLatencyStartupRetryCount - 1,
+            ),
+          );
+          return PCM_STARTUP_RETRY_BACKOFF_MS[index];
+        }
+
         function maybeStartLowLatencyPlayout(reason) {
           if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
@@ -1015,7 +1026,7 @@
             return false;
           }
           clearLowLatencyStartupWatchdog();
-          lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
+          lowLatencyStartupRetryCount = PCM_STARTUP_RETRY_BACKOFF_MS.length;
           window._pcmDegraded = true;
           setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
           relayLogToStudio(
@@ -1052,27 +1063,17 @@
               return;
             }
             lowLatencyStartupRetryCount += 1;
-            if (lowLatencyStartupRetryCount >= PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE) {
-              degradePcmStartupToNative("pcm_startup_timeout");
-              return;
-            }
             relayLogToStudio(
-              "⚠️ Receiver: PCM worklet startup timed out; retrying PCM path (" +
+              "⚠️ Receiver: PCM worklet startup timed out; keeping PCM primary and retrying (" +
                 lowLatencyStartupRetryCount +
                 ").",
             );
-            invalidateWorkletInitialization();
-            audioInitializing = false;
+            teardownPcmPlayout("pcm_startup_timeout_retry", true);
             workletInitPromise = null;
-            setTimeout(() => {
-              if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
-                return;
-              }
-              if (receiverPlayoutPreference !== "pcm_fallback" || window._pcmDegraded) {
-                return;
-              }
-              maybeStartLowLatencyPlayout("pcm_startup_retry");
-            }, 250);
+            schedulePcmStartupRetry(
+              "pcm_startup_timeout_retry",
+              getPcmStartupRetryDelayMs(),
+            );
           }, NATIVE_STARTUP_TIMEOUT_MS);
         }
 
@@ -1111,7 +1112,7 @@
           lastInitAttempt = 0;
         }
 
-        function schedulePcmStartupRetry(reason) {
+        function schedulePcmStartupRetry(reason, delayMs) {
           if (
             window._receiverShutdownInProgress ||
             nativeStreamActive ||
@@ -1121,6 +1122,16 @@
           ) {
             return false;
           }
+          const retryDelayMs = Number.isFinite(delayMs) && delayMs >= 0
+            ? delayMs
+            : getPcmStartupRetryDelayMs();
+          relayLogToStudio(
+            "⏳ Receiver: Scheduling PCM startup retry in " +
+              retryDelayMs +
+              "ms (" +
+              (reason || "pcm_startup_retry") +
+              ").",
+          );
           setTimeout(() => {
             if (
               window._receiverShutdownInProgress ||
@@ -1132,7 +1143,7 @@
               return;
             }
             maybeStartLowLatencyPlayout(reason || "pcm_startup_retry");
-          }, 250);
+          }, retryDelayMs);
           return true;
         }
 
@@ -2411,28 +2422,17 @@
               relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
               if (shouldFastFallbackPcmStartup(e, preserveNativeMode)) {
                 lowLatencyStartupRetryCount += 1;
-                teardownPcmPlayout(
-                  lowLatencyStartupRetryCount < PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE
-                    ? "pcm_worklet_abort_retry"
-                    : "pcm_worklet_abort",
-                  true,
-                );
+                teardownPcmPlayout("pcm_worklet_abort_retry", true);
                 workletInitPromise = null;
-                if (lowLatencyStartupRetryCount < PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE) {
-                  relayLogToStudio(
-                    "⚠️ Receiver: PCM worklet startup aborted; retrying with a fresh AudioContext (" +
-                      lowLatencyStartupRetryCount +
-                      "/" +
-                      PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE +
-                      ").",
-                  );
-                  schedulePcmStartupRetry("pcm_worklet_abort_retry");
-                } else {
-                  relayLogToStudio(
-                    "⚠️ Receiver: PCM worklet startup aborted after bounded retry; switching to native stream.",
-                  );
-                  degradePcmStartupToNative("pcm_worklet_abort");
-                }
+                relayLogToStudio(
+                  "⚠️ Receiver: PCM worklet startup aborted; keeping PCM primary and retrying with a fresh AudioContext (" +
+                    lowLatencyStartupRetryCount +
+                    ").",
+                );
+                schedulePcmStartupRetry(
+                  "pcm_worklet_abort_retry",
+                  getPcmStartupRetryDelayMs(),
+                );
               }
               return false;
             }
