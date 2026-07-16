@@ -2323,8 +2323,36 @@
             if (audioCtx.state !== "running") {
               throw new Error("AudioContext did not reach running state before PCM module load");
             }
-            relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${workletUrl}`);
-            await audioCtx.audioWorklet.addModule(workletUrl);
+
+            let loadedViaBlob = false;
+            try {
+              relayLogToStudio(`📡 Receiver: Fetching PCM worklet code: ${workletUrl}`);
+              const response = await fetch(workletUrl, { cache: "no-store" });
+              if (response && response.ok) {
+                const code = await response.text();
+                const blob = new Blob([code], { type: "application/javascript" });
+                const blobUrl = URL.createObjectURL(blob);
+                relayLogToStudio("📡 Receiver: Adding PCM worklet module from Blob URL...");
+                await audioCtx.audioWorklet.addModule(blobUrl);
+                loadedViaBlob = true;
+                // Defer revocation to avoid race conditions with asynchronous module compilation
+                setTimeout(() => {
+                  try {
+                    URL.revokeObjectURL(blobUrl);
+                  } catch (e) {}
+                }, 10000);
+              } else {
+                relayLogToStudio(`⚠️ Receiver: Worklet fetch failed with status ${response ? response.status : "unknown"}. Falling back to direct load.`);
+              }
+            } catch (fetchErr) {
+              relayLogToStudio(`⚠️ Receiver: Fetch-and-Blob loader failed (${fetchErr.message}). Falling back to direct load.`);
+            }
+
+            if (!loadedViaBlob) {
+              relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${workletUrl}`);
+              await audioCtx.audioWorklet.addModule(workletUrl);
+            }
+
             if (
               initGeneration !== workletLifecycleGeneration ||
               window._receiverShutdownInProgress
