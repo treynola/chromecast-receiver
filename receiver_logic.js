@@ -18,6 +18,11 @@
         var masterGain = null;
         var workletNode = null;
         window._receiverShutdownInProgress = false;
+        try {
+          window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
+        } catch (e) {
+          window._pcmDegraded = false;
+        }
         var configReceived = false;
         window._studioRate = 48000;
         window._hwRate = 48000;
@@ -641,6 +646,12 @@
           if (window._pcmDegraded || receiverPlayoutPreference !== "pcm_fallback") {
             return false;
           }
+          // Set retry count to max so the catch block immediately falls back to native
+          lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
+          window._pcmDegraded = true;
+          try {
+            localStorage.setItem("mxs_pcm_degraded", "true");
+          } catch (e) {}
           return !nativeStreamActive && !nativeStreamStarting;
         }
 
@@ -1102,6 +1113,9 @@
           clearLowLatencyStartupWatchdog();
           lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
           window._pcmDegraded = true;
+          try {
+            localStorage.setItem("mxs_pcm_degraded", "true");
+          } catch (e) {}
           setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
           relayLogToStudio(
             "⚠️ Receiver: PCM worklet startup failed; falling back to native stream (" +
@@ -1431,7 +1445,11 @@
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
           window._playbackMode = "unknown";
-          window._pcmDegraded = false;
+          try {
+            window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
+          } catch (e) {
+            window._pcmDegraded = false;
+          }
           playbackModeLastSent = "";
           playbackModeLastSentGeneration = -1;
           stopCafNativeCompanion();
@@ -1520,7 +1538,11 @@
           window._isDrainingStartup = false;
           window._binaryActive = false;
           window._lastBinaryTime = 0;
-          window._pcmDegraded = false;
+          try {
+            window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
+          } catch (e) {
+            window._pcmDegraded = false;
+          }
           clearLowLatencyStartupWatchdog();
           const now = Date.now();
           const duplicateReset =
@@ -3363,7 +3385,11 @@
             window._wsReconnectAttempts = 0;
             // [v13.9.506] Reset stale bypass flag so fresh sessions don't carry old state
             window._nativeStreamBypassLogged = false;
-            window._pcmDegraded = false;
+            try {
+              window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
+            } catch (e) {
+              window._pcmDegraded = false;
+            }
             clearBinaryReconnectTimer();
             // Flush buffered logs
             while (logQueue.length > 0) {
