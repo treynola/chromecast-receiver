@@ -57,9 +57,16 @@
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
         var nativeStartupAttemptId = 0;
+        var nativeStreamReloadTimerId = null;
+        var nativeStartupTrimPending = false;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 3000;
+        // A fresh native stream must not replay the buffered tail of a prior
+        // idle session. Correct an oversized live buffer once at startup;
+        // steady-state playback remains at rate 1.0 with no clock chasing.
+        const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.25;
+        const NATIVE_STARTUP_TARGET_SEC = 0.35;
         // A Chromecast can abort the first AudioWorklet module/context startup
         // while the receiver is still bringing up its audio thread. Allow one
         // clean, fresh-context retry before selecting native fallback; repeated
@@ -802,7 +809,34 @@
             // breaks source-frame continuity, and makes the sender's local delay
             // chase the receiver. Native playback remains at playbackRate 1.0;
             // the sender applies only bounded, stable alignment updates.
-            const latency = liveEdge - playhead;
+            let latency = liveEdge - playhead;
+
+            if (nativeStartupTrimPending) {
+              nativeStartupTrimPending = false;
+              if (latency > NATIVE_STARTUP_TRIM_THRESHOLD_SEC) {
+                try {
+                  const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+                  const trimTarget = Math.max(
+                    bufferedStart,
+                    liveEdge - NATIVE_STARTUP_TARGET_SEC,
+                  );
+                  if (trimTarget > playhead + 0.25) {
+                    activeAudio.currentTime = trimTarget;
+                    latency = Math.max(0, liveEdge - trimTarget);
+                    relayLogToStudio(
+                      "✂️ Receiver: Fresh native stream buffer released; playhead aligned to " +
+                        latency.toFixed(3) +
+                        "s from live edge.",
+                    );
+                  }
+                } catch (trimError) {
+                  relayLogToStudio(
+                    "⚠️ Receiver: Fresh native stream buffer reset failed: " +
+                      (trimError && trimError.message ? trimError.message : trimError),
+                  );
+                }
+              }
+            }
 
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               binaryWS.send(
@@ -1017,9 +1051,12 @@
                 ) {
                   if (nativeStreamActive && nativeStreamUrl) {
                     relayLogToStudio("🔄 Receiver: Native stream finished; reloading /stream.wav...");
-                    setTimeout(() => {
+                    clearNativeStreamReloadTimer();
+                    const reloadAttemptId = nativeStartupAttemptId;
+                    nativeStreamReloadTimerId = setTimeout(() => {
+                      nativeStreamReloadTimerId = null;
                       if (nativeStreamActive && nativeStreamUrl) {
-                        startCafStreamPlayout(nativeStreamUrl);
+                        startCafStreamPlayout(nativeStreamUrl, reloadAttemptId);
                       }
                     }, 100);
                   }
@@ -1041,6 +1078,13 @@
           if (nativeStartupWatchdogId) {
             clearTimeout(nativeStartupWatchdogId);
             nativeStartupWatchdogId = null;
+          }
+        }
+
+        function clearNativeStreamReloadTimer() {
+          if (nativeStreamReloadTimerId) {
+            clearTimeout(nativeStreamReloadTimerId);
+            nativeStreamReloadTimerId = null;
           }
         }
 
@@ -1132,6 +1176,9 @@
           if (!nativeAudio) return;
           try {
             nativeAudio.pause();
+            try {
+              nativeAudio.currentTime = 0;
+            } catch (e) {}
             nativeAudio.removeAttribute("src");
             nativeAudio.load();
           } catch (e) {}
@@ -1139,14 +1186,28 @@
 
         function stopCafNativeCompanion() {
           const pm = getCastPlayerManager();
-          if (pm && typeof pm.stop === "function") {
+          if (pm) {
+            // stop() only halts playout on some CAF versions. Prefer unload()
+            // when available so the next PLAYBACK_START cannot inherit the
+            // previous live media pipeline and its buffered idle tail.
             try {
-              pm.stop();
+              if (typeof pm.unload === "function") {
+                const unloadResult = pm.unload();
+                if (unloadResult && typeof unloadResult.catch === "function") {
+                  unloadResult.catch(() => {});
+                }
+              } else if (typeof pm.stop === "function") {
+                pm.stop();
+              }
             } catch (e) {}
           }
           const cafAudio = document.getElementById("cast-media-element");
           if (cafAudio) {
             try {
+              cafAudio.pause();
+              try {
+                cafAudio.currentTime = 0;
+              } catch (e) {}
               cafAudio.removeAttribute("src");
               cafAudio.load();
             } catch (e) {}
@@ -1360,6 +1421,8 @@
             reason === lastNativeStopReason &&
             now - lastNativeStopAt <= PCM_QUEUE_RESET_DEDUPE_MS;
           nativeStartupAttemptId++;
+          clearNativeStreamReloadTimer();
+          nativeStartupTrimPending = false;
           clearPlaybackStartSignal();
           clearNativeStartupWatchdog();
           clearLowLatencyStartupWatchdog();
@@ -1658,9 +1721,11 @@
           }
 
           const attemptId = ++nativeStartupAttemptId;
+          clearNativeStreamReloadTimer();
           nativeStreamStarting = true;
           nativeStreamActive = false;
           nativeStreamUrl = streamUrl;
+          nativeStartupTrimPending = true;
           window._nativeStreamActive = false;
           armNativeStartupWatchdog();
 
