@@ -2365,7 +2365,7 @@
                 return true;
               }
 
-            let workletUrl = `pcm-player-worklet-v13.9.509.js?cb=${Date.now()}`;
+            let workletUrl = "pcm-player-worklet-v13.9.509.js";
             if (window.location.protocol === "http:" && currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
