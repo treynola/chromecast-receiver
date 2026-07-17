@@ -2303,6 +2303,7 @@
         }
 
         let lastInitAttempt = 0;
+        let lastFailedInitAttemptAt = 0;
         let audioInitializing = false;
         // Cast lifecycle, unlock, and PCM startup can all request resume at
         // once. Share one promise per AudioContext so addModule never races
@@ -2332,7 +2333,7 @@
 
           // [v13.9.504] THROTTLE: Prevent tight-loop retries if init fails (e.g. 404 or SyntaxError)
           const now = Date.now();
-          if (!force && now - lastInitAttempt < 5000) return null;
+          if (!force && now - lastFailedInitAttemptAt < 5000) return null;
           lastInitAttempt = now;
 
           const initGeneration = workletLifecycleGeneration;
@@ -2348,6 +2349,7 @@
 
               if (!audioCtx) {
                 relayLogToStudio("❌ Receiver ERROR: initAudio failed - audioCtx is null");
+                lastFailedInitAttemptAt = Date.now();
                 return false;
               }
 
@@ -2585,6 +2587,7 @@
                 );
                 return false;
               }
+              lastFailedInitAttemptAt = Date.now();
               relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
               if (shouldFastFallbackPcmStartup(e, preserveNativeMode)) {
                 lowLatencyStartupRetryCount += 1;
