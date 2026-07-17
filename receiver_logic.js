@@ -2385,7 +2385,14 @@
             }
 
             relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${workletUrl}`);
-            await audioCtx.audioWorklet.addModule(workletUrl);
+            try {
+              await audioCtx.audioWorklet.addModule(workletUrl);
+            } catch (err) {
+              relayLogToStudio(`⚠️ Receiver: Versioned worklet load failed (${err.message}). Trying fallback unversioned worklet...`);
+              const fallbackUrl = workletUrl.replace(/-v[\d.\-]+\.js$/, ".js");
+              relayLogToStudio(`📡 Receiver: Adding fallback PCM worklet: ${fallbackUrl}`);
+              await audioCtx.audioWorklet.addModule(fallbackUrl);
+            }
 
             if (
               initGeneration !== workletLifecycleGeneration ||
