@@ -7,6 +7,9 @@
       // Fires exactly once per cast session — no loop because redirect URL already has cb=.
       (function () {
         if (window.location.search.indexOf('cb=') === -1) {
+          try {
+            localStorage.removeItem("mxs_pcm_degraded");
+          } catch (e) {}
           var freshUrl = window.location.href.split('?')[0] + '?cb=' + Date.now();
           window.location.replace(freshUrl);
           // Execution stops here — the browser navigates away immediately.
