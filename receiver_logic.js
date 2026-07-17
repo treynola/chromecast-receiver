@@ -3421,6 +3421,10 @@
               window._pcmDegraded = false;
             }
             clearBinaryReconnectTimer();
+            buildIdentityAccepted = false;
+            buildIdentityRejected = false;
+            window._buildIdentityAccepted = false;
+            pendingBuildIdentityRejection = null;
             // Flush buffered logs
             while (logQueue.length > 0) {
               const msg = logQueue.shift();
