@@ -2384,14 +2384,18 @@
               throw new Error("AudioContext did not reach running state before PCM module load");
             }
 
-            relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${workletUrl}`);
+            // Always resolve to an absolute URL because some TV/embedded browsers (Cobalt)
+            // fail/abort if the URL passed to addModule() is relative.
+            const absWorkletUrl = new URL(workletUrl, window.location.href).href;
+            relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${absWorkletUrl}`);
             try {
-              await audioCtx.audioWorklet.addModule(workletUrl);
+              await audioCtx.audioWorklet.addModule(absWorkletUrl);
             } catch (err) {
               relayLogToStudio(`⚠️ Receiver: Versioned worklet load failed (${err.message}). Trying fallback unversioned worklet...`);
               const fallbackUrl = workletUrl.replace(/-v[\d.\-]+\.js$/, ".js");
-              relayLogToStudio(`📡 Receiver: Adding fallback PCM worklet: ${fallbackUrl}`);
-              await audioCtx.audioWorklet.addModule(fallbackUrl);
+              const absFallbackUrl = new URL(fallbackUrl, window.location.href).href;
+              relayLogToStudio(`📡 Receiver: Adding fallback PCM worklet: ${absFallbackUrl}`);
+              await audioCtx.audioWorklet.addModule(absFallbackUrl);
             }
 
             if (
