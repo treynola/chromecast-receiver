@@ -21,6 +21,7 @@
         var masterGain = null;
         var workletNode = null;
         window._receiverShutdownInProgress = false;
+        window._isFreshSession = true;
         try {
           window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
         } catch (e) {
@@ -3422,6 +3423,10 @@
             // [v13.9.506] Reset stale bypass flag so fresh sessions don't carry old state
             window._nativeStreamBypassLogged = false;
             try {
+              if (window._isFreshSession) {
+                localStorage.removeItem("mxs_pcm_degraded");
+                window._isFreshSession = false;
+              }
               window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
             } catch (e) {
               window._pcmDegraded = false;
