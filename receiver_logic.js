@@ -119,6 +119,8 @@
         var playbackModeLastSentGeneration = -1;
         var playbackModeLastSent = "";
         var lastPlaybackStartSignalAt = 0;
+        var receiverStartupTimingStartAt = Date.now();
+        var receiverStartupTimingMarks = {};
         const PLAYBACK_START_GRACE_MS = 2500;
         var cafLoadInterceptorConfigured = false;
         var castDebugLogger = null;
@@ -149,6 +151,29 @@
             BUILD_IDENTITY_COMPONENTS.every(function (key) {
               return expected.components[key] === received.components[key];
             })
+          );
+        }
+
+        function logReceiverStartupTiming(stage, details) {
+          if (!stage || receiverStartupTimingMarks[stage]) {
+            return;
+          }
+          const now = Date.now();
+          receiverStartupTimingMarks[stage] = now;
+          relayLogToStudio(
+            "🧭 Receiver startup timing: " +
+              JSON.stringify(
+                Object.assign(
+                  {
+                    event: "receiver_startup_timing",
+                    stage: stage,
+                    elapsedMs: now - receiverStartupTimingStartAt,
+                    atMs: now,
+                    playbackMode: window._playbackMode || "unknown",
+                  },
+                  details || {},
+                ),
+              ),
           );
         }
 
@@ -1329,6 +1354,11 @@
           nativeStreamActive = true;
           window._nativeStreamActive = true;
           clearNativeStartupWatchdog();
+          logReceiverStartupTiming("receiver_ready", {
+            modeReason: modeReason || "",
+            nativeStreamActive: true,
+            nativeStreamStarting: false,
+          });
           if (modeReason.indexOf("caf_") === 0) {
             stopHtmlAudioNativeCompanion();
           } else {
