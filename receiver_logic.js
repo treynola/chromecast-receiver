@@ -2366,7 +2366,10 @@
               }
 
             let workletUrl = "pcm-player-worklet-v13.9.509.js";
-            if (window.location.protocol === "http:" && currentBridgeIp && currentBridgePort) {
+            // Prefer the authoritative local bridge whenever BRIDGE_CONFIG has
+            // supplied it. Public HTTPS hosting can otherwise select a stale or
+            // unavailable GitHub worklet, producing AbortError during startup.
+            if (currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
               relayLogToStudio(`📡 Receiver: Loading Worklet from Studio: ${workletUrl}`);
