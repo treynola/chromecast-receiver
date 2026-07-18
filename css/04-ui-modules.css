@@ -1,4 +1,4 @@
-/* Receiver build: pruned 53 Studio-only modal/session CSS blocks. */
+/* Receiver build: pruned 57 Studio-only modal/session CSS blocks. */
 /* 04-ui-modules.css - All specific UI modules, modals, and dialogs */
 
 
@@ -2063,6 +2063,18 @@ select option {
   align-items: start !important;
 }
 
+@media (max-width: 900px) {
+  .effect-params-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .effect-params-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 .dialog-header-top {
   display: flex;
   justify-content: space-between;
@@ -2091,6 +2103,42 @@ select option {
   color: var(--green);
   font-style: italic;
   margin-left: 8px;
+}
+
+.dialog-header-top--center {
+  justify-content: center;
+  align-items: center;
+}
+
+.dialog-header-title--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: none;
+  padding-right: 0;
+  text-align: center;
+  align-items: center;
+}
+
+.dialog-header-title--slot {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  padding-right: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.dialog-header-status--audition {
+  text-align: center;
+  margin-left: 0;
+  margin-top: 4px;
+  width: 100%;
 }
 
 .close-dialog-btn {
@@ -3462,22 +3510,29 @@ body.receiver-mode .unlock-button:focus {
   font-weight: bold;
 }
 
-/* Slot Button Row (EffectUI.js L52-54) */
 .audition-slot-selector {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 5px;
+  align-items: center;
+  width: 100%;
+}
+
+.audition-slot-selector--compact {
+  gap: 6px;
+  margin-top: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.audition-slot-selector-row {
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 5px;
-}
-.audition-slot-selector .slot-label-text {
-  font-size: 0.8em;
-  font-weight: bold;
-  color: #ccc;
-}
-.audition-slot-selector .slot-btn-row {
-  display: flex;
-  gap: 4px;
+  justify-content: center;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 /* Slot Assign Button States (EffectUI.js L62, Interactions.js L324/L377) */
@@ -3495,6 +3550,25 @@ body.receiver-mode .unlock-button:focus {
 .slot-assign-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.audition-step-btn {
+  min-width: 1.8rem;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  height: auto !important;
+  line-height: normal !important;
+  cursor: pointer;
+}
+
+.audition-slot-assign-btn {
+  min-width: 2.1rem;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  background: #444;
+  border: 1px solid #666;
+  color: white;
+  border-radius: 3px;
 }
 
 /* Effect Params Wrapper (EffectUI.js L79) */
@@ -4167,6 +4241,22 @@ dialog.input-prompt-dialog {
   transition: all 0.15s ease-in-out;
 }
 
+.vertical-tab-slot {
+  margin-bottom: 5px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+}
+
+.vertical-tab-slot .fx-chain-slot-label {
+  width: 30px;
+  height: 30px !important;
+  line-height: 30px !important;
+  padding: 0;
+  margin: 0;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+}
+
 /* Force active/selected slot numbers (both horizontal & vertical) to match the REC button color scheme */
 .fx-chain-slot-label.selected,
 .fx-chain-slot input[type="checkbox"]:checked + .fx-chain-slot-label.selected {
@@ -4175,6 +4265,3 @@ dialog.input-prompt-dialog {
   border: 1px solid var(--gold) !important;
   box-shadow: 0 0 6px var(--red);
 }
-
-
-
