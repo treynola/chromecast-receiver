@@ -2438,11 +2438,12 @@
               relayLogToStudio(`📡 Receiver: Loading Worklet relatively: ${workletUrl}`);
             }
 
-            // Load the module from the Studio's CORS-enabled, versioned URL.
-            // The previous fetch -> Blob URL path made Chromecast's AudioWorklet
-            // loader abort intermittently even after the HTTP fetch succeeded.
-            // Direct loading keeps the module request and AudioContext lifecycle
-            // in one browser-managed operation and preserves cache-busting.
+            // Load the module from the verified URL. Some Cobalt builds accept
+            // the fetch but abort when AudioWorklet.addModule() compiles a
+            // remote HTTPS URL directly. Prefer a same-origin Blob containing
+            // the verified source, and keep that Blob alive while asynchronous
+            // module compilation completes. Direct loading remains the fallback
+            // for browsers that reject Blob module URLs.
             await resumeAudio();
             if (audioCtx.state !== "running") {
               throw new Error("AudioContext did not reach running state before PCM module load");
@@ -2482,18 +2483,54 @@
               }
             }
 
+            async function addWorkletModuleWithCompatibilityFallback(url, label) {
+              let blobUrl = null;
+              try {
+                const response = await fetch(url, {
+                  cache: "no-store",
+                  credentials: "same-origin",
+                });
+                if (!response.ok) {
+                  throw new Error(`${label} HTTP ${response.status}`);
+                }
+                const code = await response.text();
+                blobUrl = URL.createObjectURL(
+                  new Blob([code], { type: "application/javascript" }),
+                );
+                relayLogToStudio(`📡 Receiver: Adding ${label} PCM worklet from verified Blob source.`);
+                await audioCtx.audioWorklet.addModule(blobUrl);
+                // Cobalt can compile AudioWorklet modules asynchronously after
+                // addModule() resolves. Revoking immediately reintroduces the
+                // same misleading AbortError during processor registration.
+                const retainedBlobUrl = blobUrl;
+                blobUrl = null;
+                setTimeout(() => {
+                  try { URL.revokeObjectURL(retainedBlobUrl); } catch (e) {}
+                }, 10000);
+                relayLogToStudio(`✅ Receiver: ${label} PCM worklet compiled from Blob source.`);
+                return;
+              } catch (blobError) {
+                if (blobUrl) {
+                  try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+                }
+                relayLogToStudio(
+                  `⚠️ Receiver: ${label} Blob worklet load failed (${blobError && blobError.message ? blobError.message : blobError}); trying direct URL.`,
+                );
+              }
+              relayLogToStudio(`📡 Receiver: Adding ${label} PCM worklet module directly: ${url}`);
+              await audioCtx.audioWorklet.addModule(url);
+            }
+
             relayLogToStudio(`📡 Receiver: Preflighting PCM worklet module: ${absWorkletUrl}`);
             try {
               await preflightWorkletModule(absWorkletUrl, "versioned");
-              relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${absWorkletUrl}`);
-              await audioCtx.audioWorklet.addModule(absWorkletUrl);
+              await addWorkletModuleWithCompatibilityFallback(absWorkletUrl, "versioned");
             } catch (err) {
               relayLogToStudio(`⚠️ Receiver: Versioned worklet load failed (${err.message}). Trying fallback unversioned worklet...`);
               const fallbackUrl = workletUrl.replace(/-v[\d.\-]+\.js$/, ".js");
               const absFallbackUrl = new URL(fallbackUrl, window.location.href).href;
               await preflightWorkletModule(absFallbackUrl, "fallback");
-              relayLogToStudio(`📡 Receiver: Adding fallback PCM worklet: ${absFallbackUrl}`);
-              await audioCtx.audioWorklet.addModule(absFallbackUrl);
+              await addWorkletModuleWithCompatibilityFallback(absFallbackUrl, "fallback");
             }
 
             if (
