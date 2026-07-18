@@ -65,12 +65,13 @@
         var nativeStreamActive = false;
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
+        var nativeStreamPaused = false;
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
         var nativeStartupTrimPending = false;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
-        const NATIVE_STARTUP_TIMEOUT_MS = 3000;
+        const NATIVE_STARTUP_TIMEOUT_MS = 1500;
         // A fresh native stream must not replay the buffered tail of a prior
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
@@ -926,6 +927,9 @@
             resetBinaryPlayoutState("native_takeover");
           }
           if (nativeStreamActive) {
+            if (nativeStreamPaused) {
+              resumeNativeStreamPlayout(reason || "playback_start");
+            }
             return true;
           }
           if (nativeStreamStarting) {
@@ -1356,6 +1360,7 @@
           }
           nativeStreamStarting = false;
           nativeStreamActive = true;
+          nativeStreamPaused = false;
           window._nativeStreamActive = true;
           clearNativeStartupWatchdog();
           logReceiverStartupTiming("receiver_ready", {
@@ -1476,6 +1481,7 @@
           clearLowLatencyStartupWatchdog();
           nativeStreamStarting = false;
           nativeStreamActive = false;
+          nativeStreamPaused = false;
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
           window._playbackMode = "unknown";
@@ -1501,6 +1507,42 @@
             lastNativeStopReason = reason;
             lastNativeStopAt = now;
           }
+        }
+
+        function pauseNativeStreamPlayout(reason) {
+          if (!nativeStreamActive && !nativeStreamStarting) return false;
+          nativeStreamPaused = true;
+          const pm = getCastPlayerManager();
+          try { if (pm && typeof pm.pause === "function") pm.pause(); } catch (e) {}
+          const cafAudio = document.getElementById("cast-media-element");
+          const htmlAudio = document.getElementById("native-stream-audio");
+          try { if (cafAudio) cafAudio.pause(); } catch (e) {}
+          try { if (htmlAudio) htmlAudio.pause(); } catch (e) {}
+          relayLogToStudio("⏸️ Receiver: Native stream paused without teardown (" + (reason || "playback_pause") + ").");
+          return true;
+        }
+
+        function resumeNativeStreamPlayout(reason) {
+          if (!nativeStreamActive || !nativeStreamPaused) return false;
+          nativeStreamPaused = false;
+          const pm = getCastPlayerManager();
+          try { if (pm && typeof pm.play === "function") pm.play(); } catch (e) {}
+          const cafAudio = document.getElementById("cast-media-element");
+          const htmlAudio = document.getElementById("native-stream-audio");
+          try {
+            if (cafAudio && typeof cafAudio.play === "function") {
+              const result = cafAudio.play();
+              if (result && typeof result.catch === "function") result.catch(() => {});
+            }
+          } catch (e) {}
+          try {
+            if (htmlAudio && typeof htmlAudio.play === "function") {
+              const result = htmlAudio.play();
+              if (result && typeof result.catch === "function") result.catch(() => {});
+            }
+          } catch (e) {}
+          relayLogToStudio("▶️ Receiver: Native stream resumed without reload (" + (reason || "playback_start") + ").");
+          return true;
         }
 
         function destroyAudioWorklet() {
@@ -1607,8 +1649,12 @@
             resetRealtimePlayoutKeepPcmReady(reason);
             return;
           }
-          // Do not keep /stream.wav primed while idle. Chromecast can buffer
-          // backend silence and replay it before the next audible packet.
+          const pauseReason = reason === "track_pause" || reason === "state_update_inactive" || reason === "playback_idle";
+          if (pauseReason && (nativeStreamActive || nativeStreamStarting)) {
+            clearPlaybackStartSignal();
+            pauseNativeStreamPlayout(reason);
+            return;
+          }
           stopAllPlayout(reason || "playback_stop");
         }
 
