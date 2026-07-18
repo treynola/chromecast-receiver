@@ -4160,49 +4160,11 @@ dialog.input-prompt-dialog {
   z-index: 10000;
 }
 
-.vertical-slot-tab {
-  width: 30px;
-  height: 30px;
-  border-radius: 0 4px 4px 0; /* Folder tab style attached to the right border */
-  background: #333;
-  border: 1px solid var(--gold);
-  border-left: none; /* Merges visually with the dialog border */
-  color: white;
-  font-family: "Mexcellent", sans-serif;
-  font-weight: bold;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.5);
+/* Custom interactive hover adjustments for vertical sidebar labels */
+.vertical-slot-tabs .fx-chain-slot-label:hover {
+  border-color: var(--green) !important;
+  padding-left: 4px !important;
   transition: all 0.15s ease-in-out;
 }
 
-.vertical-slot-tab:hover {
-  background: #444;
-  border-color: var(--green);
-  padding-left: 4px; /* Pulls slightly out on hover */
-}
-
-.vertical-slot-tab.active {
-  background: var(--green) !important;
-  color: white !important;
-  border-color: var(--gold) !important;
-  box-shadow: 3px 0 8px var(--green);
-  z-index: 5;
-}
-
-.vertical-slot-tab.audition-tab {
-  background: #552222;
-  border-color: var(--red);
-}
-
-.vertical-slot-tab.audition-tab.active {
-  background: var(--red) !important;
-  color: white !important;
-  border-color: var(--gold) !important;
-  box-shadow: 3px 0 8px var(--red);
-  z-index: 5;
-}
 
