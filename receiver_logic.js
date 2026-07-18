@@ -3324,16 +3324,6 @@
           acknowledgePlaybackRevision(d, "playback_stop");
         }
 
-        function handlePlaybackPauseCommand(d) {
-          if (!acceptPlaybackRevision(d, "PLAYBACK_PAUSE")) {
-            return;
-          }
-          // Pause intentionally keeps the native stream primed or the PCM
-          // worklet alive. Only the actual STOP command tears playout down.
-          stopRealtimePlayoutKeepNativePrimed(d.reason || "track_pause");
-          acknowledgePlaybackRevision(d, "playback_pause");
-        }
-
         function decodePcmRelayBuffer(d) {
           let buffer = d.binary || d.data;
           if (buffer && typeof buffer === "string") {
@@ -3385,9 +3375,6 @@
               // Backward compatibility for older senders: pause has the same
               // receiver-side boundary semantics as PLAYBACK_STOP.
               handlePlaybackStopCommand({ ...d, type: "PLAYBACK_STOP" });
-              return true;
-            case "PLAYBACK_PAUSE":
-              handlePlaybackPauseCommand(d);
               return true;
             case "PCM_RELAY":
               handlePcmRelayCommand(d, {
