@@ -78,11 +78,12 @@
         // steady-state playback remains at rate 1.0 with no clock chasing.
         const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.25;
         const NATIVE_STARTUP_TARGET_SEC = 0.35;
-        // A Chromecast can abort the first AudioWorklet module/context startup
-        // while the receiver is still bringing up its audio thread. Allow one
-        // clean, fresh-context retry before selecting native fallback; repeated
-        // attempts beyond this point only create startup races and silence.
-        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 2;
+        // A Chromecast can abort AudioWorklet module/context startup even when
+        // the source fetch is valid. Do not spend multiple seconds retrying a
+        // doomed Cobalt load: one bounded startup attempt is enough, after
+        // which native fallback owns the session and late worklet failures are
+        // ignored by the lifecycle generation guard.
+        const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 1;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
@@ -1613,15 +1614,14 @@
 
         function pauseAllPlayout(reason) {
           playbackPaused = true;
-          pendingBinaryFrames = [];
-          window._isDrainingStartup = false;
-          window._binaryActive = false;
-          clearLowLatencyStartupWatchdog();
-          if (workletNode && workletNode.port) {
-            try { workletNode.port.postMessage({ type: "PAUSE" }); } catch (e) {}
-          }
-          pauseNativeStreamPlayout(reason || "playback_pause");
-          relayLogToStudio("⏸️ Receiver: Playback paused; audio path held without teardown.");
+          // Pause is a hard live-stream boundary. Holding CAF's progressive
+          // WAV socket leaves Cobalt buffering while the sender is paused;
+          // rapid resume then inherits that stale/starved pipeline. Tear down
+          // both paths exactly as STOP, while preserving the paused command
+          // state until the next ordered PLAYBACK_START.
+          stopAllPlayout(reason || "playback_pause");
+          playbackPaused = true;
+          relayLogToStudio("⏸️ Receiver: Playback paused; native and PCM playout torn down.");
         }
 
         function resetRealtimePlayoutKeepPcmReady(reason) {
