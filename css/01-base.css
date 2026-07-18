@@ -61,8 +61,7 @@ body {
   overflow: hidden;
   cursor: default;
   position: relative;
-  /* [V13.6.6] Gold Standard Fade-in */
-  transition: opacity 0.72s ease-in-out !important;
+  transition: none !important;
 }
 
 /* [V13.5.2] App-wide text selection prevention */
@@ -284,10 +283,10 @@ input[type="range"]:focus {
 }
 
 .app-loading {
-  opacity: 0;
-  pointer-events: none;
+  opacity: 1 !important;
+  pointer-events: auto;
   background-color: #000000 !important; /* Total blackout at launch */
-  transition: opacity 0.72s cubic-bezier(0.4, 0, 0.2, 1); /* Gold Standard Fade */
+  transition: none !important;
 }
 
 .header {
@@ -355,4 +354,3 @@ input[type="range"]:focus {
   min-height: 0;
   overflow: hidden;
 }
-

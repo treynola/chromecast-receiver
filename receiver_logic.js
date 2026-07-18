@@ -761,9 +761,9 @@
 
         function markPlaybackStartSignal() {
           lastPcmQueueResetAt = 0;
-          if (!lastPlaybackStartSignalAt) {
-            lastPlaybackStartSignalAt = Date.now();
-          }
+          // Every ordered PLAYBACK_START reopens the short stale-inactive-state
+          // grace window. This matters for rapid stop/play and reconnect replay.
+          lastPlaybackStartSignalAt = Date.now();
         }
 
         function acceptPlaybackRevision(message, source) {
@@ -1642,19 +1642,9 @@
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          if (
-            receiverPlayoutPreference === "pcm_fallback" &&
-            (workletNode || workletInitPromise || audioInitializing)
-          ) {
-            resetRealtimePlayoutKeepPcmReady(reason);
-            return;
-          }
-          const pauseReason = reason === "track_pause" || reason === "state_update_inactive" || reason === "playback_idle";
-          if (pauseReason && (nativeStreamActive || nativeStreamStarting)) {
-            clearPlaybackStartSignal();
-            pauseNativeStreamPlayout(reason);
-            return;
-          }
+          // Pause/idle is a hard playout boundary. Keeping either native
+          // /stream.wav or the PCM worklet alive lets silence and late packets
+          // accumulate, making the next resume inherit avoidable latency.
           stopAllPlayout(reason || "playback_stop");
         }
 
@@ -3330,8 +3320,18 @@
           if (!acceptPlaybackRevision(d, "PLAYBACK_STOP")) {
             return;
           }
-          stopRealtimePlayoutKeepNativePrimed(d.reason || "playback_stop");
+          stopAllPlayout(d.reason || "playback_stop");
           acknowledgePlaybackRevision(d, "playback_stop");
+        }
+
+        function handlePlaybackPauseCommand(d) {
+          if (!acceptPlaybackRevision(d, "PLAYBACK_PAUSE")) {
+            return;
+          }
+          // Pause intentionally keeps the native stream primed or the PCM
+          // worklet alive. Only the actual STOP command tears playout down.
+          stopRealtimePlayoutKeepNativePrimed(d.reason || "track_pause");
+          acknowledgePlaybackRevision(d, "playback_pause");
         }
 
         function decodePcmRelayBuffer(d) {
@@ -3380,6 +3380,14 @@
               return true;
             case "PLAYBACK_STOP":
               handlePlaybackStopCommand(d);
+              return true;
+            case "PLAYBACK_PAUSE":
+              // Backward compatibility for older senders: pause has the same
+              // receiver-side boundary semantics as PLAYBACK_STOP.
+              handlePlaybackStopCommand({ ...d, type: "PLAYBACK_STOP" });
+              return true;
+            case "PLAYBACK_PAUSE":
+              handlePlaybackPauseCommand(d);
               return true;
             case "PCM_RELAY":
               handlePcmRelayCommand(d, {
@@ -3672,6 +3680,17 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
+
+                  // The receiver clears playout on a bridge reconnect. Tell the
+                  // sender explicitly so it can replay the last ordered command
+                  // (including an active PLAYBACK_START) without inventing a new
+                  // playback revision.
+                  if (window._receiverReadyGeneration !== playbackModeSocketGeneration) {
+                    window._receiverReadyGeneration = playbackModeSocketGeneration;
+                    try {
+                      binaryWS.send(JSON.stringify({ type: "RECEIVER_READY" }));
+                    } catch (e) {}
+                  }
 
                   // PCM startup is playback-gated. A handshake only prepares
                   // the bridge; PLAYBACK_START/state activity owns audio

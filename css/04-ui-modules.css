@@ -3120,7 +3120,12 @@ select option {
 /* --- [V13.9.497] RECEIVER MODE OVERRIDES --- */
 body.receiver-mode {
   background: #000 !important;
-  transition: opacity 0.5s ease-in-out !important;
+  transition: none !important;
+}
+body.receiver-mode.app-loading {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transition: none !important;
 }
 body.receiver-mode #cursor-mirror {
   position: absolute;
@@ -3219,7 +3224,7 @@ body.receiver-mode #audio-unlock-overlay {
   align-items: center;
   justify-content: center;
   z-index: 2000000;
-  transition: opacity 0.5s ease, visibility 0.5s ease;
+  transition: none !important;
   opacity: 0;
   visibility: hidden;
 }
@@ -3315,9 +3320,7 @@ body.receiver-mode .unlock-button:focus {
 /* --- Phase 1: State Toggles --- */
 
 /* App Curtain Fade (GlobalUIMethods.js L21-22) */
-#app-curtain {
-  transition: opacity 1.2s ease-out;
-}
+#app-curtain { transition: none !important; }
 #app-curtain.fade-out {
   opacity: 0;
   pointer-events: none;
@@ -4313,4 +4316,3 @@ dialog.input-prompt-dialog {
   color: #fff;
   border-color: var(--red);
 }
-
