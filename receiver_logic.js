@@ -968,6 +968,42 @@
             return;
           }
           const messageType = cast.framework.messages.MessageType;
+
+          // Give CAF the exact media element that owns the native stream. The
+          // PlayerManager API exposes setMediaElement(), but not the
+          // getMediaElement() probe this receiver used previously. Explicitly
+          // binding the element keeps CAF load/play/pause state on the same
+          // element that the native latency monitor observes.
+          const cafMediaElement = document.getElementById("cast-media-element");
+          if (cafMediaElement && typeof pm.setMediaElement === "function") {
+            try {
+              cafMediaElement.crossOrigin = "anonymous";
+              pm.setMediaElement(cafMediaElement);
+              cafMediaElement._mxsCafMediaElementBound = true;
+              relayLogToStudio("✅ Receiver: CAF PlayerManager bound to #cast-media-element.");
+            } catch (e) {
+              relayLogToStudio("⚠️ Receiver: CAF setMediaElement failed: " + e.message);
+            }
+          }
+
+          // Publish only controls implemented by this receiver. PLAY and STOP
+          // are mandatory request types; PAUSE/volume are the corresponding
+          // MediaStatus command bits. SEEK is intentionally omitted because
+          // the PCM/native live bridge has no seekable media timeline.
+          const command = cast.framework.messages.Command || {};
+          const supportedCommands =
+            (Number(command.PAUSE) || 0) |
+            (Number(command.STREAM_VOLUME) || 0) |
+            (Number(command.STREAM_MUTE) || 0);
+          if (supportedCommands && typeof pm.setSupportedMediaCommands === "function") {
+            try {
+              pm.setSupportedMediaCommands(supportedCommands, true);
+              relayLogToStudio("✅ Receiver: CAF supported media commands set to PAUSE/VOLUME/MUTE.");
+            } catch (e) {
+              relayLogToStudio("⚠️ Receiver: CAF supported-command setup failed: " + e.message);
+            }
+          }
+
           if (typeof pm.setMediaUrlResolver === "function") {
             pm.setMediaUrlResolver(function (request) {
               const media = request && request.media ? request.media : null;
@@ -1043,6 +1079,47 @@
               }
               return request;
             });
+
+            // Standard Cast transport controls must use the same lifecycle as
+            // the MXS custom channel. Let CAF finish its normal request first,
+            // then apply our live-stream boundary on the next task so native
+            // and PCM playout cannot remain active behind the sender UI.
+            const deferPlayerManagerCommand = function (command, request) {
+              setTimeout(function () {
+                if (window._receiverShutdownInProgress) {
+                  return;
+                }
+                relayLogToStudio(
+                  "🎛️ Receiver: PlayerManager " + command +
+                    " request routed to MXS playout (requestId=" +
+                    (request && request.requestId !== undefined ? request.requestId : "n/a") +
+                    ").",
+                );
+                if (command === "PLAY") {
+                  markPlaybackStartSignal();
+                  playbackPaused = false;
+                  requestNativePlaybackStart("player_manager_play");
+                } else if (command === "PAUSE") {
+                  pauseAllPlayout("player_manager_pause");
+                } else if (command === "STOP") {
+                  stopAllPlayout("player_manager_stop");
+                }
+              }, 0);
+              return request;
+            };
+
+            [
+              [messageType.PLAY, "PLAY"],
+              [messageType.PAUSE, "PAUSE"],
+              [messageType.STOP, "STOP"],
+            ].forEach(function (entry) {
+              if (!entry[0]) {
+                return;
+              }
+              pm.setMessageInterceptor(entry[0], function (request) {
+                return deferPlayerManagerCommand(entry[1], request);
+              });
+            });
           }
           cafLoadInterceptorConfigured = true;
           relayLogToStudio("✅ Receiver: CAF playback handlers configured for native stream.");
@@ -1054,31 +1131,39 @@
             return;
           }
           const events = cast.framework.events && cast.framework.events.EventType ? cast.framework.events.EventType : {};
-          const messages = cast.framework.messages && cast.framework.messages.PlayerState ? cast.framework.messages : {};
+          const messages = cast.framework.messages || {};
           [
-            events.PLAYER_STATE_CHANGED,
+            // PLAYING is the documented CAF event forwarded from the bound
+            // HTMLMediaElement. PLAYER_STATE_CHANGED is a sender-side event,
+            // not a Web Receiver PlayerManager event.
+            events.PLAYING,
+            events.PAUSE,
             events.MEDIA_STATUS,
             events.ERROR,
           ].forEach(function (eventType) {
             if (!eventType) return;
             try {
               pm.addEventListener(eventType, function (event) {
+                const mediaStatus = event && event.mediaStatus ? event.mediaStatus : null;
+                const playerState = mediaStatus && mediaStatus.playerState
+                  ? mediaStatus.playerState
+                  : event && event.playerState
+                    ? event.playerState
+                    : "";
                 const value =
                   event && event.value !== undefined
                     ? event.value
                     : event && event.errorCode !== undefined
                       ? event.errorCode
-                      : "";
+                      : playerState;
                 const msg = "CAF event " + eventType + (value !== "" ? ": " + value : "");
                 writeCastDebug(eventType === events.ERROR ? "error" : "debug", msg);
-                if (eventType === events.ERROR || eventType === events.PLAYER_STATE_CHANGED) {
+                if (eventType === events.ERROR || eventType === events.PLAYING || eventType === events.PAUSE) {
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
 
                 if (
-                  eventType === events.PLAYER_STATE_CHANGED &&
-                  messages.PlayerState &&
-                  event.playerState === messages.PlayerState.PLAYING &&
+                  eventType === events.PLAYING &&
                   nativeStreamStarting &&
                   nativeStreamUrl
                 ) {
@@ -1088,25 +1173,29 @@
                     nativeStartupAttemptId,
                   );
                 }
-                
-                // [v13.9.506] Keep the active native LAN stream alive if CAF reports FINISHED.
+
+                // MEDIA_STATUS is the documented PlayerManager status event.
+                // Keep the existing live-stream reload guard on this event so
+                // CAF finishing a progressive WAV does not strand the session.
                 if (
-                  eventType === events.PLAYER_STATE_CHANGED &&
+                  eventType === events.MEDIA_STATUS &&
                   messages.PlayerState &&
-                  event.playerState === messages.PlayerState.IDLE &&
-                  event.idleReason === messages.IdleReason.FINISHED
+                  messages.IdleReason &&
+                  playerState === messages.PlayerState.IDLE &&
+                  mediaStatus &&
+                  mediaStatus.idleReason === messages.IdleReason.FINISHED &&
+                  nativeStreamActive &&
+                  nativeStreamUrl
                 ) {
-                  if (nativeStreamActive && nativeStreamUrl) {
-                    relayLogToStudio("🔄 Receiver: Native stream finished; reloading /stream.wav...");
-                    clearNativeStreamReloadTimer();
-                    const reloadAttemptId = nativeStartupAttemptId;
-                    nativeStreamReloadTimerId = setTimeout(() => {
-                      nativeStreamReloadTimerId = null;
-                      if (nativeStreamActive && nativeStreamUrl) {
-                        startCafStreamPlayout(nativeStreamUrl, reloadAttemptId);
-                      }
-                    }, 100);
-                  }
+                  relayLogToStudio("🔄 Receiver: Native stream finished; reloading /stream.wav...");
+                  clearNativeStreamReloadTimer();
+                  const reloadAttemptId = nativeStartupAttemptId;
+                  nativeStreamReloadTimerId = setTimeout(() => {
+                    nativeStreamReloadTimerId = null;
+                    if (nativeStreamActive && nativeStreamUrl) {
+                      startCafStreamPlayout(nativeStreamUrl, reloadAttemptId);
+                    }
+                  }, 100);
                 }
               });
             } catch (e) {}
@@ -1237,17 +1326,18 @@
         function stopCafNativeCompanion() {
           const pm = getCastPlayerManager();
           if (pm) {
-            // stop() only halts playout on some CAF versions. Prefer unload()
-            // when available so the next PLAYBACK_START cannot inherit the
-            // previous live media pipeline and its buffered idle tail.
+            // Use the documented PlayerManager stop() API first. Clearing the
+            // bound media element below removes any progressive-WAV buffer so
+            // the next PLAYBACK_START cannot inherit an idle tail. Keep the
+            // older unload() fallback for CAF builds that expose it.
             try {
-              if (typeof pm.unload === "function") {
+              if (typeof pm.stop === "function") {
+                pm.stop();
+              } else if (typeof pm.unload === "function") {
                 const unloadResult = pm.unload();
                 if (unloadResult && typeof unloadResult.catch === "function") {
                   unloadResult.catch(() => {});
                 }
-              } else if (typeof pm.stop === "function") {
-                pm.stop();
               }
             } catch (e) {}
           }
@@ -2816,18 +2906,6 @@
           try {
             // Check for statically declared Cast media element first
             let castMediaElement = document.getElementById("cast-media-element");
-            
-            // Fallback: check Cast SDK PlayerManager
-            if (!castMediaElement && typeof cast !== "undefined" && cast.framework) {
-              try {
-                const pm = getCastPlayerManager();
-                if (pm && typeof pm.getMediaElement === "function") {
-                  castMediaElement = pm.getMediaElement();
-                }
-              } catch (sdkErr) {
-                // Non-fatal fallback
-              }
-            }
             
             // Fallback: use recursive shadow root traverser
             if (!castMediaElement) {
