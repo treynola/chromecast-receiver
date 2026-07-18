@@ -66,6 +66,7 @@
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
         var nativeStreamPaused = false;
+        var playbackPaused = false;
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
         var nativeStartupTrimPending = false;
@@ -913,6 +914,7 @@
 
         function requestNativePlaybackStart(reason) {
           if (!identityAllowsAudio()) return false;
+          if (playbackPaused) return true;
           if (!lastPlaybackStartSignalAt) {
             relayLogToStudio(
               "⏸️ Receiver: Ignored playout start without PLAYBACK_START.",
@@ -1603,9 +1605,23 @@
         }
 
         function stopAllPlayout(reason) {
+          playbackPaused = false;
           clearPlaybackStartSignal();
           resetBinaryPlayoutState(reason || "playback_stop");
           stopNativeStreamPlayout(reason || "playback_stop");
+        }
+
+        function pauseAllPlayout(reason) {
+          playbackPaused = true;
+          pendingBinaryFrames = [];
+          window._isDrainingStartup = false;
+          window._binaryActive = false;
+          clearLowLatencyStartupWatchdog();
+          if (workletNode && workletNode.port) {
+            try { workletNode.port.postMessage({ type: "PAUSE" }); } catch (e) {}
+          }
+          pauseNativeStreamPlayout(reason || "playback_pause");
+          relayLogToStudio("⏸️ Receiver: Playback paused; audio path held without teardown.");
         }
 
         function resetRealtimePlayoutKeepPcmReady(reason) {
@@ -2435,13 +2451,47 @@
             // Always resolve to an absolute URL because some TV/embedded browsers (Cobalt)
             // fail/abort if the URL passed to addModule() is relative.
             const absWorkletUrl = new URL(workletUrl, window.location.href).href;
-            relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${absWorkletUrl}`);
+            async function preflightWorkletModule(url, label) {
+              if (typeof fetch !== "function") {
+                relayLogToStudio(`⚠️ Receiver: Worklet preflight unavailable; continuing with ${label} addModule().`);
+                return;
+              }
+              try {
+                const response = await fetch(url, {
+                  cache: "no-store",
+                  credentials: "same-origin",
+                });
+                const contentType = String(response.headers && response.headers.get
+                  ? response.headers.get("content-type") || ""
+                  : "").toLowerCase();
+                const bytes = await response.arrayBuffer();
+                relayLogToStudio(
+                  `🧪 Receiver: Worklet preflight ${label}: status=${response.status} ok=${response.ok} contentType=${contentType || "unknown"} bytes=${bytes.byteLength} url=${url}`,
+                );
+                if (!response.ok) {
+                  throw new Error(`${label} HTTP ${response.status}`);
+                }
+                if (/text\/html/i.test(contentType)) {
+                  throw new Error(`${label} returned HTML instead of JavaScript`);
+                }
+              } catch (preflightError) {
+                relayLogToStudio(
+                  `❌ Receiver: Worklet preflight failed for ${label}: ${preflightError && preflightError.message ? preflightError.message : preflightError}`,
+                );
+                throw preflightError;
+              }
+            }
+
+            relayLogToStudio(`📡 Receiver: Preflighting PCM worklet module: ${absWorkletUrl}`);
             try {
+              await preflightWorkletModule(absWorkletUrl, "versioned");
+              relayLogToStudio(`📡 Receiver: Adding PCM worklet module directly: ${absWorkletUrl}`);
               await audioCtx.audioWorklet.addModule(absWorkletUrl);
             } catch (err) {
               relayLogToStudio(`⚠️ Receiver: Versioned worklet load failed (${err.message}). Trying fallback unversioned worklet...`);
               const fallbackUrl = workletUrl.replace(/-v[\d.\-]+\.js$/, ".js");
               const absFallbackUrl = new URL(fallbackUrl, window.location.href).href;
+              await preflightWorkletModule(absFallbackUrl, "fallback");
               relayLogToStudio(`📡 Receiver: Adding fallback PCM worklet: ${absFallbackUrl}`);
               await audioCtx.audioWorklet.addModule(absFallbackUrl);
             }
@@ -3008,7 +3058,7 @@
         }
 
         let lastRenderTime = 0;
-        const RENDER_THROTTLE_MS = 250; // Keep UI near-live without hammering the DOM.
+        const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
 
         const _lastParamsCache = [];
         const _lastFxCache = [];
@@ -3295,6 +3345,10 @@
             return;
           }
           markPlaybackStartSignal();
+          playbackPaused = false;
+          if (workletNode && workletNode.port) {
+            try { workletNode.port.postMessage({ type: "RESUME" }); } catch (e) {}
+          }
           const immediateState = buildImmediatePlaybackState(d.trackId);
           if (immediateState) {
             renderState(immediateState, true);
@@ -3313,6 +3367,9 @@
           if (isPlaybackActiveState(state)) {
             markPlaybackStartSignal();
             requestNativePlaybackStart("state_update");
+          } else if (playbackPaused) {
+            acknowledgePlaybackRevision(envelope, "state_update_paused");
+            return;
           } else if (shouldIgnoreStaleInactiveState()) {
             return;
           } else if (
@@ -3331,6 +3388,14 @@
           }
           stopAllPlayout(d.reason || "playback_stop");
           acknowledgePlaybackRevision(d, "playback_stop");
+        }
+
+        function handlePlaybackPauseCommand(d) {
+          if (!acceptPlaybackRevision(d, "PLAYBACK_PAUSE")) {
+            return;
+          }
+          pauseAllPlayout(d.reason || "playback_pause");
+          acknowledgePlaybackRevision(d, "playback_pause");
         }
 
         function decodePcmRelayBuffer(d) {
@@ -3352,7 +3417,7 @@
         }
 
         function handlePcmRelayCommand(d, options) {
-          if (window._binaryActive || nativeStreamActive) return;
+          if (playbackPaused || window._binaryActive || nativeStreamActive) return;
           const buffer = decodePcmRelayBuffer(d);
           if (!buffer) return;
           if (options && options.requireWorklet && !workletNode) return;
@@ -3381,9 +3446,7 @@
               handlePlaybackStopCommand(d);
               return true;
             case "PLAYBACK_PAUSE":
-              // Backward compatibility for older senders: pause has the same
-              // receiver-side boundary semantics as PLAYBACK_STOP.
-              handlePlaybackStopCommand({ ...d, type: "PLAYBACK_STOP" });
+              handlePlaybackPauseCommand(d);
               return true;
             case "PCM_RELAY":
               handlePcmRelayCommand(d, {
@@ -3603,7 +3666,7 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              if (window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
+              if (playbackPaused || window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
                 return;
               }
               if (workletNode) {
@@ -3631,7 +3694,7 @@
               }
               return;
             } else if (isBlob) {
-              if (window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
+              if (playbackPaused || window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
                 return;
               }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
@@ -3648,6 +3711,7 @@
               if (audioCtx && audioCtx.state === "suspended") resumeAudio();
               var reader = new FileReader();
               reader.onload = function() {
+                if (playbackPaused) return;
                 const packet = validatePcmV2Packet(this.result);
                 if (packet) queueBinaryFrame(packet);
               };

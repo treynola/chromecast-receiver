@@ -27,6 +27,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._TARGET_TOLERANCE_MS = 25;
     this._EMERGENCY_FLOOR_MS = 75;
     this._CROSSFADE_MS = 12;
+    // Keep the clock-safe target acquisition window. This is queue settling,
+    // not an audible fade; removing it lets the controller acquire on a
+    // transient startup queue and destabilize playout.
     this._STARTUP_SETTLE_MS = 750;
     this._QUEUE_CONTROL_FILTER_MS = 1000;
     this._DIAG_INTERVAL_CALLBACKS = 120;
@@ -50,6 +53,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
     this._isBuffering = true;
     this._playoutStarted = false;
+    this._paused = false;
     this._emergencyAwaitingRecovery = false;
     this._crossfadeKind = null;
     this._crossfadeFramesRemaining = 0;
@@ -102,6 +106,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const message = event.data;
         if (message && message.type === "RESET") {
           this._intentionalReset();
+          return;
+        }
+        if (message && message.type === "PAUSE") {
+          this._paused = true;
+          this.port.postMessage({ type: "LOG", msg: "Worklet playout PAUSED (hold)." });
+          return;
+        }
+        if (message && message.type === "RESUME") {
+          this._paused = false;
+          this.port.postMessage({ type: "LOG", msg: "Worklet playout RESUMED (hold released)." });
           return;
         }
         if (message && message.type === "CONFIG") {
@@ -379,7 +393,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return;
     }
     this._startupPrebuffers++;
-    this._startCrossfade("startup", 0, 0);
+    // Startup is immediate once the target queue is ready. Crossfades remain
+    // enabled for emergency underrun/overrun recovery only.
   }
 
   _queueErrorMs(queuedFrames) {
@@ -441,6 +456,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const channel0 = output?.[0];
       const channel1 = output?.[1] || channel0;
       if (!channel0) return true;
+
+      if (this._paused) {
+        channel0.fill(0);
+        if (channel1 !== channel0) channel1.fill(0);
+        return true;
+      }
 
       const framesInBlock = channel0.length;
       const wallNow = typeof Date !== "undefined" ? Date.now() : 0;
