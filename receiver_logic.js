@@ -2402,14 +2402,23 @@
               }
 
             let workletUrl = "pcm-player-worklet-v13.9.509.js";
-            // Prefer the authoritative local bridge whenever BRIDGE_CONFIG has
-            // supplied it. Public HTTPS hosting can otherwise select a stale or
-            // unavailable GitHub worklet, producing AbortError during startup.
-            if (currentBridgeIp && currentBridgePort) {
+            // The hosted receiver is HTTPS, so an HTTP Studio bridge is mixed
+            // content and Chromecast/Cobalt reports its AudioWorklet rejection
+            // as the misleading `AbortError`. Only use the bridge on local HTTP
+            // receiver sessions; hosted receivers must load the same-origin,
+            // versioned worklet over HTTPS.
+            const receiverProtocol = String(window.location && window.location.protocol || "").toLowerCase();
+            const canUseHttpBridge = receiverProtocol === "http:";
+            if (canUseHttpBridge && currentBridgeIp && currentBridgePort) {
               const port = currentBridgePort || "8080";
               workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
               relayLogToStudio(`📡 Receiver: Loading Worklet from Studio: ${workletUrl}`);
             } else {
+              if (currentBridgeIp && currentBridgePort && !canUseHttpBridge) {
+                relayLogToStudio(
+                  `🔒 Receiver: Ignoring HTTP Studio worklet bridge on ${receiverProtocol || "unknown"} page; using same-origin worklet.`,
+                );
+              }
               relayLogToStudio(`📡 Receiver: Loading Worklet relatively: ${workletUrl}`);
             }
 
