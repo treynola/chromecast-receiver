@@ -4153,7 +4153,7 @@ dialog.input-prompt-dialog {
 .vertical-slot-tabs {
   position: absolute;
   top: 15px;
-  right: -36px; /* Exactly outside the right edge of the dialog */
+  right: -42px; /* Pushed right to clear overlap and make all borders visible */
   display: flex;
   flex-direction: column;
   gap: 5px;
