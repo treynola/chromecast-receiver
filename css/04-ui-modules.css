@@ -4167,4 +4167,14 @@ dialog.input-prompt-dialog {
   transition: all 0.15s ease-in-out;
 }
 
+/* Force active/selected slot numbers (both horizontal & vertical) to match the REC button color scheme */
+.fx-chain-slot-label.selected,
+.fx-chain-slot input[type="checkbox"]:checked + .fx-chain-slot-label.selected {
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  box-shadow: 0 0 6px var(--red);
+}
+
+
 
