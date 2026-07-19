@@ -1,14 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-9fd0e0fc9c59"></script>
+    <script src="build_identity.js?v=13.9.509-fb48f368a11d"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MXS-004 Studio Mirror v13.9.509</title>
-    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <script src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -305,5 +303,9 @@
 
     <script src="pcm-v2-protocol.js?v=13.9.509-575b6a402da5"></script>
     <script src="receiver_logic.js?v=13.9.509-575b6a402da5"></script>
+    <!-- Load optional Cast dependencies after local GUI/bootstrap code so a
+         slow or unavailable CDN cannot hold the receiver on a black screen. -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <script src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
   </body>
 </html>
