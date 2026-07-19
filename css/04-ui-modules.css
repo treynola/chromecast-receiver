@@ -3133,12 +3133,17 @@ body.receiver-mode.app-loading {
  * the static master column from becoming an incomplete first paint.
  */
 body.receiver-mode.app-loading #studio-root {
+  /* Cobalt can paint visibility-hidden descendants in separate layout passes.
+     Keep the receiver tree out of layout until the whole tree is ready. */
+  display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
   transition: none !important;
 }
 body.receiver-mode:not(.app-loading) #studio-root {
+  display: flex !important;
   visibility: visible !important;
+  pointer-events: auto !important;
   transition: none !important;
 }
 body.receiver-mode #cursor-mirror {

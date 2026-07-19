@@ -2993,26 +2993,13 @@
         function prepareReceiverUi() {
           buildGUI();
 
-          // The receiver script runs at the end of <body>, so every required
-          // node and local stylesheet is already available. Keep the root
-          // hidden for two paint boundaries so Chromium computes the complete
-          // five-column grid before exposing a single frame. There is no fade.
-          const revealCompleteLayout = function revealCompleteLayout() {
+          // Cobalt can throttle requestAnimationFrame during startup. The root
+          // is display:none while app-loading is present, so one event-loop
+          // turn completes the synchronous DOM build without exposing a
+          // partially painted layout or adding the old 250ms fallback wait.
+          setTimeout(function revealCompleteLayout() {
             revealReceiverUi("complete_layout_ready");
-          };
-          if (typeof window.requestAnimationFrame === "function") {
-            window.requestAnimationFrame(function waitForReceiverLayout() {
-              window.requestAnimationFrame(revealCompleteLayout);
-            });
-          } else {
-            setTimeout(revealCompleteLayout, 0);
-          }
-
-          // Safety net for receiver runtimes that throttle animation frames
-          // during startup. The structural gate still prevents partial paint.
-          setTimeout(function revealReceiverUiFallback() {
-            revealReceiverUi("layout_frame_fallback");
-          }, 250);
+          }, 0);
         }
 
         function updateScale() {
