@@ -3127,6 +3127,20 @@ body.receiver-mode.app-loading {
   pointer-events: auto !important;
   transition: none !important;
 }
+/*
+ * Keep the receiver canvas black until its four dynamic track columns have
+ * been created. `visibility` preserves a full layout pass while preventing
+ * the static master column from becoming an incomplete first paint.
+ */
+body.receiver-mode.app-loading #studio-root {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+body.receiver-mode:not(.app-loading) #studio-root {
+  visibility: visible !important;
+  transition: none !important;
+}
 body.receiver-mode #cursor-mirror {
   position: absolute;
   width: 14px;

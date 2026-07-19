@@ -652,17 +652,45 @@
           }
         }
 
+        function isReceiverUiStructurallyComplete() {
+          const root = document.getElementById("studio-root");
+          const grid = document.getElementById("main-grid");
+          const sampleGrid = document.getElementById("sample-grid");
+          if (!root || !grid || !sampleGrid || sampleGrid.children.length !== 20) {
+            return false;
+          }
+          for (let index = 0; index < 4; index++) {
+            const track = document.getElementById("track-" + index);
+            if (!track || track.parentNode !== grid) {
+              return false;
+            }
+          }
+          return true;
+        }
+
         function revealReceiverUi(reason) {
           if (!document.body || window._receiverUiRevealed) {
-            return;
+            return false;
+          }
+          if (!isReceiverUiStructurallyComplete()) {
+            relayLogToStudio(
+              "⚠️ Receiver: Deferred UI reveal because the complete five-column layout is not ready.",
+            );
+            return false;
           }
           window._receiverUiRevealed = true;
+          const root = document.getElementById("studio-root");
+          document.body.setAttribute("aria-busy", "false");
+          if (root) {
+            root.removeAttribute("aria-hidden");
+          }
           document.body.classList.remove("app-loading");
           relayLogToStudio(
             "✅ Receiver: Receiver UI revealed (app-loading removed" +
               (reason ? " / " + reason : "") +
               ").",
           );
+          return true;
         }
 
         function notifyPlaybackMode(mode, reason) {
@@ -2962,6 +2990,31 @@
           updateScale();
         }
 
+        function prepareReceiverUi() {
+          buildGUI();
+
+          // The receiver script runs at the end of <body>, so every required
+          // node and local stylesheet is already available. Keep the root
+          // hidden for two paint boundaries so Chromium computes the complete
+          // five-column grid before exposing a single frame. There is no fade.
+          const revealCompleteLayout = function revealCompleteLayout() {
+            revealReceiverUi("complete_layout_ready");
+          };
+          if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(function waitForReceiverLayout() {
+              window.requestAnimationFrame(revealCompleteLayout);
+            });
+          } else {
+            setTimeout(revealCompleteLayout, 0);
+          }
+
+          // Safety net for receiver runtimes that throttle animation frames
+          // during startup. The structural gate still prevents partial paint.
+          setTimeout(function revealReceiverUiFallback() {
+            revealReceiverUi("layout_frame_fallback");
+          }, 250);
+        }
+
         function updateScale() {
           const winW = window.innerWidth;
           const winH = window.innerHeight;
@@ -3591,7 +3644,6 @@
           }
         }
 
-        var logQueue = [];
         let lastHighFreqLogTime = 0;
         function relayLogToStudio(msg) {
           const isHighFreq =
@@ -3669,13 +3721,14 @@
 
           // [v13.9.504] ULTIMATE FALLBACK: HTTP Beacon (Log Server)
           if (!sent) {
+            const pageHost = window.location.hostname;
+            const pageHostIsStudio =
+              pageHost === "localhost" ||
+              pageHost === "127.0.0.1" ||
+              /^\d{1,3}(?:\.\d{1,3}){3}$/.test(pageHost);
             const targetIp =
               currentBridgeIp ||
-              (window.location.hostname !== "localhost" &&
-              window.location.hostname !== "127.0.0.1" &&
-              window.location.hostname !== ""
-                ? window.location.hostname
-                : null);
+              (pageHostIsStudio ? pageHost : null);
             if (targetIp) {
               const port =
                 currentBridgePort ||
@@ -3685,11 +3738,11 @@
               const url = "http://" + targetIp + ":" + port + "/log?m=" + encodeURIComponent(msg);
               try {
                 if (navigator.sendBeacon) {
-                  navigator.sendBeacon(url);
+                  sent = navigator.sendBeacon(url);
                 } else {
                   fetch(url).catch(() => {});
+                  sent = true;
                 }
-                sent = true;
               } catch (e) {}
             }
           }
@@ -4274,13 +4327,9 @@
             buildIdentityRejected = false;
             window._buildIdentityAccepted = false;
             pendingBuildIdentityRejection = null;
-            // Flush buffered logs
-            while (logQueue.length > 0) {
-              const msg = logQueue.shift();
-              try {
-                binaryWS.send(JSON.stringify({ type: "LOG", msg: msg }));
-              } catch (e) {}
-            }
+            // Flush startup/UI logs that were queued before the Studio LAN
+            // address and receiver WebSocket became available.
+            flushPendingStudioLogs();
             const diagEl = document.getElementById("bridge-diag-text");
             if (diagEl) {
               diagEl.textContent = diagEl.textContent.replace(
@@ -4623,8 +4672,9 @@
           }
         }
 
+        prepareReceiverUi();
+
         window.onload = function () {
-          buildGUI();
           startNativeLatencyMonitor();
 
           // [V13.9.40] Aggressive Startup Trace
@@ -4816,7 +4866,7 @@
           }
 
           window.addEventListener("resize", updateScale);
-          revealReceiverUi("startup_ready");
+          revealReceiverUi("window_load_fallback");
           relayLogToStudio("🎬 Receiver: Startup Complete [" + VERSION_TAG + "].");
         };
       })();
