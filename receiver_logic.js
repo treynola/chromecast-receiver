@@ -65,6 +65,7 @@
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const CAST_GUI_PROTOCOL_VERSION = 1;
+        let guiInteractionRevision = 0;
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         var nativeStreamActive = false;
         var nativeStreamStarting = false;
@@ -1213,6 +1214,48 @@
           if (reason) {
             writeCastDebug("debug", "GUI revision gate reset (" + reason + ").");
           }
+        }
+
+        function isReceiverInteractiveControl(element) {
+          if (!element || !element.id) return false;
+          return /^(t-(rec|stop|play|rev)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain)-sl-\d+|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|sample-\d+)$/.test(element.id);
+        }
+
+        function sendGuiInteraction(element, kind) {
+          if (!isReceiverInteractiveControl(element)) return;
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+          guiInteractionRevision += 1;
+          const message = {
+            type: "GUI_INTERACTION_EVENT",
+            transport: "gui",
+            guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            guiInteractionRevision,
+            kind,
+            targetId: element.id,
+            value: element.type === "checkbox" ? undefined : element.value,
+            checked: element.type === "checkbox" ? element.checked : undefined,
+          };
+          try {
+            binaryWS.send(JSON.stringify(message));
+            relayLogToStudio("📡 Receiver: GUI interaction sent → " + element.id + " (" + kind + ")");
+          } catch (e) {}
+        }
+
+        function bindReceiverGuiInteractions() {
+          document.addEventListener("click", (event) => {
+            const target = event.target && event.target.closest ? event.target.closest("button") : null;
+            if (target) sendGuiInteraction(target, "click");
+          });
+          document.addEventListener("input", (event) => {
+            const target = event.target;
+            if (target && (target.matches("input[type=range], input[type=checkbox]") || target.tagName === "SELECT")) {
+              sendGuiInteraction(target, "input");
+            }
+          });
+          document.addEventListener("change", (event) => {
+            const target = event.target;
+            if (target && target.tagName === "SELECT") sendGuiInteraction(target, "change");
+          });
         }
 
         function acknowledgePlaybackRevision(message, action) {
@@ -2998,6 +3041,7 @@
         function prepareReceiverUi() {
           markReceiverBoot("receiver_script_loaded");
           buildGUI();
+          bindReceiverGuiInteractions();
           markReceiverBoot("gui_structurally_ready");
 
           // Cobalt can throttle requestAnimationFrame during startup. The root
