@@ -81,6 +81,11 @@
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
         const WORKLET_CAPABILITY_CACHE_KEY = "mxs_audio_worklet_capability_v1";
+        // Bump this only when the receiver changes its AudioWorklet loading
+        // compatibility strategy. A proven production AbortError is a device
+        // capability result, not a source-build result, and must survive normal
+        // receiver deployments or every new QA build pays the same dead path.
+        const WORKLET_CAPABILITY_GENERATION = "cobalt-production-worklet-v1";
         // A fresh native stream must not replay the buffered tail of a prior
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
@@ -742,6 +747,20 @@
           return components.receiverLogic + ":" + components.receiverPcmWorklet;
         }
 
+        function isReusableHardWorkletFailure(entry) {
+          if (!entry || entry.supported !== false) return false;
+          const details = [
+            entry.stage,
+            entry.reason,
+            entry.error && entry.error.name,
+            entry.error && entry.error.message,
+          ].filter(Boolean).join(" ");
+          return (
+            entry.stage === "production_same_origin_module" &&
+            /abort|not.?supported|unavailable/i.test(details)
+          );
+        }
+
         function readCachedWorkletCapability() {
           const buildKey = getWorkletCapabilityBuildKey();
           if (!buildKey) return null;
@@ -750,10 +769,27 @@
             if (
               !parsed ||
               parsed.schema !== 1 ||
-              parsed.buildKey !== buildKey ||
               typeof parsed.supported !== "boolean"
             ) {
               return null;
+            }
+            const sameBuild = parsed.buildKey === buildKey;
+            const hardDeviceFailure = isReusableHardWorkletFailure(parsed);
+            const compatibleGeneration =
+              parsed.capabilityGeneration === WORKLET_CAPABILITY_GENERATION;
+            const migratableLegacyHardFailure =
+              hardDeviceFailure && !parsed.capabilityGeneration;
+            if (
+              !sameBuild &&
+              !(hardDeviceFailure && (compatibleGeneration || migratableLegacyHardFailure))
+            ) {
+              return null;
+            }
+            if (migratableLegacyHardFailure || (!sameBuild && compatibleGeneration)) {
+              parsed.buildKey = buildKey;
+              parsed.capabilityGeneration = WORKLET_CAPABILITY_GENERATION;
+              parsed.migratedAcrossBuildAt = Date.now();
+              localStorage.setItem(WORKLET_CAPABILITY_CACHE_KEY, JSON.stringify(parsed));
             }
             return {
               supported: parsed.supported,
@@ -763,6 +799,8 @@
               cached: true,
               cachedAt: parsed.cachedAt || null,
               buildKey: buildKey,
+              cacheScope: sameBuild ? "build" : "device_compatibility_generation",
+              capabilityGeneration: WORKLET_CAPABILITY_GENERATION,
             };
           } catch (e) {
             return null;
@@ -778,6 +816,7 @@
             localStorage.setItem(WORKLET_CAPABILITY_CACHE_KEY, JSON.stringify({
               schema: 1,
               buildKey: buildKey,
+              capabilityGeneration: WORKLET_CAPABILITY_GENERATION,
               supported: result.supported,
               stage: result.stage || "unknown",
               reason: result.reason || "unknown",
@@ -984,7 +1023,8 @@
           if (cachedCapability && !cachedCapability.supported) {
             reportWorkletCapability(cachedCapability);
             relayLogToStudio(
-              "⚡ Receiver: Per-build AudioWorklet capability cache selects native before playback.",
+              "⚡ Receiver: AudioWorklet hard-failure cache selects native before playback (" +
+                (cachedCapability.cacheScope || "build") + ").",
             );
             return degradePcmStartupToNative("audio_worklet_capability_cached_unavailable");
           }
