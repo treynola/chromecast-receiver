@@ -3,18 +3,13 @@
       window.SERVER_PORT = "{{SERVER_PORT}}";
       window.SECURITY_TOKEN = "{{SECURITY_TOKEN}}";
 
-      // [v13.9.505] AUTO CACHE-BUST: If no ?cb= param, redirect to self with one.
-      // Fires exactly once per cast session — no loop because redirect URL already has cb=.
-      (function () {
-        if (window.location.search.indexOf('cb=') === -1) {
-          try {
-            localStorage.removeItem("mxs_pcm_degraded");
-          } catch (e) {}
-          var freshUrl = window.location.href.split('?')[0] + '?cb=' + Date.now();
-          window.location.replace(freshUrl);
-          // Execution stops here — the browser navigates away immediately.
-        }
-      })();
+        // [v13.9.509] Do not redirect during Cast bootstrap. A launch-time
+        // self-redirect can leave a custom receiver on a blank page before
+        // CAF initializes. Asset URLs are versioned, and explicit receiver
+        // reloads add their own cache-buster after the app is running.
+        try {
+          localStorage.removeItem("mxs_pcm_degraded");
+        } catch (e) {}
 
       (function () {
         var audioCtx = null;
