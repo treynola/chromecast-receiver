@@ -477,6 +477,36 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* [V13.6.5] Unified Master & Track Control Buttons */
 
+/* Shared REC component used by the Master Column and every Track. */
+.track-rec-button {
+  height: 24px !important;
+  font-size: 0.75em !important;
+  padding: 2px 4px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family: "Cousine", monospace !important;
+  font-weight: 720 !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+}
+
+.track-rec-button:hover {
+  filter: brightness(1.2);
+}
+
+.track-rec-button.recording {
+  animation: text-blink 0.5s infinite;
+  background-color: var(--red) !important;
+  color: white !important;
+  box-shadow: 0 0 5px var(--red);
+}
+
 /* [V13.8.66] Master REC Dimension Alignment */
 #master-record-button {
   width: 60px !important;
