@@ -104,14 +104,12 @@
         // Playback commands can arrive twice because the sender deliberately
         // mirrors control messages over both the Cast namespace and the bridge
         // WebSocket. Keep command and GUI-state ordering separate: equal
-        // command revisions are duplicates, while equal STATE_UPDATE revisions
-        // can contain legitimate GUI changes.
+        // command revisions are duplicates; GUI snapshots use their own
+        // revision stream and can never control audio playout.
         var lastPlaybackEpoch = -1;
         var lastPlaybackRevision = -1;
         var allowSamePlaybackRevisionReplay = false;
-        var lastStateEpoch = -1;
-        var lastStateRevision = -1;
-        var lastStateAckKey = "";
+        var lastGuiRevision = -1;
         var expectedPcmSessionId = null;
         var frozenJitterTarget = null;
 
@@ -1126,9 +1124,7 @@
           // needs to accept that exact command once, but must continue to
           // reject delayed commands from before it.
           allowSamePlaybackRevisionReplay = lastPlaybackEpoch >= 0;
-          lastStateEpoch = -1;
-          lastStateRevision = -1;
-          lastStateAckKey = "";
+          lastGuiRevision = -1;
           if (reason) {
             writeCastDebug("debug", "Playback revision gate reset (" + reason + ").");
           }
@@ -1150,9 +1146,8 @@
             // current sender frames carry an ordered epoch/revision pair.
             return true;
           }
-          const isStateUpdate = source === "STATE_UPDATE";
-          const previousEpoch = isStateUpdate ? lastStateEpoch : lastPlaybackEpoch;
-          const previousRevision = isStateUpdate ? lastStateRevision : lastPlaybackRevision;
+          const previousEpoch = lastPlaybackEpoch;
+          const previousRevision = lastPlaybackRevision;
           if (isRevisionOlder(epoch, revision, previousEpoch, previousRevision)) {
             relayLogToStudio(
               "⏭️ Receiver: Ignored stale " +
@@ -1186,25 +1181,30 @@
             );
             return false;
           }
-          if (isStateUpdate) {
-            // A state snapshot with the same playback revision is still valid:
-            // effect, meter, and GUI fields may have changed without a new
-            // transport command.
-            if (isRevisionOlder(epoch, revision, lastPlaybackEpoch, lastPlaybackRevision)) {
-              relayLogToStudio(
-                "⏭️ Receiver: Ignored state behind the latest playback command " +
-                  "epoch=" + epoch + " revision=" + revision + ".",
-              );
-              return false;
-            }
-            lastStateEpoch = epoch;
-            lastStateRevision = revision;
-          } else {
-            lastPlaybackEpoch = epoch;
-            lastPlaybackRevision = revision;
-            allowSamePlaybackRevisionReplay = false;
-          }
+          lastPlaybackEpoch = epoch;
+          lastPlaybackRevision = revision;
+          allowSamePlaybackRevisionReplay = false;
           return true;
+        }
+
+        function acceptGuiRevision(message) {
+          const revision = Number(message && message.guiRevision);
+          if (!Number.isSafeInteger(revision) || revision < 0) {
+            return true;
+          }
+          if (revision <= lastGuiRevision) {
+            return false;
+          }
+          lastGuiRevision = revision;
+          return true;
+        }
+
+        function resetGuiRevisionGate(reason) {
+          lastGuiRevision = -1;
+          lastDialogMirrorState = "";
+          if (reason) {
+            writeCastDebug("debug", "GUI revision gate reset (" + reason + ").");
+          }
         }
 
         function acknowledgePlaybackRevision(message, action) {
@@ -1220,17 +1220,8 @@
           const playbackRevision = Number.isSafeInteger(messageRevision)
             ? messageRevision
             : lastPlaybackRevision;
-          // STATE_UPDATE arrives on the 10 Hz mirror cadence. One ACK per
-          // revision/action is sufficient; repeating the same ACK for every
-          // GUI snapshot only creates control-channel churn and competes with
-          // the actual playback commands.
-          if (ackAction === "state_update" || ackAction === "state_update_paused") {
-            const stateAckKey = ackAction + ":" + playbackEpoch + ":" + playbackRevision;
-            if (stateAckKey === lastStateAckKey) {
-              return;
-            }
-            lastStateAckKey = stateAckKey;
-          }
+          // GUI snapshots do not use playback ACKs. Only playback commands
+          // reach this function, keeping ACK traffic off the GUI path.
           try {
             binaryWS.send(
               JSON.stringify({
@@ -2956,6 +2947,12 @@
         ];
 
         function buildGUI() {
+          if (!document.getElementById("gui-dialog-mirror-root")) {
+            const dialogRoot = document.createElement("div");
+            dialogRoot.id = "gui-dialog-mirror-root";
+            dialogRoot.setAttribute("aria-hidden", "true");
+            document.getElementById("studio-root")?.appendChild(dialogRoot);
+          }
           var g = document.getElementById("sample-grid");
           if (g) {
             g.innerHTML = "";
@@ -3801,6 +3798,76 @@
             valCache[id] = left;
           }
         }
+        function updateButtonState(id, buttonState) {
+          const el = getEl(id);
+          if (!el || !buttonState) return;
+          const cacheKey = "button:" + id;
+          const stateKey = JSON.stringify(buttonState);
+          if (valCache[cacheKey] !== stateKey) {
+            el.classList.toggle("active", !!buttonState.active);
+            el.classList.toggle("playing", !!buttonState.active);
+            el.classList.toggle(
+              "recording",
+              !!buttonState.active && id.indexOf("rec") >= 0,
+            );
+            el.setAttribute("aria-pressed", buttonState.pressed ? "true" : "false");
+            valCache[cacheKey] = stateKey;
+          }
+          el.disabled = !!buttonState.disabled;
+        }
+
+        let lastDialogMirrorState = "";
+        function renderDialogMirrors(dialogs) {
+          const root = getEl("gui-dialog-mirror-root");
+          if (!root) return;
+          const list = Array.isArray(dialogs) ? dialogs : [];
+          const signature = JSON.stringify(list);
+          if (signature === lastDialogMirrorState) return;
+          lastDialogMirrorState = signature;
+          root.replaceChildren();
+          root.hidden = list.length === 0;
+          list.forEach((dialog) => {
+            const panel = document.createElement("section");
+            panel.className = "gui-dialog-mirror";
+            panel.style.left = `${Math.max(0, Math.min(0.85, Number(dialog.left) || 0.2)) * 100}%`;
+            panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
+            panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
+            panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
+            const heading = document.createElement("h3");
+            heading.textContent = dialog.title || "MXS-004";
+            panel.appendChild(heading);
+            (dialog.text || []).forEach((text) => {
+              const help = document.createElement("p");
+              help.textContent = text;
+              panel.appendChild(help);
+            });
+            (dialog.controls || []).forEach((control) => {
+              const row = document.createElement("label");
+              row.className = "gui-dialog-mirror-control";
+              const label = document.createElement("span");
+              label.textContent = control.label || "Parameter";
+              row.appendChild(label);
+              if (control.type === "checkbox") {
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.checked = !!control.checked;
+                checkbox.disabled = true;
+                row.appendChild(checkbox);
+              } else {
+                const value = document.createElement("input");
+                value.type = control.type === "select-one" ? "text" : (control.type || "text");
+                value.value = control.value ?? "";
+                value.min = control.min || "";
+                value.max = control.max || "";
+                value.step = control.step || "";
+                value.disabled = true;
+                row.appendChild(value);
+              }
+              panel.appendChild(row);
+            });
+            root.appendChild(panel);
+          });
+        }
 
         let lastRenderTime = 0;
         const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
@@ -3866,12 +3933,13 @@
                 const curKey = `${s.cursor.x}_${s.cursor.y}_${s.cursor.isClicking}`;
                 if (valCache["cursor"] !== curKey) {
                   cur.style.display = "block";
-                  var px = s.cursor.x * 1440;
-                  var py = s.cursor.y * 810 + 13;
-                  cur.style.transform = `translate3d(${px}px, ${py}px, 0) translate3d(-50%, -50%, 0)`;
-                  cur.style.background = s.cursor.isClicking
-                    ? "rgba(255, 255, 0, 0.9)"
-                    : "rgba(255, 0, 0, 0.9)";
+                  const root = getEl("studio-root");
+                  const rootWidth = root ? root.clientWidth : 1440;
+                  const rootHeight = root ? root.clientHeight : 810;
+                  const px = Math.max(0, Math.min(rootWidth - 1, s.cursor.x * rootWidth));
+                  const py = Math.max(0, Math.min(rootHeight - 1, s.cursor.y * rootHeight));
+                  cur.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+                  cur.classList.toggle("is-clicking", !!s.cursor.isClicking);
                   valCache["cursor"] = curKey;
                 }
               }
@@ -3915,6 +3983,18 @@
                 "lfo2-toggle",
                 s.master.lfo2 && s.master.lfo2.active ? "active" : "",
               );
+              updateButtonState(
+                "master-record-button",
+                s.master.buttons && s.master.buttons.record,
+              );
+              updateButtonState(
+                "lfo-toggle",
+                s.master.buttons && s.master.buttons.lfo1,
+              );
+              updateButtonState(
+                "lfo2-toggle",
+                s.master.buttons && s.master.buttons.lfo2,
+              );
               updateStyleWidth(
                 "lfo2-meter-bar",
                 ((s.master.lfo2 && s.master.lfo2.value) * 100 || 0) + "%",
@@ -3928,6 +4008,7 @@
                 ((s.master.lfo2 && s.master.lfo2.time) || 1.8).toFixed(1) + "s",
               );
             }
+            renderDialogMirrors(s.dialogs);
             if (s.sampler) {
               const samplerStr = JSON.stringify(s.sampler);
               if (_lastSamplerCache !== samplerStr) {
@@ -3967,8 +4048,12 @@
                       ? "status-recording"
                       : t.isPlaying
                         ? "status-playing"
-                        : "status-ready"),
+                    : "status-ready"),
                 );
+                updateButtonState(`t-rec-${i}`, t.buttons && t.buttons.record);
+                updateButtonState(`t-stop-${i}`, t.buttons && t.buttons.stop);
+                updateButtonState(`t-play-${i}`, t.buttons && t.buttons.play);
+                updateButtonState(`t-rev-${i}`, t.buttons && t.buttons.reverse);
                 updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
                 updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
 
@@ -4109,28 +4194,12 @@
           acknowledgePlaybackRevision(d, "playback_start");
         }
 
-        function handleStateUpdateCommand(state, envelope) {
-          if (!acceptPlaybackRevision(envelope, "STATE_UPDATE")) {
+        function handleGuiStateUpdateCommand(state, envelope) {
+          if (!acceptGuiRevision(envelope)) {
             return;
           }
           renderState(state);
           lastMirroredState = state;
-          if (isPlaybackActiveState(state)) {
-            markPlaybackStartSignal();
-            requestNativePlaybackStart("state_update");
-          } else if (playbackPaused) {
-            acknowledgePlaybackRevision(envelope, "state_update_paused");
-            return;
-          } else if (shouldIgnoreStaleInactiveState()) {
-            return;
-          } else if (
-            nativeStreamActive ||
-            window._binaryActive ||
-            pendingBinaryFrames.length > 0
-          ) {
-            stopRealtimePlayoutKeepNativePrimed("state_update_inactive");
-          }
-          acknowledgePlaybackRevision(envelope, "state_update");
         }
 
         function handlePlaybackStopCommand(d) {
@@ -4187,8 +4256,8 @@
             case "RECEIVER_SHUTDOWN":
               shutdownReceiver(d.reason || "signal");
               return true;
-            case "STATE_UPDATE":
-              handleStateUpdateCommand(d.state, d);
+            case "GUI_STATE_UPDATE":
+              handleGuiStateUpdateCommand(d.state, d);
               return true;
             case "PLAYBACK_START":
               handlePlaybackStartCommand(d, "playback_start");
@@ -4294,6 +4363,7 @@
             pcmV2AllowInitialOffset = true;
             pcmV2Telemetry = createPcmV2Telemetry();
             playbackModeSocketGeneration++;
+            resetGuiRevisionGate("bridge_open");
             console.log("✅ Binary Bridge Connected");
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             // [v13.9.504] Reset reconnect backoff counter on success
@@ -4554,6 +4624,7 @@
             // same-revision RECEIVER_READY replay to re-arm that fresh session,
             // while equal revisions remain suppressed during one connection.
             resetPlaybackRevisionGate("bridge_closed");
+            resetGuiRevisionGate("bridge_closed");
             stopAllPlayout("websocket_closed");
             if (workletNode) {
               try {

@@ -3148,21 +3148,93 @@ body.receiver-mode:not(.app-loading) #studio-root {
 }
 body.receiver-mode #cursor-mirror {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  background: rgba(255, 0, 0, 0.9);
-  border-radius: 50%;
+  width: 22px;
+  height: 28px;
+  background: #fff;
+  clip-path: polygon(0 0, 0 100%, 27% 72%, 48% 100%, 62% 92%, 42% 65%, 78% 65%);
   pointer-events: none;
   z-index: 10000;
-  border: 2px solid white;
   display: none;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
   left: 0;
   top: 0;
-  transform-origin: center;
+  transform-origin: 0 0;
+}
+body.receiver-mode #cursor-mirror::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: #000;
+  clip-path: polygon(0 0, 0 100%, 27% 72%, 48% 100%, 62% 92%, 42% 65%, 78% 65%);
 }
 body.receiver-mode cast-media-player {
   display: none;
+}
+#qa-overlay-root {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  left: auto;
+  top: auto;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(70vh, 620px);
+  z-index: 2147483000;
+  pointer-events: none;
+  isolation: isolate;
+}
+#qa-overlay-root > * {
+  pointer-events: auto;
+}
+#qa-overlay-root dialog,
+#qa-overlay-root .qa-panel,
+#qa-overlay-root .qa-area {
+  z-index: 2147483001;
+}
+body.receiver-mode #gui-dialog-mirror-root {
+  position: absolute;
+  inset: 0;
+  z-index: 10001;
+  pointer-events: none;
+}
+body.receiver-mode #gui-dialog-mirror-root[hidden] {
+  display: none !important;
+}
+body.receiver-mode .gui-dialog-mirror {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 12px;
+  color: var(--gold);
+  background: rgba(9, 9, 9, 0.97);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+body.receiver-mode .gui-dialog-mirror h3 {
+  margin: 0;
+  color: var(--gold);
+  font-size: 0.9em;
+}
+body.receiver-mode .gui-dialog-mirror p {
+  margin: 0;
+  color: #ddd;
+  font-size: 0.7em;
+}
+body.receiver-mode .gui-dialog-mirror-control {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(90px, 1.4fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-size: 0.7em;
+}
+body.receiver-mode .gui-dialog-mirror-control input {
+  min-width: 0;
+  accent-color: var(--gold);
 }
 body.receiver-mode .sample-grid {
   display: grid !important;
