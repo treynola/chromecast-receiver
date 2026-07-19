@@ -152,6 +152,7 @@
         var cafLoadInterceptorConfigured = false;
         var suppressedPlayerManagerStopCount = 0;
         var suppressedPlayerManagerStopTimerId = null;
+        var suppressedPlayerManagerStopAttemptId = -1;
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
         const CAST_DEBUG_TAG = "MXS004.RECEIVER";
@@ -761,6 +762,13 @@
           );
         }
 
+        function isPcmWorkletKnownUnavailable() {
+          return !!(
+            workletCapabilityResult &&
+            workletCapabilityResult.supported === false
+          );
+        }
+
         function readCachedWorkletCapability() {
           const buildKey = getWorkletCapabilityBuildKey();
           if (!buildKey) return null;
@@ -1327,6 +1335,11 @@
             return true;
           }
           if (nativeStreamStarting) {
+            // Idle pre-prime intentionally has no destructive watchdog. Arm
+            // the full timeout budget only after ordered playback is active.
+            if (!nativeStartupWatchdogId) {
+              armNativeStartupWatchdog();
+            }
             return true;
           }
           if (receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded) {
@@ -1477,13 +1490,29 @@
             // active playout path warm, while STOP remains the destructive
             // boundary for both CAF and PCM.
             const deferPlayerManagerCommand = function (command, request) {
+              const commandAttemptId = nativeStartupAttemptId;
               setTimeout(function () {
                 if (window._receiverShutdownInProgress) {
                   return;
                 }
-                if (command === "STOP" && consumePlayerManagerStopSuppression()) {
+                const internalStopRequest =
+                  command === "STOP" &&
+                  Number(request && request.requestId) === 0;
+                const staleStopRequest =
+                  command === "STOP" &&
+                  commandAttemptId !== nativeStartupAttemptId;
+                const armedStopAttemptId = suppressedPlayerManagerStopAttemptId;
+                const armedStopSuppression =
+                  command === "STOP" &&
+                  consumePlayerManagerStopSuppression(request);
+                if (internalStopRequest || staleStopRequest || armedStopSuppression) {
                   relayLogToStudio(
-                    "⏭️ Receiver: Suppressed duplicate PlayerManager STOP after MXS STOP.",
+                    "⏭️ Receiver: Suppressed internal/stale PlayerManager STOP " +
+                      "(requestId=" +
+                      (request && request.requestId !== undefined ? request.requestId : "n/a") +
+                      ", commandAttempt=" + commandAttemptId +
+                      ", armedAttempt=" + armedStopAttemptId +
+                      ", currentAttempt=" + nativeStartupAttemptId + ").",
                   );
                   return;
                 }
@@ -1763,6 +1792,10 @@
             // older unload() fallback for CAF builds that expose it.
             try {
               if (typeof pm.stop === "function") {
+                // pm.stop() re-enters the STOP interceptor asynchronously.
+                // Tag every receiver-owned stop at the current native attempt
+                // so its callback cannot tear down a newer stream generation.
+                armPlayerManagerStopSuppression(nativeStartupAttemptId);
                 pm.stop();
               } else if (typeof pm.unload === "function") {
                 const unloadResult = pm.unload();
@@ -1785,18 +1818,28 @@
           }
         }
 
-        function armPlayerManagerStopSuppression() {
+        function armPlayerManagerStopSuppression(attemptId) {
           suppressedPlayerManagerStopCount += 1;
+          suppressedPlayerManagerStopAttemptId = Number.isFinite(attemptId)
+            ? attemptId
+            : nativeStartupAttemptId;
           if (suppressedPlayerManagerStopTimerId) {
             clearTimeout(suppressedPlayerManagerStopTimerId);
           }
           suppressedPlayerManagerStopTimerId = setTimeout(() => {
             suppressedPlayerManagerStopTimerId = null;
             suppressedPlayerManagerStopCount = 0;
-          }, 1000);
+            suppressedPlayerManagerStopAttemptId = -1;
+          }, 5000);
         }
 
-        function consumePlayerManagerStopSuppression() {
+        function consumePlayerManagerStopSuppression(request) {
+          // CAF uses requestId=0 for receiver-owned pm.stop() callbacks. Cast
+          // sender/user STOP requests carry their own request IDs and must
+          // remain authoritative even while an internal stop is outstanding.
+          if (Number(request && request.requestId) !== 0) {
+            return false;
+          }
           if (suppressedPlayerManagerStopCount <= 0) {
             return false;
           }
@@ -1804,6 +1847,7 @@
           if (suppressedPlayerManagerStopCount === 0 && suppressedPlayerManagerStopTimerId) {
             clearTimeout(suppressedPlayerManagerStopTimerId);
             suppressedPlayerManagerStopTimerId = null;
+            suppressedPlayerManagerStopAttemptId = -1;
           }
           return true;
         }
@@ -1891,12 +1935,41 @@
 
         function armNativeStartupWatchdog() {
           clearNativeStartupWatchdog();
+          // Native pre-prime may begin several seconds before the owner presses
+          // Play. That idle preparation time must never consume the audible
+          // startup budget or trigger a destructive fallback before live PCM.
+          if (!lastPlaybackStartSignalAt) {
+            return false;
+          }
+          const watchdogAttemptId = nativeStartupAttemptId;
           nativeStartupWatchdogId = setTimeout(() => {
             nativeStartupWatchdogId = null;
             if (window._receiverShutdownInProgress) {
               return;
             }
+            if (watchdogAttemptId !== nativeStartupAttemptId) {
+              relayLogToStudio(
+                "⏭️ Receiver: Ignored stale native startup watchdog " +
+                  "(attempt=" + watchdogAttemptId +
+                  ", current=" + nativeStartupAttemptId + ").",
+              );
+              return;
+            }
             if (window._playbackMode === "native" || nativeStreamActive || workletNode || audioInitializing) {
+              return;
+            }
+            if (isPcmWorkletKnownUnavailable()) {
+              // This receiver has already proven that PCM AudioWorklet cannot
+              // initialize. Keep the in-flight native attempt alive; cycling
+              // through an impossible PCM path only restarts CAF and adds lag.
+              relayLogToStudio(
+                "⏳ Receiver: Native startup exceeded 5 seconds after Play; " +
+                  "PCM is known unavailable, so the current native attempt remains authoritative.",
+              );
+              notifyPlayoutSelecting(
+                "native_stream",
+                "native_extended_startup_pcm_unavailable",
+              );
               return;
             }
             relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
@@ -1906,6 +1979,7 @@
               initAudio(true, false);
             }
           }, NATIVE_STARTUP_TIMEOUT_MS);
+          return true;
         }
 
         function activateNativeStream(modeReason, logMessage, attemptId) {
@@ -2194,13 +2268,6 @@
         function stopAllPlayout(reason, statusState, fromPlayerManager) {
           playbackPaused = false;
           const stopReason = String(reason || "playback_stop");
-          if (
-            !fromPlayerManager &&
-            /stop/i.test(stopReason) &&
-            (nativeStreamActive || nativeStreamStarting || nativeStreamUrl || window._playbackMode === "native")
-          ) {
-            armPlayerManagerStopSuppression();
-          }
           clearPlaybackStartSignal();
           resetBinaryPlayoutState(stopReason);
           stopNativeStreamPlayout(stopReason);
@@ -2275,14 +2342,42 @@
           stopAllPlayout(reason || "playback_stop");
         }
 
+        function startPcmFallbackAfterNativeFailure(reason) {
+          const failureReason = reason || "native_playback_failure";
+          if (isPcmWorkletKnownUnavailable()) {
+            // STATE_UPDATE will retry the native path while playback remains
+            // active. Never pay another known-dead AudioWorklet cycle.
+            setReceiverPlayoutPreference(
+              "native",
+              failureReason + "_pcm_known_unavailable",
+            );
+            notifyPlayoutSelecting(
+              "native_stream",
+              failureReason + "_native_retry",
+            );
+            relayLogToStudio(
+              "⏭️ Receiver: PCM fallback skipped after " + failureReason +
+                "; AudioWorklet is known unavailable and native remains authoritative.",
+            );
+            return false;
+          }
+          setReceiverPlayoutPreference("pcm_fallback", failureReason);
+          if (configReceived) {
+            initAudio(true, false);
+            return true;
+          }
+          return false;
+        }
+
         function startHtmlAudioStreamPlayout(streamUrl, attemptId) {
           const nativeAudio = document.getElementById("native-stream-audio");
           if (!nativeAudio) {
             clearNativeStartupWatchdog();
-            relayLogToStudio("⚠️ Receiver: Native stream element missing; falling back to AudioWorklet.");
+            relayLogToStudio("⚠️ Receiver: Native HTML stream element missing.");
             nativeStreamStarting = false;
             nativeStreamActive = false;
             window._nativeStreamActive = false;
+            startPcmFallbackAfterNativeFailure("html_audio_element_missing");
             return false;
           }
           try {
@@ -2310,10 +2405,8 @@
               nativeStreamActive = false;
               window._nativeStreamActive = false;
               clearNativeStartupWatchdog();
-              relayLogToStudio("⚠️ Receiver: HTML audio stream media error; falling back to AudioWorklet.");
-              if (configReceived) {
-                initAudio(true);
-              }
+              relayLogToStudio("⚠️ Receiver: HTML audio stream media error.");
+              startPcmFallbackAfterNativeFailure("html_audio_media_error");
             };
             const playPromise = nativeAudio.play();
             if (playPromise && typeof playPromise.then === "function") {
@@ -2329,9 +2422,7 @@
                   window._nativeStreamActive = false;
                   clearNativeStartupWatchdog();
                   relayLogToStudio("⚠️ Receiver: HTML audio stream play failed: " + (e && e.message ? e.message : e));
-                  if (configReceived) {
-                    initAudio(true);
-                  }
+                  startPcmFallbackAfterNativeFailure("html_audio_play_rejected");
                 });
             } else {
               activateNativeStream(
@@ -2347,6 +2438,7 @@
             window._nativeStreamActive = false;
             clearNativeStartupWatchdog();
             relayLogToStudio("⚠️ Receiver: HTML audio stream setup failed: " + e.message);
+            startPcmFallbackAfterNativeFailure("html_audio_setup_failed");
             return false;
           }
         }
