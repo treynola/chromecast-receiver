@@ -90,8 +90,16 @@
         var playbackModeSocketGeneration = 0;
         var pcmV2Validator = null;
         var pcmV2AllowInitialOffset = true;
-        var lastPlaybackEpoch = 0;
-        var lastPlaybackRevision = 0;
+        // Playback commands can arrive twice because the sender deliberately
+        // mirrors control messages over both the Cast namespace and the bridge
+        // WebSocket. Keep command and GUI-state ordering separate: equal
+        // command revisions are duplicates, while equal STATE_UPDATE revisions
+        // can contain legitimate GUI changes.
+        var lastPlaybackEpoch = -1;
+        var lastPlaybackRevision = -1;
+        var allowSamePlaybackRevisionReplay = false;
+        var lastStateEpoch = -1;
+        var lastStateRevision = -1;
         var expectedPcmSessionId = null;
         var frozenJitterTarget = null;
 
@@ -259,6 +267,33 @@
             return null;
           }
           return context.getPlayerManager();
+        }
+
+        function publishMxsPlaybackStatus(playbackState, reason) {
+          const pm = getCastPlayerManager();
+          if (!pm) return;
+          const playoutPath = nativeStreamActive
+            ? (nativeStreamPaused ? "native_paused" : "native")
+            : (window._binaryActive || window._playbackMode === "pcm_fallback" ? "pcm_fallback" : "idle");
+          const customState = {
+            source: "mxs004",
+            authoritative: "mxs_playback",
+            playbackState: playbackState || "IDLE",
+            playoutPath,
+            paused: playbackState === "PAUSED",
+            reason: reason || "",
+            timestampMs: Date.now(),
+          };
+          try {
+            if (typeof pm.sendCustomState === "function") {
+              pm.sendCustomState(customState);
+            }
+          } catch (e) {}
+          try {
+            if (typeof pm.broadcastStatus === "function") {
+              pm.broadcastStatus(false, undefined, customState);
+            }
+          } catch (e) {}
         }
 
         let deviceCapabilitiesLogged = false;
@@ -768,6 +803,26 @@
           lastPlaybackStartSignalAt = Date.now();
         }
 
+        function resetPlaybackRevisionGate(reason) {
+          // Keep the last command as the replay anchor. A bridge reconnect
+          // needs to accept that exact command once, but must continue to
+          // reject delayed commands from before it.
+          allowSamePlaybackRevisionReplay = lastPlaybackEpoch >= 0;
+          lastStateEpoch = -1;
+          lastStateRevision = -1;
+          if (reason) {
+            writeCastDebug("debug", "Playback revision gate reset (" + reason + ").");
+          }
+        }
+
+        function isRevisionOlder(epoch, revision, previousEpoch, previousRevision) {
+          return (
+            previousEpoch >= 0 &&
+            (epoch < previousEpoch ||
+              (epoch === previousEpoch && revision < previousRevision))
+          );
+        }
+
         function acceptPlaybackRevision(message, source) {
           const epoch = Number(message && message.playbackEpoch);
           const revision = Number(message && message.playbackRevision);
@@ -776,10 +831,10 @@
             // current sender frames carry an ordered epoch/revision pair.
             return true;
           }
-          if (
-            epoch < lastPlaybackEpoch ||
-            (epoch === lastPlaybackEpoch && revision < lastPlaybackRevision)
-          ) {
+          const isStateUpdate = source === "STATE_UPDATE";
+          const previousEpoch = isStateUpdate ? lastStateEpoch : lastPlaybackEpoch;
+          const previousRevision = isStateUpdate ? lastStateRevision : lastPlaybackRevision;
+          if (isRevisionOlder(epoch, revision, previousEpoch, previousRevision)) {
             relayLogToStudio(
               "⏭️ Receiver: Ignored stale " +
                 (source || "playback") +
@@ -788,15 +843,48 @@
                 " revision=" +
                 revision +
                 "; applied epoch=" +
-                lastPlaybackEpoch +
+                previousEpoch +
                 " revision=" +
-                lastPlaybackRevision +
+                previousRevision +
                 ".",
             );
             return false;
           }
-          lastPlaybackEpoch = epoch;
-          lastPlaybackRevision = revision;
+          if (!isStateUpdate && epoch === lastPlaybackEpoch && revision === lastPlaybackRevision) {
+            if (allowSamePlaybackRevisionReplay) {
+              allowSamePlaybackRevisionReplay = false;
+              relayLogToStudio(
+                "🔁 Receiver: Accepted same-revision playback replay after bridge reconnect " +
+                  "epoch=" + epoch + " revision=" + revision + ".",
+              );
+              return true;
+            }
+            relayLogToStudio(
+              "⏭️ Receiver: Ignored duplicate " +
+                (source || "playback") +
+                " command epoch=" + epoch +
+                " revision=" + revision + ".",
+            );
+            return false;
+          }
+          if (isStateUpdate) {
+            // A state snapshot with the same playback revision is still valid:
+            // effect, meter, and GUI fields may have changed without a new
+            // transport command.
+            if (isRevisionOlder(epoch, revision, lastPlaybackEpoch, lastPlaybackRevision)) {
+              relayLogToStudio(
+                "⏭️ Receiver: Ignored state behind the latest playback command " +
+                  "epoch=" + epoch + " revision=" + revision + ".",
+              );
+              return false;
+            }
+            lastStateEpoch = epoch;
+            lastStateRevision = revision;
+          } else {
+            lastPlaybackEpoch = epoch;
+            lastPlaybackRevision = revision;
+            allowSamePlaybackRevisionReplay = false;
+          }
           return true;
         }
 
@@ -1082,8 +1170,9 @@
 
             // Standard Cast transport controls must use the same lifecycle as
             // the MXS custom channel. Let CAF finish its normal request first,
-            // then apply our live-stream boundary on the next task so native
-            // and PCM playout cannot remain active behind the sender UI.
+            // then reconcile the MXS path on the next task: native PAUSE keeps
+            // the CAF media item loaded, while PCM PAUSE and every STOP remain
+            // hard playout boundaries.
             const deferPlayerManagerCommand = function (command, request) {
               setTimeout(function () {
                 if (window._receiverShutdownInProgress) {
@@ -1098,9 +1187,17 @@
                 if (command === "PLAY") {
                   markPlaybackStartSignal();
                   playbackPaused = false;
-                  requestNativePlaybackStart("player_manager_play");
+                  if (nativeStreamActive && nativeStreamPaused) {
+                    resumeNativeStreamPlayout("player_manager_play", true);
+                  } else {
+                    requestNativePlaybackStart("player_manager_play");
+                    publishMxsPlaybackStatus("STARTING", "player_manager_play");
+                  }
                 } else if (command === "PAUSE") {
-                  pauseAllPlayout("player_manager_pause");
+                  playbackPaused = true;
+                  if (!pauseNativeStreamPlayout("player_manager_pause", true)) {
+                    pauseAllPlayout("player_manager_pause");
+                  }
                 } else if (command === "STOP") {
                   stopAllPlayout("player_manager_stop");
                 }
@@ -1469,6 +1566,7 @@
           notifyPlaybackMode("native", modeReason);
           revealReceiverUi("native_active");
           teardownPcmPlayout("native_active", true);
+          publishMxsPlaybackStatus("PLAYING", modeReason || "native_active");
           if (logMessage) {
             relayLogToStudio(logMessage);
           }
@@ -1602,24 +1700,29 @@
           }
         }
 
-        function pauseNativeStreamPlayout(reason) {
+        function pauseNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive && !nativeStreamStarting) return false;
           nativeStreamPaused = true;
           const pm = getCastPlayerManager();
-          try { if (pm && typeof pm.pause === "function") pm.pause(); } catch (e) {}
+          if (!cafRequestAlreadyApplied) {
+            try { if (pm && typeof pm.pause === "function") pm.pause(); } catch (e) {}
+          }
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
           try { if (cafAudio) cafAudio.pause(); } catch (e) {}
           try { if (htmlAudio) htmlAudio.pause(); } catch (e) {}
           relayLogToStudio("⏸️ Receiver: Native stream paused without teardown (" + (reason || "playback_pause") + ").");
+          publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
           return true;
         }
 
-        function resumeNativeStreamPlayout(reason) {
+        function resumeNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive || !nativeStreamPaused) return false;
           nativeStreamPaused = false;
           const pm = getCastPlayerManager();
-          try { if (pm && typeof pm.play === "function") pm.play(); } catch (e) {}
+          if (!cafRequestAlreadyApplied) {
+            try { if (pm && typeof pm.play === "function") pm.play(); } catch (e) {}
+          }
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
           try {
@@ -1635,6 +1738,7 @@
             }
           } catch (e) {}
           relayLogToStudio("▶️ Receiver: Native stream resumed without reload (" + (reason || "playback_start") + ").");
+          publishMxsPlaybackStatus("PLAYING", reason || "playback_start");
           return true;
         }
 
@@ -1695,21 +1799,22 @@
           }
         }
 
-        function stopAllPlayout(reason) {
+        function stopAllPlayout(reason, statusState) {
           playbackPaused = false;
           clearPlaybackStartSignal();
           resetBinaryPlayoutState(reason || "playback_stop");
           stopNativeStreamPlayout(reason || "playback_stop");
+          publishMxsPlaybackStatus(statusState || "STOPPED", reason || "playback_stop");
         }
 
         function pauseAllPlayout(reason) {
           playbackPaused = true;
-          // Pause is a hard live-stream boundary. Holding CAF's progressive
-          // WAV socket leaves Cobalt buffering while the sender is paused;
-          // rapid resume then inherits that stale/starved pipeline. Tear down
-          // both paths exactly as STOP, while preserving the paused command
-          // state until the next ordered PLAYBACK_START.
-          stopAllPlayout(reason || "playback_pause");
+          // MXS custom pause and PCM fallback use a hard live-stream boundary.
+          // Holding a PCM socket leaves receiver buffering behind the sender;
+          // rapid resume would inherit that stale/starved pipeline. Native CAF
+          // pause is handled separately by pauseNativeStreamPlayout(), which
+          // preserves the loaded media item for standard Cast semantics.
+          stopAllPlayout(reason || "playback_pause", "PAUSED");
           playbackPaused = true;
           relayLogToStudio("⏸️ Receiver: Playback paused; native and PCM playout torn down.");
         }
@@ -3469,7 +3574,11 @@
             renderState(immediateState, true);
             lastMirroredState = immediateState;
           }
+          const resumingNative = nativeStreamActive && nativeStreamPaused;
           requestNativePlaybackStart(reason || "playback_start");
+          if (!resumingNative) {
+            publishMxsPlaybackStatus("STARTING", reason || "playback_start");
+          }
           acknowledgePlaybackRevision(d, "playback_start");
         }
 
@@ -3918,6 +4027,10 @@
             pendingBinaryFrames = [];
             workletReady = false;
             window._isDrainingStartup = false;
+            // The bridge close tears down receiver playout. Allow the sender's
+            // same-revision RECEIVER_READY replay to re-arm that fresh session,
+            // while equal revisions remain suppressed during one connection.
+            resetPlaybackRevisionGate("bridge_closed");
             stopAllPlayout("websocket_closed");
             if (workletNode) {
               try {
