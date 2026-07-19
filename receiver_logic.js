@@ -72,17 +72,17 @@
         var nativeStartupTrimPending = false;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
-        const NATIVE_STARTUP_TIMEOUT_MS = 1500;
+        var pcmStartupRetryTimerId = null;
+        const NATIVE_STARTUP_TIMEOUT_MS = 5000;
+        const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         // A fresh native stream must not replay the buffered tail of a prior
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
         const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.25;
         const NATIVE_STARTUP_TARGET_SEC = 0.35;
         // A Chromecast can abort AudioWorklet module/context startup even when
-        // the source fetch is valid. Do not spend multiple seconds retrying a
-        // doomed Cobalt load: one bounded startup attempt is enough, after
-        // which native fallback owns the session and late worklet failures are
-        // ignored by the lifecycle generation guard.
+        // the source fetch is valid. Preload owns the normal path; this bounded
+        // fallback is only a safety net for a genuinely hung or failed load.
         const PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE = 1;
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         window._nativeStreamActive = false;
@@ -100,6 +100,7 @@
         var allowSamePlaybackRevisionReplay = false;
         var lastStateEpoch = -1;
         var lastStateRevision = -1;
+        var lastStateAckKey = "";
         var expectedPcmSessionId = null;
         var frozenJitterTarget = null;
 
@@ -138,6 +139,8 @@
         var receiverStartupTimingMarks = {};
         const PLAYBACK_START_GRACE_MS = 2500;
         var cafLoadInterceptorConfigured = false;
+        var suppressedPlayerManagerStopCount = 0;
+        var suppressedPlayerManagerStopTimerId = null;
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
         const CAST_DEBUG_TAG = "MXS004.RECEIVER";
@@ -739,7 +742,16 @@
           if (receiverPlayoutPreference !== "pcm_fallback") {
             return false;
           }
-          if (nativeStreamActive || audioInitializing || workletInitPromise || workletNode) {
+          if (nativeStreamActive) {
+            return true;
+          }
+          if (audioInitializing || workletInitPromise) {
+            // An active addModule()/AudioWorklet initialization owns startup.
+            // Do not promote to native while that promise is still resolving.
+            armLowLatencyStartupWatchdog();
+            return true;
+          }
+          if (workletNode) {
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -764,6 +776,38 @@
             relayLogToStudio("⚠️ Receiver: initAudio failed: " + (e && e.message ? e.message : e));
           });
           armLowLatencyStartupWatchdog();
+          return true;
+        }
+
+        function preloadPcmWorklet(reason) {
+          if (!identityAllowsAudio()) return false;
+          if (window._receiverShutdownInProgress) {
+            return false;
+          }
+          if (window._pcmDegraded || receiverPlayoutPreference !== "pcm_fallback") {
+            return false;
+          }
+          if (!configReceived || !currentBridgeIp) {
+            return false;
+          }
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN || !window._handshakeAcked) {
+            return false;
+          }
+          if (workletNode || workletInitPromise || audioInitializing) {
+            return true;
+          }
+          const initPromise = initAudio(false, false);
+          if (!initPromise) {
+            return false;
+          }
+          relayLogToStudio(
+            "⏱️ Receiver: Preloading PCM worklet before playback (" +
+              (reason || "handshake") +
+              ").",
+          );
+          initPromise.catch((e) => {
+            relayLogToStudio("⚠️ Receiver: PCM preload failed: " + (e && e.message ? e.message : e));
+          });
           return true;
         }
 
@@ -810,6 +854,7 @@
           allowSamePlaybackRevisionReplay = lastPlaybackEpoch >= 0;
           lastStateEpoch = -1;
           lastStateRevision = -1;
+          lastStateAckKey = "";
           if (reason) {
             writeCastDebug("debug", "Playback revision gate reset (" + reason + ").");
           }
@@ -892,13 +937,33 @@
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
             return;
           }
+          const ackAction = action || "applied";
+          const messageEpoch = Number(message && message.playbackEpoch);
+          const messageRevision = Number(message && message.playbackRevision);
+          const playbackEpoch = Number.isSafeInteger(messageEpoch)
+            ? messageEpoch
+            : lastPlaybackEpoch;
+          const playbackRevision = Number.isSafeInteger(messageRevision)
+            ? messageRevision
+            : lastPlaybackRevision;
+          // STATE_UPDATE arrives on the 10 Hz mirror cadence. One ACK per
+          // revision/action is sufficient; repeating the same ACK for every
+          // GUI snapshot only creates control-channel churn and competes with
+          // the actual playback commands.
+          if (ackAction === "state_update" || ackAction === "state_update_paused") {
+            const stateAckKey = ackAction + ":" + playbackEpoch + ":" + playbackRevision;
+            if (stateAckKey === lastStateAckKey) {
+              return;
+            }
+            lastStateAckKey = stateAckKey;
+          }
           try {
             binaryWS.send(
               JSON.stringify({
                 type: "PLAYBACK_COMMAND_ACK",
-                action: action || "applied",
-                playbackEpoch: Number(message && message.playbackEpoch) || lastPlaybackEpoch,
-                playbackRevision: Number(message && message.playbackRevision) || lastPlaybackRevision,
+                action: ackAction,
+                playbackEpoch,
+                playbackRevision,
               }),
             );
           } catch (e) {}
@@ -1170,12 +1235,18 @@
 
             // Standard Cast transport controls must use the same lifecycle as
             // the MXS custom channel. Let CAF finish its normal request first,
-            // then reconcile the MXS path on the next task: native PAUSE keeps
-            // the CAF media item loaded, while PCM PAUSE and every STOP remain
-            // hard playout boundaries.
+            // then reconcile the MXS path on the next task: PAUSE keeps the
+            // active playout path warm, while STOP remains the destructive
+            // boundary for both CAF and PCM.
             const deferPlayerManagerCommand = function (command, request) {
               setTimeout(function () {
                 if (window._receiverShutdownInProgress) {
+                  return;
+                }
+                if (command === "STOP" && consumePlayerManagerStopSuppression()) {
+                  relayLogToStudio(
+                    "⏭️ Receiver: Suppressed duplicate PlayerManager STOP after MXS STOP.",
+                  );
                   return;
                 }
                 relayLogToStudio(
@@ -1199,7 +1270,7 @@
                     pauseAllPlayout("player_manager_pause");
                   }
                 } else if (command === "STOP") {
-                  stopAllPlayout("player_manager_stop");
+                  stopAllPlayout("player_manager_stop", undefined, true);
                 }
               }, 0);
               return request;
@@ -1328,6 +1399,13 @@
           }
         }
 
+        function clearPcmStartupRetryTimer() {
+          if (pcmStartupRetryTimerId) {
+            clearTimeout(pcmStartupRetryTimerId);
+            pcmStartupRetryTimerId = null;
+          }
+        }
+
         function degradePcmStartupToNative(reason) {
           if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
             return false;
@@ -1357,11 +1435,16 @@
           return maybeStartNativeStream(reason || "pcm_startup_degraded");
         }
 
-        function armLowLatencyStartupWatchdog() {
+        function armLowLatencyStartupWatchdog(startedAt) {
           clearLowLatencyStartupWatchdog();
+          const watchdogStartedAt = Number.isFinite(startedAt) ? startedAt : Date.now();
+          const watchdogGeneration = workletLifecycleGeneration;
           lowLatencyStartupWatchdogId = setTimeout(() => {
             lowLatencyStartupWatchdogId = null;
-            if (window._receiverShutdownInProgress) {
+            if (
+              window._receiverShutdownInProgress ||
+              watchdogGeneration !== workletLifecycleGeneration
+            ) {
               return;
             }
             if (workletNode && workletReady) {
@@ -1369,6 +1452,23 @@
               return;
             }
             if (nativeStreamActive || nativeStreamStarting) {
+              return;
+            }
+            if (workletInitPromise || audioInitializing) {
+              const elapsedMs = Date.now() - watchdogStartedAt;
+              if (elapsedMs < PCM_STARTUP_HARD_TIMEOUT_MS) {
+                relayLogToStudio(
+                  "⏳ Receiver: PCM worklet module is still loading; waiting for the active startup promise (" +
+                    elapsedMs +
+                    "ms).",
+                );
+                armLowLatencyStartupWatchdog(watchdogStartedAt);
+                return;
+              }
+              relayLogToStudio(
+                "⚠️ Receiver: PCM worklet startup exceeded the hard load limit; switching to native.",
+              );
+              degradePcmStartupToNative("pcm_startup_hard_timeout");
               return;
             }
             if (!configReceived || !currentBridgeIp) {
@@ -1391,16 +1491,11 @@
             invalidateWorkletInitialization();
             audioInitializing = false;
             workletInitPromise = null;
-            setTimeout(() => {
-              if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
-                return;
-              }
-              if (receiverPlayoutPreference !== "pcm_fallback" || window._pcmDegraded) {
-                return;
-              }
-              maybeStartLowLatencyPlayout("pcm_startup_retry");
-            }, 250);
-          }, NATIVE_STARTUP_TIMEOUT_MS);
+            schedulePcmStartupRetry("pcm_startup_retry");
+          }, Math.min(
+            PCM_STARTUP_HARD_TIMEOUT_MS,
+            Math.max(250, PCM_STARTUP_HARD_TIMEOUT_MS - (Date.now() - watchdogStartedAt)),
+          ));
         }
 
         function isCurrentNativeAttempt(attemptId) {
@@ -1451,9 +1546,33 @@
           }
         }
 
+        function armPlayerManagerStopSuppression() {
+          suppressedPlayerManagerStopCount += 1;
+          if (suppressedPlayerManagerStopTimerId) {
+            clearTimeout(suppressedPlayerManagerStopTimerId);
+          }
+          suppressedPlayerManagerStopTimerId = setTimeout(() => {
+            suppressedPlayerManagerStopTimerId = null;
+            suppressedPlayerManagerStopCount = 0;
+          }, 1000);
+        }
+
+        function consumePlayerManagerStopSuppression() {
+          if (suppressedPlayerManagerStopCount <= 0) {
+            return false;
+          }
+          suppressedPlayerManagerStopCount -= 1;
+          if (suppressedPlayerManagerStopCount === 0 && suppressedPlayerManagerStopTimerId) {
+            clearTimeout(suppressedPlayerManagerStopTimerId);
+            suppressedPlayerManagerStopTimerId = null;
+          }
+          return true;
+        }
+
         function invalidateWorkletInitialization() {
           workletLifecycleGeneration += 1;
           lastInitAttempt = 0;
+          clearPcmStartupRetryTimer();
         }
 
         function schedulePcmStartupRetry(reason) {
@@ -1466,9 +1585,14 @@
           ) {
             return false;
           }
-          setTimeout(() => {
+          clearPcmStartupRetryTimer();
+          const retryGeneration = workletLifecycleGeneration;
+          pcmStartupRetryTimerId = setTimeout(() => {
+            pcmStartupRetryTimerId = null;
             if (
               window._receiverShutdownInProgress ||
+              retryGeneration !== workletLifecycleGeneration ||
+              playbackPaused ||
               nativeStreamActive ||
               nativeStreamStarting ||
               receiverPlayoutPreference !== "pcm_fallback" ||
@@ -1486,6 +1610,7 @@
             workletHardTeardownCount += 1;
           }
           invalidateWorkletInitialization();
+          workletInitPromise = null;
           pendingBinaryFrames = [];
           workletReady = false;
           window._isDrainingStartup = false;
@@ -1747,6 +1872,9 @@
             workletHardTeardownCount += 1;
           }
           invalidateWorkletInitialization();
+          clearLowLatencyStartupWatchdog();
+          workletInitPromise = null;
+          audioInitializing = false;
           if (workletNode) {
             try {
               if (workletNode.port) {
@@ -1799,24 +1927,48 @@
           }
         }
 
-        function stopAllPlayout(reason, statusState) {
+        function stopAllPlayout(reason, statusState, fromPlayerManager) {
           playbackPaused = false;
+          const stopReason = String(reason || "playback_stop");
+          if (
+            !fromPlayerManager &&
+            /stop/i.test(stopReason) &&
+            (nativeStreamActive || nativeStreamStarting || nativeStreamUrl || window._playbackMode === "native")
+          ) {
+            armPlayerManagerStopSuppression();
+          }
           clearPlaybackStartSignal();
-          resetBinaryPlayoutState(reason || "playback_stop");
-          stopNativeStreamPlayout(reason || "playback_stop");
-          publishMxsPlaybackStatus(statusState || "STOPPED", reason || "playback_stop");
+          resetBinaryPlayoutState(stopReason);
+          stopNativeStreamPlayout(stopReason);
+          publishMxsPlaybackStatus(statusState || "STOPPED", stopReason);
         }
 
         function pauseAllPlayout(reason) {
           playbackPaused = true;
-          // MXS custom pause and PCM fallback use a hard live-stream boundary.
-          // Holding a PCM socket leaves receiver buffering behind the sender;
-          // rapid resume would inherit that stale/starved pipeline. Native CAF
-          // pause is handled separately by pauseNativeStreamPlayout(), which
-          // preserves the loaded media item for standard Cast semantics.
-          stopAllPlayout(reason || "playback_pause", "PAUSED");
-          playbackPaused = true;
-          relayLogToStudio("⏸️ Receiver: Playback paused; native and PCM playout torn down.");
+          clearLowLatencyStartupWatchdog();
+          clearPcmStartupRetryTimer();
+
+          // Pause is reversible for every active playout path. Native CAF
+          // keeps the loaded progressive-WAV item, so resume does not issue a
+          // new LOAD or reopen /stream.wav. PCM keeps its AudioWorklet and
+          // resets only the queued frames, preventing stale audio without
+          // paying module/context startup cost on the next Play.
+          if (pauseNativeStreamPlayout(reason || "playback_pause", true)) {
+            relayLogToStudio(
+              "⏸️ Receiver: Playback paused; native CAF media item preserved.",
+            );
+            return;
+          }
+          if (workletNode && workletReady) {
+            resetRealtimePlayoutKeepPcmReady(reason || "playback_pause");
+            publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
+            relayLogToStudio(
+              "⏸️ Receiver: Playback paused; PCM worklet retained with queue reset.",
+            );
+            return;
+          }
+          publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
+          relayLogToStudio("⏸️ Receiver: Playback paused; no active playout teardown required.");
         }
 
         function resetRealtimePlayoutKeepPcmReady(reason) {
@@ -3976,12 +4128,12 @@
                     } catch (e) {}
                   }
 
-                  // PCM startup is playback-gated. A handshake only prepares
-                  // the bridge; PLAYBACK_START/state activity owns audio
-                  // opening so an idle cast session cannot create a native or
-                  // worklet stream that later races the first file packet.
+                  // Preload the worklet while the cast session is idle. The
+                  // first PLAYBACK_START then only resumes the ready node,
+                  // keeping module compilation and AudioContext setup out of
+                  // the user-visible Play critical path.
                   if (receiverPlayoutPreference === "pcm_fallback") {
-                    maybeStartLowLatencyPlayout("handshake_ack");
+                    preloadPcmWorklet("handshake_ack");
                   }
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
