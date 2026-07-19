@@ -37,6 +37,9 @@
         var workletReady = false;
         var pendingStartupTrimLogged = false;
         var workletInitPromise = null;
+        var workletCapabilityPromise = null;
+        var workletCapabilityResult = null;
+        var workletCapabilityContext = null;
         var workletLifecycleGeneration = 0;
         var workletInitializationCount = 0;
         var workletHardTeardownCount = 0;
@@ -75,6 +78,8 @@
         var pcmStartupRetryTimerId = null;
         const NATIVE_STARTUP_TIMEOUT_MS = 5000;
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
+        const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
+        const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
         // A fresh native stream must not replay the buffered tail of a prior
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
@@ -669,16 +674,136 @@
             return;
           }
           try {
-            binaryWS.send(
-              JSON.stringify({
-                type: "PLAYBACK_MODE",
-                mode: mode,
-                reason: reason || "",
-              }),
-            );
+            const readiness = {
+              mode: mode,
+              reason: reason || "",
+              ready: true,
+              lifecycleGeneration: workletLifecycleGeneration,
+            };
+            binaryWS.send(JSON.stringify({ type: "PLAYBACK_MODE", ...readiness }));
+            binaryWS.send(JSON.stringify({
+              type: "PLAYOUT_STATE",
+              state: "ready",
+              ...readiness,
+            }));
             playbackModeLastSent = mode;
             playbackModeLastSentGeneration = playbackModeSocketGeneration;
           } catch (e) {}
+        }
+
+        function notifyPlayoutSelecting(stage, reason) {
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+          try {
+            binaryWS.send(JSON.stringify({
+              type: "PLAYOUT_STATE",
+              state: "selecting",
+              stage: stage || "unknown",
+              mode: "unknown",
+              reason: reason || "",
+              ready: false,
+              lifecycleGeneration: workletLifecycleGeneration,
+            }));
+          } catch (e) {}
+        }
+
+        function withWorkletTimeout(promise, timeoutMs, stage) {
+          return new Promise(function settleWorkletOperation(resolve, reject) {
+            let settled = false;
+            const timeoutId = setTimeout(function workletOperationTimedOut() {
+              if (settled) return;
+              settled = true;
+              const error = new Error(stage + " timed out after " + timeoutMs + "ms");
+              error.name = "AudioWorkletTimeoutError";
+              reject(error);
+            }, timeoutMs);
+            Promise.resolve(promise).then(
+              function workletOperationResolved(value) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve(value);
+              },
+              function workletOperationRejected(error) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeoutId);
+                reject(error);
+              },
+            );
+          });
+        }
+
+        function reportWorkletCapability(result) {
+          workletCapabilityResult = result;
+          window._workletCapabilityResult = result;
+          relayLogToStudio("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify({ type: "AUDIO_WORKLET_CAPABILITY", ...result }));
+            } catch (e) {}
+          }
+          return result;
+        }
+
+        function describeWorkletError(error) {
+          return {
+            name: error && error.name ? String(error.name) : "Error",
+            message: error && error.message ? String(error.message) : String(error || "unknown"),
+            code: error && error.code !== undefined ? String(error.code) : "",
+          };
+        }
+
+        function probeAudioWorkletCapability(context) {
+          if (workletCapabilityContext === context && workletCapabilityPromise) {
+            return workletCapabilityPromise;
+          }
+          workletCapabilityContext = context;
+          workletCapabilityResult = null;
+          const probeHash = window.MXS_BUILD_IDENTITY &&
+            window.MXS_BUILD_IDENTITY.components &&
+            window.MXS_BUILD_IDENTITY.components.receiverLogic
+              ? window.MXS_BUILD_IDENTITY.components.receiverLogic.slice(0, 16)
+              : Date.now();
+          const probeUrl = new URL(
+            "pcm-capability-probe.js?v=" + probeHash,
+            window.location.href,
+          ).href;
+          workletCapabilityPromise = (async function runCapabilityProbe() {
+            if (!context || !context.audioWorklet || typeof context.audioWorklet.addModule !== "function") {
+              return reportWorkletCapability({
+                supported: false,
+                stage: "api",
+                reason: "audio_worklet_api_unavailable",
+                url: probeUrl,
+              });
+            }
+            const startedAt = Date.now();
+            try {
+              notifyPlayoutSelecting("capability_probe", "minimal_same_origin_module");
+              await withWorkletTimeout(
+                context.audioWorklet.addModule(probeUrl),
+                WORKLET_CAPABILITY_TIMEOUT_MS,
+                "AudioWorklet capability probe",
+              );
+              return reportWorkletCapability({
+                supported: true,
+                stage: "minimal_same_origin_module",
+                reason: "probe_loaded",
+                elapsedMs: Date.now() - startedAt,
+                url: probeUrl,
+              });
+            } catch (error) {
+              return reportWorkletCapability({
+                supported: false,
+                stage: "minimal_same_origin_module",
+                reason: "probe_rejected",
+                elapsedMs: Date.now() - startedAt,
+                error: describeWorkletError(error),
+                url: probeUrl,
+              });
+            }
+          })();
+          return workletCapabilityPromise;
         }
 
         function isPlaybackActiveState(state) {
@@ -811,12 +936,12 @@
           return true;
         }
 
-        function maybeStartNativeStream(reason) {
+        function maybeStartNativeStream(reason, allowPriming = false) {
           if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
             return false;
           }
-          if (!lastPlaybackStartSignalAt) {
+          if (!lastPlaybackStartSignalAt && !allowPriming) {
             relayLogToStudio(
               "⏸️ Receiver: Native fallback is armed but waiting for PLAYBACK_START.",
             );
@@ -835,7 +960,10 @@
             resetBinaryPlayoutState("native_takeover");
           }
           if (reason) {
-            relayLogToStudio("▶️ Receiver: Starting native stream on " + reason + ".");
+            relayLogToStudio(
+              (allowPriming ? "⏱️ Receiver: Priming" : "▶️ Receiver: Starting") +
+                " native stream on " + reason + ".",
+            );
           }
           return startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
         }
@@ -1417,6 +1545,7 @@
             localStorage.setItem("mxs_pcm_degraded", "true");
           } catch (e) {}
           setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
+          notifyPlayoutSelecting("native_stream", reason || "pcm_startup_degraded");
           relayLogToStudio(
             "⚠️ Receiver: PCM worklet startup failed; falling back to native stream (" +
               (reason || "pcm_startup_degraded") +
@@ -1428,9 +1557,9 @@
           pendingBinaryFrames = [];
           if (!lastPlaybackStartSignalAt) {
             relayLogToStudio(
-              "🛡️ Receiver: Native fallback armed; waiting for PLAYBACK_START before opening /stream.wav.",
+              "🛡️ Receiver: Priming native /stream.wav before PLAYBACK_START.",
             );
-            return true;
+            return maybeStartNativeStream(reason || "pcm_startup_degraded", true);
           }
           return maybeStartNativeStream(reason || "pcm_startup_degraded");
         }
@@ -1691,7 +1820,10 @@
           notifyPlaybackMode("native", modeReason);
           revealReceiverUi("native_active");
           teardownPcmPlayout("native_active", true);
-          publishMxsPlaybackStatus("PLAYING", modeReason || "native_active");
+          publishMxsPlaybackStatus(
+            lastPlaybackStartSignalAt ? "PLAYING" : "READY",
+            modeReason || "native_active",
+          );
           if (logMessage) {
             relayLogToStudio(logMessage);
           }
@@ -1813,8 +1945,17 @@
           
           const htmlAudio = document.getElementById("native-stream-audio");
           const cafAudio = document.getElementById("cast-media-element");
-          if (htmlAudio) htmlAudio.playbackRate = 1.0;
-          if (cafAudio) cafAudio.playbackRate = 1.0;
+          [htmlAudio, cafAudio].forEach(function resetNativeElement(element) {
+            if (!element) return;
+            try {
+              element.playbackRate = 1.0;
+              element.muted = false;
+              if (element._mxsVolumeBeforePause !== undefined) {
+                element.volume = element._mxsVolumeBeforePause;
+                delete element._mxsVolumeBeforePause;
+              }
+            } catch (e) {}
+          });
 
           if (reason && hadNativePlayout && !duplicateStop) {
             relayLogToStudio("🛑 Receiver: Native stream stopped (" + reason + ").");
@@ -1828,15 +1969,22 @@
         function pauseNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive && !nativeStreamStarting) return false;
           nativeStreamPaused = true;
-          const pm = getCastPlayerManager();
-          if (!cafRequestAlreadyApplied) {
-            try { if (pm && typeof pm.pause === "function") pm.pause(); } catch (e) {}
-          }
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
-          try { if (cafAudio) cafAudio.pause(); } catch (e) {}
-          try { if (htmlAudio) htmlAudio.pause(); } catch (e) {}
-          relayLogToStudio("⏸️ Receiver: Native stream paused without teardown (" + (reason || "playback_pause") + ").");
+          [cafAudio, htmlAudio].forEach(function muteNativeElement(element) {
+            if (!element) return;
+            try {
+              if (element._mxsVolumeBeforePause === undefined) {
+                element._mxsVolumeBeforePause = Number.isFinite(element.volume) ? element.volume : 1;
+              }
+              element.muted = true;
+              element.volume = 0;
+            } catch (e) {}
+          });
+          // Keep the live media clock advancing while muted. Pausing the HTTP
+          // stream lets a stale progressive-WAV tail accumulate and causes a
+          // multi-second delay when Play follows Pause.
+          relayLogToStudio("⏸️ Receiver: Native output muted while live transport stays primed (" + (reason || "playback_pause") + ").");
           publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
           return true;
         }
@@ -1844,12 +1992,18 @@
         function resumeNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive || !nativeStreamPaused) return false;
           nativeStreamPaused = false;
-          const pm = getCastPlayerManager();
-          if (!cafRequestAlreadyApplied) {
-            try { if (pm && typeof pm.play === "function") pm.play(); } catch (e) {}
-          }
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
+          [cafAudio, htmlAudio].forEach(function unmuteNativeElement(element) {
+            if (!element) return;
+            try {
+              element.muted = false;
+              element.volume = element._mxsVolumeBeforePause === undefined
+                ? 1
+                : element._mxsVolumeBeforePause;
+              delete element._mxsVolumeBeforePause;
+            } catch (e) {}
+          });
           try {
             if (cafAudio && typeof cafAudio.play === "function") {
               const result = cafAudio.play();
@@ -1862,7 +2016,7 @@
               if (result && typeof result.catch === "function") result.catch(() => {});
             }
           } catch (e) {}
-          relayLogToStudio("▶️ Receiver: Native stream resumed without reload (" + (reason || "playback_start") + ").");
+          relayLogToStudio("▶️ Receiver: Native output unmuted at the live edge (" + (reason || "playback_start") + ").");
           publishMxsPlaybackStatus("PLAYING", reason || "playback_start");
           return true;
         }
@@ -2126,7 +2280,7 @@
             }
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
-            notifyPlaybackMode("native", "caf_load_requested");
+            notifyPlayoutSelecting("native_stream", "caf_load_requested");
             relayLogToStudio("🧭 Receiver: Native playback preferred; PCM bridge stays idle until fallback is required.");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
@@ -2785,15 +2939,23 @@
               relayLogToStudio(`📡 Receiver: Loading Worklet relatively: ${workletUrl}`);
             }
 
-            // Load the module from the verified URL. Some Cobalt builds accept
-            // the fetch but abort when AudioWorklet.addModule() compiles a
-            // remote HTTPS URL directly. Prefer a same-origin Blob containing
-            // the verified source, and keep that Blob alive while asynchronous
-            // module compilation completes. Direct loading remains the fallback
-            // for browsers that reject Blob module URLs.
+            // Decide AudioWorklet support once per AudioContext using a tiny,
+            // same-origin module. A failed capability probe selects native
+            // playout immediately; retrying Blob/versioned/unversioned copies
+            // of the same production code only lengthens the Play critical path.
             await resumeAudio();
             if (audioCtx.state !== "running") {
               throw new Error("AudioContext did not reach running state before PCM module load");
+            }
+
+            const capability = await probeAudioWorkletCapability(audioCtx);
+            if (!capability || !capability.supported) {
+              const capabilityError = new Error(
+                "AudioWorklet capability probe failed: " +
+                  (capability && capability.reason ? capability.reason : "unknown"),
+              );
+              capabilityError.name = "AudioWorkletCapabilityError";
+              throw capabilityError;
             }
 
             // Always resolve to an absolute URL because some TV/embedded browsers (Cobalt)
@@ -2830,54 +2992,34 @@
               }
             }
 
-            async function addWorkletModuleWithCompatibilityFallback(url, label) {
-              let blobUrl = null;
-              try {
-                const response = await fetch(url, {
-                  cache: "no-store",
-                  credentials: "same-origin",
-                });
-                if (!response.ok) {
-                  throw new Error(`${label} HTTP ${response.status}`);
-                }
-                const code = await response.text();
-                blobUrl = URL.createObjectURL(
-                  new Blob([code], { type: "application/javascript" }),
-                );
-                relayLogToStudio(`📡 Receiver: Adding ${label} PCM worklet from verified Blob source.`);
-                await audioCtx.audioWorklet.addModule(blobUrl);
-                // Cobalt can compile AudioWorklet modules asynchronously after
-                // addModule() resolves. Revoking immediately reintroduces the
-                // same misleading AbortError during processor registration.
-                const retainedBlobUrl = blobUrl;
-                blobUrl = null;
-                setTimeout(() => {
-                  try { URL.revokeObjectURL(retainedBlobUrl); } catch (e) {}
-                }, 10000);
-                relayLogToStudio(`✅ Receiver: ${label} PCM worklet compiled from Blob source.`);
-                return;
-              } catch (blobError) {
-                if (blobUrl) {
-                  try { URL.revokeObjectURL(blobUrl); } catch (e) {}
-                }
-                relayLogToStudio(
-                  `⚠️ Receiver: ${label} Blob worklet load failed (${blobError && blobError.message ? blobError.message : blobError}); trying direct URL.`,
-                );
-              }
-              relayLogToStudio(`📡 Receiver: Adding ${label} PCM worklet module directly: ${url}`);
-              await audioCtx.audioWorklet.addModule(url);
-            }
-
             relayLogToStudio(`📡 Receiver: Preflighting PCM worklet module: ${absWorkletUrl}`);
+            await preflightWorkletModule(absWorkletUrl, "versioned");
+            const productionStartedAt = Date.now();
             try {
-              await preflightWorkletModule(absWorkletUrl, "versioned");
-              await addWorkletModuleWithCompatibilityFallback(absWorkletUrl, "versioned");
-            } catch (err) {
-              relayLogToStudio(`⚠️ Receiver: Versioned worklet load failed (${err.message}). Trying fallback unversioned worklet...`);
-              const fallbackUrl = workletUrl.replace(/-v[\d.\-]+\.js$/, ".js");
-              const absFallbackUrl = new URL(fallbackUrl, window.location.href).href;
-              await preflightWorkletModule(absFallbackUrl, "fallback");
-              await addWorkletModuleWithCompatibilityFallback(absFallbackUrl, "fallback");
+              notifyPlayoutSelecting("production_module", "capability_probe_passed");
+              relayLogToStudio(`📡 Receiver: Adding verified versioned PCM worklet directly: ${absWorkletUrl}`);
+              await withWorkletTimeout(
+                audioCtx.audioWorklet.addModule(absWorkletUrl),
+                WORKLET_PRODUCTION_TIMEOUT_MS,
+                "PCM production worklet",
+              );
+              reportWorkletCapability({
+                supported: true,
+                stage: "production_same_origin_module",
+                reason: "production_loaded",
+                elapsedMs: Date.now() - productionStartedAt,
+                url: absWorkletUrl,
+              });
+            } catch (productionError) {
+              reportWorkletCapability({
+                supported: false,
+                stage: "production_same_origin_module",
+                reason: "production_rejected",
+                elapsedMs: Date.now() - productionStartedAt,
+                error: describeWorkletError(productionError),
+                url: absWorkletUrl,
+              });
+              throw productionError;
             }
 
             if (
@@ -3083,30 +3225,19 @@
               }
               lastFailedInitAttemptAt = Date.now();
               relayLogToStudio(`❌ Receiver ERROR: initAudio failed - ${e.message}`);
-              if (shouldFastFallbackPcmStartup(e, preserveNativeMode)) {
-                lowLatencyStartupRetryCount += 1;
-                teardownPcmPlayout(
-                  lowLatencyStartupRetryCount < PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE
-                    ? "pcm_worklet_abort_retry"
-                    : "pcm_worklet_abort",
-                  true,
-                );
+              if (!preserveNativeMode && receiverPlayoutPreference === "pcm_fallback") {
+                const fallbackReason =
+                  e && e.name === "AudioWorkletCapabilityError"
+                    ? "audio_worklet_capability_unavailable"
+                    : isPcmStartupAbortError(e)
+                      ? "pcm_worklet_abort"
+                      : "pcm_worklet_initialization_failed";
+                teardownPcmPlayout(fallbackReason, true);
                 workletInitPromise = null;
-                if (lowLatencyStartupRetryCount < PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE) {
-                  relayLogToStudio(
-                    "⚠️ Receiver: PCM worklet startup aborted; retrying with a fresh AudioContext (" +
-                      lowLatencyStartupRetryCount +
-                      "/" +
-                      PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE +
-                      ").",
-                  );
-                  schedulePcmStartupRetry("pcm_worklet_abort_retry");
-                } else {
-                  relayLogToStudio(
-                    "⚠️ Receiver: PCM worklet startup aborted after bounded retry; switching to native stream.",
-                  );
-                  degradePcmStartupToNative("pcm_worklet_abort");
-                }
+                relayLogToStudio(
+                  "⚠️ Receiver: PCM capability decision is final for this session; selecting native without module retries.",
+                );
+                degradePcmStartupToNative(fallbackReason);
               }
               return false;
             }
@@ -3728,7 +3859,9 @@
           }
           const resumingNative = nativeStreamActive && nativeStreamPaused;
           requestNativePlaybackStart(reason || "playback_start");
-          if (!resumingNative) {
+          if (nativeStreamActive) {
+            publishMxsPlaybackStatus("PLAYING", reason || "playback_start");
+          } else if (!resumingNative) {
             publishMxsPlaybackStatus("STARTING", reason || "playback_start");
           }
           acknowledgePlaybackRevision(d, "playback_start");
