@@ -269,7 +269,7 @@ img {
 #loop-length-value,
 #lfo-time-value,
 #lfo2-time-value {
-  color: var(--gold);
+  color: var(--gold) !important;
   font-size: 0.7em;
   font-weight: 720;
 }
