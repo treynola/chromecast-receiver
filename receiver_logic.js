@@ -80,6 +80,7 @@
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
+        const WORKLET_CAPABILITY_CACHE_KEY = "mxs_audio_worklet_capability_v1";
         // A fresh native stream must not replay the buffered tail of a prior
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
@@ -733,9 +734,63 @@
           });
         }
 
+        function getWorkletCapabilityBuildKey() {
+          const components = window.MXS_BUILD_IDENTITY && window.MXS_BUILD_IDENTITY.components;
+          if (!components || !components.receiverLogic || !components.receiverPcmWorklet) {
+            return "";
+          }
+          return components.receiverLogic + ":" + components.receiverPcmWorklet;
+        }
+
+        function readCachedWorkletCapability() {
+          const buildKey = getWorkletCapabilityBuildKey();
+          if (!buildKey) return null;
+          try {
+            const parsed = JSON.parse(localStorage.getItem(WORKLET_CAPABILITY_CACHE_KEY) || "null");
+            if (
+              !parsed ||
+              parsed.schema !== 1 ||
+              parsed.buildKey !== buildKey ||
+              typeof parsed.supported !== "boolean"
+            ) {
+              return null;
+            }
+            return {
+              supported: parsed.supported,
+              stage: parsed.stage || "cached_per_build",
+              reason: parsed.reason || "cached_result",
+              error: parsed.error || undefined,
+              cached: true,
+              cachedAt: parsed.cachedAt || null,
+              buildKey: buildKey,
+            };
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function cacheWorkletCapability(result) {
+          const buildKey = getWorkletCapabilityBuildKey();
+          if (!buildKey || !result || typeof result.supported !== "boolean" || result.cached) {
+            return;
+          }
+          try {
+            localStorage.setItem(WORKLET_CAPABILITY_CACHE_KEY, JSON.stringify({
+              schema: 1,
+              buildKey: buildKey,
+              supported: result.supported,
+              stage: result.stage || "unknown",
+              reason: result.reason || "unknown",
+              error: result.error || null,
+              cachedAt: Date.now(),
+            }));
+          } catch (e) {}
+        }
+
         function reportWorkletCapability(result) {
           workletCapabilityResult = result;
           window._workletCapabilityResult = result;
+          cacheWorkletCapability(result);
           relayLogToStudio("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
@@ -759,6 +814,13 @@
           }
           workletCapabilityContext = context;
           workletCapabilityResult = null;
+          const cachedCapability = readCachedWorkletCapability();
+          if (cachedCapability) {
+            workletCapabilityPromise = Promise.resolve(
+              reportWorkletCapability(cachedCapability),
+            );
+            return workletCapabilityPromise;
+          }
           const probeHash = window.MXS_BUILD_IDENTITY &&
             window.MXS_BUILD_IDENTITY.components &&
             window.MXS_BUILD_IDENTITY.components.receiverLogic
@@ -917,6 +979,14 @@
           }
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN || !window._handshakeAcked) {
             return false;
+          }
+          const cachedCapability = readCachedWorkletCapability();
+          if (cachedCapability && !cachedCapability.supported) {
+            reportWorkletCapability(cachedCapability);
+            relayLogToStudio(
+              "⚡ Receiver: Per-build AudioWorklet capability cache selects native before playback.",
+            );
+            return degradePcmStartupToNative("audio_worklet_capability_cached_unavailable");
           }
           if (workletNode || workletInitPromise || audioInitializing) {
             return true;
