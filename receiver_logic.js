@@ -64,6 +64,7 @@
         const PENDING_BINARY_FRAMES_MAX = 256; // Emergency startup guard, never routine queue control.
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
+        const CAST_GUI_PROTOCOL_VERSION = 1;
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         var nativeStreamActive = false;
         var nativeStreamStarting = false;
@@ -203,6 +204,12 @@
                 ),
               ),
           );
+        }
+
+        function markReceiverBoot(stage, details) {
+          if (!stage) return;
+          window._receiverBootStage = stage;
+          logReceiverStartupTiming(stage, details);
         }
 
         function reportBuildIdentityRejection(reason, received) {
@@ -683,6 +690,7 @@
             root.removeAttribute("aria-hidden");
           }
           document.body.classList.remove("app-loading");
+          markReceiverBoot("gui_revealed", { reason: reason || "unspecified" });
           relayLogToStudio(
             "✅ Receiver: Receiver UI revealed (app-loading removed" +
               (reason ? " / " + reason : "") +
@@ -2981,14 +2989,16 @@
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
+                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div><div class="stereo-meter-wrapper receiver-meter-pair" style="margin-top:auto;"><div class="meter-container"><div id="t-mtr-${i}" class="meter-bar"></div></div><div class="meter-container"><div id="t-mtr-r-${i}" class="meter-bar"></div></div></div>`;
             grid.appendChild(t);
           }
           updateScale();
         }
 
         function prepareReceiverUi() {
+          markReceiverBoot("receiver_script_loaded");
           buildGUI();
+          markReceiverBoot("gui_structurally_ready");
 
           // Cobalt can throttle requestAnimationFrame during startup. The root
           // is display:none while app-loading is present, so one event-loop
@@ -3954,6 +3964,10 @@
                 "master-meter-bar",
                 ((s.master.meters && s.master.meters.l) * 100 || 0) + "%",
               );
+              updateStyleWidth(
+                "master-meter-bar-r",
+                ((s.master.meters && s.master.meters.r) * 100 || 0) + "%",
+              );
               updateValue("loop-length", s.master.loopLength || 4);
               updateText(
                 "loop-length-value",
@@ -4041,6 +4055,10 @@
                   "t-mtr-" + i,
                   ((t.meters && t.meters.l) * 100 || 0) + "%",
                 );
+                updateStyleWidth(
+                  "t-mtr-r-" + i,
+                  ((t.meters && t.meters.r) * 100 || 0) + "%",
+                );
                 updateClass(
                   "t-st-" + i,
                   "status-indicator " +
@@ -4123,6 +4141,28 @@
                 }
                 updateClass(`t-rec-${i}`, t.isRecording ? "recording" : "");
               });
+            if (s.qa) {
+              const qaRoot = getEl("qa-overlay-root");
+              if (qaRoot) {
+                const qaSignature = JSON.stringify(s.qa);
+                if (valCache.qaMirror !== qaSignature) {
+                  valCache.qaMirror = qaSignature;
+                  qaRoot.replaceChildren();
+                  qaRoot.hidden = !s.qa.visible;
+                  if (s.qa.visible && s.qa.text) {
+                    const panel = document.createElement("section");
+                    panel.className = "receiver-qa-mirror";
+                    const heading = document.createElement("h3");
+                    heading.textContent = "QA";
+                    panel.appendChild(heading);
+                    const body = document.createElement("pre");
+                    body.textContent = s.qa.text;
+                    panel.appendChild(body);
+                    qaRoot.appendChild(panel);
+                  }
+                }
+              }
+            }
           } catch (e) {
             console.error("❌ Receiver Render Error:", e);
           }
@@ -4198,6 +4238,10 @@
           if (!acceptGuiRevision(envelope)) {
             return;
           }
+          if (!state || state.schema !== "mxs-004.gui-state" || Number(state.schemaVersion) !== 1) {
+            writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported state schema.");
+            return;
+          }
           renderState(state);
           lastMirroredState = state;
         }
@@ -4257,6 +4301,13 @@
               shutdownReceiver(d.reason || "signal");
               return true;
             case "GUI_STATE_UPDATE":
+              if (
+                d.transport !== "gui" ||
+                Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION
+              ) {
+                writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported protocol envelope.");
+                return true;
+              }
               handleGuiStateUpdateCommand(d.state, d);
               return true;
             case "PLAYBACK_START":
@@ -4365,6 +4416,7 @@
             playbackModeSocketGeneration++;
             resetGuiRevisionGate("bridge_open");
             console.log("✅ Binary Bridge Connected");
+            markReceiverBoot("bridge_connected", { url: url });
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             // [v13.9.504] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
@@ -4454,6 +4506,9 @@
             window._sendHandshake = sendHandshake;
             window._handshakeAcked = false;
             sendHandshake();
+            markReceiverBoot("handshake_sent", {
+              sampleRate: (audioCtx && audioCtx.sampleRate) || window._hwRate || hwRate || 48000,
+            });
 
             // Set up a retry interval in case the initial handshake is lost/dropped by sender
             const handshakeRetryInterval = setInterval(() => {
@@ -4557,6 +4612,7 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
+                  markReceiverBoot("handshake_ack", { sampleRate: ackRate, bitDepth: ackBitDepth });
 
                   // The receiver clears playout on a bridge reconnect. Tell the
                   // sender explicitly so it can replay the last ordered command
@@ -4733,6 +4789,7 @@
         prepareReceiverUi();
 
         window.onload = function () {
+          markReceiverBoot("window_loaded");
           startNativeLatencyMonitor();
 
           // [V13.9.40] Aggressive Startup Trace
@@ -4754,6 +4811,7 @@
                 () => {
                 if (window._receiverShutdownInProgress) return;
                 console.log("📡 Sender connected.");
+                markReceiverBoot("sender_connected");
                 clearNoSenderShutdownTimer();
                 flushPendingStudioLogs();
                 logReceiverHardwareTelemetry(context);
@@ -4805,6 +4863,7 @@
               options.playbackConfig = playbackConfig;
               options.disableIdleTimeout = true;
               context.start(options);
+              markReceiverBoot("caf_started");
               setTimeout(function () {
                 logReceiverHardwareTelemetry(context);
               }, 250);

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-ba48e07ece54"></script>
+    <script src="build_identity.js?v=13.9.509-cf9b5ec21f3e"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -13,10 +13,10 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-8a1e5fddaf36" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-8a1e5fddaf36" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-8a1e5fddaf36" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-8a1e5fddaf36" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-f42ba1ad1dfd" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-f42ba1ad1dfd" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-f42ba1ad1dfd" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-f42ba1ad1dfd" />
   </head>
   <body class="app-loading receiver-mode" aria-busy="true">
     <div class="container" id="studio-root" aria-hidden="true">
@@ -219,12 +219,13 @@
             ><button id="sample-station-button">MEDIA</button
             ><button id="settings-button">SETTINGS</button>
           </div>
-          <div class="meter-container master-meter-container">
-            <div
-              id="master-meter-bar"
-              class="meter-bar"
-              
-            ></div>
+          <div class="stereo-meter-wrapper master-meter-container">
+            <div class="meter-container">
+              <div id="master-meter-bar" class="meter-bar"></div>
+            </div>
+            <div class="meter-container">
+              <div id="master-meter-bar-r" class="meter-bar"></div>
+            </div>
           </div>
           <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
           <div
@@ -302,7 +303,7 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-734786ce3b3c"></script>
-    <script src="receiver_logic.js?v=13.9.509-734786ce3b3c"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-8726d70d9fa6"></script>
+    <script src="receiver_logic.js?v=13.9.509-8726d70d9fa6"></script>
   </body>
 </html>
