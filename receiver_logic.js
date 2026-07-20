@@ -342,7 +342,20 @@
         let hardwareTelemetryRetryCount = 0;
         let receiverPlayoutPreference = "pcm_fallback";
         let lowLatencyStartupRetryCount = 0;
+        let activeAudioPathOwner = "none";
         window._receiverPlayoutPreference = receiverPlayoutPreference;
+
+        function setActiveAudioPathOwner(path, reason) {
+          const nextPath = path || "none";
+          if (activeAudioPathOwner === nextPath) return;
+          const previousPath = activeAudioPathOwner;
+          activeAudioPathOwner = nextPath;
+          window._activeAudioPathOwner = nextPath;
+          relayLogToStudio(
+            "🎚️ Receiver audio path owner: " + previousPath + " -> " + nextPath +
+              (reason ? " (" + reason + ")" : "") + ".",
+          );
+        }
 
         function formatTelemetryValue(value) {
           if (value === null) {
@@ -896,7 +909,12 @@
           relayLogToStudio("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
-              binaryWS.send(JSON.stringify({ type: "AUDIO_WORKLET_CAPABILITY", ...result }));
+              binaryWS.send(JSON.stringify({
+                type: "AUDIO_PATH_CAPABILITY",
+                pcm: { ...result },
+                selectedPath: result.supported ? "pcm_v2" : "native_caf",
+                authoritative: true,
+              }));
             } catch (e) {}
           }
           return result;
@@ -1040,7 +1058,11 @@
             armLowLatencyStartupWatchdog();
             return true;
           }
-          if (workletNode) {
+          if (workletNode && workletReady) {
+            // PCM v2 is the live path: advertise readiness at the ordered Play
+            // boundary so the sender can release frames without waiting for a
+            // redundant native-mode transition.
+            notifyPlaybackMode("pcm_fallback", "playback_start_pcm_ready");
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -2092,6 +2114,7 @@
           nativeStreamActive = true;
           nativeStreamPaused = false;
           window._nativeStreamActive = true;
+          setActiveAudioPathOwner("native_caf", modeReason || "native_active");
           clearNativeStartupWatchdog();
           logReceiverStartupTiming("receiver_ready", {
             modeReason: modeReason || "",
@@ -2373,6 +2396,7 @@
           clearPlaybackStartSignal();
           resetBinaryPlayoutState(stopReason);
           stopNativeStreamPlayout(stopReason);
+          setActiveAudioPathOwner("none", stopReason);
           publishMxsPlaybackStatus(statusState || "STOPPED", stopReason);
         }
 
@@ -2381,15 +2405,17 @@
           clearLowLatencyStartupWatchdog();
           clearPcmStartupRetryTimer();
 
-          // Pause is reversible for every active playout path. Native CAF
-          // keeps the loaded progressive-WAV item, so resume does not issue a
-          // new LOAD or reopen /stream.wav. PCM keeps its AudioWorklet and
-          // resets only the queued frames, preventing stale audio without
-          // paying module/context startup cost on the next Play.
-          if (pauseNativeStreamPlayout(reason || "playback_pause", true)) {
+          // Pause is a live-sync boundary. Do not keep a progressive CAF item
+          // buffering while paused; its stale tail becomes seconds of delay on
+          // resume. Stop native media and clear queued PCM, while retaining the
+          // capability decision so the next ordered Play can restart promptly.
+          if (nativeStreamActive || nativeStreamStarting || nativeStreamPaused) {
+            stopNativeStreamPlayout(reason || "playback_pause");
+            setActiveAudioPathOwner("none", reason || "playback_pause");
             relayLogToStudio(
-              "⏸️ Receiver: Playback paused; native CAF media item preserved.",
+              "⏸️ Receiver: Playback paused at a fresh live boundary; native CAF buffer cleared.",
             );
+            publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
             return;
           }
           if (workletNode && workletReady) {
@@ -2573,7 +2599,9 @@
             media.contentType = "audio/wav";
             media.streamType = messages.StreamType.LIVE;
             media.duration = null;
-            media.startAbsoluteTime = Date.now() / 1000;
+            // This progressive LAN stream has no sender/receiver wall-clock
+            // timeline. Pinning CAF to Date.now() can make it wait for or seek
+            // toward a live position that is not present in the stream.
             media.contentUrl = streamUrl;
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
             if (typeof messages.GenericMediaMetadata === "function") {
@@ -3514,6 +3542,7 @@
                   clearLowLatencyStartupWatchdog();
                   flushPendingBinaryFrames();
                   if (!nativeStreamActive) {
+                    setActiveAudioPathOwner("pcm_v2", "worklet_ready");
                     notifyPlaybackMode("pcm_fallback", "worklet_ready");
                   }
                   relayLogToStudio("✅ Receiver: Live PCM playout active.");
