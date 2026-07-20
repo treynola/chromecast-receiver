@@ -1193,7 +1193,10 @@
             );
             return false;
           }
-          if (!isStateUpdate && epoch === lastPlaybackEpoch && revision === lastPlaybackRevision) {
+          // All current callers are ordered playback commands. Do not depend
+          // on an undeclared state-update flag here: a runtime ReferenceError
+          // would drop PLAY, PAUSE, and STOP messages before they reach audio.
+          if (epoch === lastPlaybackEpoch && revision === lastPlaybackRevision) {
             if (allowSamePlaybackRevisionReplay) {
               allowSamePlaybackRevisionReplay = false;
               relayLogToStudio(
