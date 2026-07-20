@@ -3980,6 +3980,7 @@
             (dialog.controls || []).forEach((control) => {
               const row = document.createElement("label");
               row.className = "gui-dialog-mirror-control";
+              row.dataset.controlType = control.type || "text";
               const label = document.createElement("span");
               label.textContent = control.label || "Parameter";
               row.appendChild(label);
@@ -3997,7 +3998,12 @@
                 value.max = control.max || "";
                 value.step = control.step || "";
                 value.disabled = true;
+                value.setAttribute("aria-label", control.label || "Parameter");
                 row.appendChild(value);
+                const output = document.createElement("output");
+                output.textContent = value.value;
+                output.className = "gui-dialog-mirror-value";
+                row.appendChild(output);
               }
               panel.appendChild(row);
             });
@@ -4171,6 +4177,11 @@
                     ? "scrolling-text active-scrolling"
                     : "scrolling-text",
                 );
+                const trackLabel = getEl("t-scroll-" + i);
+                if (trackLabel) {
+                  trackLabel.setAttribute("title", trackName);
+                  trackLabel.dataset.trackState = t.isPlaying ? "playing" : t.isPaused ? "paused" : "stopped";
+                }
                 updateMeter("t-mtr-" + i, t.meters && t.meters.l);
                 updateMeter("t-mtr-r-" + i, t.meters && t.meters.r);
                 updateClass(
@@ -4262,15 +4273,19 @@
                 if (valCache.qaMirror !== qaSignature) {
                   valCache.qaMirror = qaSignature;
                   qaRoot.replaceChildren();
+                  qaRoot.dataset.source = "studio";
+                  qaRoot.dataset.revision = String(Number(s.qa.revision) || 0);
                   qaRoot.hidden = !s.qa.visible;
                   if (s.qa.visible && s.qa.text) {
                     const panel = document.createElement("section");
-                    panel.className = "receiver-qa-mirror";
+                    panel.className = "receiver-qa-mirror qa-console-independent";
+                    panel.setAttribute("role", "status");
                     const heading = document.createElement("h3");
                     heading.textContent = "QA";
                     panel.appendChild(heading);
                     const body = document.createElement("pre");
                     body.textContent = s.qa.text;
+                    body.setAttribute("aria-live", "polite");
                     panel.appendChild(body);
                     qaRoot.appendChild(panel);
                   }
