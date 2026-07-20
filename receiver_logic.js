@@ -107,6 +107,7 @@
         var lastPlaybackRevision = -1;
         var allowSamePlaybackRevisionReplay = false;
         var lastGuiRevision = -1;
+        var guiReceivedCount = 0;
         var expectedPcmSessionId = null;
         var frozenJitterTarget = null;
 
@@ -3915,6 +3916,21 @@
             valCache[id] = left;
           }
         }
+        function updateMeter(id, level) {
+          const el = getEl(id);
+          if (!el) return;
+          const normalized = Math.max(0, Math.min(1, Number(level) || 0));
+          const width = `${normalized * 100}%`;
+          if (valCache[`meter:${id}`] !== width) {
+            el.style.width = width;
+            el.style.setProperty("--meter-level", String(normalized));
+            valCache[`meter:${id}`] = width;
+          }
+          el.setAttribute("role", "meter");
+          el.setAttribute("aria-valuemin", "0");
+          el.setAttribute("aria-valuemax", "1");
+          el.setAttribute("aria-valuenow", normalized.toFixed(3));
+        }
         function updateButtonState(id, buttonState) {
           const el = getEl(id);
           if (!el || !buttonState) return;
@@ -3927,10 +3943,13 @@
               "recording",
               !!buttonState.active && id.indexOf("rec") >= 0,
             );
+            el.classList.toggle("mirrored-active", !!buttonState.active);
+            el.dataset.mirroredState = buttonState.active ? "active" : "idle";
             el.setAttribute("aria-pressed", buttonState.pressed ? "true" : "false");
             valCache[cacheKey] = stateKey;
           }
           el.disabled = !!buttonState.disabled;
+          el.setAttribute("aria-disabled", buttonState.disabled ? "true" : "false");
         }
 
         let lastDialogMirrorState = "";
@@ -4067,14 +4086,8 @@
                 "master-volume-value",
                 (s.master.volume || 0).toFixed(1) + " dB",
               );
-              updateStyleWidth(
-                "master-meter-bar",
-                ((s.master.meters && s.master.meters.l) * 100 || 0) + "%",
-              );
-              updateStyleWidth(
-                "master-meter-bar-r",
-                ((s.master.meters && s.master.meters.r) * 100 || 0) + "%",
-              );
+              updateMeter("master-meter-bar", s.master.meters && s.master.meters.l);
+              updateMeter("master-meter-bar-r", s.master.meters && s.master.meters.r);
               updateValue("loop-length", s.master.loopLength || 4);
               updateText(
                 "loop-length-value",
@@ -4158,14 +4171,8 @@
                     ? "scrolling-text active-scrolling"
                     : "scrolling-text",
                 );
-                updateStyleWidth(
-                  "t-mtr-" + i,
-                  ((t.meters && t.meters.l) * 100 || 0) + "%",
-                );
-                updateStyleWidth(
-                  "t-mtr-r-" + i,
-                  ((t.meters && t.meters.r) * 100 || 0) + "%",
-                );
+                updateMeter("t-mtr-" + i, t.meters && t.meters.l);
+                updateMeter("t-mtr-r-" + i, t.meters && t.meters.r);
                 updateClass(
                   "t-st-" + i,
                   "status-indicator " +
@@ -4345,12 +4352,74 @@
           if (!acceptGuiRevision(envelope)) {
             return;
           }
-          if (!state || state.schema !== "mxs-004.gui-state" || Number(state.schemaVersion) !== 1) {
+          const normalizedState = normalizeGuiState(state);
+          if (!normalizedState) {
             writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported state schema.");
             return;
           }
-          renderState(state);
-          lastMirroredState = state;
+          guiReceivedCount += 1;
+          if (guiReceivedCount === 1 || guiReceivedCount % 20 === 0) {
+            relayLogToStudio(
+              "🖥️ Receiver GUI telemetry: received=" + guiReceivedCount +
+              " revision=" + Number(envelope.guiRevision || -1),
+            );
+          }
+          renderState(normalizedState);
+          lastMirroredState = normalizedState;
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify({
+                type: "GUI_STATE_ACK",
+                transport: "gui",
+                guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                guiRevision: Number(envelope.guiRevision || -1),
+                receivedCount: guiReceivedCount,
+              }));
+            } catch (e) {}
+          }
+        }
+
+        function normalizeGuiState(state) {
+          if (!state || state.schema !== "mxs-004.gui-state" || Number(state.schemaVersion) !== 1) {
+            return null;
+          }
+          if (!Array.isArray(state.tracks) || !state.master || !state.master.meters || !state.qa) {
+            return null;
+          }
+          const finite = (value, fallback = 0) => {
+            const number = Number(value);
+            return Number.isFinite(number) ? number : fallback;
+          };
+          const meters = (value) => ({
+            l: Math.max(0, Math.min(1, finite(value?.l))),
+            r: value?.r == null ? null : Math.max(0, Math.min(1, finite(value.r))),
+          });
+          const normalized = {
+            ...state,
+            transport: {
+              position: String(state.transport?.position || "00:00:00"),
+            },
+            master: {
+              ...state.master,
+              volume: finite(state.master.volume),
+              loopLength: Math.max(0, finite(state.master.loopLength, 4)),
+              meters: meters(state.master.meters),
+            },
+            tracks: state.tracks.slice(0, 4).map((track, index) => ({
+              ...track,
+              index,
+              fileName: String(track?.fileName || ""),
+              meters: meters(track?.meters),
+              buttons: track?.buttons && typeof track.buttons === "object" ? track.buttons : {},
+              params: track?.params && typeof track.params === "object" ? track.params : {},
+            })),
+            dialogs: Array.isArray(state.dialogs) ? state.dialogs : [],
+            qa: {
+              visible: Boolean(state.qa.visible),
+              text: String(state.qa.text || "").slice(0, 4000),
+            },
+          };
+          return normalized;
         }
 
         function handlePlaybackStopCommand(d) {
