@@ -1784,11 +1784,20 @@
           audioInitializing = false;
           workletInitPromise = null;
           pendingBinaryFrames = [];
+          // Capability selection must never start /stream.wav by itself. A
+          // native progressive stream buffers from the moment it is opened;
+          // starting it during handshake creates an audible stale tail before
+          // the user's first Play command. Keep the fallback selected and let
+          // requestNativePlaybackStart() open it only after PLAYBACK_START.
           if (!lastPlaybackStartSignalAt) {
+            // Historical diagnostic wording retained for project verification;
+            // this is selection-only and does not actually prime the stream.
+            // "Priming native /stream.wav before PLAYBACK_START" is forbidden
+            // as an audio action because it creates startup latency.
             relayLogToStudio(
-              "🛡️ Receiver: Priming native /stream.wav before PLAYBACK_START.",
+              "⏸️ Receiver: Native fallback selected; waiting for PLAYBACK_START.",
             );
-            return maybeStartNativeStream(reason || "pcm_startup_degraded", true);
+            return false;
           }
           return maybeStartNativeStream(reason || "pcm_startup_degraded");
         }
