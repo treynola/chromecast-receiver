@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-fb48f368a11d"></script>
+    <script src="build_identity.js?v=13.9.509-9a705f364a96"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -11,12 +11,35 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-e12bacab0885" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-e12bacab0885" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-e12bacab0885" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-e12bacab0885" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-9f352efdda8b" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-9f352efdda8b" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-9f352efdda8b" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-9f352efdda8b" />
+    <style>
+      /* Zero-dependency Cast bootstrap diagnostic. It is removed after the
+         complete receiver GUI is revealed by receiver_logic.js. */
+      #receiver-bootstrap-sentinel {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: #000;
+        color: #fad78e;
+        font: 600 22px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        text-align: center;
+        letter-spacing: 0.04em;
+      }
+      #receiver-bootstrap-sentinel[data-state="stalled"] {
+        color: #ff8080;
+      }
+    </style>
   </head>
   <body class="app-loading receiver-mode" aria-busy="true">
+    <div id="receiver-bootstrap-sentinel" role="status" aria-live="polite">NOWMULTIMEDIA MXS-004 Receiver starting…</div>
     <div class="container" id="studio-root" aria-hidden="true">
       <div id="cursor-mirror"></div>
       <div class="header">
@@ -301,11 +324,24 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-575b6a402da5"></script>
-    <script src="receiver_logic.js?v=13.9.509-575b6a402da5"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-d8b5d99ac5bb"></script>
+    <script src="receiver_logic.js?v=13.9.509-d8b5d99ac5bb"></script>
     <!-- Load optional Cast dependencies after local GUI/bootstrap code so a
          slow or unavailable CDN cannot hold the receiver on a black screen. -->
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
+    <script>
+      (function () {
+        var sentinel = document.getElementById("receiver-bootstrap-sentinel");
+        if (!sentinel) return;
+        setTimeout(function () {
+          if (window._receiverUiRevealed) return;
+          sentinel.dataset.state = "stalled";
+          sentinel.textContent = window._receiverBootStage
+            ? "NOWMULTIMEDIA MXS-004 Receiver stalled at " + window._receiverBootStage
+            : "NOWMULTIMEDIA MXS-004 Receiver bootstrap did not start";
+        }, 2500);
+      })();
+    </script>
   </body>
 </html>

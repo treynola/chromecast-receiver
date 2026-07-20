@@ -205,7 +205,30 @@
         function markReceiverBoot(stage, details) {
           if (!stage) return;
           window._receiverBootStage = stage;
+          const sentinel = document.getElementById("receiver-bootstrap-sentinel");
+          if (sentinel && !window._receiverUiRevealed) {
+            sentinel.dataset.state = "ready";
+            sentinel.textContent = "NOWMULTIMEDIA MXS-004 Receiver: " + stage;
+          }
           logReceiverStartupTiming(stage, details);
+        }
+
+        function reportReceiverRuntimeCapabilities() {
+          const runtime = {
+            userAgent: navigator.userAgent || "unknown",
+            protocol: window.location.protocol || "unknown",
+            bigint: typeof BigInt === "function",
+            websocket: typeof WebSocket === "function",
+            audioContext: !!(window.AudioContext || window.webkitAudioContext),
+            audioWorklet: !!(
+              (window.AudioContext || window.webkitAudioContext) &&
+              window.AudioWorkletNode
+            ),
+            castFramework: !!(window.cast && window.cast.framework),
+          };
+          window._receiverRuntimeCapabilities = runtime;
+          relayLogToStudio("📋 Receiver runtime capabilities: " + JSON.stringify(runtime));
+          return runtime;
         }
 
         function reportBuildIdentityRejection(reason, received) {
@@ -686,6 +709,8 @@
             root.removeAttribute("aria-hidden");
           }
           document.body.classList.remove("app-loading");
+          const sentinel = document.getElementById("receiver-bootstrap-sentinel");
+          if (sentinel) sentinel.remove();
           markReceiverBoot("gui_revealed", { reason: reason || "unspecified" });
           relayLogToStudio(
             "✅ Receiver: Receiver UI revealed (app-loading removed" +
@@ -2997,7 +3022,8 @@
             const dialogRoot = document.createElement("div");
             dialogRoot.id = "gui-dialog-mirror-root";
             dialogRoot.setAttribute("aria-hidden", "true");
-            document.getElementById("studio-root")?.appendChild(dialogRoot);
+            const studioRoot = document.getElementById("studio-root");
+            if (studioRoot) studioRoot.appendChild(dialogRoot);
           }
           var g = document.getElementById("sample-grid");
           if (g) {
@@ -3035,6 +3061,7 @@
 
         function prepareReceiverUi() {
           markReceiverBoot("receiver_script_loaded");
+          reportReceiverRuntimeCapabilities();
           buildGUI();
           bindReceiverGuiInteractions();
           markReceiverBoot("gui_structurally_ready");
@@ -3905,7 +3932,7 @@
               } else {
                 const value = document.createElement("input");
                 value.type = control.type === "select-one" ? "text" : (control.type || "text");
-                value.value = control.value ?? "";
+                value.value = control.value === null || control.value === undefined ? "" : control.value;
                 value.min = control.min || "";
                 value.max = control.max || "";
                 value.step = control.step || "";
@@ -4457,6 +4484,20 @@
             console.log("✅ Binary Bridge Connected");
             markReceiverBoot("bridge_connected", { url: url });
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
+            if (window._receiverUiRevealed) {
+              try {
+                binaryWS.send(JSON.stringify({
+                  type: "GUI_READY",
+                  transport: "gui",
+                  guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                  guiRevision: lastGuiRevision,
+                  bootStage: window._receiverBootStage || "gui_revealed",
+                }));
+                relayLogToStudio("✅ Receiver: GUI_READY sent independently of audio handshake.");
+              } catch (e) {
+                relayLogToStudio("⚠️ Receiver: GUI_READY send failed: " + e.message);
+              }
+            }
             // [v13.9.504] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
             // [v13.9.506] Reset stale bypass flag so fresh sessions don't carry old state

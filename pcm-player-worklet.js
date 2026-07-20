@@ -18,8 +18,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalWritten = 0;
     this._totalRead = 0;
 
-    this._studioRate = options.processorOptions?.studioRate || 48000;
-    this._bitDepth = options.processorOptions?.bitDepth === 24 ? 24 : 16;
+    const processorOptions = options.processorOptions || {};
+    this._studioRate = processorOptions.studioRate || 48000;
+    this._bitDepth = processorOptions.bitDepth === 24 ? 24 : 16;
 
     // Rust sends one exact frame target before audible dequeue. The wall
     // target never changes during that PCM session.
@@ -453,8 +454,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   process(inputs, outputs) {
     try {
       const output = outputs[0];
-      const channel0 = output?.[0];
-      const channel1 = output?.[1] || channel0;
+      const channel0 = output && output[0];
+      const channel1 = (output && output[1]) || channel0;
       if (!channel0) return true;
 
       if (this._paused) {
