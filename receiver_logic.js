@@ -1263,7 +1263,9 @@
         }
 
         function isReceiverInteractiveControl(element) {
-          if (!element || !element.id) return false;
+          if (!element) return false;
+          if (element.dataset.dialogId && element.dataset.controlIndex !== undefined) return true;
+          if (!element.id) return false;
           return /^(t-(rec|stop|play|rev)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain)-sl-\d+|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|sample-\d+)$/.test(element.id);
         }
 
@@ -1278,6 +1280,8 @@
             guiInteractionRevision,
             kind,
             targetId: element.id,
+            dialogId: element.dataset.dialogId || undefined,
+            controlIndex: element.dataset.controlIndex === undefined ? undefined : Number(element.dataset.controlIndex),
             value: element.type === "checkbox" ? undefined : element.value,
             checked: element.type === "checkbox" ? element.checked : undefined,
           };
@@ -1295,6 +1299,8 @@
           document.addEventListener("input", (event) => {
             const target = event.target;
             if (target && (target.matches("input[type=range], input[type=checkbox]") || target.tagName === "SELECT")) {
+              const output = target.parentElement?.querySelector(".gui-dialog-mirror-value");
+              if (output) output.textContent = target.value;
               sendGuiInteraction(target, "input");
             }
           });
@@ -3981,6 +3987,8 @@
               const row = document.createElement("label");
               row.className = "gui-dialog-mirror-control";
               row.dataset.controlType = control.type || "text";
+              row.dataset.dialogId = dialog.id || "";
+              row.dataset.controlIndex = String(dialog.controls.indexOf(control));
               const label = document.createElement("span");
               label.textContent = control.label || "Parameter";
               row.appendChild(label);
@@ -3988,7 +3996,9 @@
                 const checkbox = document.createElement("input");
                 checkbox.type = "checkbox";
                 checkbox.checked = !!control.checked;
-                checkbox.disabled = true;
+                checkbox.disabled = false;
+                checkbox.dataset.dialogId = dialog.id || "";
+                checkbox.dataset.controlIndex = String(dialog.controls.indexOf(control));
                 row.appendChild(checkbox);
               } else {
                 const value = document.createElement("input");
@@ -3997,8 +4007,10 @@
                 value.min = control.min || "";
                 value.max = control.max || "";
                 value.step = control.step || "";
-                value.disabled = true;
+                value.disabled = false;
                 value.setAttribute("aria-label", control.label || "Parameter");
+                value.dataset.dialogId = dialog.id || "";
+                value.dataset.controlIndex = String(dialog.controls.indexOf(control));
                 row.appendChild(value);
                 const output = document.createElement("output");
                 output.textContent = value.value;

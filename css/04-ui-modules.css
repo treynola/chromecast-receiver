@@ -3213,6 +3213,7 @@ body.receiver-mode cast-media-player {
   margin: 0 !important;
   pointer-events: none;
   isolation: isolate;
+  contain: layout paint style;
 }
 #qa-overlay-root > * {
   pointer-events: auto;
@@ -3221,6 +3222,21 @@ body.receiver-mode cast-media-player {
 #qa-overlay-root .qa-panel,
 #qa-overlay-root .qa-area {
   z-index: 2147483001;
+}
+#qa-overlay-root .qa-console-independent {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: inherit;
+  overflow: auto;
+  isolation: isolate;
+}
+#qa-overlay-root .qa-console-independent pre {
+  max-height: min(55vh, 500px);
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 body.receiver-mode #gui-dialog-mirror-root {
   position: absolute;
@@ -3236,7 +3252,7 @@ body.receiver-mode .gui-dialog-mirror {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  overflow: hidden;
+  overflow: auto;
   box-sizing: border-box;
   padding: 12px;
   color: var(--gold);
@@ -3244,7 +3260,7 @@ body.receiver-mode .gui-dialog-mirror {
   border: 1px solid var(--gold);
   border-radius: 4px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
-  pointer-events: none;
+  pointer-events: auto;
 }
 body.receiver-mode .gui-dialog-mirror h3 {
   margin: 0;
@@ -3267,6 +3283,39 @@ body.receiver-mode .gui-dialog-mirror-control {
 body.receiver-mode .gui-dialog-mirror-control input {
   min-width: 0;
   accent-color: var(--gold);
+}
+body.receiver-mode .gui-dialog-mirror-control {
+  min-height: 26px;
+  gap: 6px;
+}
+body.receiver-mode .gui-dialog-mirror-control input[type="range"] {
+  width: 100%;
+}
+body.receiver-mode .gui-dialog-mirror-value {
+  min-width: 36px;
+  color: #fff;
+  font-size: 0.72em;
+  text-align: right;
+}
+body.receiver-mode .track-buttons button.mirrored-active,
+body.receiver-mode #master-record-button.mirrored-active,
+body.receiver-mode #lfo-toggle.mirrored-active,
+body.receiver-mode #lfo2-toggle.mirrored-active {
+  outline: 1px solid var(--gold);
+  box-shadow: 0 0 5px rgba(255, 196, 0, 0.55);
+}
+body.receiver-mode .meter-bar {
+  transition: none !important;
+}
+body.receiver-mode .scrolling-text.active-scrolling {
+  display: inline-block;
+  min-width: 100%;
+  animation: receiver-gui-scroll 8s linear infinite;
+}
+@keyframes receiver-gui-scroll {
+  from { transform: translateX(0); }
+  50% { transform: translateX(calc(-100% + 160px)); }
+  to { transform: translateX(0); }
 }
 body.receiver-mode .sample-grid {
   display: grid !important;
