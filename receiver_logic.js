@@ -2599,9 +2599,9 @@
             media.contentType = "audio/wav";
             media.streamType = messages.StreamType.LIVE;
             media.duration = null;
-            // This progressive LAN stream has no sender/receiver wall-clock
-            // timeline. Pinning CAF to Date.now() can make it wait for or seek
-            // toward a live position that is not present in the stream.
+            // CAF uses this live anchor to avoid replaying an older buffered
+            // position when it attaches to the progressive LAN stream.
+            media.startAbsoluteTime = Date.now() / 1000;
             media.contentUrl = streamUrl;
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
             if (typeof messages.GenericMediaMetadata === "function") {
