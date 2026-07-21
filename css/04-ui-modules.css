@@ -1408,6 +1408,10 @@ select option {
   border: 1px solid var(--gold);
 }
 
+.fx-chain-slot-label.audition-target {
+  box-shadow: 0 0 0 2px var(--gold), 0 0 8px var(--gold);
+}
+
 .fx-chain-arrow {
   background-color: var(--gold);
   color: var(--red);
