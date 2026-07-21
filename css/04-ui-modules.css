@@ -1419,7 +1419,7 @@ select option {
   line-height: 16px !important;
   font-family: "Courier New", Courier, monospace;
   font-weight: 720;
-  display: inline-flex;
+  display: inline-flex; cursor: pointer; z-index: 10001;
   align-items: center;
   justify-content: center;
 }
