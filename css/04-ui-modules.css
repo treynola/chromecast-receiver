@@ -4425,7 +4425,7 @@ dialog.input-prompt-dialog {
 .vertical-slot-tabs {
   position: absolute;
   top: 15px;
-  right: 0px; /* align sidebar flush to edge for visibility */
+  right: -42px;
   display: flex;
   flex-direction: column;
   gap: 5px;
