@@ -4425,15 +4425,23 @@ dialog.input-prompt-dialog {
 .vertical-slot-tabs {
   position: absolute;
   top: 15px;
-  right: -42px;
+  left: calc(100% + 8px);
+  right: auto;
+  width: 38px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 5px;
-  z-index: 10000;
+  z-index: 2147483647;
   overflow: visible;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .vertical-slot-tabs .vertical-tab-arrow {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   margin: 2px auto;
 }
 
