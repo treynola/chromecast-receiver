@@ -1419,13 +1419,13 @@ select option {
   line-height: 16px !important;
   font-family: "Courier New", Courier, monospace;
   font-weight: 720;
-  display: inline-flex; cursor: pointer; z-index: 10001;
+  display: inline-flex; cursor: pointer; z-index: 10001; pointer-events: auto;
   align-items: center;
   justify-content: center;
 }
 
-.fx-chain-arrow {
-  filter: brightness(1.2);
+.fx-chain-arrow:hover {
+  filter: brightness(1.4);
 }
 
 .vertical-tab-arrow {
@@ -1437,6 +1437,8 @@ select option {
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  z-index: 10002;
 }
 
 
@@ -4412,7 +4414,7 @@ dialog.input-prompt-dialog {
 .vertical-slot-tabs {
   position: absolute;
   top: 15px;
-  right: -40px; /* Offset adjusted to prevent visual gaps or borders overlap */
+  right: 0px; /* align sidebar flush to edge for visibility */
   display: flex;
   flex-direction: column;
   gap: 5px;
