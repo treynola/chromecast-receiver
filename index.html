@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-db31086022a3"></script>
+    <script src="build_identity.js?v=13.9.509-846ac83eef9f"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -11,10 +11,10 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-54dde07b7302" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-54dde07b7302" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-54dde07b7302" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-54dde07b7302" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-2fb895a47df4" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-2fb895a47df4" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-2fb895a47df4" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-2fb895a47df4" />
     <style>
       /* Zero-dependency Cast bootstrap diagnostic. It is removed after the
          complete receiver GUI is revealed by receiver_logic.js. */
@@ -241,14 +241,6 @@
             ><button id="sample-station-button">MEDIA</button
             ><button id="settings-button">SETTINGS</button>
           </div>
-          <div class="stereo-meter-wrapper master-meter-container">
-            <div class="meter-container">
-              <div id="master-meter-bar" class="meter-bar"></div>
-            </div>
-            <div class="meter-container">
-              <div id="master-meter-bar-r" class="meter-bar"></div>
-            </div>
-          </div>
           <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
           <div
             id="bridge-diag-text"
@@ -325,8 +317,8 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-61d3c2e3f2bd"></script>
-    <script src="receiver_logic.js?v=13.9.509-61d3c2e3f2bd"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-7b8ef8089df5"></script>
+    <script src="receiver_logic.js?v=13.9.509-7b8ef8089df5"></script>
     <!-- Load optional Cast dependencies after local GUI/bootstrap code so a
          slow or unavailable CDN cannot hold the receiver on a black screen. -->
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>

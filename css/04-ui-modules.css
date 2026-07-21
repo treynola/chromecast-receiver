@@ -1423,6 +1423,18 @@ select option {
   filter: brightness(1.2);
 }
 
+.vertical-tab-arrow {
+  width: 30px;
+  height: 22px;
+  font-size: 10px;
+  padding: 0;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
 /* --- Dialog Styling --- */
 @keyframes dialog-open {
   from {
@@ -2658,12 +2670,10 @@ select option {
 
 /* --- 420 Sample Center --- */
 .sample-center-container {
-  width: 90%;
-  /* Reduced from 95% to prevent side clipping */
+  width: 100%;
+  /* Full width for 5‑column layout */
   box-sizing: border-box;
-  /* Ensure padding/border doesn't add to width */
-  margin: 4px auto 4px auto;
-  /* Reduced from 15px/10px for tighter GUI density */
+  margin: 4px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2675,7 +2685,7 @@ select option {
 
   /* Dark Grey Background */
   background-color: #222222 !important;
-  border: 1px solid var(--green) !important;
+  border: none !important;
   border-radius: 10px;
   padding: 10px;
 }
@@ -2684,8 +2694,8 @@ select option {
 
 .sample-grid {
   display: grid;
-  /* 4 columns */
-  grid-template-columns: repeat(4, 1fr);
+  /* 5 columns */
+  grid-template-columns: repeat(5, 1fr);
   gap: 4px;
   width: 100%;
   margin-top: 5px;
@@ -2702,18 +2712,16 @@ select option {
 
 /* Sample Center Updates */
 .sample-btn {
-  /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
-  /* Normal State: Match REV Button Scheme */
-  background-color: var(--gold) !important;
-  color: var(--green) !important;
-  border: 4px solid var(--green) !important;
+  /* Normal State: Updated color scheme */
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 2px solid var(--gold) !important;
 
   font-family: "Cousine", monospace !important;
   font-size: 1.2em !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
 
-  /* Reduced Size Further */
   aspect-ratio: 1;
   padding: 1px;
   cursor: pointer;
@@ -2723,34 +2731,31 @@ select option {
   align-items: center;
   justify-content: center;
   text-shadow: none;
-  /* Removed shadow */
   position: relative;
   z-index: 5;
 }
 
 /* Hover Effects */
 .sample-btn:hover {
-  /* Hover State: Greenish BG, Gold Text/Border */
-  background-color: var(--dark-green-transparent);
-  border-color: var(--gold);
-  color: var(--gold);
-  box-shadow: 0 0 8px var(--gold);
+  background-color: var(--green) !important;
+  border-color: var(--gold) !important;
+  color: var(--gold) !important;
+  box-shadow: 0 0 10px var(--gold);
   text-shadow: none;
 }
 
 .sample-btn:active {
-  background-color: var(--gold);
-  color: var(--green) !important;
-  /* Green text on press */
-  font-weight: normal;
-  /* Normal weight on press */
+  background-color: var(--green) !important;
+  color: var(--red) !important;
+  box-shadow: 0 0 12px var(--red);
+  border-color: var(--red) !important;
 }
 
 .sample-btn.active {
-  background-color: var(--gold) !important;
+  background-color: var(--green) !important;
   color: var(--red) !important;
-  /* Visual pop on trigger */
-  box-shadow: 0 0 15px var(--red);
+  box-shadow: 0 0 12px var(--red);
+  border-color: var(--red) !important;
 }
 
 .sample-btn.loaded {
