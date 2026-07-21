@@ -589,7 +589,12 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--gold);
   background: #333;
 }
-
+.fx-chain-slot-label.audition-tab { background: #444; }
+.fx-chain-slot-label.audition-tab.selected {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: #333;
+}
 .fx-chain-checkbox:checked + .fx-chain-slot-label {
   background: var(--green);
   color: white;
