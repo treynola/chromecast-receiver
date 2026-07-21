@@ -1419,9 +1419,20 @@ select option {
   line-height: 16px !important;
   font-family: "Courier New", Courier, monospace;
   font-weight: 720;
-  display: inline-flex; cursor: pointer; z-index: 10001; pointer-events: auto;
+  display: inline-flex;
+  cursor: pointer;
+  z-index: 10001;
+  pointer-events: auto;
   align-items: center;
   justify-content: center;
+}
+
+.fx-chain-arrow.disabled,
+.fx-chain-arrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(1);
+  pointer-events: none;
 }
 
 .fx-chain-arrow:hover {
@@ -4419,6 +4430,29 @@ dialog.input-prompt-dialog {
   flex-direction: column;
   gap: 5px;
   z-index: 10000;
+  overflow: visible;
+}
+
+.vertical-slot-tabs .vertical-tab-arrow {
+  margin: 2px auto;
+}
+
+.audition-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gold);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.audition-panel .dialog-header-status--audition {
+  width: auto;
+  margin: 0;
+  color: var(--gold);
 }
 
 /* Custom interactive hover adjustments for vertical sidebar labels */
