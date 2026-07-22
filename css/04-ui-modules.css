@@ -1346,7 +1346,7 @@ select option {
 .fx-chain-title {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
   color: var(--gold);
-  font-weight: bold;
+  font-weight: normal;
   text-align: center;
   width: 100%;
   font-size: 1.2em;
