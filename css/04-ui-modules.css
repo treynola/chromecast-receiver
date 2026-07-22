@@ -1350,7 +1350,10 @@ select option {
   text-align: center;
   width: 100%;
   font-size: 1.2em;
-  margin-bottom: 5px;
+  line-height: 24px;
+  padding: 3px 0 0;
+  box-sizing: border-box;
+  margin-bottom: 8px;
 }
 
 .fx-chain-controls {

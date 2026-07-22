@@ -258,6 +258,7 @@
   font-size: 0.7em;
   margin: 0;
   white-space: nowrap;
+  padding: 0;
 }
 
 .master-row-layout .master-value {
@@ -325,4 +326,3 @@
 .lfo-hidden-spacer {
   display: none;
 }
-

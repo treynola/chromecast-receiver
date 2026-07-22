@@ -81,7 +81,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 5px;
+  padding: 3px 5px 0;
+  box-sizing: border-box;
   flex-shrink: 0;
 }
 
