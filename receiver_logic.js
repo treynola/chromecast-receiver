@@ -230,11 +230,6 @@
         function markReceiverBoot(stage, details) {
           if (!stage) return;
           window._receiverBootStage = stage;
-          const sentinel = document.getElementById("receiver-bootstrap-sentinel");
-          if (sentinel && !window._receiverUiRevealed) {
-            sentinel.dataset.state = "ready";
-            sentinel.textContent = "NOWMULTIMEDIA MXS-004 Receiver: " + stage;
-          }
           logReceiverStartupTiming(stage, details);
         }
 
@@ -747,8 +742,6 @@
             root.removeAttribute("aria-hidden");
           }
           document.body.classList.remove("app-loading");
-          const sentinel = document.getElementById("receiver-bootstrap-sentinel");
-          if (sentinel) sentinel.remove();
           markReceiverBoot("gui_revealed", { reason: reason || "unspecified" });
           relayLogToStudio(
             "✅ Receiver: Receiver UI revealed (app-loading removed" +
