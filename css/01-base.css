@@ -311,7 +311,7 @@ input[type="range"]:focus {
 
 .header h2 {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
-  font-size: 0.75em !important;
+  font-size: 0.85em !important;
   margin: 0;
   color: var(--green);
   letter-spacing: 0.5px;
