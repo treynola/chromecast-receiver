@@ -1445,13 +1445,20 @@ select option {
 
 .vertical-tab-arrow {
   width: 30px;
-  height: 22px;
-  font-size: 10px;
+  min-height: 22px;
+  height: 22px !important;
+  flex: 0 0 22px;
+  font-size: 14px;
   padding: 0;
   margin: 0 auto;
-  display: flex;
+  display: flex !important;
   align-items: center;
   justify-content: center;
+  background-color: var(--gold) !important;
+  color: var(--red) !important;
+  border: 1px solid var(--red) !important;
+  border-radius: 4px;
+  line-height: 20px !important;
   cursor: pointer;
   z-index: 10002;
 }
