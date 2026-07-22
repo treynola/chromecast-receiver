@@ -144,6 +144,30 @@
         var lastPlaybackStartSignalAt = 0;
         var receiverStartupTimingStartAt = Date.now();
         var receiverStartupTimingMarks = {};
+        var receiverHandshakeTelemetryReady = false;
+        var deferredReceiverTelemetry = [];
+        const MAX_DEFERRED_RECEIVER_TELEMETRY = 128;
+
+        function emitReceiverTelemetry(message) {
+          if (receiverHandshakeTelemetryReady) {
+            relayLogToStudio(message);
+            return;
+          }
+          if (deferredReceiverTelemetry.length >= MAX_DEFERRED_RECEIVER_TELEMETRY) {
+            deferredReceiverTelemetry.shift();
+          }
+          deferredReceiverTelemetry.push(message);
+        }
+
+        function flushDeferredReceiverTelemetry() {
+          if (!receiverHandshakeTelemetryReady || !deferredReceiverTelemetry.length) {
+            return;
+          }
+          const pending = deferredReceiverTelemetry.splice(0);
+          pending.forEach(function (message) {
+            relayLogToStudio(message);
+          });
+        }
         const PLAYBACK_START_GRACE_MS = 2500;
         var cafLoadInterceptorConfigured = false;
         var suppressedPlayerManagerStopCount = 0;
@@ -186,7 +210,7 @@
           }
           const now = Date.now();
           receiverStartupTimingMarks[stage] = now;
-          relayLogToStudio(
+          emitReceiverTelemetry(
             "🧭 Receiver startup timing: " +
               JSON.stringify(
                 Object.assign(
@@ -228,7 +252,7 @@
             castFramework: !!(window.cast && window.cast.framework),
           };
           window._receiverRuntimeCapabilities = runtime;
-          relayLogToStudio("📋 Receiver runtime capabilities: " + JSON.stringify(runtime));
+          emitReceiverTelemetry("📋 Receiver runtime capabilities: " + JSON.stringify(runtime));
           return runtime;
         }
 
@@ -267,7 +291,7 @@
           buildIdentityAccepted = true;
           window._buildIdentityAccepted = true;
           if (!wasAccepted) {
-            relayLogToStudio(
+            emitReceiverTelemetry(
               "✅ Receiver build identity verified: " +
                 JSON.stringify({
                   event: "build_identity_verified",
@@ -4642,6 +4666,8 @@
             buildIdentityRejected = false;
             window._buildIdentityAccepted = false;
             pendingBuildIdentityRejection = null;
+            receiverHandshakeTelemetryReady = false;
+            deferredReceiverTelemetry = [];
             // Flush startup/UI logs that were queued before the Studio LAN
             // address and receiver WebSocket became available.
             flushPendingStudioLogs();
@@ -4819,6 +4845,8 @@
                   configReceived = true;
                   window._handshakeAcked = true;
                   markReceiverBoot("handshake_ack", { sampleRate: ackRate, bitDepth: ackBitDepth });
+                  receiverHandshakeTelemetryReady = true;
+                  flushDeferredReceiverTelemetry();
 
                   // The receiver clears playout on a bridge reconnect. Tell the
                   // sender explicitly so it can replay the last ordered command
