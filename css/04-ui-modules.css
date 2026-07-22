@@ -1444,27 +1444,37 @@ select option {
 }
 
 .vertical-tab-arrow {
-  width: 38px;
-  min-height: 30px;
-  height: 30px !important;
-  flex: 0 0 30px;
-  font-size: 22px;
-  font-weight: 900;
-  padding: 0;
-  margin: 0 auto;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--gold) !important;
-  color: var(--red) !important;
-  border: 2px solid var(--red) !important;
-  border-radius: 5px;
-  line-height: 26px !important;
-  box-shadow: 0 0 0 1px var(--red), 0 2px 6px rgba(0, 0, 0, 0.75);
-  cursor: pointer;
+  margin: 2px auto;
+  display: inline-flex !important;
   z-index: 2147483647;
 }
 
+.vertical-tab-arrow-glyph {
+  display: inline-block;
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+
+/* Keep the dialog arrows the same size/color as the track-column arrows. */
+.vertical-slot-tabs .vertical-tab-arrow {
+  margin: 2px auto;
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* The tab container supplies the exterior spacing; the buttons use the
+   shared .fx-chain-arrow dimensions above. */
+.vertical-slot-tabs {
+  width: 46px;
+}
+
+/* Ensure the rotated glyph does not inherit oversized legacy tab styling. */
+.vertical-tab-arrow-glyph {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
 
 /* --- Dialog Styling --- */
 @keyframes dialog-open {
