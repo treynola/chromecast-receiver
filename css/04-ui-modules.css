@@ -1444,23 +1444,25 @@ select option {
 }
 
 .vertical-tab-arrow {
-  width: 30px;
-  min-height: 22px;
-  height: 22px !important;
-  flex: 0 0 22px;
-  font-size: 14px;
+  width: 38px;
+  min-height: 30px;
+  height: 30px !important;
+  flex: 0 0 30px;
+  font-size: 22px;
+  font-weight: 900;
   padding: 0;
   margin: 0 auto;
   display: flex !important;
   align-items: center;
   justify-content: center;
-  background-color: var(--gold) !important;
-  color: var(--red) !important;
-  border: 1px solid var(--red) !important;
-  border-radius: 4px;
-  line-height: 20px !important;
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 2px solid var(--gold) !important;
+  border-radius: 5px;
+  line-height: 26px !important;
+  box-shadow: 0 0 0 1px var(--red), 0 2px 6px rgba(0, 0, 0, 0.75);
   cursor: pointer;
-  z-index: 10002;
+  z-index: 2147483647;
 }
 
 
@@ -4438,7 +4440,7 @@ dialog.input-prompt-dialog {
   top: 15px;
   left: calc(100% + 8px);
   right: auto;
-  width: 38px;
+  width: 46px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4453,7 +4455,7 @@ dialog.input-prompt-dialog {
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
-  margin: 2px auto;
+  margin: 3px auto;
 }
 
 .audition-panel {
