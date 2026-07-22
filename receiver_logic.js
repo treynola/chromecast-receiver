@@ -5001,9 +5001,17 @@
           }
         }
 
+        // Register the minimal load wrapper before any dynamic GUI work. The
+        // full lifecycle is assigned below before the browser can fire load.
+        window.onload = function receiverLoadBootstrap() {
+          if (typeof window._receiverLoadLifecycle === "function") {
+            window._receiverLoadLifecycle();
+          }
+        };
+
         prepareReceiverUi();
 
-        window.onload = function () {
+        window._receiverLoadLifecycle = function () {
           markReceiverBoot("window_loaded");
           startNativeLatencyMonitor();
 
@@ -5201,5 +5209,6 @@
           revealReceiverUi("window_load_fallback");
           relayLogToStudio("🎬 Receiver: Startup Complete [" + VERSION_TAG + "].");
         };
+
       })();
     
