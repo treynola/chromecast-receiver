@@ -3109,17 +3109,8 @@
         function prepareReceiverUi() {
           markReceiverBoot("receiver_script_loaded");
           reportReceiverRuntimeCapabilities();
-          buildGUI();
           bindReceiverGuiInteractions();
           markReceiverBoot("gui_structurally_ready");
-
-          // Cobalt can throttle requestAnimationFrame during startup. The root
-          // is display:none while app-loading is present, so one event-loop
-          // turn completes the synchronous DOM build without exposing a
-          // partially painted layout or adding the old 250ms fallback wait.
-          setTimeout(function revealCompleteLayout() {
-            revealReceiverUi("complete_layout_ready");
-          }, 0);
         }
 
         function updateScale() {
@@ -5009,11 +5000,15 @@
           }
         };
 
-        prepareReceiverUi();
-
         window._receiverLoadLifecycle = function () {
-          markReceiverBoot("window_loaded");
+          // Preserve the known-good receiver order: construct the complete
+          // static/dynamic GUI first, then start the native latency monitor.
+          // New GUI telemetry and bindings are deliberately layered after
+          // those original startup steps.
+          buildGUI();
           startNativeLatencyMonitor();
+          prepareReceiverUi();
+          markReceiverBoot("window_loaded");
 
           // [V13.9.40] Aggressive Startup Trace
           console.log("🎬 Receiver: Startup sequence initiated.");
@@ -5206,7 +5201,9 @@
           }
 
           window.addEventListener("resize", updateScale);
-          revealReceiverUi("window_load_fallback");
+          // The new atomic reveal remains the final step, after the complete
+          // milestone lifecycle and all GUI bindings have finished.
+          revealReceiverUi("complete_layout_ready");
           relayLogToStudio("🎬 Receiver: Startup Complete [" + VERSION_TAG + "].");
         };
 
