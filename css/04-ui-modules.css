@@ -1459,20 +1459,6 @@ select option {
   transform-origin: center;
 }
 
-/* Keep the dialog arrows the same size/color as the track-column arrows. */
-.vertical-slot-tabs .vertical-tab-arrow {
-  margin: 2px auto;
-  display: inline-flex !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-/* The tab container supplies the exterior spacing; the buttons use the
-   shared .fx-chain-arrow dimensions above. */
-.vertical-slot-tabs {
-  width: 46px;
-}
-
 /* Ensure the rotated glyph does not inherit oversized legacy tab styling. */
 .vertical-tab-arrow-glyph {
   font-size: inherit;
