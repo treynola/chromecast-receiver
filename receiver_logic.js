@@ -5013,15 +5013,9 @@
           }
         }
 
-        // Register the minimal load wrapper before any dynamic GUI work. The
-        // full lifecycle is assigned below before the browser can fire load.
-        window.onload = function receiverLoadBootstrap() {
-          if (typeof window._receiverLoadLifecycle === "function") {
-            window._receiverLoadLifecycle();
-          }
-        };
-
-        window._receiverLoadLifecycle = function () {
+        // Keep the milestone's direct browser load lifecycle. The current
+        // audio and handshake implementation remains unchanged inside it.
+        window.onload = function () {
           // Preserve the known-good receiver order: construct the complete
           // static/dynamic GUI first, then start the native latency monitor.
           // New GUI telemetry and bindings are deliberately layered after
