@@ -2735,14 +2735,12 @@ select option {
 .sample-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(4, auto);
-  row-gap: 4px;
-  column-gap: 4px;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 4px;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
   align-self: stretch;
-  align-content: center;
   margin-top: 5px;
 }
 
@@ -2768,11 +2766,10 @@ select option {
   letter-spacing: 0.5px !important;
 
   width: 100%;
-  height: auto;
+  height: 100%;
   min-height: 0;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: auto;
   box-sizing: border-box;
-  align-self: center;
   padding: 1px;
   cursor: pointer;
   border-radius: 12px;
@@ -3375,18 +3372,15 @@ body.receiver-mode .scrolling-text.active-scrolling {
 body.receiver-mode .sample-grid {
   display: grid !important;
   grid-template-columns: repeat(5, 1fr) !important;
-  grid-template-rows: repeat(4, auto) !important;
-  row-gap: 4px !important;
-  column-gap: 4px !important;
+  grid-template-rows: repeat(4, minmax(0, 1fr)) !important;
+  gap: 4px !important;
   margin-top: 5px !important;
-  align-content: center !important;
 }
 body.receiver-mode .sample-btn {
   width: 100% !important;
-  height: auto !important;
+  height: 100% !important;
   min-height: 0 !important;
-  aspect-ratio: 4 / 3 !important;
-  align-self: center !important;
+  aspect-ratio: auto !important;
   font-family: "Cousine", monospace !important;
   font-size: 1.2em !important;
   font-weight: 720 !important;
