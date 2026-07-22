@@ -2731,6 +2731,9 @@ select option {
 }
 
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
+.sample-center-container .center-header {
+  font-size: 1em;
+}
 
 .sample-grid {
   display: grid;
