@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-9ae4173872c2"></script>
+    <script src="build_identity.js?v=13.9.509-5f9e8dbd556f"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -317,11 +317,13 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
+    <!-- CAF must be available before receiver_logic registers window.onload
+         and starts CastReceiverContext. Cobalt can otherwise exit the custom
+         app before any receiver bootstrap telemetry is emitted. -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
     <script src="pcm-v2-protocol.js?v=13.9.509-7b8ef8089df5"></script>
     <script src="receiver_logic.js?v=13.9.509-7b8ef8089df5"></script>
-    <!-- Load optional Cast dependencies after local GUI/bootstrap code so a
-         slow or unavailable CDN cannot hold the receiver on a black screen. -->
-    <script defer src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <!-- Debug logging is optional and must not be part of the CAF bootstrap. -->
     <script defer src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
     <script>
       (function () {
