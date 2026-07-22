@@ -1344,11 +1344,12 @@ select option {
 }
 
 .fx-chain-title {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
   color: var(--green);
   font-weight: bold;
   text-align: center;
   width: 100%;
-  font-size: 0.8em;
+  font-size: 1.2em;
   margin-bottom: 5px;
 }
 
