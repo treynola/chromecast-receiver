@@ -302,7 +302,7 @@ input[type="range"]:focus {
 }
 
 .header h1 {
-  font-family: "Mexcellent 3D", sans-serif;
+  font-family: "Mexcellent", sans-serif;
   font-size: 1.6em;
   margin: 0;
   color: var(--gold);
