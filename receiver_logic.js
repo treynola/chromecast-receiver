@@ -68,6 +68,7 @@
         var nativeStreamPaused = false;
         var nativeStreamPrewarmBeforePlayback = false;
         var nativeStreamPrewarmReady = false;
+        var nativeFailureRetryAttempted = false;
         var playbackPaused = false;
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
@@ -1195,6 +1196,9 @@
 
         function markPlaybackStartSignal() {
           lastPcmQueueResetAt = 0;
+          // Give each ordered Play one guarded native recovery attempt. A
+          // second failure must settle instead of creating a restart loop.
+          nativeFailureRetryAttempted = false;
           // Every ordered PLAYBACK_START reopens the short stale-inactive-state
           // grace window. This matters for rapid stop/play and reconnect replay.
           lastPlaybackStartSignalAt = Date.now();
@@ -2202,6 +2206,7 @@
           nativeStreamStarting = false;
           nativeStreamActive = true;
           nativeStreamPaused = false;
+          nativeFailureRetryAttempted = false;
           releaseNativeStreamPrewarmMute();
           nativeStreamPrewarmBeforePlayback = false;
           nativeStreamPrewarmReady = false;
@@ -2506,15 +2511,13 @@
           clearLowLatencyStartupWatchdog();
           clearPcmStartupRetryTimer();
 
-          // Pause is a live-sync boundary. Do not keep a progressive CAF item
-          // buffering while paused; its stale tail becomes seconds of delay on
-          // resume. Stop native media and clear queued PCM, while retaining the
-          // capability decision so the next ordered Play can restart promptly.
-          if (nativeStreamActive || nativeStreamStarting || nativeStreamPaused) {
-            stopNativeStreamPlayout(reason || "playback_pause");
-            setActiveAudioPathOwner("none", reason || "playback_pause");
+          // Pause is reversible for native CAF playout. Keep the loaded
+          // progressive-WAV item and its live clock warm, but mute the output;
+          // STOP remains the destructive boundary that clears the stream and
+          // prevents an old buffered tail from surviving a later session.
+          if (pauseNativeStreamPlayout(reason || "playback_pause", true)) {
             relayLogToStudio(
-              "⏸️ Receiver: Playback paused at a fresh live boundary; native CAF buffer cleared.",
+              "⏸️ Receiver: Playback paused; native CAF media item preserved.",
             );
             publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
             return;
@@ -2574,8 +2577,9 @@
         function startPcmFallbackAfterNativeFailure(reason) {
           const failureReason = reason || "native_playback_failure";
           if (isPcmWorkletKnownUnavailable()) {
-            // STATE_UPDATE will retry the native path while playback remains
-            // active. Never pay another known-dead AudioWorklet cycle.
+            // AudioWorklet is known unavailable, so native remains authoritative.
+            // Retry directly while the ordered Play is active; GUI snapshots
+            // are intentionally audio-neutral and cannot trigger recovery.
             setReceiverPlayoutPreference(
               "native",
               failureReason + "_pcm_known_unavailable",
@@ -2584,6 +2588,19 @@
               "native_stream",
               failureReason + "_native_retry",
             );
+            if (
+              lastPlaybackStartSignalAt &&
+              !nativeStreamActive &&
+              !nativeStreamStarting &&
+              !nativeFailureRetryAttempted
+            ) {
+              nativeFailureRetryAttempted = true;
+              relayLogToStudio(
+                "🔁 Receiver: Retrying native stream once after " +
+                  failureReason + " while playback remains active.",
+              );
+              return maybeStartNativeStream(failureReason);
+            }
             relayLogToStudio(
               "⏭️ Receiver: PCM fallback skipped after " + failureReason +
                 "; AudioWorklet is known unavailable and native remains authoritative.",
