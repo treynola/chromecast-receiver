@@ -144,10 +144,13 @@
         var pcmV2Telemetry = createPcmV2Telemetry();
         var playbackModeLastSentGeneration = -1;
         var playbackModeLastSent = "";
+        var pendingPlaybackMode = null;
+        var pendingPlayoutSelection = null;
         var lastPlaybackStartSignalAt = 0;
         var receiverStartupTimingStartAt = Date.now();
         var receiverStartupTimingMarks = {};
         var receiverHandshakeTelemetryReady = false;
+        var receiverBridgeConfigReady = false;
         var deferredReceiverTelemetry = [];
         const MAX_DEFERRED_RECEIVER_TELEMETRY = 128;
 
@@ -170,6 +173,19 @@
           pending.forEach(function (message) {
             relayLogToStudio(message);
           });
+        }
+
+        function maybeEnableReceiverHandshakeTelemetry() {
+          if (
+            receiverHandshakeTelemetryReady ||
+            !window._handshakeAcked ||
+            !receiverBridgeConfigReady
+          ) {
+            return;
+          }
+          receiverHandshakeTelemetryReady = true;
+          flushDeferredReceiverTelemetry();
+          flushPendingStudioLogs();
         }
         const PLAYBACK_START_GRACE_MS = 2500;
         var cafLoadInterceptorConfigured = false;
@@ -541,7 +557,7 @@
           }
           receiverPlayoutPreference = mode;
           window._receiverPlayoutPreference = mode;
-          relayLogToStudio(
+          emitReceiverTelemetry(
             "📟 Receiver: Playback preference set to " +
               mode +
               (reason ? " (" + reason + ")" : "") +
@@ -577,20 +593,20 @@
           telemetry.playbackPreference = determineReceiverPlayoutPreference(context, telemetry);
           window._receiverHardwareTelemetry = telemetry;
           setReceiverPlayoutPreference(telemetry.playbackPreference, "hardware_telemetry");
-          relayLogToStudio("📟 Receiver: Hardware telemetry snapshot begin.");
-          relayLogToStudio(
+          emitReceiverTelemetry("📟 Receiver: Hardware telemetry snapshot begin.");
+          emitReceiverTelemetry(
             "📟 Receiver Hardware Capabilities: " +
               formatTelemetryValue(summarizeTelemetryValue(telemetry.capabilities)),
           );
-          relayLogToStudio(
+          emitReceiverTelemetry(
             "📟 Receiver Device Information: " +
               formatTelemetryValue(summarizeTelemetryValue(telemetry.deviceInformation)),
           );
-          relayLogToStudio(
+          emitReceiverTelemetry(
             "📟 Receiver Media Support Matrix: " +
               formatTelemetryValue(summarizeTelemetryValue(telemetry.mediaSupport)),
           );
-          relayLogToStudio(
+          emitReceiverTelemetry(
             "📟 Receiver: Hardware telemetry snapshot end; userAgent=" +
               telemetry.host.userAgent +
               " | platform=" +
@@ -623,7 +639,7 @@
             hardwareTelemetryRetryId = null;
             if (!deviceCapabilitiesLogged) {
               if (!emitReceiverHardwareTelemetry(context) && hardwareTelemetryRetryCount >= retryDelaysMs.length) {
-                relayLogToStudio("⚠️ Receiver: Hardware telemetry unavailable after startup retries.");
+                emitReceiverTelemetry("⚠️ Receiver: Hardware telemetry unavailable after startup retries.");
                 clearReceiverHardwareTelemetryRetry();
                 return;
               }
@@ -702,7 +718,9 @@
                     logger.clearDebugLogs();
                   }
                   writeCastDebug("info", "Cast debug logger ready; overlay=" + isCastDebugOverlayRequested());
-                  logReceiverHardwareTelemetry(context);
+                  // Hardware probing is deliberately deferred until the
+                  // Studio bridge handshake ACK so capability queries cannot
+                  // compete with receiver bootstrap on low-power Cast hosts.
                 } catch (e) {}
               });
             }
@@ -763,7 +781,12 @@
             playbackModeLastSent === mode &&
             playbackModeLastSentGeneration === playbackModeSocketGeneration;
           window._playbackMode = mode;
-          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) {
+          if (
+            !binaryWS ||
+            binaryWS.readyState !== WebSocket.OPEN ||
+            !window._handshakeAcked
+          ) {
+            pendingPlaybackMode = { mode: mode, reason: reason || "" };
             return;
           }
           if (duplicateOnCurrentSocket) {
@@ -788,7 +811,17 @@
         }
 
         function notifyPlayoutSelecting(stage, reason) {
-          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+          if (
+            !binaryWS ||
+            binaryWS.readyState !== WebSocket.OPEN ||
+            !window._handshakeAcked
+          ) {
+            pendingPlayoutSelection = {
+              stage: stage || "unknown",
+              reason: reason || "",
+            };
+            return;
+          }
           try {
             binaryWS.send(JSON.stringify({
               type: "PLAYOUT_STATE",
@@ -800,6 +833,27 @@
               lifecycleGeneration: workletLifecycleGeneration,
             }));
           } catch (e) {}
+        }
+
+        function flushPendingPlayoutState() {
+          if (
+            !window._handshakeAcked ||
+            !receiverBridgeConfigReady ||
+            !binaryWS ||
+            binaryWS.readyState !== WebSocket.OPEN
+          ) {
+            return;
+          }
+          const pendingSelection = pendingPlayoutSelection;
+          pendingPlayoutSelection = null;
+          if (pendingSelection) {
+            notifyPlayoutSelecting(pendingSelection.stage, pendingSelection.reason);
+          }
+          const pendingMode = pendingPlaybackMode;
+          pendingPlaybackMode = null;
+          if (pendingMode) {
+            notifyPlaybackMode(pendingMode.mode, pendingMode.reason);
+          }
         }
 
         function withWorkletTimeout(promise, timeoutMs, stage) {
@@ -927,8 +981,8 @@
           workletCapabilityResult = result;
           window._workletCapabilityResult = result;
           cacheWorkletCapability(result);
-          relayLogToStudio("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
-          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+          emitReceiverTelemetry("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN && window._handshakeAcked) {
             try {
               binaryWS.send(JSON.stringify({
                 type: "AUDIO_PATH_CAPABILITY",
@@ -962,13 +1016,13 @@
             );
             return workletCapabilityPromise;
           }
-          const probeHash = window.MXS_BUILD_IDENTITY &&
-            window.MXS_BUILD_IDENTITY.components &&
-            window.MXS_BUILD_IDENTITY.components.receiverLogic
-              ? window.MXS_BUILD_IDENTITY.components.receiverLogic.slice(0, 16)
-              : Date.now();
+          // Cobalt rejects query parameters on AudioWorklet.addModule(). The
+          // probe is intentionally tiny and immutable; use its plain
+          // same-origin path and keep the capability result keyed by the
+          // receiver build/generation in localStorage instead of URL-busting
+          // the AudioWorklet request.
           const probeUrl = new URL(
-            "pcm-capability-probe.js?v=" + probeHash,
+            "pcm-capability-probe.js",
             window.location.href,
           ).href;
           workletCapabilityPromise = (async function runCapabilityProbe() {
@@ -2498,6 +2552,8 @@
 
         function stopAllPlayout(reason, statusState, fromPlayerManager) {
           playbackPaused = false;
+          pendingPlaybackMode = null;
+          pendingPlayoutSelection = null;
           const stopReason = String(reason || "playback_stop");
           clearPlaybackStartSignal();
           resetBinaryPlayoutState(stopReason);
@@ -2829,6 +2885,10 @@
           clearLowLatencyStartupWatchdog();
           window._wsReconnectAttempts = 0;
           window._handshakeAcked = false;
+          receiverHandshakeTelemetryReady = false;
+          receiverBridgeConfigReady = false;
+          pendingPlaybackMode = null;
+          pendingPlayoutSelection = null;
           window._sendHandshake = null;
           window._binaryActive = false;
           window._isDrainingStartup = false;
@@ -3924,6 +3984,9 @@
         }
 
         function trySendLogToStudio(msg) {
+          if (!receiverHandshakeTelemetryReady) {
+            return false;
+          }
           let sent = false;
           // [v13.9.504] PREFER BINARY WS: Fastest and most reliable path
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
@@ -4777,7 +4840,10 @@
             window._buildIdentityAccepted = false;
             pendingBuildIdentityRejection = null;
             receiverHandshakeTelemetryReady = false;
+            receiverBridgeConfigReady = false;
             deferredReceiverTelemetry = [];
+            pendingPlaybackMode = null;
+            pendingPlayoutSelection = null;
             // Flush startup/UI logs that were queued before the Studio LAN
             // address and receiver WebSocket became available.
             flushPendingStudioLogs();
@@ -4955,8 +5021,9 @@
                   configReceived = true;
                   window._handshakeAcked = true;
                   markReceiverBoot("handshake_ack", { sampleRate: ackRate, bitDepth: ackBitDepth });
-                  receiverHandshakeTelemetryReady = true;
-                  flushDeferredReceiverTelemetry();
+                  maybeEnableReceiverHandshakeTelemetry();
+                  flushPendingPlayoutState();
+                  logReceiverHardwareTelemetry(getCastReceiverContext());
 
                   // The receiver clears playout on a bridge reconnect. Tell the
                   // sender explicitly so it can replay the last ordered command
@@ -4983,6 +5050,9 @@
                   if (d.pcmProtocol && !acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
                     return;
                   }
+                  receiverBridgeConfigReady = true;
+                  maybeEnableReceiverHandshakeTelemetry();
+                  flushPendingPlayoutState();
                   if (d.config && d.config.sampleRate) {
                     const newStudioRate = d.config.sampleRate;
                     configReceived = true;
@@ -5013,6 +5083,8 @@
             if (generation !== binaryConnectionGeneration) return;
             buildIdentityAccepted = false;
             window._buildIdentityAccepted = false;
+            receiverHandshakeTelemetryReady = false;
+            receiverBridgeConfigReady = false;
             clearLowLatencyStartupWatchdog();
             window._binaryActive = false;
             configReceived = false;
