@@ -66,6 +66,8 @@
         var nativeStreamStarting = false;
         var nativeStreamUrl = "";
         var nativeStreamPaused = false;
+        var nativeStreamPrewarmBeforePlayback = false;
+        var nativeStreamPrewarmReady = false;
         var playbackPaused = false;
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
@@ -1178,7 +1180,17 @@
                 " native stream on " + reason + ".",
             );
           }
-          return startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+          const shouldPrewarm = allowPriming && !lastPlaybackStartSignalAt;
+          if (shouldPrewarm) {
+            nativeStreamPrewarmBeforePlayback = true;
+            nativeStreamPrewarmReady = false;
+          }
+          const started = startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+          if (!started && shouldPrewarm) {
+            nativeStreamPrewarmBeforePlayback = false;
+            nativeStreamPrewarmReady = false;
+          }
+          return started;
         }
 
         function markPlaybackStartSignal() {
@@ -1476,6 +1488,14 @@
           if (nativeStreamStarting) {
             // Idle pre-prime intentionally has no destructive watchdog. Arm
             // the full timeout budget only after ordered playback is active.
+            if (nativeStreamPrewarmReady) {
+              activateNativeStream(
+                "caf_preplay_ready",
+                "✅ Receiver: Bounded native CAF prewarm released at PLAYBACK_START.",
+                nativeStartupAttemptId,
+              );
+              return true;
+            }
             if (!nativeStartupWatchdogId) {
               armNativeStartupWatchdog();
             }
@@ -1741,11 +1761,19 @@
                   nativeStreamStarting &&
                   nativeStreamUrl
                 ) {
-                  activateNativeStream(
-                    "caf_playing",
-                    "✅ Receiver: CAF native LAN stream PLAYING via /stream.wav.",
-                    nativeStartupAttemptId,
-                  );
+                  if (!lastPlaybackStartSignalAt && nativeStreamPrewarmBeforePlayback) {
+                    nativeStreamPrewarmReady = true;
+                    muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
+                    relayLogToStudio(
+                      "✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
+                    );
+                  } else {
+                    activateNativeStream(
+                      "caf_playing",
+                      "✅ Receiver: CAF native LAN stream PLAYING via /stream.wav.",
+                      nativeStartupAttemptId,
+                    );
+                  }
                 }
 
                 // MEDIA_STATUS is the documented PlayerManager status event.
@@ -1833,16 +1861,18 @@
           audioInitializing = false;
           workletInitPromise = null;
           pendingBinaryFrames = [];
-          // Capability selection must never start /stream.wav by itself. A
-          // native progressive stream buffers from the moment it is opened;
-          // starting it during handshake creates an audible stale tail before
-          // the user's first Play command. Keep the fallback selected and let
-          // requestNativePlaybackStart() open it only after PLAYBACK_START.
           if (!lastPlaybackStartSignalAt) {
-            // Historical diagnostic wording retained for project verification;
-            // this is selection-only and does not actually prime the stream.
-            // "Priming native /stream.wav before PLAYBACK_START" is forbidden
-            // as an audio action because it creates startup latency.
+            const boundedCapabilityPrewarm =
+              reason === "audio_worklet_capability_cached_unavailable";
+            if (boundedCapabilityPrewarm) {
+              relayLogToStudio(
+                "🛡️ Receiver: Bounded native /stream.wav prewarm before PLAYBACK_START; CAF output remains muted until Play.",
+              );
+              return maybeStartNativeStream(reason, true);
+            }
+            // Generic startup failures remain selection-only. A native
+            // progressive stream buffers from the moment it is opened, so
+            // only the durable hard capability result is allowed to prewarm.
             relayLogToStudio(
               "⏸️ Receiver: Native fallback selected; waiting for PLAYBACK_START.",
             );
@@ -2130,6 +2160,41 @@
           return true;
         }
 
+        function muteNativeStreamPrewarmOutput(element) {
+          if (!element) {
+            return;
+          }
+          try {
+            if (element._mxsVolumeBeforePrewarm === undefined) {
+              element._mxsVolumeBeforePrewarm = Number.isFinite(element.volume)
+                ? element.volume
+                : 1;
+            }
+            element.muted = true;
+            element.volume = 0;
+            element._mxsPrewarmMuted = true;
+          } catch (e) {}
+        }
+
+        function releaseNativeStreamPrewarmMute() {
+          [
+            document.getElementById("cast-media-element"),
+            document.getElementById("native-stream-audio"),
+          ].forEach(function (element) {
+            if (!element || !element._mxsPrewarmMuted) {
+              return;
+            }
+            try {
+              element.muted = false;
+              element.volume = element._mxsVolumeBeforePrewarm === undefined
+                ? 1
+                : element._mxsVolumeBeforePrewarm;
+              delete element._mxsVolumeBeforePrewarm;
+              delete element._mxsPrewarmMuted;
+            } catch (e) {}
+          });
+        }
+
         function activateNativeStream(modeReason, logMessage, attemptId) {
           if (attemptId && !isCurrentNativeAttempt(attemptId)) {
             return false;
@@ -2137,6 +2202,9 @@
           nativeStreamStarting = false;
           nativeStreamActive = true;
           nativeStreamPaused = false;
+          releaseNativeStreamPrewarmMute();
+          nativeStreamPrewarmBeforePlayback = false;
+          nativeStreamPrewarmReady = false;
           window._nativeStreamActive = true;
           setActiveAudioPathOwner("native_caf", modeReason || "native_active");
           clearNativeStartupWatchdog();
@@ -2263,6 +2331,8 @@
           nativeStreamStarting = false;
           nativeStreamActive = false;
           nativeStreamPaused = false;
+          nativeStreamPrewarmBeforePlayback = false;
+          nativeStreamPrewarmReady = false;
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
           window._playbackMode = "unknown";
@@ -2281,6 +2351,13 @@
           [htmlAudio, cafAudio].forEach(function resetNativeElement(element) {
             if (!element) return;
             try {
+              if (element._mxsPrewarmMuted) {
+                element.volume = element._mxsVolumeBeforePrewarm === undefined
+                  ? 1
+                  : element._mxsVolumeBeforePrewarm;
+                delete element._mxsVolumeBeforePrewarm;
+                delete element._mxsPrewarmMuted;
+              }
               element.playbackRate = 1.0;
               element.muted = false;
               if (element._mxsVolumeBeforePause !== undefined) {
@@ -2536,17 +2613,28 @@
             const onNativeAudioPlaying = function onNativeAudioPlaying() {
               if (!isCurrentNativeAttempt(attemptId)) return;
               nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
-              activateNativeStream(
-                "html_audio_playing",
-                "✅ Receiver: HTML audio stream fallback playing via /stream.wav.",
-                attemptId,
-              );
+              if (!lastPlaybackStartSignalAt && nativeStreamPrewarmBeforePlayback) {
+                nativeStreamPrewarmReady = true;
+                muteNativeStreamPrewarmOutput(nativeAudio);
+                relayLogToStudio(
+                  "✅ Receiver: HTML native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
+                );
+              } else {
+                activateNativeStream(
+                  "html_audio_playing",
+                  "✅ Receiver: HTML audio stream fallback playing via /stream.wav.",
+                  attemptId,
+                );
+              }
             };
             nativeAudio.pause();
             nativeAudio.muted = false;
             nativeAudio.loop = false;
             nativeAudio.preload = "auto";
             nativeAudio.crossOrigin = "anonymous";
+            if (nativeStreamPrewarmBeforePlayback) {
+              muteNativeStreamPrewarmOutput(nativeAudio);
+            }
             nativeAudio.src = streamUrl;
             nativeAudio.addEventListener("playing", onNativeAudioPlaying, { once: true });
             nativeAudio.onerror = function () {
@@ -2577,11 +2665,18 @@
                   startPcmFallbackAfterNativeFailure("html_audio_play_rejected");
                 });
             } else {
-              activateNativeStream(
-                "html_audio_started",
-                "✅ Receiver: HTML audio stream fallback started via /stream.wav.",
-                attemptId,
-              );
+              if (!lastPlaybackStartSignalAt && nativeStreamPrewarmBeforePlayback) {
+                nativeStreamPrewarmReady = true;
+                relayLogToStudio(
+                  "✅ Receiver: HTML native /stream.wav prewarm accepted; waiting for PLAYBACK_START.",
+                );
+              } else {
+                activateNativeStream(
+                  "html_audio_started",
+                  "✅ Receiver: HTML audio stream fallback started via /stream.wav.",
+                  attemptId,
+                );
+              }
             }
             return true;
           } catch (e) {
@@ -2614,6 +2709,9 @@
           if (!pm || typeof pm.load !== "function") {
             writeCastDebug("warn", "CAF PlayerManager unavailable; falling back to HTML audio stream.");
             return false;
+          }
+          if (nativeStreamPrewarmBeforePlayback) {
+            muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
           }
           try {
             const messages = cast.framework.messages;
