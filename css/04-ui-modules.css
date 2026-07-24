@@ -3274,9 +3274,24 @@ body.receiver-mode cast-media-player {
   pointer-events: none;
   isolation: isolate;
   contain: layout paint style;
+  display: flex;
+  flex-direction: column;
+}
+#tv-console .tv-console-status {
+  flex: 0 0 auto;
+  min-height: 14px;
+  margin: 0 0 6px !important;
+  color: #aaa;
+}
+#tv-console .bridge-status-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 #tv-console-inner {
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
   overflow: hidden;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
