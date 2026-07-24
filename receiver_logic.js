@@ -4670,6 +4670,16 @@
         }
 
         function handlePcmRelayCommand(d, options) {
+          if (
+            !identityAllowsAudio() ||
+            !window._handshakeAcked ||
+            !receiverBridgeConfigReady
+          ) {
+            relayLogToStudio(
+              "⏸️ Receiver: Ignored PCM relay before authenticated HANDSHAKE_ACK/config readiness.",
+            );
+            return;
+          }
           if (playbackPaused || window._binaryActive || nativeStreamActive) return;
           const buffer = decodePcmRelayBuffer(d);
           if (!buffer) return;
@@ -4685,6 +4695,26 @@
         }
 
         function handleReceiverCommand(d, source) {
+          const requiresAuthenticatedBridge = [
+            "GUI_STATE_UPDATE",
+            "PLAYBACK_START",
+            "PLAYBACK_STOP",
+            "PLAYBACK_PAUSE",
+            "PCM_RELAY",
+          ].includes(d.type);
+          if (
+            requiresAuthenticatedBridge &&
+            (!identityAllowsAudio() ||
+              !window._handshakeAcked ||
+              !receiverBridgeConfigReady)
+          ) {
+            relayLogToStudio(
+              "⏸️ Receiver: Ignored " +
+                d.type +
+                " before authenticated HANDSHAKE_ACK/config readiness.",
+            );
+            return true;
+          }
           switch (d.type) {
             case "RECEIVER_SHUTDOWN":
               shutdownReceiver(d.reason || "signal");
