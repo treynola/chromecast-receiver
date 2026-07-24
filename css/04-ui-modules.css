@@ -3245,6 +3245,50 @@ body.receiver-mode #cursor-mirror::after {
 body.receiver-mode cast-media-player {
   display: none;
 }
+/*
+ * Independent receiver diagnostics. Keep this out of the studio layout so
+ * log growth cannot resize or push the Sample Station. The QA mirror remains
+ * the higher diagnostic layer when both surfaces are visible.
+ */
+#tv-console {
+  position: fixed !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  left: auto !important;
+  top: auto !important;
+  width: min(400px, calc(100vw - 24px));
+  height: min(200px, calc(100vh - 24px));
+  max-height: min(200px, calc(100vh - 24px));
+  box-sizing: border-box;
+  padding: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.78);
+  color: #aaa;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-family: "Cousine", monospace;
+  font-size: 0.7em;
+  line-height: 1.25;
+  z-index: 2147483000 !important;
+  margin: 0 !important;
+  pointer-events: none;
+  isolation: isolate;
+  contain: layout paint style;
+}
+#tv-console-inner {
+  height: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+body.receiver-mode.app-loading #tv-console {
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+body.receiver-mode:not(.app-loading) #tv-console {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
 #qa-overlay-root {
   position: fixed !important;
   right: 12px !important;
