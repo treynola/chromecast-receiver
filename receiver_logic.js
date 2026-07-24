@@ -2473,19 +2473,26 @@
               delete element._mxsVolumeBeforePause;
             } catch (e) {}
           });
-          try {
-            if (cafAudio && typeof cafAudio.play === "function") {
-              const result = cafAudio.play();
-              if (result && typeof result.catch === "function") result.catch(() => {});
-            }
-          } catch (e) {}
-          try {
-            if (htmlAudio && typeof htmlAudio.play === "function") {
-              const result = htmlAudio.play();
-              if (result && typeof result.catch === "function") result.catch(() => {});
-            }
-          } catch (e) {}
-          relayLogToStudio("▶️ Receiver: Native output unmuted at the live edge (" + (reason || "playback_start") + ").");
+          // Pause is implemented as a mute so the live progressive-WAV clock
+          // stays warm. Do not call play() on an element that is already
+          // running: that can force CAF to re-prime the decoder and creates a
+          // short click/stutter on rapid Pause -> Play. Only honor an actual
+          // CAF-applied pause when the media element reports itself paused.
+          if (cafRequestAlreadyApplied === true) {
+            [cafAudio, htmlAudio].forEach(function resumePausedNativeElement(element) {
+              if (!element || element.paused !== true || typeof element.play !== "function") return;
+              try {
+                const result = element.play();
+                if (result && typeof result.catch === "function") result.catch(() => {});
+              } catch (e) {}
+            });
+          }
+          relayLogToStudio(
+            "▶️ Receiver: Native output unmuted at the live edge (" +
+              (cafRequestAlreadyApplied === true ? "CAF resume; " : "live clock preserved; ") +
+              (reason || "playback_start") +
+              ").",
+          );
           publishMxsPlaybackStatus("PLAYING", reason || "playback_start");
           return true;
         }
@@ -3292,7 +3299,7 @@
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div><div class="meter-container" style="margin-top:auto; height:6px;"><div id="t-mtr-${i}" class="meter-bar"></div></div>`;
+                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
           updateScale();
@@ -4108,21 +4115,6 @@
             valCache[id] = left;
           }
         }
-        function updateMeter(id, level) {
-          const el = getEl(id);
-          if (!el) return;
-          const normalized = Math.max(0, Math.min(1, Number(level) || 0));
-          const width = `${normalized * 100}%`;
-          if (valCache[`meter:${id}`] !== width) {
-            el.style.width = width;
-            el.style.setProperty("--meter-level", String(normalized));
-            valCache[`meter:${id}`] = width;
-          }
-          el.setAttribute("role", "meter");
-          el.setAttribute("aria-valuemin", "0");
-          el.setAttribute("aria-valuemax", "1");
-          el.setAttribute("aria-valuenow", normalized.toFixed(3));
-        }
         function updateButtonState(id, buttonState) {
           const el = getEl(id);
           if (!el || !buttonState) return;
@@ -4290,8 +4282,6 @@
                 "master-volume-value",
                 (s.master.volume || 0).toFixed(1) + " dB",
               );
-              updateMeter("master-meter-bar", s.master.meters && s.master.meters.l);
-
               updateValue("loop-length", s.master.loopLength || 4);
               updateText(
                 "loop-length-value",
@@ -4304,10 +4294,6 @@
               updateClass(
                 "lfo-toggle",
                 s.master.lfo1 && s.master.lfo1.active ? "active" : "",
-              );
-              updateStyleWidth(
-                "lfo-meter-bar",
-                ((s.master.lfo1 && s.master.lfo1.value) * 100 || 0) + "%",
               );
               updateValue(
                 "lfo-time",
@@ -4332,10 +4318,6 @@
               updateButtonState(
                 "lfo2-toggle",
                 s.master.buttons && s.master.buttons.lfo2,
-              );
-              updateStyleWidth(
-                "lfo2-meter-bar",
-                ((s.master.lfo2 && s.master.lfo2.value) * 100 || 0) + "%",
               );
               updateValue(
                 "lfo2-time",
@@ -4380,8 +4362,6 @@
                   trackLabel.setAttribute("title", trackName);
                   trackLabel.dataset.trackState = t.isPlaying ? "playing" : t.isPaused ? "paused" : "stopped";
                 }
-                updateMeter("t-mtr-" + i, t.meters && t.meters.l);
-
                 updateClass(
                   "t-st-" + i,
                   "status-indicator " +
@@ -4877,15 +4857,6 @@
             // Flush startup/UI logs that were queued before the Studio LAN
             // address and receiver WebSocket became available.
             flushPendingStudioLogs();
-            const diagEl = document.getElementById("bridge-diag-text");
-            if (diagEl) {
-              diagEl.textContent = diagEl.textContent.replace(
-                /WS: (CONNECTED|DISCONNECTED|ERROR.*)/,
-                "WS: CONNECTED",
-              );
-              diagEl.style.color = "#0f0";
-              diagEl.style.borderColor = "#0f0";
-            }
             const conn = document.getElementById("bridge-status-dot");
             if (conn) {
               conn.style.backgroundColor = "var(--green)";
@@ -5175,12 +5146,6 @@
             if (window._receiverShutdownInProgress) return;
             console.error("❌ Binary Bridge Error:", e);
             relayLogToStudio(`❌ Receiver: WebSocket Error on ${url}`);
-            const diagEl = document.getElementById("bridge-diag-text");
-            if (diagEl) {
-              diagEl.textContent = `BUF: 0 | STALLS: 0 | WS: ERROR [${url}]`;
-              diagEl.style.color = "var(--red)";
-              diagEl.style.borderColor = "var(--red)";
-            }
             // [v13.9.504] Retry with full connection params (port + token preserved)
             scheduleBinaryReconnect(ip, customPort, customToken, 5000);
           };

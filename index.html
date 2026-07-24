@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-f71fbe671450"></script>
+    <script src="build_identity.js?v=13.9.509-04d2cf3d88a4"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -13,10 +13,10 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-dfcd92b66343" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-dfcd92b66343" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-dfcd92b66343" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-dfcd92b66343" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-f3ad10358658" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-f3ad10358658" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-f3ad10358658" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-f3ad10358658" />
   </head>
   <body class="app-loading receiver-mode">
     <div class="container" id="studio-root">
@@ -134,15 +134,6 @@
                   LFO 1
                 </button>
               </div>
-              <div class="master-item lfo-meter-item">
-                <div class="meter-container lfo-meter">
-                  <div
-                    id="lfo-meter-bar"
-                    class="meter-bar"
-                    
-                  ></div>
-                </div>
-              </div>
               <div class="master-item lfo-sweep-control lfo-sweep-control-no-margin">
                 <label class="master-label sweep-label"
                   >Sweep 1</label
@@ -171,15 +162,6 @@
                 >
                   LFO 2
                 </button>
-              </div>
-              <div class="master-item lfo-meter-item">
-                <div class="meter-container lfo-meter">
-                  <div
-                    id="lfo2-meter-bar"
-                    class="meter-bar"
-                    
-                  ></div>
-                </div>
               </div>
               <div class="master-item lfo-sweep-control lfo-sweep-control-no-margin">
                 <label class="master-label sweep-label"
@@ -219,19 +201,6 @@
             ><button id="sample-station-button">MEDIA</button
             ><button id="settings-button">SETTINGS</button>
           </div>
-          <div class="meter-container master-meter-container">
-            <div
-              id="master-meter-bar"
-              class="meter-bar"
-            ></div>
-          </div>
-          <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
-          <div
-            id="bridge-diag-text"
-            class="bridge-diag-text"
-          >
-            BUF: -- | STALLS: -- | WS: DISCONNECTED
-          </div>
           <!-- [v13.9.462] FIX: castMediaElement class removed — Cast SDK was hijacking this
                element and fighting the custom PCM AudioWorklet pipeline for audio output. -->
           <audio
@@ -264,15 +233,7 @@
                 id="bridge-status-dot"
                 class="bridge-status-dot"
               ></div>
-              BRIDGE:
-              <div
-                class="meter-container buffer-health-meter"
-              >
-                <div
-                  id="buffer-health-bar"
-                  class="buffer-health-bar"
-                ></div>
-              </div>
+              BRIDGE
             </div>
           </div>
         </div>
@@ -299,7 +260,7 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-dc3ce37ced11"></script>
-    <script src="receiver_logic.js?v=13.9.509-dc3ce37ced11"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-e970bfccdcdf"></script>
+    <script src="receiver_logic.js?v=13.9.509-e970bfccdcdf"></script>
   </body>
 </html>
