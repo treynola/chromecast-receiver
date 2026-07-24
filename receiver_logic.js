@@ -2598,6 +2598,10 @@
         }
 
         function resetRealtimePlayoutKeepPcmReady(reason) {
+          // Pause is a reversible hold for PCM too. Clear queued audio and
+          // reset the processor timeline, but retain the initialized worklet
+          // so the next PLAYBACK_START can resume without a second module
+          // load or an implicit Stop-style teardown.
           clearPlaybackStartSignal();
           pendingBinaryFrames = [];
           window._isDrainingStartup = false;
@@ -2621,12 +2625,11 @@
             } catch (e) {}
             workletReady = true;
           }
-          stopNativeStreamPlayout(reason || "playback_idle");
-          if (workletNode) {
+          if (workletNode && workletReady) {
             notifyPlaybackMode("pcm_fallback", (reason || "playback_idle") + "_pcm_ready");
           }
           if (reason && !duplicateReset) {
-            relayLogToStudio("🛑 Receiver: Binary playout reset, PCM bridge kept ready (" + reason + ").");
+            relayLogToStudio("⏸️ Receiver: PCM playout paused; worklet retained and queue reset (" + reason + ").");
           }
         }
 
