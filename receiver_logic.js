@@ -5273,7 +5273,6 @@
 
               configureCastDebugLogger(context);
               clearReceiverHardwareTelemetryRetry();
-              logReceiverHardwareTelemetry(context);
               configureCafPlaybackHandlers();
               configureCafPlayerDebugEvents();
               const options = new cast.framework.CastReceiverOptions();
