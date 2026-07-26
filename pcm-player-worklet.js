@@ -196,6 +196,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     const targetWallMs = Number(message.targetWallMs);
     const drainHz = Number(message.drainHz);
     const estimatorLockedWhenFrozen = message.estimatorLockedWhenFrozen;
+    const nominalRate = Number(sampleRate);
     const valid =
       sessionId.length > 0 &&
       Number.isInteger(targetFrames) &&
@@ -205,6 +206,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       Number.isFinite(drainHz) &&
       drainHz >= 16000 &&
       drainHz <= 96000 &&
+      Number.isFinite(nominalRate) &&
+      Math.abs(drainHz - nominalRate) <= 0.5 &&
       typeof estimatorLockedWhenFrozen === "boolean" &&
       Math.abs((targetFrames * 1000) / drainHz - targetWallMs) <= 0.1;
 

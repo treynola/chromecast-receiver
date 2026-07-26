@@ -3035,6 +3035,25 @@
             relayLogToStudio("Receiver rejected malformed PCM v2 jitter target.");
             return false;
           }
+          // `wallHz` is a diagnostic AudioWorklet callback rate and may be
+          // throttled on Chromecast/Cobalt. A frozen queue target must stay
+          // in the authenticated AudioContext sample-rate domain so it cannot
+          // accidentally turn a 48 kHz PCM session into a 31 kHz clock.
+          // The validator is also exercised as a standalone protocol helper in
+          // Node, outside the receiver IIFE where `audioCtx` is declared.
+          // Keep that harness path safe while still preferring the live context
+          // whenever the receiver runtime provides it.
+          const liveAudioContext = typeof audioCtx !== "undefined" ? audioCtx : null;
+          const receiverRate = Number(liveAudioContext && liveAudioContext.sampleRate || window._hwRate || 0);
+          if (
+            receiverRate > 0 &&
+            Math.abs(drainHz - receiverRate) > 0.5
+          ) {
+            relayLogToStudio(
+              `Receiver rejected non-nominal PCM v2 jitter target: ${drainHz}Hz; expected ${receiverRate}Hz.`,
+            );
+            return false;
+          }
           if (
             expectedPcmSessionId !== null &&
             expectedPcmSessionId !== 0n &&
