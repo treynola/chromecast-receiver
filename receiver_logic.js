@@ -56,7 +56,11 @@
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
         window._buildIdentityAccepted = false;
-        const PENDING_BINARY_FRAMES_MAX = 256; // Emergency startup guard, never routine queue control.
+        // Keep at most about one second of packets while the worklet or its
+        // nominal target is not ready. Normal startup publishes the target
+        // before the first packet; exceeding this bound is an explicit native
+        // fallback, never silent packet deletion.
+        const PENDING_BINARY_FRAMES_MAX = 48;
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const CAST_GUI_PROTOCOL_VERSION = 1;
@@ -68,6 +72,7 @@
         var nativeStreamPaused = false;
         var nativeStreamPrewarmBeforePlayback = false;
         var nativeStreamPrewarmReady = false;
+        var nativeStreamCompanionForPcm = false;
         var nativeFailureRetryAttempted = false;
         var playbackPaused = false;
         var nativeStartupAttemptId = 0;
@@ -137,6 +142,11 @@
             queueDroppedFrames: 0,
             lastQueueDropReason: null,
             emergencyFailures: 0,
+            startupFallbacks: 0,
+            startupFallbackDroppedFrames: 0,
+            pcmAudioPriorityActive: false,
+            pcmAudioPriorityGuiSkips: 0,
+            pcmAudioPrioritySuppressedLogs: 0,
             sessionStarts: 0,
             sessionChanges: 0,
             baselineSequence: null,
@@ -154,6 +164,8 @@
         var receiverStartupTimingMarks = {};
         var receiverHandshakeTelemetryReady = false;
         var receiverBridgeConfigReady = false;
+        var pcmAudioPriorityActive = false;
+        var deferredGuiState = null;
         var deferredReceiverTelemetry = [];
         const MAX_DEFERRED_RECEIVER_TELEMETRY = 128;
 
@@ -395,6 +407,33 @@
           window._activeAudioPathOwner = nextPath;
           relayLogToStudio(
             "🎚️ Receiver audio path owner: " + previousPath + " -> " + nextPath +
+              (reason ? " (" + reason + ")" : "") + ".",
+          );
+        }
+
+        function setPcmAudioPriority(active, reason) {
+          const nextActive = active === true;
+          if (pcmAudioPriorityActive === nextActive) {
+            pcmV2Telemetry.pcmAudioPriorityActive = nextActive;
+            return;
+          }
+          pcmAudioPriorityActive = nextActive;
+          pcmV2Telemetry.pcmAudioPriorityActive = nextActive;
+          if (nextActive) {
+            relayLogToStudio(
+              "🎛️ Receiver PCM audio priority enabled" +
+                (reason ? " (" + reason + ")" : "") + ".",
+            );
+            return;
+          }
+          if (deferredGuiState) {
+            const state = deferredGuiState;
+            deferredGuiState = null;
+            renderState(state, true);
+            lastMirroredState = state;
+          }
+          relayLogToStudio(
+            "🎛️ Receiver PCM audio priority released" +
               (reason ? " (" + reason + ")" : "") + ".",
           );
         }
@@ -779,6 +818,7 @@
           if (!mode) {
             return;
           }
+          setPcmAudioPriority(mode === "pcm_fallback", reason || "playback_mode");
           const duplicateOnCurrentSocket =
             window._playbackMode === mode &&
             playbackModeLastSent === mode &&
@@ -1209,7 +1249,7 @@
           return true;
         }
 
-        function maybeStartNativeStream(reason, allowPriming = false) {
+        function maybeStartNativeStream(reason, allowPriming = false, allowPcmCompanion = false) {
           if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
             return false;
@@ -1220,7 +1260,11 @@
             );
             return false;
           }
-          if (receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded) {
+          if (
+            receiverPlayoutPreference === "pcm_fallback" &&
+            !window._pcmDegraded &&
+            !allowPcmCompanion
+          ) {
             return false;
           }
           if (nativeStreamActive || nativeStreamStarting) {
@@ -1229,7 +1273,7 @@
           if (!configReceived || !currentBridgeIp) {
             return false;
           }
-          if (workletNode || audioInitializing || window._binaryActive) {
+          if (!allowPcmCompanion && (workletNode || audioInitializing || window._binaryActive)) {
             resetBinaryPlayoutState("native_takeover");
           }
           if (reason) {
@@ -1238,17 +1282,35 @@
                 " native stream on " + reason + ".",
             );
           }
-          const shouldPrewarm = allowPriming && !lastPlaybackStartSignalAt;
+          const shouldPrewarm = allowPriming && (!lastPlaybackStartSignalAt || allowPcmCompanion);
           if (shouldPrewarm) {
             nativeStreamPrewarmBeforePlayback = true;
             nativeStreamPrewarmReady = false;
+            nativeStreamCompanionForPcm = allowPcmCompanion;
           }
-          const started = startNativeStreamPlayout(currentBridgeIp, currentBridgePort);
+          const started = startNativeStreamPlayout(
+            currentBridgeIp,
+            currentBridgePort,
+            allowPcmCompanion,
+          );
           if (!started && shouldPrewarm) {
             nativeStreamPrewarmBeforePlayback = false;
             nativeStreamPrewarmReady = false;
+            nativeStreamCompanionForPcm = false;
           }
           return started;
+        }
+
+        function prepareNativePcmHandoff(reason) {
+          if (
+            nativeStreamActive ||
+            nativeStreamStarting ||
+            window._receiverShutdownInProgress ||
+            window._pcmDegraded
+          ) {
+            return nativeStreamActive || nativeStreamStarting;
+          }
+          return maybeStartNativeStream(reason || "pcm_handoff_prepare", true, true);
         }
 
         function markPlaybackStartSignal() {
@@ -1547,6 +1609,12 @@
             return true;
           }
           if (nativeStreamStarting) {
+            if (nativeStreamCompanionForPcm) {
+              // A muted native companion is prepared for a bounded fallback;
+              // ordered Play must keep PCM authoritative until escalation.
+              maybeStartLowLatencyPlayout(reason || "playback_start_pcm_companion");
+              return true;
+            }
             // Idle pre-prime intentionally has no destructive watchdog. Arm
             // the full timeout budget only after ordered playback is active.
             if (nativeStreamPrewarmReady) {
@@ -1822,7 +1890,10 @@
                   nativeStreamStarting &&
                   nativeStreamUrl
                 ) {
-                  if (!lastPlaybackStartSignalAt && nativeStreamPrewarmBeforePlayback) {
+                  if (
+                    nativeStreamPrewarmBeforePlayback &&
+                    (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm)
+                  ) {
                     nativeStreamPrewarmReady = true;
                     muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
                     relayLogToStudio(
@@ -1901,9 +1972,33 @@
           }
         }
 
-        function degradePcmStartupToNative(reason) {
-          if (window._receiverShutdownInProgress || nativeStreamActive || nativeStreamStarting) {
+        function releaseNativePcmCompanion(reason) {
+          if (!nativeStreamStarting || !nativeStreamCompanionForPcm) {
             return false;
+          }
+          nativeStreamCompanionForPcm = false;
+          if (nativeStreamPrewarmReady) {
+            return activateNativeStream(
+              "pcm_native_handoff",
+              "✅ Receiver: Prepared native stream released for PCM handoff.",
+              nativeStartupAttemptId,
+            );
+          }
+          relayLogToStudio(
+            "⏱️ Receiver: Prepared native stream is still booting; handoff will activate on PLAYING (" +
+              (reason || "pcm_native_handoff") +").",
+          );
+          return true;
+        }
+
+        function degradePcmStartupToNative(reason) {
+          if (window._receiverShutdownInProgress || nativeStreamActive) {
+            return false;
+          }
+          if (nativeStreamStarting) {
+            return lastPlaybackStartSignalAt
+              ? releaseNativePcmCompanion(reason)
+              : false;
           }
           clearLowLatencyStartupWatchdog();
           lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
@@ -1921,6 +2016,17 @@
           invalidateWorkletInitialization();
           audioInitializing = false;
           workletInitPromise = null;
+          pcmV2Telemetry.startupFallbacks++;
+          if (pendingBinaryFrames.length > 0) {
+            const pendingFrames = pendingBinaryFrames.reduce(
+              (total, queued) => total + Number(queued && queued.metadata && queued.metadata.frameCount || 0),
+              0,
+            );
+            pcmV2Telemetry.startupFallbackDroppedFrames += pendingFrames;
+            relayLogToStudio(
+              `⚠️ Receiver: native startup fallback discarded ${pendingFrames} queued PCM frames explicitly; no silent queue trim.`,
+            );
+          }
           pendingBinaryFrames = [];
           if (!lastPlaybackStartSignalAt) {
             const boundedCapabilityPrewarm =
@@ -1946,7 +2052,6 @@
           if (
             window._receiverShutdownInProgress ||
             nativeStreamActive ||
-            nativeStreamStarting ||
             window._playbackMode === "native"
           ) {
             return false;
@@ -1959,6 +2064,12 @@
               (reason || "pcm_runtime_unsustainable") +
               ").",
           );
+          if (nativeStreamStarting && nativeStreamCompanionForPcm) {
+            return releaseNativePcmCompanion(reason || "pcm_runtime_unsustainable");
+          }
+          if (nativeStreamStarting) {
+            return false;
+          }
           return maybeStartNativeStream(reason || "pcm_runtime_unsustainable");
         }
 
@@ -2340,6 +2451,7 @@
           releaseNativeStreamPrewarmMute();
           nativeStreamPrewarmBeforePlayback = false;
           nativeStreamPrewarmReady = false;
+          nativeStreamCompanionForPcm = false;
           window._nativeStreamActive = true;
           setActiveAudioPathOwner("native_caf", modeReason || "native_active");
           clearNativeStartupWatchdog();
@@ -2468,6 +2580,7 @@
           nativeStreamPaused = false;
           nativeStreamPrewarmBeforePlayback = false;
           nativeStreamPrewarmReady = false;
+          nativeStreamCompanionForPcm = false;
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
           window._playbackMode = "unknown";
@@ -2635,6 +2748,7 @@
 
         function stopAllPlayout(reason, statusState, fromPlayerManager) {
           playbackPaused = false;
+          setPcmAudioPriority(false, reason || "playback_stop");
           pendingPlaybackMode = null;
           pendingPlayoutSelection = null;
           const stopReason = String(reason || "playback_stop");
@@ -2772,7 +2886,10 @@
             const onNativeAudioPlaying = function onNativeAudioPlaying() {
               if (!isCurrentNativeAttempt(attemptId)) return;
               nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
-              if (!lastPlaybackStartSignalAt && nativeStreamPrewarmBeforePlayback) {
+              if (
+                nativeStreamPrewarmBeforePlayback &&
+                (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm)
+              ) {
                 nativeStreamPrewarmReady = true;
                 muteNativeStreamPrewarmOutput(nativeAudio);
                 relayLogToStudio(
@@ -2824,7 +2941,10 @@
                   startPcmFallbackAfterNativeFailure("html_audio_play_rejected");
                 });
             } else {
-              if (!lastPlaybackStartSignalAt && nativeStreamPrewarmBeforePlayback) {
+              if (
+                nativeStreamPrewarmBeforePlayback &&
+                (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm)
+              ) {
                 nativeStreamPrewarmReady = true;
                 relayLogToStudio(
                   "✅ Receiver: HTML native /stream.wav prewarm accepted; waiting for PLAYBACK_START.",
@@ -2921,13 +3041,18 @@
           }
         }
 
-        function startNativeStreamPlayout(ip, customPort) {
+        function startNativeStreamPlayout(ip, customPort, allowPcmCompanion = false) {
           if (!ENABLE_NATIVE_STREAM_PLAYOUT || window._receiverShutdownInProgress) {
             return false;
           }
           // [v13.9.506] SINGLE PATH: Don't start native stream if worklet is already
           // handling playout — dual paths cause wobble from competing clock recovery.
-          if (workletNode && workletReady && window._playbackMode === "pcm_fallback") {
+          if (
+            !allowPcmCompanion &&
+            workletNode &&
+            workletReady &&
+            window._playbackMode === "pcm_fallback"
+          ) {
             relayLogToStudio("📡 Receiver: Native stream skipped; AudioWorklet already active.");
             return false;
           }
@@ -3054,7 +3179,9 @@
             relayLogToStudio("⚠️ Receiver queueBinaryFrame: Rejected buffer (not ArrayBuffer / no byteLength)");
             return;
           }
-          if (workletNode && workletReady) {
+          const targetReady =
+            typeof frozenJitterTarget === "undefined" || !!frozenJitterTarget;
+          if (workletNode && workletReady && targetReady) {
             const message = packet && packet.payload
               ? { type: "PCM_PACKET", payload: buffer, metadata: packet.metadata }
               : buffer;
@@ -3067,22 +3194,33 @@
           }
 
           if (pendingBinaryFrames.length >= PENDING_BINARY_FRAMES_MAX) {
-            if (audioInitializing || workletInitPromise || workletNode) {
-              const dropped = pendingBinaryFrames.shift();
-              recordPcmV2QueueDrop(dropped, "startup_pending_trim");
-              if (!pendingStartupTrimLogged) {
-                pendingStartupTrimLogged = true;
-                relayLogToStudio("⚠️ Receiver: trimming pre-ready PCM startup backlog while worklet initializes.");
-              }
-              pendingBinaryFrames.push(packet);
-              return;
+            const queued = pendingBinaryFrames.splice(0);
+            queued.push(packet);
+            const droppedFrames = queued.reduce(
+              (total, item) => total + Number(item && item.metadata && item.metadata.frameCount || 0),
+              0,
+            );
+            pcmV2Telemetry.queueDroppedPackets += queued.length;
+            pcmV2Telemetry.queueDroppedFrames += droppedFrames;
+            pcmV2Telemetry.startupFallbackDroppedFrames += droppedFrames;
+            pcmV2Telemetry.lastQueueDropReason = "pcm_startup_pending_overrun";
+            relayLogToStudio(
+              `⛔ Receiver: PCM startup gate exceeded ${PENDING_BINARY_FRAMES_MAX} packets; switching to native without silent PCM trimming.`,
+            );
+            const started = degradePcmStartupToNative("pcm_startup_pending_overrun");
+            if (!started && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+              try {
+                binaryWS.send(JSON.stringify({
+                  type: "PCM_RUNTIME_UNSUSTAINABLE",
+                  reason: "pcm_startup_pending_overrun",
+                  droppedFrames,
+                  pendingPackets: queued.length,
+                }));
+              } catch (e) {}
             }
-            // This is a receiver startup failure, never routine queue control.
-            recordPcmV2QueueDrop(packet, "emergency_pending_overrun");
-            pcmV2Telemetry.emergencyFailures = (pcmV2Telemetry.emergencyFailures || 0) + 1;
-            relayLogToStudio("⛔ Receiver: pending PCM queue overrun; failing closed instead of deleting continuity.");
             return;
           }
+
           pendingBinaryFrames.push(packet);
         }
 
@@ -3159,6 +3297,9 @@
           };
           if (workletNode && workletNode.port) {
             workletNode.port.postMessage(frozenJitterTarget);
+          }
+          if (typeof flushPendingBinaryFrames === "function") {
+            flushPendingBinaryFrames();
           }
           relayLogToStudio(
             `PCM v2 jitter target frozen: ${targetWallMs}ms / ${targetFrames} frames @ ${drainHz.toFixed(2)}Hz.`,
@@ -4074,6 +4215,18 @@
             }
             lastHighFreqLogTime = now;
           }
+          const isCriticalDuringPcm =
+            msg.indexOf("❌") !== -1 ||
+            msg.indexOf("⚠️") !== -1 ||
+            msg.indexOf("⛔") !== -1 ||
+            msg.indexOf("jitter target") !== -1 ||
+            msg.indexOf("fallback") !== -1 ||
+            msg.indexOf("PLAYBACK") !== -1 ||
+            msg.indexOf("PCM") !== -1;
+          if (pcmAudioPriorityActive && !isHighFreq && !isCriticalDuringPcm) {
+            pcmV2Telemetry.pcmAudioPrioritySuppressedLogs++;
+            return;
+          }
           if (!isHighFreq) {
             const debugLevel =
               msg.indexOf("❌") !== -1
@@ -4368,6 +4521,11 @@
 
         function renderState(s, force = false) {
           if (!s) return;
+          if (pcmAudioPriorityActive && !force) {
+            pcmV2Telemetry.pcmAudioPriorityGuiSkips++;
+            deferredGuiState = s;
+            return;
+          }
           const now = Date.now();
           const renderThrottleMs =
             window._binaryActive || window._playbackMode === "pcm_fallback"
@@ -4646,6 +4804,10 @@
           }
           markPlaybackStartSignal();
           playbackPaused = false;
+          setPcmAudioPriority(
+            receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded,
+            reason || "playback_start",
+          );
           if (workletNode && workletNode.port) {
             try { workletNode.port.postMessage({ type: "RESUME" }); } catch (e) {}
           }
@@ -4671,6 +4833,11 @@
           const normalizedState = normalizeGuiState(state);
           if (!normalizedState) {
             writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported state schema.");
+            return;
+          }
+          if (pcmAudioPriorityActive) {
+            pcmV2Telemetry.pcmAudioPriorityGuiSkips++;
+            deferredGuiState = normalizedState;
             return;
           }
           guiReceivedCount += 1;
@@ -5070,7 +5237,12 @@
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
             
             if (isArrayBuffer) {
-              if (playbackPaused || window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
+              if (
+                playbackPaused ||
+                window._playbackMode === "native" ||
+                nativeStreamActive ||
+                (nativeStreamStarting && !nativeStreamCompanionForPcm)
+              ) {
                 return;
               }
               if (workletNode) {
@@ -5098,7 +5270,12 @@
               }
               return;
             } else if (isBlob) {
-              if (playbackPaused || window._playbackMode === "native" || nativeStreamActive || nativeStreamStarting) {
+              if (
+                playbackPaused ||
+                window._playbackMode === "native" ||
+                nativeStreamActive ||
+                (nativeStreamStarting && !nativeStreamCompanionForPcm)
+              ) {
                 return;
               }
               // [v13.9.504] Fallback: Receiver browser ignored binaryType="arraybuffer"
@@ -5166,6 +5343,7 @@
                   // the user-visible Play critical path.
                   if (receiverPlayoutPreference === "pcm_fallback") {
                     preloadPcmWorklet("handshake_ack");
+                    prepareNativePcmHandoff("handshake_ack");
                   }
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
