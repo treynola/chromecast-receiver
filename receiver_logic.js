@@ -1256,6 +1256,13 @@
           if (workletNode || workletInitPromise || audioInitializing) {
             return true;
           }
+          // Native CAF owns the receiver while its prewarm attempt is in
+          // flight. Keep PCM as a cold fallback; initializing the full
+          // AudioContext/worklet here would otherwise publish pcm_fallback
+          // before native readiness is known.
+          if (nativeStreamActive || nativeStreamStarting) {
+            return false;
+          }
           const initPromise = initAudio(false, false);
           if (!initPromise) {
             return false;
@@ -1304,6 +1311,14 @@
                 " native stream on " + reason + ".",
             );
           }
+          // A native attempt is an ownership decision, even while CAF is
+          // still buffering. This gates sender/backend PCM admission until
+          // native either becomes ready or explicitly fails.
+          notifyPlaybackMode(
+            "native",
+            reason || "native_stream_starting",
+            false,
+          );
           const shouldPrewarm = allowPriming && (!lastPlaybackStartSignalAt || allowPcmCompanion);
           if (shouldPrewarm) {
             nativeStreamPrewarmBeforePlayback = true;
@@ -1631,12 +1646,6 @@
             return true;
           }
           if (nativeStreamStarting) {
-            if (nativeStreamCompanionForPcm) {
-              // A muted native companion is prepared for a bounded fallback;
-              // ordered Play must keep PCM authoritative until escalation.
-              maybeStartLowLatencyPlayout(reason || "playback_start_pcm_companion");
-              return true;
-            }
             // Idle pre-prime intentionally has no destructive watchdog. Arm
             // the full timeout budget only after ordered playback is active.
             if (nativeStreamPrewarmReady) {
@@ -1918,9 +1927,17 @@
                   ) {
                     nativeStreamPrewarmReady = true;
                     muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
-                    relayLogToStudio(
-                      "✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
-                    );
+                    if (lastPlaybackStartSignalAt && nativeStreamCompanionForPcm) {
+                      activateNativeStream(
+                        "caf_preplay_ready_after_play",
+                        "✅ Receiver: CAF native /stream.wav prewarm became ready after PLAYBACK_START.",
+                        nativeStartupAttemptId,
+                      );
+                    } else {
+                      relayLogToStudio(
+                        "✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
+                      );
+                    }
                   } else {
                     activateNativeStream(
                       "caf_playing",
@@ -2927,9 +2944,17 @@
               ) {
                 nativeStreamPrewarmReady = true;
                 muteNativeStreamPrewarmOutput(nativeAudio);
-                relayLogToStudio(
-                  "✅ Receiver: HTML native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
-                );
+                if (lastPlaybackStartSignalAt && nativeStreamCompanionForPcm) {
+                  activateNativeStream(
+                    "html_preplay_ready_after_play",
+                    "✅ Receiver: HTML native /stream.wav prewarm became ready after PLAYBACK_START.",
+                    attemptId,
+                  );
+                } else {
+                  relayLogToStudio(
+                    "✅ Receiver: HTML native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
+                  );
+                }
               } else {
                 activateNativeStream(
                   "html_audio_playing",
@@ -2981,9 +3006,17 @@
                 (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm)
               ) {
                 nativeStreamPrewarmReady = true;
-                relayLogToStudio(
-                  "✅ Receiver: HTML native /stream.wav prewarm accepted; waiting for PLAYBACK_START.",
-                );
+                if (lastPlaybackStartSignalAt && nativeStreamCompanionForPcm) {
+                  activateNativeStream(
+                    "html_preplay_ready_after_play",
+                    "✅ Receiver: HTML native /stream.wav prewarm became ready after PLAYBACK_START.",
+                    attemptId,
+                  );
+                } else {
+                  relayLogToStudio(
+                    "✅ Receiver: HTML native /stream.wav prewarm accepted; waiting for PLAYBACK_START.",
+                  );
+                }
               } else {
                 activateNativeStream(
                   "html_audio_started",
@@ -4032,12 +4065,20 @@
                   pcmRuntimeHighWatermarkDiagnostics = 0;
                   pcmRuntimeNativeFallbacks = 0;
                   clearLowLatencyStartupWatchdog();
-                  flushPendingBinaryFrames();
-                  if (!nativeStreamActive) {
+                  const pcmMayOwnAudio =
+                    !nativeStreamActive &&
+                    !nativeStreamStarting &&
+                    window._playbackMode !== "native";
+                  if (pcmMayOwnAudio) {
+                    flushPendingBinaryFrames();
                     setActiveAudioPathOwner("pcm_v2", "worklet_ready");
                     notifyPlaybackMode("pcm_fallback", "worklet_ready");
+                    relayLogToStudio("✅ Receiver: Live PCM playout active.");
+                  } else {
+                    relayLogToStudio(
+                      "✅ Receiver: PCM worklet ready as standby; native playout retains ownership.",
+                    );
                   }
-                  relayLogToStudio("✅ Receiver: Live PCM playout active.");
                 }
                 relayLogToStudio(e.data.msg);
               }
@@ -5379,13 +5420,14 @@
                     } catch (e) {}
                   }
 
-                  // Preload the worklet while the cast session is idle. The
-                  // first PLAYBACK_START then only resumes the ready node,
-                  // keeping module compilation and AudioContext setup out of
-                  // the user-visible Play critical path.
+                  // Start the native owner first. PCM remains a cold fallback
+                  // until CAF explicitly fails or times out; preloading the
+                  // full worklet here would create a competing owner.
                   if (receiverPlayoutPreference === "pcm_fallback") {
-                    preloadPcmWorklet("handshake_ack");
                     prepareNativePcmHandoff("handshake_ack");
+                    if (!nativeStreamStarting && !nativeStreamActive) {
+                      preloadPcmWorklet("native_preparation_unavailable");
+                    }
                   }
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
