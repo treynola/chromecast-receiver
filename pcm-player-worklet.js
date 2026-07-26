@@ -32,7 +32,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     // not an audible fade; removing it lets the controller acquire on a
     // transient startup queue and destabilize playout.
     this._STARTUP_SETTLE_MS = 750;
+    this._STARTUP_LOW_WATERMARK_MS = 450;
+    this._STARTUP_HIGH_WATERMARK_MS = 750;
     this._QUEUE_CONTROL_FILTER_MS = 1000;
+    this._QUEUE_LOW_WATERMARK_MS = 300;
+    this._QUEUE_HIGH_WATERMARK_MS = 900;
     this._DIAG_INTERVAL_CALLBACKS = 120;
     this._targetSessionId = null;
     this._targetFrames = 0;
@@ -74,12 +78,18 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._wallStartMs = 0;
     this._lastDiagWallMs = 0;
     this._lastDiagFramesProcessed = 0;
+    this._lastDiagAudioClockTime = null;
+    this._lastDiagRawQueuedFrames = null;
     this._lastPacketWallMs = 0;
     this._lastPacketMetadata = null;
 
     this._startupPrebuffers = 0;
     this._startupAlignmentCount = 0;
     this._startupAlignmentDroppedFrames = 0;
+    this._startupWatermarkTrims = 0;
+    this._startupWatermarkDroppedFrames = 0;
+    this._queueHighWatermarkActive = false;
+    this._queueHighWatermarkEvents = 0;
     this._intentionalResetCount = 0;
     this._intentionalResetDroppedFrames = 0;
     this._underrunCount = 0;
@@ -141,6 +151,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._lastPacketWallMs = typeof Date !== "undefined" ? Date.now() : 0;
         this._lastPacketMetadata = packetMetadata;
         this._writePcm(arrayBuffer);
+        this._trimStartupWatermark();
       } catch (error) {
         this.port.postMessage({ type: "LOG", msg: `Worklet error: ${error.message}` });
       }
@@ -188,6 +199,34 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._writePtr = len - firstPart;
     }
     this._totalWritten += len;
+  }
+
+  _trimStartupWatermark() {
+    if (this._playoutStarted || this._isBuffering === false) return;
+    const rate = this._targetDrainHz > 0 ? this._targetDrainHz : Number(sampleRate);
+    if (!Number.isFinite(rate) || rate <= 0) return;
+    const highWatermarkFrames = Math.round(
+      (rate * this._STARTUP_HIGH_WATERMARK_MS) / 1000,
+    );
+    const lowWatermarkFrames = this._targetLocked
+      ? this._targetFrames
+      : Math.round((rate * this._STARTUP_LOW_WATERMARK_MS) / 1000);
+    const availableFrames = Math.floor(
+      Math.max(0, this._totalWritten - this._totalRead) / this._channels,
+    );
+    if (availableFrames <= highWatermarkFrames || lowWatermarkFrames <= 0) return;
+    const droppedFrames = Math.max(0, availableFrames - lowWatermarkFrames);
+    this._reanchorReadCursor(lowWatermarkFrames * this._channels);
+    this._droppedFrames += droppedFrames;
+    this._startupWatermarkTrims++;
+    this._startupWatermarkDroppedFrames += droppedFrames;
+    this._startupAlignmentRequired = this._targetLocked;
+    if (this._startupWatermarkTrims === 1 || this._startupWatermarkTrims % 32 === 0) {
+      this.port.postMessage({
+        type: "LOG",
+        msg: `Startup queue watermark retained ${lowWatermarkFrames} frames and discarded ${droppedFrames} pre-audible frames.`,
+      });
+    }
   }
 
   _configureFrozenTarget(message) {
@@ -313,6 +352,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._targetAcquired = false;
     this._targetAcquisitionFrames = 0;
     this._queueControlFrames = null;
+    this._lastDiagRawQueuedFrames = null;
+    this._queueHighWatermarkActive = false;
     this._startupAlignmentRequired = this._targetLocked && !hadStartedPlayout;
     this._startupSettleFramesRemaining = this._startupAlignmentRequired
       ? Math.round((this._targetDrainHz * this._STARTUP_SETTLE_MS) / 1000)
@@ -585,19 +626,63 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       const queuedFrames = Math.round(this._queueControlFrames);
       const queueErrorMs = this._queueErrorMs(queuedFrames);
       const rawQueueErrorMs = this._queueErrorMs(rawQueuedFrames);
+      if (this._targetLocked && this._targetDrainHz > 0) {
+        const highWatermarkFrames = Math.round(
+          (this._targetDrainHz * this._QUEUE_HIGH_WATERMARK_MS) / 1000,
+        );
+        const lowWatermarkFrames = Math.round(
+          (this._targetDrainHz * this._QUEUE_LOW_WATERMARK_MS) / 1000,
+        );
+        if (rawQueuedFrames >= highWatermarkFrames && !this._queueHighWatermarkActive) {
+          this._queueHighWatermarkActive = true;
+          this._queueHighWatermarkEvents++;
+        } else if (
+          this._queueHighWatermarkActive &&
+          rawQueuedFrames <= lowWatermarkFrames
+        ) {
+          this._queueHighWatermarkActive = false;
+        }
+      }
       this._recordTargetAdherence(queueErrorMs, rawQueueErrorMs, framesInBlock);
 
       if (this._callbackCount % this._DIAG_INTERVAL_CALLBACKS === 0) {
         let wallHzReported = 0;
+        let callbackWallMs = null;
+        let callbackFrames = null;
+        let audioClockDeltaMs = null;
+        let queueDeltaFrames = null;
+        let queueGrowthFramesPerSecond = null;
         if (this._lastDiagWallMs && wallNow) {
           const deltaWallMs = wallNow - this._lastDiagWallMs;
           const deltaFrames = this._framesProcessed - this._lastDiagFramesProcessed;
           if (deltaWallMs >= 250 && deltaFrames > 0) {
+            callbackWallMs = deltaWallMs;
+            callbackFrames = deltaFrames;
             wallHzReported = Math.round((deltaFrames * 1000) / deltaWallMs);
             this._lastDiagWallMs = wallNow;
             this._lastDiagFramesProcessed = this._framesProcessed;
           }
         }
+        if (
+          typeof currentTime === "number" &&
+          Number.isFinite(currentTime) &&
+          this._lastDiagAudioClockTime !== null
+        ) {
+          audioClockDeltaMs = (currentTime - this._lastDiagAudioClockTime) * 1000;
+        }
+        if (
+          callbackWallMs !== null &&
+          this._lastDiagRawQueuedFrames !== null
+        ) {
+          queueDeltaFrames = rawQueuedFrames - this._lastDiagRawQueuedFrames;
+          queueGrowthFramesPerSecond =
+            (queueDeltaFrames * 1000) / callbackWallMs * 1000;
+        }
+        this._lastDiagAudioClockTime =
+          typeof currentTime === "number" && Number.isFinite(currentTime)
+            ? currentTime
+            : null;
+        this._lastDiagRawQueuedFrames = rawQueuedFrames;
         const adherencePercent = this._targetAdherenceSamples > 0
           ? (this._targetWithinToleranceSamples * 100) / this._targetAdherenceSamples
           : null;
@@ -617,6 +702,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           rate: 1.0,
           measuredHz: wallHzReported,
           wallHz: wallHzReported,
+          callbackWallMs,
+          callbackFrames,
+          callbackWallHz: wallHzReported,
+          audioClockSampleRate: Number(sampleRate),
+          audioClockFrames: typeof currentFrame === "number" ? currentFrame : null,
+          audioClockTimeSeconds: typeof currentTime === "number" ? currentTime : null,
+          audioClockDeltaMs,
+          queueDeltaFrames,
+          queueGrowthFramesPerSecond,
           peak: this._currentPeak,
           locked:
             this._targetAcquired &&
@@ -661,6 +755,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           startupSettleFramesRemaining: this._startupSettleFramesRemaining,
           startupAlignments: this._startupAlignmentCount,
           startupAlignmentDroppedFrames: this._startupAlignmentDroppedFrames,
+          startupWatermarkLowMs: this._STARTUP_LOW_WATERMARK_MS,
+          startupWatermarkHighMs: this._STARTUP_HIGH_WATERMARK_MS,
+          startupWatermarkTrims: this._startupWatermarkTrims,
+          startupWatermarkDroppedFrames: this._startupWatermarkDroppedFrames,
+          queueLowWatermarkMs: this._QUEUE_LOW_WATERMARK_MS,
+          queueHighWatermarkMs: this._QUEUE_HIGH_WATERMARK_MS,
+          queueHighWatermarkActive: this._queueHighWatermarkActive,
+          queueHighWatermarkEvents: this._queueHighWatermarkEvents,
           intentionalResets: this._intentionalResetCount,
           intentionalResetDroppedFrames: this._intentionalResetDroppedFrames,
           underruns: this._underrunCount,

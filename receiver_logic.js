@@ -111,6 +111,9 @@
         var allowSamePlaybackRevisionReplay = false;
         var lastGuiRevision = -1;
         var guiReceivedCount = 0;
+        const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
+        var pcmRuntimeHighWatermarkDiagnostics = 0;
+        var pcmRuntimeNativeFallbacks = 0;
         var expectedPcmSessionId = null;
         var frozenJitterTarget = null;
 
@@ -1939,6 +1942,79 @@
           return maybeStartNativeStream(reason || "pcm_startup_degraded");
         }
 
+        function escalatePcmRuntimeToNative(reason) {
+          if (
+            window._receiverShutdownInProgress ||
+            nativeStreamActive ||
+            nativeStreamStarting ||
+            window._playbackMode === "native"
+          ) {
+            return false;
+          }
+          clearLowLatencyStartupWatchdog();
+          setReceiverPlayoutPreference("native", reason || "pcm_runtime_unsustainable");
+          notifyPlayoutSelecting("native_runtime_fallback", reason || "pcm_runtime_unsustainable");
+          relayLogToStudio(
+            "⚠️ Receiver: PCM runtime queue exceeded the safe watermark; switching to native stream (" +
+              (reason || "pcm_runtime_unsustainable") +
+              ").",
+          );
+          return maybeStartNativeStream(reason || "pcm_runtime_unsustainable");
+        }
+
+        function monitorPcmRuntimeHealth(diag) {
+          if (
+            !diag ||
+            !workletNode ||
+            !workletReady ||
+            nativeStreamActive ||
+            window._playbackMode !== "pcm_fallback" ||
+            diag.targetLocked !== true
+          ) {
+            return;
+          }
+          const rawQueueWallMs = Number(diag.rawQueueWallMs);
+          const highWatermark =
+            diag.queueHighWatermarkActive === true ||
+            (Number.isFinite(rawQueueWallMs) && rawQueueWallMs >= 900);
+          const lowWatermark =
+            Number.isFinite(rawQueueWallMs) && rawQueueWallMs <= 300;
+          if (highWatermark) {
+            pcmRuntimeHighWatermarkDiagnostics += 1;
+          } else if (lowWatermark || diag.buffering === true) {
+            pcmRuntimeHighWatermarkDiagnostics = 0;
+            return;
+          } else {
+            return;
+          }
+          if (
+            pcmRuntimeHighWatermarkDiagnostics < PCM_RUNTIME_HIGH_WATERMARK_DIAGS ||
+            pcmRuntimeNativeFallbacks > 0
+          ) {
+            return;
+          }
+          pcmRuntimeNativeFallbacks += 1;
+          const reason =
+            "pcm_runtime_queue_high_" +
+            (Number.isFinite(rawQueueWallMs) ? Math.round(rawQueueWallMs) : "unknown") +
+            "ms";
+          const started = escalatePcmRuntimeToNative(reason);
+          if (!started && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify({
+                type: "PCM_RUNTIME_UNSUSTAINABLE",
+                reason,
+                rawQueueWallMs: Number.isFinite(rawQueueWallMs) ? rawQueueWallMs : null,
+                highWatermarkMs: 900,
+                diagnostics: pcmRuntimeHighWatermarkDiagnostics,
+              }));
+            } catch (e) {}
+            relayLogToStudio(
+              "❌ Receiver: Native runtime fallback could not start; PCM session is unsustainable.",
+            );
+          }
+        }
+
         function armLowLatencyStartupWatchdog(startedAt) {
           clearLowLatencyStartupWatchdog();
           const watchdogStartedAt = Number.isFinite(startedAt) ? startedAt : Date.now();
@@ -3645,6 +3721,7 @@
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
+                monitorPcmRuntimeHealth(e.data);
 
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
                   binaryWS.send(
@@ -3652,9 +3729,18 @@
                       type: "DIAG",
                       available: e.data.available,
                       stalled: e.data.stalled,
-                      measuredHz: e.data.measuredHz,
-                      wallHz: e.data.wallHz,
-                      rate: e.data.rate,
+                        measuredHz: e.data.measuredHz,
+                        wallHz: e.data.wallHz,
+                        callbackWallMs: e.data.callbackWallMs,
+                        callbackFrames: e.data.callbackFrames,
+                        callbackWallHz: e.data.callbackWallHz,
+                        audioClockSampleRate: e.data.audioClockSampleRate,
+                        audioClockFrames: e.data.audioClockFrames,
+                        audioClockTimeSeconds: e.data.audioClockTimeSeconds,
+                        audioClockDeltaMs: e.data.audioClockDeltaMs,
+                        queueDeltaFrames: e.data.queueDeltaFrames,
+                        queueGrowthFramesPerSecond: e.data.queueGrowthFramesPerSecond,
+                        rate: e.data.rate,
                       peak: e.data.peak,
                       locked: e.data.locked,
                       protocolVersion: window.MXSPcmV2 ? window.MXSPcmV2.VERSION : null,
@@ -3698,6 +3784,14 @@
                         startupSettleFramesRemaining: e.data.startupSettleFramesRemaining,
                         startupAlignments: e.data.startupAlignments,
                         startupAlignmentDroppedFrames: e.data.startupAlignmentDroppedFrames,
+                        startupWatermarkLowMs: e.data.startupWatermarkLowMs,
+                        startupWatermarkHighMs: e.data.startupWatermarkHighMs,
+                        startupWatermarkTrims: e.data.startupWatermarkTrims,
+                        startupWatermarkDroppedFrames: e.data.startupWatermarkDroppedFrames,
+                        queueLowWatermarkMs: e.data.queueLowWatermarkMs,
+                        queueHighWatermarkMs: e.data.queueHighWatermarkMs,
+                        queueHighWatermarkActive: e.data.queueHighWatermarkActive,
+                        queueHighWatermarkEvents: e.data.queueHighWatermarkEvents,
                         intentionalResets: e.data.intentionalResets,
                         intentionalResetDroppedFrames: e.data.intentionalResetDroppedFrames,
                         underruns: e.data.underruns,
@@ -3758,6 +3852,8 @@
                   workletReady = true;
                   pendingStartupTrimLogged = false;
                   lowLatencyStartupRetryCount = 0;
+                  pcmRuntimeHighWatermarkDiagnostics = 0;
+                  pcmRuntimeNativeFallbacks = 0;
                   clearLowLatencyStartupWatchdog();
                   flushPendingBinaryFrames();
                   if (!nativeStreamActive) {
@@ -4225,6 +4321,7 @@
 
         let lastRenderTime = 0;
         const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
+        const PCM_RENDER_THROTTLE_MS = 250; // Protect the audio callback from GUI repaint work.
 
         const _lastParamsCache = [];
         const _lastFxCache = [];
@@ -4272,7 +4369,11 @@
         function renderState(s, force = false) {
           if (!s) return;
           const now = Date.now();
-          if (!force && now - lastRenderTime < RENDER_THROTTLE_MS) return;
+          const renderThrottleMs =
+            window._binaryActive || window._playbackMode === "pcm_fallback"
+              ? PCM_RENDER_THROTTLE_MS
+              : RENDER_THROTTLE_MS;
+          if (!force && now - lastRenderTime < renderThrottleMs) return;
           lastRenderTime = now;
           try {
             if (s.transport) {
