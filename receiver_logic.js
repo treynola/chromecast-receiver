@@ -157,6 +157,7 @@
         var pcmV2Telemetry = createPcmV2Telemetry();
         var playbackModeLastSentGeneration = -1;
         var playbackModeLastSent = "";
+        var playbackModeLastSentReady = null;
         var pendingPlaybackMode = null;
         var pendingPlayoutSelection = null;
         var lastPlaybackStartSignalAt = 0;
@@ -201,6 +202,21 @@
           receiverHandshakeTelemetryReady = true;
           flushDeferredReceiverTelemetry();
           flushPendingStudioLogs();
+        }
+
+        function resetPcmContinuityForMode(mode, reason) {
+          if (mode !== "pcm_fallback" && mode !== "native") {
+            return;
+          }
+          // Native takeover intentionally creates a transport gap. When PCM
+          // resumes, the backend starts a fresh ASRC/output sequence even
+          // though the Cast session id remains stable. Rebase the receiver
+          // validator so that intentional handoff gaps are not reported as
+          // packet loss or stale-session failures.
+          pcmV2Validator = null;
+          pcmV2AllowInitialOffset = true;
+          pcmV2Telemetry.baselineSequence = null;
+          pcmV2Telemetry.baselineSourceFrame = null;
         }
         const PLAYBACK_START_GRACE_MS = 2500;
         var cafLoadInterceptorConfigured = false;
@@ -814,7 +830,7 @@
           return true;
         }
 
-        function notifyPlaybackMode(mode, reason) {
+        function notifyPlaybackMode(mode, reason, ready = true) {
           if (!mode) {
             return;
           }
@@ -822,14 +838,19 @@
           const duplicateOnCurrentSocket =
             window._playbackMode === mode &&
             playbackModeLastSent === mode &&
+            playbackModeLastSentReady === (ready !== false) &&
             playbackModeLastSentGeneration === playbackModeSocketGeneration;
+          const previousMode = window._playbackMode;
+          if (previousMode !== mode) {
+            resetPcmContinuityForMode(mode, reason || "playback_mode");
+          }
           window._playbackMode = mode;
           if (
             !binaryWS ||
             binaryWS.readyState !== WebSocket.OPEN ||
             !window._handshakeAcked
           ) {
-            pendingPlaybackMode = { mode: mode, reason: reason || "" };
+            pendingPlaybackMode = { mode: mode, reason: reason || "", ready: ready !== false };
             return;
           }
           if (duplicateOnCurrentSocket) {
@@ -839,16 +860,17 @@
             const readiness = {
               mode: mode,
               reason: reason || "",
-              ready: true,
+              ready: ready !== false,
               lifecycleGeneration: workletLifecycleGeneration,
             };
             binaryWS.send(JSON.stringify({ type: "PLAYBACK_MODE", ...readiness }));
             binaryWS.send(JSON.stringify({
               type: "PLAYOUT_STATE",
-              state: "ready",
+              state: readiness.ready ? "ready" : "selecting",
               ...readiness,
             }));
             playbackModeLastSent = mode;
+            playbackModeLastSentReady = ready !== false;
             playbackModeLastSentGeneration = playbackModeSocketGeneration;
           } catch (e) {}
         }
@@ -895,7 +917,7 @@
           const pendingMode = pendingPlaybackMode;
           pendingPlaybackMode = null;
           if (pendingMode) {
-            notifyPlaybackMode(pendingMode.mode, pendingMode.reason);
+            notifyPlaybackMode(pendingMode.mode, pendingMode.reason, pendingMode.ready);
           }
         }
 
@@ -2058,6 +2080,12 @@
           }
           clearLowLatencyStartupWatchdog();
           setReceiverPlayoutPreference("native", reason || "pcm_runtime_unsustainable");
+          resetBinaryPlayoutState("native_runtime_fallback");
+          // Publish the ownership change before attempting CAF startup. The
+          // Rust writer uses PLAYBACK_MODE as its PCM admission gate; a mere
+          // selecting state leaves the backend emitting packets while this
+          // receiver is already abandoning the PCM queue.
+          notifyPlaybackMode("native", reason || "pcm_runtime_unsustainable", false);
           notifyPlayoutSelecting("native_runtime_fallback", reason || "pcm_runtime_unsustainable");
           relayLogToStudio(
             "⚠️ Receiver: PCM runtime queue exceeded the safe watermark; switching to native stream (" +
@@ -2396,7 +2424,10 @@
               return;
             }
             relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
-            stopNativeStreamPlayout("startup_timeout");
+            // The native attempt failed, but the ordered PLAYBACK_START is
+            // still active. Preserve that intent so the recovery path can
+            // start native immediately instead of waiting for another Play.
+            stopNativeStreamPlayout("startup_timeout", true);
             setReceiverPlayoutPreference("pcm_fallback", "native_startup_timeout");
             if (configReceived) {
               initAudio(true, false);
@@ -2557,7 +2588,7 @@
           return URL.createObjectURL(blob);
         }
 
-        function stopNativeStreamPlayout(reason) {
+        function stopNativeStreamPlayout(reason, preservePlaybackIntent = false) {
           const hadNativePlayout =
             nativeStreamActive ||
             nativeStreamStarting ||
@@ -2572,7 +2603,9 @@
           nativeStartupAttemptId++;
           clearNativeStreamReloadTimer();
           nativeStartupTrimPending = false;
-          clearPlaybackStartSignal();
+          if (!preservePlaybackIntent) {
+            clearPlaybackStartSignal();
+          }
           clearNativeStartupWatchdog();
           clearLowLatencyStartupWatchdog();
           nativeStreamStarting = false;
@@ -2590,6 +2623,7 @@
             window._pcmDegraded = false;
           }
           playbackModeLastSent = "";
+          playbackModeLastSentReady = null;
           playbackModeLastSentGeneration = -1;
           stopCafNativeCompanion();
           stopHtmlAudioNativeCompanion();
@@ -2731,6 +2765,7 @@
           if (!preserveNativeMode) {
             window._playbackMode = "unknown";
             playbackModeLastSent = "";
+            playbackModeLastSentReady = null;
             playbackModeLastSentGeneration = -1;
           }
           
@@ -3112,6 +3147,7 @@
           pendingBinaryFrames = [];
           window._playbackMode = "unknown";
           playbackModeLastSent = "";
+          playbackModeLastSentReady = null;
           playbackModeLastSentGeneration = -1;
           workletReady = false;
           window._lastBinaryTime = 0;
@@ -4950,7 +4986,13 @@
             );
             return;
           }
-          if (playbackPaused || window._binaryActive || nativeStreamActive) return;
+          if (
+            playbackPaused ||
+            window._binaryActive ||
+            nativeStreamActive ||
+            receiverPlayoutPreference !== "pcm_fallback" ||
+            window._playbackMode !== "pcm_fallback"
+          ) return;
           const buffer = decodePcmRelayBuffer(d);
           if (!buffer) return;
           if (options && options.requireWorklet && !workletNode) return;
