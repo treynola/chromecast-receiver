@@ -114,6 +114,9 @@
         var lastPlaybackEpoch = -1;
         var lastPlaybackRevision = -1;
         var allowSamePlaybackRevisionReplay = false;
+        var lastOrderedPlaybackAction = "";
+        var lastOrderedPlaybackAt = 0;
+        const PLAYER_MANAGER_ORDER_GUARD_MS = 5000;
         var lastGuiRevision = -1;
         var guiReceivedCount = 0;
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
@@ -1360,6 +1363,22 @@
           lastPlaybackStartSignalAt = Date.now();
         }
 
+        function noteOrderedPlaybackAction(action) {
+          lastOrderedPlaybackAction = action || "";
+          lastOrderedPlaybackAt = Date.now();
+        }
+
+        function shouldIgnorePlayerManagerCommand(command) {
+          if (!lastOrderedPlaybackAt || !lastOrderedPlaybackAction) {
+            return false;
+          }
+          const ageMs = Date.now() - lastOrderedPlaybackAt;
+          if (ageMs < 0 || ageMs > PLAYER_MANAGER_ORDER_GUARD_MS) {
+            return false;
+          }
+          return true;
+        }
+
         function resetPlaybackRevisionGate(reason) {
           // Keep the last command as the replay anchor. A bridge reconnect
           // needs to accept that exact command once, but must continue to
@@ -1656,6 +1675,18 @@
               );
               return true;
             }
+            if (nativeStreamPrewarmBeforePlayback) {
+              // CAF/HTML may have received the live stream before it emits its
+              // PLAYING event. The stream is already the sole owner after the
+              // ordered Play boundary, so release the prewarm mute now rather
+              // than making audible startup wait for CAF's late event.
+              releaseNativeStreamPrewarmMute();
+              nativeStreamPrewarmBeforePlayback = false;
+              nativeStreamCompanionForPcm = false;
+              relayLogToStudio(
+                "🔊 Receiver: Native prewarm unmuted at PLAYBACK_START; awaiting native PLAYING confirmation.",
+              );
+            }
             if (!nativeStartupWatchdogId) {
               armNativeStartupWatchdog();
             }
@@ -1832,6 +1863,14 @@
                       ", commandAttempt=" + commandAttemptId +
                       ", armedAttempt=" + armedStopAttemptId +
                       ", currentAttempt=" + nativeStartupAttemptId + ").",
+                  );
+                  return;
+                }
+                if (shouldIgnorePlayerManagerCommand(command)) {
+                  relayLogToStudio(
+                    "⏭️ Receiver: Ignored CAF PlayerManager " + command +
+                      " during ordered MXS " + lastOrderedPlaybackAction +
+                      " reconciliation.",
                   );
                   return;
                 }
@@ -4879,6 +4918,7 @@
           if (!acceptPlaybackRevision(d, "PLAYBACK_START")) {
             return;
           }
+          noteOrderedPlaybackAction("PLAYBACK_START");
           markPlaybackStartSignal();
           playbackPaused = false;
           setPcmAudioPriority(
@@ -4986,6 +5026,7 @@
           if (!acceptPlaybackRevision(d, "PLAYBACK_STOP")) {
             return;
           }
+          noteOrderedPlaybackAction("PLAYBACK_STOP");
           stopAllPlayout(d.reason || "playback_stop");
           acknowledgePlaybackRevision(d, "playback_stop");
         }
@@ -4994,6 +5035,7 @@
           if (!acceptPlaybackRevision(d, "PLAYBACK_PAUSE")) {
             return;
           }
+          noteOrderedPlaybackAction("PLAYBACK_PAUSE");
           pauseAllPlayout(d.reason || "playback_pause");
           acknowledgePlaybackRevision(d, "playback_pause");
         }
