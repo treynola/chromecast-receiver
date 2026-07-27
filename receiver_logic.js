@@ -55,6 +55,7 @@
         var buildIdentityAccepted = false;
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
+        const BUILD_IDENTITY_RELOAD_SESSION_KEY = "mxs_build_identity_reload_attempt";
         window._buildIdentityAccepted = false;
         // Keep at most about one second of packets while the worklet or its
         // nominal target is not ready. Normal startup publishes the target
@@ -327,6 +328,32 @@
               pendingBuildIdentityRejection = null;
             } catch (e) {}
           }
+
+          // A receiver page can outlive the deployment that launched it. If
+          // the sender presents a newer identity, refresh once with a
+          // document-level cache buster so the updated index can select the
+          // matching versioned build_identity.js asset. Keep this one-shot per
+          // receiver page session; persistent mismatches remain fail-closed.
+          if (received && !buildIdentitiesMatch(window.MXS_BUILD_IDENTITY, received)) {
+            let reloadAllowed = true;
+            const receivedKey = JSON.stringify(received);
+            try {
+              if (sessionStorage.getItem(BUILD_IDENTITY_RELOAD_SESSION_KEY) === receivedKey) {
+                reloadAllowed = false;
+              } else {
+                sessionStorage.setItem(BUILD_IDENTITY_RELOAD_SESSION_KEY, receivedKey);
+              }
+            } catch (e) {
+              reloadAllowed = !window._buildIdentityReloadAttempted;
+              window._buildIdentityReloadAttempted = true;
+            }
+            if (reloadAllowed) {
+              reloadReceiver(
+                "🔄 Receiver: Build identity mismatch; requesting one cache-busted receiver reload.",
+                250,
+              );
+            }
+          }
         }
 
         function acceptBuildIdentity(received, source) {
@@ -339,6 +366,9 @@
           buildIdentityAccepted = true;
           window._buildIdentityAccepted = true;
           if (!wasAccepted) {
+            try {
+              sessionStorage.removeItem(BUILD_IDENTITY_RELOAD_SESSION_KEY);
+            } catch (e) {}
             emitReceiverTelemetry(
               "✅ Receiver build identity verified: " +
                 JSON.stringify({
