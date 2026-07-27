@@ -2843,7 +2843,17 @@
           pendingPlaybackMode = null;
           pendingPlayoutSelection = null;
           const stopReason = String(reason || "playback_stop");
+          const hadPublishedAudioMode =
+            window._playbackMode !== "unknown" ||
+            playbackModeLastSent !== "";
           clearPlaybackStartSignal();
+          // Close backend PCM admission and reset its direct-session/ASRC
+          // state before destroying the receiver queue or native item. This
+          // makes STOP a complete two-sided lifecycle boundary, including
+          // rapid STOP -> PLAY and bridge reconnects.
+          if (hadPublishedAudioMode) {
+            notifyPlaybackMode("unknown", stopReason, false);
+          }
           resetBinaryPlayoutState(stopReason);
           stopNativeStreamPlayout(stopReason);
           setActiveAudioPathOwner("none", stopReason);
@@ -5462,14 +5472,16 @@
                     } catch (e) {}
                   }
 
-                  // Start the native owner first. PCM remains a cold fallback
-                  // until CAF explicitly fails or times out; preloading the
-                  // full worklet here would create a competing owner.
-                  if (receiverPlayoutPreference === "pcm_fallback") {
-                    prepareNativePcmHandoff("handshake_ack");
-                    if (!nativeStreamStarting && !nativeStreamActive) {
-                      preloadPcmWorklet("native_preparation_unavailable");
-                    }
+                  // Native prewarm is started from the bridge-open/config path
+                  // below. HANDSHAKE_ACK only authenticates the PCM fallback
+                  // boundary; restarting native here adds avoidable startup
+                  // latency and can race the first ordered PLAYBACK_START.
+                  if (
+                    receiverPlayoutPreference === "pcm_fallback" &&
+                    !nativeStreamStarting &&
+                    !nativeStreamActive
+                  ) {
+                    preloadPcmWorklet("native_preparation_unavailable");
                   }
                 } else if (d.type === "BRIDGE_CONFIG") {
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
@@ -5499,6 +5511,13 @@
                   }
                   if (d.ip) {
                     markReceiverPlayoutPathReady();
+                    // Begin the native CAF progressive-WAV prewarm as soon as
+                    // the authenticated bridge advertises its LAN endpoint.
+                    // The stream remains muted until the ordered Play command;
+                    // PCM stays closed while native owns preparation.
+                    if (receiverPlayoutPreference === "pcm_fallback") {
+                      prepareNativePcmHandoff("websocket_open");
+                    }
                   }
                 } else {
                   handleReceiverCommand(d, "binary bridge");
