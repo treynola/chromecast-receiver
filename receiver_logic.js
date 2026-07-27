@@ -1657,6 +1657,49 @@
           );
         }
 
+        function requestNativeMediaElementPlay(reason) {
+          let requested = false;
+          [
+            document.getElementById("cast-media-element"),
+            document.getElementById("native-stream-audio"),
+          ].forEach(function requestElementPlay(element) {
+            if (!element || typeof element.play !== "function" || element.paused !== true) {
+              return;
+            }
+            if (element.id === "native-stream-audio" && !element.src) {
+              return;
+            }
+            requested = true;
+            try {
+              const playPromise = element.play();
+              logReceiverStartupTiming("caf_play_requested_at_play", {
+                nativeAttemptId: nativeStartupAttemptId,
+                reason: reason || "playback_start",
+                mediaElementId: element.id || "unknown",
+                readyState: element.readyState,
+              });
+              relayLogToStudio(
+                "▶️ Receiver: Native media element play requested at PLAYBACK_START (" +
+                  (reason || "playback_start") + ").",
+              );
+              if (playPromise && typeof playPromise.catch === "function") {
+                playPromise.catch(function (error) {
+                  relayLogToStudio(
+                    "⚠️ Receiver: Native media element play request rejected: " +
+                      (error && error.message ? error.message : error),
+                  );
+                });
+              }
+            } catch (error) {
+              relayLogToStudio(
+                "⚠️ Receiver: Native media element play request failed: " +
+                  (error && error.message ? error.message : error),
+              );
+            }
+          });
+          return requested;
+        }
+
         function requestNativePlaybackStart(reason) {
           if (!identityAllowsAudio()) return false;
           if (playbackPaused) return true;
@@ -1698,6 +1741,7 @@
               releaseNativeStreamPrewarmMute();
               nativeStreamPrewarmBeforePlayback = false;
               nativeStreamCompanionForPcm = false;
+              requestNativeMediaElementPlay(reason || "playback_start");
               logReceiverStartupTiming("caf_prewarm_released_at_play", {
                 nativeAttemptId: nativeStartupAttemptId,
                 prewarmReady: nativeStreamPrewarmReady,
