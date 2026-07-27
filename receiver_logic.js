@@ -457,6 +457,16 @@
           );
         }
 
+        function pcmPathOwnsAudio() {
+          return (
+            activeAudioPathOwner === "pcm_v2" &&
+            receiverPlayoutPreference === "pcm_fallback" &&
+            !window._pcmDegraded &&
+            !nativeStreamStarting &&
+            !nativeStreamActive
+          );
+        }
+
         function formatTelemetryValue(value) {
           if (value === null) {
             return "null";
@@ -1314,6 +1324,8 @@
                 " native stream on " + reason + ".",
             );
           }
+          setActiveAudioPathOwner("native_caf_starting", reason || "native_stream_starting");
+          setPcmAudioPriority(false, reason || "native_stream_starting");
           // A native attempt is an ownership decision, even while CAF is
           // still buffering. This gates sender/backend PCM admission until
           // native either becomes ready or explicitly fails.
@@ -1333,10 +1345,13 @@
             currentBridgePort,
             allowPcmCompanion,
           );
-          if (!started && shouldPrewarm) {
-            nativeStreamPrewarmBeforePlayback = false;
-            nativeStreamPrewarmReady = false;
-            nativeStreamCompanionForPcm = false;
+          if (!started) {
+            setActiveAudioPathOwner("none", reason || "native_stream_start_failed");
+            if (shouldPrewarm) {
+              nativeStreamPrewarmBeforePlayback = false;
+              nativeStreamPrewarmReady = false;
+              nativeStreamCompanionForPcm = false;
+            }
           }
           return started;
         }
@@ -4970,7 +4985,7 @@
           markPlaybackStartSignal();
           playbackPaused = false;
           setPcmAudioPriority(
-            receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded,
+            pcmPathOwnsAudio(),
             reason || "playback_start",
           );
           if (workletNode && workletNode.port) {
