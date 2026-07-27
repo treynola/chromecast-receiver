@@ -5456,6 +5456,17 @@
             markReceiverPlayoutPathReady();
             if (nativeStreamActive || nativeStreamStarting) {
               notifyPlaybackMode("native", "socket_reconnected");
+            } else if (
+              receiverPlayoutPreference === "pcm_fallback" &&
+              !window._pcmDegraded
+            ) {
+              // A reconnect can retain a standby worklet from the prior
+              // generation. Its existence is not an ownership decision: the
+              // authenticated BRIDGE_CONFIG path still starts native-first
+              // preparation. Publish native selecting here so PCM cannot
+              // briefly become audible before that preparation runs.
+              notifyPlaybackMode("native", "socket_reconnected", false);
+              notifyPlayoutSelecting("native_preparation", "socket_reconnected");
             } else if (workletNode || workletReady || window._binaryActive) {
               notifyPlaybackMode("pcm_fallback", "socket_reconnected");
             }
