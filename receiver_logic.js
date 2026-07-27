@@ -1683,6 +1683,11 @@
               releaseNativeStreamPrewarmMute();
               nativeStreamPrewarmBeforePlayback = false;
               nativeStreamCompanionForPcm = false;
+              logReceiverStartupTiming("caf_prewarm_released_at_play", {
+                nativeAttemptId: nativeStartupAttemptId,
+                prewarmReady: nativeStreamPrewarmReady,
+                playbackRequested: true,
+              });
               relayLogToStudio(
                 "🔊 Receiver: Native prewarm unmuted at PLAYBACK_START; awaiting native PLAYING confirmation.",
               );
@@ -1960,11 +1965,27 @@
                   nativeStreamStarting &&
                   nativeStreamUrl
                 ) {
+                  const cafWasPreplay = !lastPlaybackStartSignalAt;
+                  logReceiverStartupTiming("caf_playing", {
+                    nativeAttemptId: nativeStartupAttemptId,
+                    prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
+                    playbackRequested: !cafWasPreplay,
+                    mediaReadyState: document.getElementById("cast-media-element")
+                      ? document.getElementById("cast-media-element").readyState
+                      : null,
+                  });
                   if (
                     nativeStreamPrewarmBeforePlayback &&
                     (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm)
                   ) {
                     nativeStreamPrewarmReady = true;
+                    logReceiverStartupTiming("caf_prewarm_ready", {
+                      nativeAttemptId: nativeStartupAttemptId,
+                      playbackRequested: !!lastPlaybackStartSignalAt,
+                      mediaReadyState: document.getElementById("cast-media-element")
+                        ? document.getElementById("cast-media-element").readyState
+                        : null,
+                    });
                     muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
                     if (lastPlaybackStartSignalAt && nativeStreamCompanionForPcm) {
                       activateNativeStream(
@@ -3131,6 +3152,12 @@
             loadRequestData.media = media;
             loadRequestData.autoplay = true;
             notifyPlayoutSelecting("native_stream", "caf_load_requested");
+            logReceiverStartupTiming("caf_load_requested", {
+              nativeAttemptId: attemptId,
+              prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
+              playbackRequested: !!lastPlaybackStartSignalAt,
+              autoplay: true,
+            });
             relayLogToStudio("🧭 Receiver: Native playback preferred; PCM bridge stays idle until fallback is required.");
 
             writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
@@ -3138,6 +3165,11 @@
             if (result && typeof result.then === "function") {
               result
                 .then(function () {
+                  logReceiverStartupTiming("caf_load_accepted", {
+                    nativeAttemptId: attemptId,
+                    prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
+                    playbackRequested: !!lastPlaybackStartSignalAt,
+                  });
                   writeCastDebug("info", "CAF native stream LOAD accepted.");
                 })
                 .catch(function (e) {
@@ -3147,6 +3179,12 @@
                   startHtmlAudioStreamPlayout(streamUrl, attemptId);
                 });
             } else {
+              logReceiverStartupTiming("caf_load_accepted", {
+                nativeAttemptId: attemptId,
+                prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
+                playbackRequested: !!lastPlaybackStartSignalAt,
+                synchronous: true,
+              });
               writeCastDebug("info", "CAF native stream LOAD started.");
             }
             return true;
