@@ -1931,8 +1931,9 @@
             // Standard Cast transport controls must use the same lifecycle as
             // the MXS custom channel. Let CAF finish its normal request first,
             // then reconcile the MXS path on the next task: PAUSE keeps the
-            // active playout path warm, while STOP remains the destructive
-            // boundary for both CAF and PCM.
+            // active playout path warm, while an external PlayerManager STOP
+            // remains destructive. Ordered MXS STOP retains a muted native
+            // prewarm for the next replay.
             const deferPlayerManagerCommand = function (command, request) {
               const commandAttemptId = nativeStartupAttemptId;
               setTimeout(function () {
@@ -2824,6 +2825,36 @@
           }
         }
 
+        function holdNativeStreamForReplay(reason) {
+          if (!nativeStreamActive && !nativeStreamStarting) {
+            return false;
+          }
+          const cafAudio = document.getElementById("cast-media-element");
+          const htmlAudio = document.getElementById("native-stream-audio");
+          [cafAudio, htmlAudio].forEach(function muteReplayNativeElement(element) {
+            if (!element) return;
+            try {
+              if (element._mxsVolumeBeforePause === undefined) {
+                element._mxsVolumeBeforePause = Number.isFinite(element.volume)
+                  ? element.volume
+                  : 1;
+              }
+              element.muted = true;
+              element.volume = 0;
+            } catch (e) {}
+          });
+          nativeStreamPaused = nativeStreamActive;
+          if (nativeStreamStarting) {
+            muteNativeStreamPrewarmOutput(cafAudio);
+            muteNativeStreamPrewarmOutput(htmlAudio);
+          }
+          relayLogToStudio(
+            "⏸️ Receiver: Native CAF retained muted and primed for ordered replay (" +
+              (reason || "playback_stop") + ").",
+          );
+          return true;
+        }
+
         function pauseNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive && !nativeStreamStarting) return false;
           nativeStreamPaused = true;
@@ -2947,7 +2978,12 @@
           }
         }
 
-        function stopAllPlayout(reason, statusState, fromPlayerManager) {
+        function stopAllPlayout(
+          reason,
+          statusState,
+          fromPlayerManager,
+          preserveNativeForReplay = false,
+        ) {
           playbackPaused = false;
           setPcmAudioPriority(false, reason || "playback_stop");
           pendingPlaybackMode = null;
@@ -2958,15 +2994,30 @@
             playbackModeLastSent !== "";
           clearPlaybackStartSignal();
           // Close backend PCM admission and reset its direct-session/ASRC
-          // state before destroying the receiver queue or native item. This
-          // makes STOP a complete two-sided lifecycle boundary, including
-          // rapid STOP -> PLAY and bridge reconnects.
-          if (hadPublishedAudioMode) {
+          // state before resetting receiver playout. Destructive callers also
+          // tear down the native item; ordered replay callers retain it muted
+          // so rapid STOP -> PLAY does not reopen PCM or reload CAF.
+          if (hadPublishedAudioMode && preserveNativeForReplay) {
+            // Keep native selected while stopped so the next ordered Play can
+            // unmute/resume the existing CAF item instead of booting PCM and
+            // starting a second native prewarm behind it.
+            notifyPlaybackMode("native", stopReason, false);
+          } else if (hadPublishedAudioMode) {
             notifyPlaybackMode("unknown", stopReason, false);
           }
           resetBinaryPlayoutState(stopReason);
-          stopNativeStreamPlayout(stopReason);
-          setActiveAudioPathOwner("none", stopReason);
+          if (preserveNativeForReplay) {
+            const retainedNative = holdNativeStreamForReplay(stopReason);
+            if (!retainedNative) {
+              // If the previous path was PCM, begin the native prewarm now,
+              // while stopped and muted, so the next Play has a ready CAF
+              // owner instead of waiting for a replay-time load.
+              maybeStartNativeStream("stop_replay_prewarm", true, true);
+            }
+          } else {
+            stopNativeStreamPlayout(stopReason);
+            setActiveAudioPathOwner("none", stopReason);
+          }
           publishMxsPlaybackStatus(statusState || "STOPPED", stopReason);
         }
 
@@ -5164,7 +5215,7 @@
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_STOP");
-          stopAllPlayout(d.reason || "playback_stop");
+          stopAllPlayout(d.reason || "playback_stop", undefined, false, true);
           acknowledgePlaybackRevision(d, "playback_stop");
         }
 
