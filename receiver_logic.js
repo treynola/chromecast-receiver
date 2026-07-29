@@ -56,6 +56,10 @@
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
         const BUILD_IDENTITY_RELOAD_SESSION_KEY = "mxs_build_identity_reload_attempt";
+        const RECEIVER_SESSION_CACHE_KEYS = [
+          BUILD_IDENTITY_RELOAD_SESSION_KEY,
+          "mxs_pcm_degraded",
+        ];
         window._buildIdentityAccepted = false;
         // Keep at most about one second of packets while the worklet or its
         // nominal target is not ready. Normal startup publishes the target
@@ -107,6 +111,27 @@
         var playbackModeSocketGeneration = 0;
         var pcmV2Validator = null;
         var pcmV2AllowInitialOffset = true;
+
+        function clearReceiverSessionCaches(reason) {
+          const cacheReason = reason || "receiver_session";
+          try {
+            RECEIVER_SESSION_CACHE_KEYS.forEach((key) => {
+              sessionStorage.removeItem(key);
+              localStorage.removeItem(key);
+            });
+          } catch (e) {}
+          window._buildIdentityReloadAttempted = false;
+          try {
+            if (window.caches?.keys) {
+              void window.caches.keys().then((names) => Promise.all(
+                names
+                  .filter((name) => /mxs|receiver/i.test(String(name)))
+                  .map((name) => window.caches.delete(name)),
+              )).catch(() => {});
+            }
+          } catch (e) {}
+          relayLogToStudio(`🧹 Receiver session cache cleared (${cacheReason}).`);
+        }
         // Playback commands can arrive twice because the sender deliberately
         // mirrors control messages over both the Cast namespace and the bridge
         // WebSocket. Keep command and GUI-state ordering separate: equal
@@ -3474,6 +3499,7 @@
             return;
           }
           window._receiverShutdownInProgress = true;
+          clearReceiverSessionCaches("cast_stopped");
           suppressBinaryReconnect = true;
           clearBinaryReconnectTimer();
           clearLowLatencyStartupWatchdog();
@@ -5503,6 +5529,7 @@
           binaryWS.onopen = async () => {
             if (generation !== binaryConnectionGeneration) return;
             if (window._receiverShutdownInProgress) return;
+            clearReceiverSessionCaches("new_cast_handshake");
             pcmV2Validator = null;
             pcmV2AllowInitialOffset = true;
             pcmV2Telemetry = createPcmV2Telemetry();
