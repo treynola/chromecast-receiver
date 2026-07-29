@@ -56,8 +56,10 @@
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
         const BUILD_IDENTITY_RELOAD_SESSION_KEY = "mxs_build_identity_reload_attempt";
+        // The identity-reload marker is deliberately not a session cache:
+        // it must survive the cache-busted reload so a persistent mismatch
+        // remains one-shot instead of becoming an infinite reload loop.
         const RECEIVER_SESSION_CACHE_KEYS = [
-          BUILD_IDENTITY_RELOAD_SESSION_KEY,
           "mxs_pcm_degraded",
         ];
         window._buildIdentityAccepted = false;
