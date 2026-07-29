@@ -208,6 +208,24 @@
           receiverHandshakeTelemetryReady = true;
           flushDeferredReceiverTelemetry();
           flushPendingStudioLogs();
+          // The bridge-open GUI_READY is intentionally independent of audio,
+          // but it can arrive before the authenticated command gate is ready.
+          // Send a second readiness edge so the sender can replay its latest
+          // GUI snapshot after HANDSHAKE_ACK and BRIDGE_CONFIG are both live.
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify({
+                type: "GUI_READY",
+                transport: "gui",
+                guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                guiRevision: lastGuiRevision,
+                bootStage: "bridge_authenticated",
+              }));
+              relayLogToStudio("✅ Receiver: Authenticated GUI_READY sent; GUI snapshot replay is now safe.");
+            } catch (e) {
+              relayLogToStudio("⚠️ Receiver: Authenticated GUI_READY send failed: " + e.message);
+            }
+          }
         }
 
         function resetPcmContinuityForMode(mode, reason) {
