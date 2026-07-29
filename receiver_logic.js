@@ -96,7 +96,7 @@
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
         const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.25;
-        const NATIVE_STARTUP_TARGET_SEC = 0.35;
+        const NATIVE_STARTUP_TARGET_SEC = 0.30;
         // A Chromecast can abort AudioWorklet module/context startup even when
         // the source fetch is valid. Preload owns the normal path; this bounded
         // fallback is only a safety net for a genuinely hung or failed load.
@@ -1698,11 +1698,34 @@
               }
             }
 
+            // Re-read the media ranges after the optional startup trim so the
+            // diagnostic components describe the same state as `latency`.
+            const reportedLiveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
+            const reportedPlayhead = activeAudio.currentTime;
+            const reportedBufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+            const reportedBufferedDuration = Math.max(
+              0,
+              reportedLiveEdge - reportedBufferedStart,
+            );
+
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               binaryWS.send(
                 JSON.stringify({
                   type: "NATIVE_LATENCY_REPORT",
                   latency: latency,
+                  syncComponents: {
+                    source: "native_media_buffer",
+                    pathOwner: nativeStreamActive ? "native_caf" : "native_starting",
+                    playbackMode: window._playbackMode || "unknown",
+                    liveEdgeSeconds: reportedLiveEdge,
+                    playheadSeconds: reportedPlayhead,
+                    bufferedStartSeconds: reportedBufferedStart,
+                    bufferedEndSeconds: reportedLiveEdge,
+                    bufferedDurationSeconds: reportedBufferedDuration,
+                    mediaReadyState: activeAudio.readyState,
+                    mediaNetworkState: activeAudio.networkState,
+                    startupAttemptId: nativeStartupAttemptId,
+                  },
                 }),
               );
             }
