@@ -2983,6 +2983,7 @@
           statusState,
           fromPlayerManager,
           preserveNativeForReplay = false,
+          preservePlaybackIntent = false,
         ) {
           playbackPaused = false;
           setPcmAudioPriority(false, reason || "playback_stop");
@@ -2992,7 +2993,9 @@
           const hadPublishedAudioMode =
             window._playbackMode !== "unknown" ||
             playbackModeLastSent !== "";
-          clearPlaybackStartSignal();
+          if (!preservePlaybackIntent) {
+            clearPlaybackStartSignal();
+          }
           // Close backend PCM admission and reset its direct-session/ASRC
           // state before resetting receiver playout. Destructive callers also
           // tear down the native item; ordered replay callers retain it muted
@@ -5733,7 +5736,21 @@
             // while equal revisions remain suppressed during one connection.
             resetPlaybackRevisionGate("bridge_closed");
             resetGuiRevisionGate("bridge_closed");
-            stopAllPlayout("websocket_closed");
+            const reconnectPlaybackActive = Boolean(
+              lastPlaybackStartSignalAt && !playbackPaused
+            );
+            stopAllPlayout(
+              "websocket_closed",
+              undefined,
+              false,
+              reconnectPlaybackActive,
+              reconnectPlaybackActive,
+            );
+            if (reconnectPlaybackActive) {
+              relayLogToStudio(
+                "🔁 Receiver: Active PLAYBACK_START intent retained across bridge reconnect; awaiting ordered replay.",
+              );
+            }
             if (workletNode) {
               try {
                 workletNode.port.postMessage({ type: "RESET" });
