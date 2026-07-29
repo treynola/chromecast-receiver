@@ -86,7 +86,11 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         var pcmStartupRetryTimerId = null;
-        const NATIVE_STARTUP_TIMEOUT_MS = 5000;
+        // CAF normally reaches PLAYING in well under one second after the
+        // ordered Play boundary. Keep the native fallback bounded so a
+        // decoder that never becomes audible cannot hold the session silent.
+        const NATIVE_STARTUP_TIMEOUT_MS = 2000;
+        const NATIVE_STARTUP_FADE_MS = 12;
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
@@ -1452,6 +1456,12 @@
           // Every ordered PLAYBACK_START reopens the short stale-inactive-state
           // grace window. This matters for rapid stop/play and reconnect replay.
           lastPlaybackStartSignalAt = Date.now();
+          logReceiverStartupTiming("playback_start_signal", {
+            nativeAttemptId: nativeStartupAttemptId,
+            nativeStreamStarting,
+            nativeStreamActive,
+            prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
+          });
         }
 
         function clearPlaybackRecoveryRetry() {
@@ -1873,21 +1883,19 @@
               return true;
             }
             if (nativeStreamPrewarmBeforePlayback) {
-              // CAF/HTML may have received the live stream before it emits its
-              // PLAYING event. The stream is already the sole owner after the
-              // ordered Play boundary, so release the prewarm mute now rather
-              // than making audible startup wait for CAF's late event.
-              releaseNativeStreamPrewarmMute();
-              nativeStreamPrewarmBeforePlayback = false;
+              // Keep the prewarm output muted until the media element reports
+              // PLAYING. CAF can accept LOAD/play before its decoder has
+              // produced live audio; unmuting at the ordered Play boundary
+              // exposes that decoder throat-clearing interval.
               nativeStreamCompanionForPcm = false;
               requestNativeMediaElementPlay(reason || "playback_start");
-              logReceiverStartupTiming("caf_prewarm_released_at_play", {
+              logReceiverStartupTiming("native_prewarm_play_requested_waiting", {
                 nativeAttemptId: nativeStartupAttemptId,
                 prewarmReady: nativeStreamPrewarmReady,
                 playbackRequested: true,
               });
               relayLogToStudio(
-                "🔊 Receiver: Native prewarm unmuted at PLAYBACK_START; awaiting native PLAYING confirmation.",
+                "⏳ Receiver: Native prewarm remains muted at PLAYBACK_START; awaiting native PLAYING confirmation.",
               );
             }
             if (!nativeStartupWatchdogId) {
@@ -2172,6 +2180,11 @@
                     mediaReadyState: document.getElementById("cast-media-element")
                       ? document.getElementById("cast-media-element").readyState
                       : null,
+                  });
+                  logReceiverStartupTiming("native_playing", {
+                    nativeAttemptId: nativeStartupAttemptId,
+                    playbackRequested: !cafWasPreplay,
+                    prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
                   });
                   if (
                     nativeStreamPrewarmBeforePlayback &&
@@ -2699,7 +2712,18 @@
               );
               return;
             }
-            relayLogToStudio("⚠️ Receiver: Native stream startup timed out; switching to PCM fallback.");
+            logReceiverStartupTiming("native_startup_timeout", {
+              nativeAttemptId: watchdogAttemptId,
+              timeoutMs: NATIVE_STARTUP_TIMEOUT_MS,
+              prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
+              prewarmReady: nativeStreamPrewarmReady,
+              playbackRequested: !!lastPlaybackStartSignalAt,
+            });
+            relayLogToStudio(
+              "⚠️ Receiver: Native stream startup timed out after " +
+                NATIVE_STARTUP_TIMEOUT_MS +
+                "ms; switching to PCM fallback.",
+            );
             // The native attempt failed, but the ordered PLAYBACK_START is
             // still active. Preserve that intent so the recovery path can
             // start native immediately instead of waiting for another Play.
@@ -2717,6 +2741,10 @@
             return;
           }
           try {
+            if (element._mxsPrewarmFadeTimerId) {
+              clearTimeout(element._mxsPrewarmFadeTimerId);
+              delete element._mxsPrewarmFadeTimerId;
+            }
             if (element._mxsVolumeBeforePrewarm === undefined) {
               element._mxsVolumeBeforePrewarm = Number.isFinite(element.volume)
                 ? element.volume
@@ -2737,13 +2765,42 @@
               return;
             }
             try {
-              element.muted = false;
-              element.volume = element._mxsVolumeBeforePrewarm === undefined
+              const targetVolume = element._mxsVolumeBeforePrewarm === undefined
                 ? 1
                 : element._mxsVolumeBeforePrewarm;
+              element.muted = false;
+              element.volume = 0;
               delete element._mxsVolumeBeforePrewarm;
               delete element._mxsPrewarmMuted;
+              const fadeStartedAt = typeof performance !== "undefined" && performance.now
+                ? performance.now()
+                : Date.now();
+              const fadeIn = function () {
+                const now = typeof performance !== "undefined" && performance.now
+                  ? performance.now()
+                  : Date.now();
+                const progress = Math.min(
+                  1,
+                  Math.max(0, (now - fadeStartedAt) / NATIVE_STARTUP_FADE_MS),
+                );
+                try {
+                  element.volume = targetVolume * progress;
+                } catch (e) {
+                  return;
+                }
+                if (progress < 1) {
+                  element._mxsPrewarmFadeTimerId = setTimeout(fadeIn, 4);
+                } else {
+                  delete element._mxsPrewarmFadeTimerId;
+                }
+              };
+              fadeIn();
             } catch (e) {}
+          });
+          logReceiverStartupTiming("native_prewarm_unmuted", {
+            nativeAttemptId: nativeStartupAttemptId,
+            playbackRequested: !!lastPlaybackStartSignalAt,
+            prewarmReady: nativeStreamPrewarmReady,
           });
         }
 
@@ -2766,6 +2823,11 @@
             modeReason: modeReason || "",
             nativeStreamActive: true,
             nativeStreamStarting: false,
+          });
+          logReceiverStartupTiming("native_audio_owner_active", {
+            nativeAttemptId: nativeStartupAttemptId,
+            modeReason: modeReason || "",
+            playbackRequested: !!lastPlaybackStartSignalAt,
           });
           if (modeReason.indexOf("caf_") === 0) {
             stopHtmlAudioNativeCompanion();
