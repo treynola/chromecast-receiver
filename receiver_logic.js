@@ -165,6 +165,8 @@
         var pendingPlaybackMode = null;
         var pendingPlayoutSelection = null;
         var lastPlaybackStartSignalAt = 0;
+        var playbackRecoveryRetryTimer = null;
+        var playbackRecoveryRetryAttempted = false;
         var receiverStartupTimingStartAt = Date.now();
         var receiverStartupTimingMarks = {};
         var receiverHandshakeTelemetryReady = false;
@@ -1403,9 +1405,50 @@
           // Give each ordered Play one guarded native recovery attempt. A
           // second failure must settle instead of creating a restart loop.
           nativeFailureRetryAttempted = false;
+          playbackRecoveryRetryAttempted = false;
           // Every ordered PLAYBACK_START reopens the short stale-inactive-state
           // grace window. This matters for rapid stop/play and reconnect replay.
           lastPlaybackStartSignalAt = Date.now();
+        }
+
+        function clearPlaybackRecoveryRetry() {
+          if (playbackRecoveryRetryTimer) {
+            clearTimeout(playbackRecoveryRetryTimer);
+            playbackRecoveryRetryTimer = null;
+          }
+        }
+
+        function schedulePlaybackRecoveryRetry() {
+          clearPlaybackRecoveryRetry();
+          if (playbackRecoveryRetryAttempted || !lastPlaybackStartSignalAt) return;
+          playbackRecoveryRetryTimer = setTimeout(() => {
+            playbackRecoveryRetryTimer = null;
+            if (
+              playbackRecoveryRetryAttempted ||
+              playbackPaused ||
+              !lastPlaybackStartSignalAt ||
+              nativeStreamActive ||
+              !(nativeStreamStarting || window._playbackMode === "native") ||
+              !binaryWS ||
+              binaryWS.readyState !== WebSocket.OPEN
+            ) {
+              return;
+            }
+            playbackRecoveryRetryAttempted = true;
+            // The sender's replay has the same epoch/revision. Re-arm the
+            // receiver's one-shot reconnect allowance so a lost first replay
+            // cannot strand CAF in pre-Play silence indefinitely.
+            resetPlaybackRevisionGate("native_recovery_retry");
+            try {
+              binaryWS.send(JSON.stringify({
+                type: "RECEIVER_READY",
+                reason: "native_recovery_retry",
+              }));
+              relayLogToStudio(
+                "🔁 Receiver: Native Play recovery retry requested after bounded startup silence.",
+              );
+            } catch (e) {}
+          }, 3000);
         }
 
         function noteOrderedPlaybackAction(action) {
@@ -2993,6 +3036,7 @@
           const hadPublishedAudioMode =
             window._playbackMode !== "unknown" ||
             playbackModeLastSent !== "";
+          clearPlaybackRecoveryRetry();
           if (!preservePlaybackIntent) {
             clearPlaybackStartSignal();
           }
@@ -5132,6 +5176,7 @@
             publishMxsPlaybackStatus("STARTING", reason || "playback_start");
           }
           acknowledgePlaybackRevision(d, "playback_start");
+          schedulePlaybackRecoveryRetry();
         }
 
         function handleGuiStateUpdateCommand(state, envelope) {
@@ -5218,6 +5263,7 @@
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_STOP");
+          clearPlaybackRecoveryRetry();
           stopAllPlayout(d.reason || "playback_stop", undefined, false, true);
           acknowledgePlaybackRevision(d, "playback_stop");
         }
@@ -5227,6 +5273,7 @@
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_PAUSE");
+          clearPlaybackRecoveryRetry();
           pauseAllPlayout(d.reason || "playback_pause");
           acknowledgePlaybackRevision(d, "playback_pause");
         }
