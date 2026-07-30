@@ -2748,10 +2748,11 @@ select option {
 
 /* Sample Center Updates */
 .sample-btn {
+  --sampler-pad-color: var(--gold);
   /* Normal State: Updated color scheme */
   background-color: var(--green) !important;
   color: var(--gold) !important;
-  border: 2px solid var(--gold) !important;
+  border: 2px solid var(--sampler-pad-color) !important;
 
   font-family: "Cousine", monospace !important;
   font-size: 1.2em !important;
@@ -2778,7 +2779,7 @@ select option {
 /* Hover Effects */
 .sample-btn:hover {
   background-color: var(--green) !important;
-  border-color: var(--gold) !important;
+  border-color: var(--sampler-pad-color) !important;
   color: var(--gold) !important;
   box-shadow: 0 0 10px var(--gold);
   text-shadow: none;
@@ -2795,7 +2796,20 @@ select option {
   background-color: var(--green) !important;
   color: var(--red) !important;
   box-shadow: 0 0 12px var(--red);
-  border-color: var(--red) !important;
+  border-color: var(--sampler-pad-color) !important;
+}
+
+.sample-btn.repeating {
+  box-shadow: 0 0 12px var(--sampler-pad-color), inset 0 0 8px var(--sampler-pad-color);
+}
+
+.sample-btn.reverse::after {
+  content: "↶";
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 0.7em;
+  color: var(--sampler-pad-color);
 }
 
 .sample-btn.loaded {
