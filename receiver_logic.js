@@ -5759,10 +5759,8 @@
               sendHandshake();
             }, 1500);
 
-            // Record that the receiver audio path is ready. PCM is the
-            // authoritative real-time path; native CAF is only a recovery
-            // fallback because its progressive media buffer cannot reproduce
-            // responsive sampler attacks.
+            // Record that the receiver audio path is ready; low-latency PCM startup begins only
+            // once the handshake/configuration path is ready.
             markReceiverPlayoutPathReady();
             if (nativeStreamActive || nativeStreamStarting) {
               notifyPlaybackMode("native", "socket_reconnected");
@@ -5770,7 +5768,13 @@
               receiverPlayoutPreference === "pcm_fallback" &&
               !window._pcmDegraded
             ) {
-              notifyPlayoutSelecting("pcm_preload", "socket_reconnected");
+              // A reconnect can retain a standby worklet from the prior
+              // generation. Its existence is not an ownership decision: the
+              // authenticated BRIDGE_CONFIG path still starts native-first
+              // preparation. Publish native selecting here so PCM cannot
+              // briefly become audible before that preparation runs.
+              notifyPlaybackMode("native", "socket_reconnected", false);
+              notifyPlayoutSelecting("native_preparation", "socket_reconnected");
             } else if (workletNode || workletReady || window._binaryActive) {
               notifyPlaybackMode("pcm_fallback", "socket_reconnected");
             }
@@ -5923,12 +5927,12 @@
                   }
                   if (d.ip) {
                     markReceiverPlayoutPathReady();
-                    // Preload PCM as soon as the authenticated bridge is
-                    // ready. Do not prewarm native CAF here: Cobalt maintains
-                    // an unavoidable ~1.2s progressive-media tail, which
-                    // makes sampler pads late or effectively click-only.
+                    // Begin the native CAF progressive-WAV prewarm as soon as
+                    // the authenticated bridge advertises its LAN endpoint.
+                    // The stream remains muted until the ordered Play command;
+                    // PCM stays closed while native owns preparation.
                     if (receiverPlayoutPreference === "pcm_fallback") {
-                      preloadPcmWorklet("websocket_open");
+                      prepareNativePcmHandoff("websocket_open");
                     }
                   }
                 } else {
