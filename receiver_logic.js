@@ -152,6 +152,7 @@
         var lastOrderedPlaybackAt = 0;
         const PLAYER_MANAGER_ORDER_GUARD_MS = 5000;
         var lastGuiRevision = -1;
+        var lastCursorRevision = -1;
         var guiReceivedCount = 0;
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
         var pcmRuntimeHighWatermarkDiagnostics = 0;
@@ -1609,6 +1610,7 @@
 
         function resetGuiRevisionGate(reason) {
           lastGuiRevision = -1;
+          lastCursorRevision = -1;
           lastDialogMirrorState = "";
           if (reason) {
             writeCastDebug("debug", "GUI revision gate reset (" + reason + ").");
@@ -4965,6 +4967,32 @@
         let _lastSamplerCache = "";
         let lastMirroredState = null;
 
+        function renderCursorState(cursor) {
+          const cur = getEl("cursor-mirror");
+          if (!cur || !cursor || typeof cursor !== "object") return;
+          const revision = Number(cursor.revision);
+          if (Number.isSafeInteger(revision) && revision < lastCursorRevision) return;
+          if (Number.isSafeInteger(revision)) lastCursorRevision = revision;
+          if (cursor.visible === false) {
+            cur.classList.remove("is-visible", "is-clicking");
+            return;
+          }
+          const x = Number(cursor.x);
+          const y = Number(cursor.y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+          const root = getEl("studio-root");
+          const rootWidth = root ? root.clientWidth : 1440;
+          const rootHeight = root ? root.clientHeight : 810;
+          const px = Math.max(0, Math.min(rootWidth - 1, x * rootWidth));
+          const py = Math.max(0, Math.min(rootHeight - 1, y * rootHeight));
+          const curKey = `${x}_${y}_${cursor.isClicking}_${cursor.visible}_${revision}`;
+          if (valCache["cursor"] === curKey) return;
+          cur.classList.add("is-visible");
+          cur.style.transform = `translate3d(${px}px, ${py}px, 0)`;
+          cur.classList.toggle("is-clicking", !!cursor.isClicking);
+          valCache["cursor"] = curKey;
+        }
+
         function cloneMirroredState(state) {
           if (!state || typeof state !== "object") {
             return null;
@@ -5005,6 +5033,10 @@
 
         function renderState(s, force = false) {
           if (!s) return;
+          // Cursor updates are isolated from the full GUI render budget so
+          // PCM playout can defer control repainting without freezing the TV
+          // pointer. Ordering is guarded by cursor.revision.
+          renderCursorState(s.cursor);
           if (pcmAudioPriorityActive && !force) {
             pcmV2Telemetry.pcmAudioPriorityGuiSkips++;
             deferredGuiState = s;
@@ -5022,23 +5054,6 @@
               updateText("recording-time-display", s.transport.position);
               for (var i = 0; i < 4; i++) {
                 updateText("t-time-" + i, s.transport.position);
-              }
-            }
-            if (s.cursor) {
-              var cur = getEl("cursor-mirror");
-              if (cur) {
-                const curKey = `${s.cursor.x}_${s.cursor.y}_${s.cursor.isClicking}`;
-                if (valCache["cursor"] !== curKey) {
-                  cur.style.display = "block";
-                  const root = getEl("studio-root");
-                  const rootWidth = root ? root.clientWidth : 1440;
-                  const rootHeight = root ? root.clientHeight : 810;
-                  const px = Math.max(0, Math.min(rootWidth - 1, s.cursor.x * rootWidth));
-                  const py = Math.max(0, Math.min(rootHeight - 1, s.cursor.y * rootHeight));
-                  cur.style.transform = `translate3d(${px}px, ${py}px, 0)`;
-                  cur.classList.toggle("is-clicking", !!s.cursor.isClicking);
-                  valCache["cursor"] = curKey;
-                }
               }
             }
             if (s.master) {
@@ -5348,6 +5363,10 @@
           }
         }
 
+        function handleCursorUpdateCommand(cursor) {
+          renderCursorState(cursor);
+        }
+
         function normalizeGuiState(state) {
           if (!state || state.schema !== "mxs-004.gui-state" || Number(state.schemaVersion) !== 1) {
             return null;
@@ -5463,6 +5482,7 @@
         function handleReceiverCommand(d, source) {
           const requiresAuthenticatedBridge = [
             "GUI_STATE_UPDATE",
+            "CURSOR_UPDATE",
             "PLAYBACK_START",
             "PLAYBACK_STOP",
             "PLAYBACK_PAUSE",
@@ -5494,6 +5514,16 @@
                 return true;
               }
               handleGuiStateUpdateCommand(d.state, d);
+              return true;
+            case "CURSOR_UPDATE":
+              if (
+                d.transport !== "gui_cursor" ||
+                Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION
+              ) {
+                writeCastDebug("warn", "Receiver rejected CURSOR_UPDATE with an unsupported protocol envelope.");
+                return true;
+              }
+              handleCursorUpdateCommand(d.cursor);
               return true;
             case "PLAYBACK_START":
               handlePlaybackStartCommand(d, "playback_start");

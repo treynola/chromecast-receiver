@@ -3249,6 +3249,12 @@ body.receiver-mode #cursor-mirror {
   top: 0;
   transform-origin: 0 0;
 }
+body.receiver-mode #cursor-mirror.is-visible {
+  display: block;
+}
+body.receiver-mode #cursor-mirror.is-clicking {
+  filter: drop-shadow(0 0 5px rgba(255, 204, 0, 0.95));
+}
 body.receiver-mode #cursor-mirror::after {
   content: "";
   position: absolute;
