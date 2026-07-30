@@ -106,7 +106,9 @@
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
         const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.25;
-        const NATIVE_STARTUP_TARGET_SEC = 0.30;
+        // Keep a fresh native stream close to the live edge. A larger startup
+        // target creates a conspicuous first-play pause before file audio.
+        const NATIVE_STARTUP_TARGET_SEC = 0.08;
         // A Chromecast can abort AudioWorklet module/context startup even when
         // the source fetch is valid. Preload owns the normal path; this bounded
         // fallback is only a safety net for a genuinely hung or failed load.
