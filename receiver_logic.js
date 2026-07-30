@@ -1789,6 +1789,44 @@
           }, 500);
         }
 
+        function realignNativeStreamToLiveEdge(reason) {
+          const htmlAudio = document.getElementById("native-stream-audio");
+          const cafAudio = document.getElementById("cast-media-element");
+          const activeAudio = htmlAudio && htmlAudio.src && !htmlAudio.paused
+            ? htmlAudio
+            : cafAudio && !cafAudio.paused
+              ? cafAudio
+              : null;
+          if (!nativeStreamActive || !activeAudio || activeAudio.readyState < 3 || !activeAudio.buffered.length) {
+            return false;
+          }
+          try {
+            const rangeIndex = activeAudio.buffered.length - 1;
+            const liveEdge = activeAudio.buffered.end(rangeIndex);
+            const bufferedStart = activeAudio.buffered.start(rangeIndex);
+            const previousLatency = Math.max(0, liveEdge - activeAudio.currentTime);
+            const target = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
+            // Tiny adjustments add no practical benefit and seeking while an
+            // actual continuous track is playing would be destructive. This
+            // command is emitted only for sampler one-shot attacks.
+            if (target <= activeAudio.currentTime + 0.04) return false;
+            activeAudio.currentTime = target;
+            relayLogToStudio(
+              "⚡ Receiver: Sampler live-edge pulse trimmed " +
+                previousLatency.toFixed(3) +
+                "s native silence to " +
+                Math.max(0, liveEdge - target).toFixed(3) + "s.",
+            );
+            return true;
+          } catch (error) {
+            relayLogToStudio(
+              "⚠️ Receiver: Sampler live-edge pulse failed: " +
+                (error && error.message ? error.message : error),
+            );
+            return false;
+          }
+        }
+
         function clearPlaybackStartSignal() {
           lastPlaybackStartSignalAt = 0;
         }
@@ -5466,6 +5504,7 @@
             "PLAYBACK_START",
             "PLAYBACK_STOP",
             "PLAYBACK_PAUSE",
+            "SAMPLER_LIVE_EDGE_PULSE",
             "PCM_RELAY",
           ].includes(d.type);
           if (
@@ -5503,6 +5542,10 @@
               return true;
             case "PLAYBACK_PAUSE":
               handlePlaybackPauseCommand(d);
+              return true;
+            case "SAMPLER_LIVE_EDGE_PULSE":
+              if (d.source !== "sampler") return true;
+              realignNativeStreamToLiveEdge("sampler_pad_" + String(d.padId || "unknown"));
               return true;
             case "PCM_RELAY":
               handlePcmRelayCommand(d, {
