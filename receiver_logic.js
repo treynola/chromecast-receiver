@@ -1730,35 +1730,9 @@
             // the sender applies only bounded, stable alignment updates.
             let latency = liveEdge - playhead;
 
-            if (nativeStartupTrimPending) {
-              nativeStartupTrimPending = false;
-              if (latency > NATIVE_STARTUP_TRIM_THRESHOLD_SEC) {
-                try {
-                  const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
-                  const trimTarget = Math.max(
-                    bufferedStart,
-                    liveEdge - NATIVE_STARTUP_TARGET_SEC,
-                  );
-                  if (trimTarget > playhead + 0.25) {
-                    activeAudio.currentTime = trimTarget;
-                    latency = Math.max(0, liveEdge - trimTarget);
-                    relayLogToStudio(
-                      "✂️ Receiver: Fresh native stream buffer released; playhead aligned to " +
-                        latency.toFixed(3) +
-                        "s from live edge.",
-                    );
-                  }
-                } catch (trimError) {
-                  relayLogToStudio(
-                    "⚠️ Receiver: Fresh native stream buffer reset failed: " +
-                      (trimError && trimError.message ? trimError.message : trimError),
-                  );
-                }
-              }
-            }
-
-            // Re-read the media ranges after the optional startup trim so the
-            // diagnostic components describe the same state as `latency`.
+            // This is telemetry only. The one permitted startup trim is made
+            // at the ordered Play boundary while the prewarm output is muted;
+            // never seek here during audible playback.
             const reportedLiveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const reportedPlayhead = activeAudio.currentTime;
             const reportedBufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
@@ -1793,6 +1767,68 @@
 
         function clearPlaybackStartSignal() {
           lastPlaybackStartSignalAt = 0;
+        }
+
+        function releasePendingNativeStartupTrim() {
+          if (!nativeStartupTrimPending || !lastPlaybackStartSignalAt) {
+            return false;
+          }
+          const activeAudio = [
+            document.getElementById("cast-media-element"),
+            document.getElementById("native-stream-audio"),
+          ].find(function findPreparedNativeElement(element) {
+            return !!(
+              element &&
+              !element.paused &&
+              element.readyState >= 3 &&
+              element.buffered &&
+              element.buffered.length > 0
+            );
+          });
+          if (!activeAudio) {
+            return false;
+          }
+          // A startup trim is safe only before the prewarm is released. Do
+          // not turn a late/failed preparation into an audible live seek.
+          const mutedForPrewarm = activeAudio._mxsPrewarmMuted === true ||
+            activeAudio.muted === true || Number(activeAudio.volume) <= 0.001;
+          nativeStartupTrimPending = false;
+          if (!mutedForPrewarm) {
+            relayLogToStudio("⏭️ Receiver: Skipped native startup trim because output was already audible.");
+            return false;
+          }
+          try {
+            const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
+            const playhead = activeAudio.currentTime;
+            const latency = liveEdge - playhead;
+            if (latency <= NATIVE_STARTUP_TRIM_THRESHOLD_SEC) {
+              return false;
+            }
+            const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+            const trimTarget = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
+            if (trimTarget <= playhead + 0.25) {
+              return false;
+            }
+            activeAudio.currentTime = trimTarget;
+            const trimmedLatency = Math.max(0, liveEdge - trimTarget);
+            relayLogToStudio(
+              "✂️ Receiver: Ordered PLAYBACK_START released native buffer at " +
+                trimmedLatency.toFixed(3) +
+                "s from live edge before unmute.",
+            );
+            logReceiverStartupTiming("native_startup_trim_at_play", {
+              nativeAttemptId: nativeStartupAttemptId,
+              latencyBeforeSec: latency,
+              latencyAfterSec: trimmedLatency,
+            });
+            return true;
+          } catch (trimError) {
+            relayLogToStudio(
+              "⚠️ Receiver: Ordered native startup trim failed: " +
+                (trimError && trimError.message ? trimError.message : trimError),
+            );
+            return false;
+          }
         }
 
         function shouldIgnoreStaleInactiveState() {
@@ -2818,6 +2854,7 @@
           nativeStreamActive = true;
           nativeStreamPaused = false;
           nativeFailureRetryAttempted = false;
+          releasePendingNativeStartupTrim();
           releaseNativeStreamPrewarmMute();
           nativeStreamPrewarmBeforePlayback = false;
           nativeStreamPrewarmReady = false;
