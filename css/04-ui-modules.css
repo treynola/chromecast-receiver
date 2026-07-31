@@ -4656,3 +4656,39 @@ dialog.input-prompt-dialog {
   color: #fff;
   border-color: var(--red);
 }
+
+/* --- Sampler Pad Settings Dialog Styling --- */
+.pad-settings-dialog {
+  position: fixed !important;
+  top: 40px !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  margin: 0 !important;
+  width: 480px !important;
+  max-width: 92vw !important;
+  max-height: 85vh !important;
+  z-index: 2500 !important;
+  background: var(--off-black, #121212) !important;
+  border: 2px solid var(--gold, #d8b35a) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9) !important;
+  display: none;
+  flex-direction: column;
+  overflow: hidden !important;
+  outline: none !important;
+}
+
+.pad-settings-dialog[open] {
+  display: flex !important;
+}
+
+.pad-settings-dialog .dialog-header {
+  cursor: move !important;
+  user-select: none !important;
+}
+
+.pad-settings-dialog .dialog-content {
+  overflow-y: auto !important;
+  max-height: calc(85vh - 55px) !important;
+  padding: 14px 16px !important;
+}
