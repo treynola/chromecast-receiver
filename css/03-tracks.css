@@ -184,17 +184,19 @@
   transition: all 0.2s;
 }
 
-.track-buttons button[data-action="reverse"].reversed {
-  background-color: var(--gold);
-  color: var(--green);
+.track-buttons button[data-action="reverse"].reversed,
+.track-buttons button[data-action="reverse"].active {
+  background-color: var(--gold) !important;
+  color: var(--green) !important;
   border: 1px solid var(--green) !important;
   font-weight: bold;
   box-shadow: 0 0 5px var(--green);
-  animation: rev-blink-green-black 0.5s infinite alternate;
+  animation: rev-blink-green-black 0.5s infinite alternate !important;
 }
 
-.track-buttons button[data-action="reverse"].reversed.blinking {
-  animation: rev-blink-green-black 0.5s infinite alternate;
+.track-buttons button[data-action="reverse"].reversed.blinking,
+.track-buttons button[data-action="reverse"].active.blinking {
+  animation: rev-blink-green-black 0.5s infinite alternate !important;
 }
 
 .track-buttons button.recording {
