@@ -563,7 +563,7 @@ input[type="range"]::-webkit-slider-thumb {
 .rev-btn.blinking {
   background-color: var(--gold) !important;
   border: 1px solid var(--green) !important;
-  animation: rev-blink-green-black 0.5s infinite alternate !important;
+  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
 /* FX Chain Container Styles */
@@ -728,7 +728,7 @@ button[id^="t-rev-"].blinking,
 #lfo2-toggle.sweeping.blinking {
   background-color: var(--gold) !important;
   border: 1px solid var(--green) !important;
-  animation: rev-blink-green-black 0.5s infinite alternate !important;
+  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
 .track-buttons button.recording,
@@ -743,7 +743,7 @@ button[id^="t-rev-"].blinking,
   }
 }
 
-@keyframes rev-blink-green-black {
+@keyframes rev-blink-green-kelly {
   0% {
     color: var(--green);
   }
