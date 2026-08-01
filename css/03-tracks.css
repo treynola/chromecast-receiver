@@ -179,21 +179,22 @@
 
 .track-buttons button[data-action="reverse"] {
   background-color: #333;
-  color: #ccc;
-  border-color: #555;
+  color: var(--green);
+  border: 1px solid var(--green) !important;
   transition: all 0.2s;
 }
 
 .track-buttons button[data-action="reverse"].reversed {
   background-color: var(--gold);
-  color: #000;
-  border-color: #fff;
+  color: var(--green);
+  border: 1px solid var(--green) !important;
   font-weight: bold;
-  box-shadow: 0 0 5px var(--gold);
+  box-shadow: 0 0 5px var(--green);
+  animation: rev-blink-green-black 0.5s infinite alternate;
 }
 
 .track-buttons button[data-action="reverse"].reversed.blinking {
-  animation: none;
+  animation: rev-blink-green-black 0.5s infinite alternate;
 }
 
 .track-buttons button.recording {

@@ -548,7 +548,15 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .rev-btn {
-  color: cyan !important;
+  color: var(--green) !important;
+  border: 1px solid var(--green) !important;
+}
+
+.rev-btn.reversed,
+.rev-btn.active {
+  background-color: var(--gold) !important;
+  border: 1px solid var(--green) !important;
+  animation: rev-blink-green-black 0.5s infinite alternate !important;
 }
 
 /* FX Chain Container Styles */
@@ -678,29 +686,34 @@ input[type="range"]::-webkit-slider-thumb {
 
 
 .track-buttons button[data-action="reverse"],
+.rev-btn,
+button[id^="t-rev-"],
 #lfo-toggle,
 #lfo2-toggle {
   background-color: var(--gold);
-  color: var(--green);
-  border: 1px solid var(--green);
+  color: var(--green) !important;
+  border: 1px solid var(--green) !important;
   font-weight: 720;
 }
 
 .track-buttons button[data-action="reverse"].reversed,
+.rev-btn.reversed,
+.rev-btn.active,
+button[id^="t-rev-"].reversed,
+button[id^="t-rev-"].active,
 #lfo-toggle.sweeping,
 #lfo2-toggle.sweeping {
-  background-color: var(--gold);
-  color: var(--dark-green);
-  border: 1px solid var(--green);
+  background-color: var(--gold) !important;
+  border: 1px solid var(--green) !important;
+  animation: rev-blink-green-black 0.5s infinite alternate !important;
 }
 
 .track-buttons button[data-action="reverse"].reversed.blinking,
 #lfo-toggle.sweeping.blinking,
 #lfo2-toggle.sweeping.blinking {
-  background-color: var(--green);
-  color: var(--gold);
-  border-color: var(--gold);
-  animation: rev-blink-final 0.5s infinite;
+  background-color: var(--gold) !important;
+  border: 1px solid var(--green) !important;
+  animation: rev-blink-green-black 0.5s infinite alternate !important;
 }
 
 .track-buttons button.recording,
@@ -715,10 +728,12 @@ input[type="range"]::-webkit-slider-thumb {
   }
 }
 
-@keyframes rev-blink-final {
-  50% {
-    color: var(--dark-green);
-    border-color: var(--dark-gold);
+@keyframes rev-blink-green-black {
+  0% {
+    color: var(--green) !important;
+  }
+  100% {
+    color: #000000 !important;
   }
 }
 
