@@ -548,12 +548,19 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .rev-btn {
-  color: var(--green) !important;
+  color: var(--green);
   border: 1px solid var(--green) !important;
 }
 
 .rev-btn.reversed,
 .rev-btn.active {
+  background-color: var(--gold) !important;
+  color: var(--green);
+  border: 1px solid var(--green) !important;
+}
+
+.rev-btn.playing-reverse,
+.rev-btn.blinking {
   background-color: var(--gold) !important;
   border: 1px solid var(--green) !important;
   animation: rev-blink-green-black 0.5s infinite alternate !important;
@@ -741,7 +748,7 @@ button[id^="t-rev-"].blinking,
     color: var(--green);
   }
   100% {
-    color: #000000;
+    color: #4CBB17;
   }
 }
 
