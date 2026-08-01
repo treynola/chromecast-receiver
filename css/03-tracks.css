@@ -187,7 +187,7 @@
 .track-buttons button[data-action="reverse"].reversed,
 .track-buttons button[data-action="reverse"].active {
   background-color: var(--gold) !important;
-  color: var(--green) !important;
+  color: var(--green);
   border: 1px solid var(--green) !important;
   font-weight: bold;
   box-shadow: 0 0 5px var(--green);

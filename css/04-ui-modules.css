@@ -691,7 +691,7 @@ button[id^="t-rev-"],
 #lfo-toggle,
 #lfo2-toggle {
   background-color: var(--gold);
-  color: var(--green) !important;
+  color: var(--green);
   border: 1px solid var(--green) !important;
   font-weight: 720;
 }
@@ -704,7 +704,7 @@ button[id^="t-rev-"].active,
 #lfo-toggle.sweeping,
 #lfo2-toggle.sweeping {
   background-color: var(--gold) !important;
-  color: var(--green) !important;
+  color: var(--green);
   border: 1px solid var(--green) !important;
 }
 
@@ -714,7 +714,9 @@ button[id^="t-rev-"].active,
 .track-buttons button[data-action="reverse"].reversed.blinking,
 .track-buttons button[data-action="reverse"].active.blinking,
 .rev-btn.playing-reverse,
+.rev-btn.blinking,
 button[id^="t-rev-"].playing-reverse,
+button[id^="t-rev-"].blinking,
 #lfo-toggle.sweeping.blinking,
 #lfo2-toggle.sweeping.blinking {
   background-color: var(--gold) !important;
@@ -736,10 +738,10 @@ button[id^="t-rev-"].playing-reverse,
 
 @keyframes rev-blink-green-black {
   0% {
-    color: var(--green) !important;
+    color: var(--green);
   }
   100% {
-    color: #000000 !important;
+    color: #000000;
   }
 }
 
