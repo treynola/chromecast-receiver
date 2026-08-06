@@ -723,14 +723,8 @@ button[id^="t-rev-"].active,
 .track-buttons button[data-action="reverse"].playing-reverse,
 .track-buttons button[data-action="reverse"].reversed.playing,
 .track-buttons button[data-action="reverse"].active.playing,
-.track-buttons button[data-action="reverse"].reversed.blinking,
-.track-buttons button[data-action="reverse"].active.blinking,
 .rev-btn.playing-reverse,
-.rev-btn.blinking,
-button[id^="t-rev-"].playing-reverse,
-button[id^="t-rev-"].blinking,
-#lfo-toggle.sweeping.blinking,
-#lfo2-toggle.sweeping.blinking {
+button[id^="t-rev-"].playing-reverse {
   background-color: var(--gold) !important;
   border: 2px solid var(--green) !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
@@ -738,7 +732,7 @@ button[id^="t-rev-"].blinking,
 
 .track-buttons button.recording,
 #master-record-button.recording,
-.track-buttons button.playing.blinking {
+.track-buttons button:not([data-action="reverse"]):not(.rev-btn).playing.blinking {
   animation: text-blink 0.5s infinite;
 }
 

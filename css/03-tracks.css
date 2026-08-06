@@ -197,9 +197,7 @@
 
 .track-buttons button[data-action="reverse"].playing-reverse,
 .track-buttons button[data-action="reverse"].reversed.playing,
-.track-buttons button[data-action="reverse"].active.playing,
-.track-buttons button[data-action="reverse"].reversed.blinking,
-.track-buttons button[data-action="reverse"].active.blinking {
+.track-buttons button[data-action="reverse"].active.playing {
   background-color: var(--gold) !important;
   border: 2px solid var(--green) !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
