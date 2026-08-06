@@ -141,9 +141,9 @@
 #lfo2-toggle:hover,
 .lfo-toggle-btn:hover {
   background-color: var(--green) !important;
-  border: 1px solid #FFE066 !important;
+  border: 1px solid #FFE699 !important;
   color: var(--gold) !important;
-  box-shadow: 0 0 6px rgba(255, 224, 102, 0.6) !important;
+  box-shadow: 0 0 6px rgba(255, 230, 153, 0.6) !important;
   filter: brightness(1.1) !important;
 }
 
