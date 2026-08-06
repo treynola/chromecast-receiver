@@ -108,7 +108,8 @@
 
 .master-bottom-buttons button,
 #lfo-toggle,
-#lfo2-toggle {
+#lfo2-toggle,
+.lfo-toggle-btn {
   flex: 1 !important;
   height: 24px !important;
   font-size: 0.75em !important;
@@ -119,10 +120,10 @@
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
-  background-color: var(--green) !important;
-  border: 1px solid var(--gold) !important;
+  background-color: var(--gold) !important;
+  border: 2px solid var(--green) !important;
   border-radius: 4px !important;
-  color: var(--gold) !important;
+  color: var(--green) !important;
   cursor: pointer !important;
   transition: all 0.15s ease-in-out !important;
   text-transform: uppercase !important;

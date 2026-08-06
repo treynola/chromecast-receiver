@@ -347,7 +347,7 @@ img {
   width: 12px !important;
   height: 12px !important;
   border: 1px solid var(--gold) !important;
-  border-radius: 2px !important;
+  border-radius: 4px !important;
   cursor: pointer !important;
   position: relative !important;
   flex-shrink: 0 !important;
@@ -701,10 +701,12 @@ input[type="range"]::-webkit-slider-thumb {
 .rev-btn,
 button[id^="t-rev-"],
 #lfo-toggle,
-#lfo2-toggle {
+#lfo2-toggle,
+.lfo-toggle-btn {
   background-color: var(--gold);
   color: var(--green);
   border: 2px solid var(--green) !important;
+  border-radius: 4px !important;
   font-weight: 720;
 }
 
@@ -714,10 +716,13 @@ button[id^="t-rev-"],
 button[id^="t-rev-"].reversed,
 button[id^="t-rev-"].active,
 #lfo-toggle.sweeping,
-#lfo2-toggle.sweeping {
+#lfo2-toggle.sweeping,
+.lfo-toggle-btn.sweeping,
+.lfo-toggle-btn.active {
   background-color: var(--gold) !important;
   color: var(--green);
   border: 2px solid var(--green) !important;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="reverse"].playing-reverse,
