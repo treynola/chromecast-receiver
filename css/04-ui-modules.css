@@ -712,9 +712,19 @@ button[id^="t-rev-"] {
 .lfo-toggle-btn {
   background-color: var(--green) !important;
   color: var(--gold) !important;
-  border: 2px solid var(--gold) !important;
+  border: 1px solid var(--gold) !important;
   border-radius: 4px !important;
   font-weight: 720;
+}
+
+#lfo-toggle:hover,
+#lfo2-toggle:hover,
+.lfo-toggle-btn:hover {
+  background-color: var(--green) !important;
+  border: 1px solid #FFE066 !important;
+  color: var(--gold) !important;
+  box-shadow: 0 0 6px rgba(255, 224, 102, 0.6) !important;
+  filter: brightness(1.1) !important;
 }
 
 .track-buttons button[data-action="reverse"].reversed,
@@ -734,7 +744,7 @@ button[id^="t-rev-"].active {
 .lfo-toggle-btn.active {
   background-color: var(--green) !important;
   color: var(--gold) !important;
-  border: 2px solid var(--gold) !important;
+  border: 1px solid var(--gold) !important;
   border-radius: 4px !important;
 }
 

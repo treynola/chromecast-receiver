@@ -121,7 +121,7 @@
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   background-color: var(--green) !important;
-  border: 2px solid var(--gold) !important;
+  border: 1px solid var(--gold) !important;
   border-radius: 4px !important;
   color: var(--gold) !important;
   cursor: pointer !important;
@@ -135,6 +135,16 @@
 .master-bottom-buttons button:hover {
   filter: brightness(1.2) !important;
   box-shadow: 0 0 5px rgba(250, 215, 142, 0.3) !important;
+}
+
+#lfo-toggle:hover,
+#lfo2-toggle:hover,
+.lfo-toggle-btn:hover {
+  background-color: var(--green) !important;
+  border: 1px solid #FFE066 !important;
+  color: var(--gold) !important;
+  box-shadow: 0 0 6px rgba(255, 224, 102, 0.6) !important;
+  filter: brightness(1.1) !important;
 }
 
 .master-bottom-buttons button:active {
