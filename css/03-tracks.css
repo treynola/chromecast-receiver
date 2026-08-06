@@ -150,7 +150,7 @@
   font-family: monospace;
   background: #111;
   padding: 3px;
-  border-radius: 4px;
+  border-radius: 4px !important;
   border: 1px solid #333;
   flex-shrink: 0;
 }
@@ -163,12 +163,14 @@
   background-color: var(--green);
   color: #fff;
   border-color: #00ff00;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="record"] {
   background-color: var(--red);
   color: #fff;
   border-color: #ff0000;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="stop"] {

@@ -524,12 +524,14 @@ input[type="range"]::-webkit-slider-thumb {
 .rec-btn {
   color: var(--red) !important;
   border-color: var(--dark-red) !important;
+  border-radius: 4px !important;
 }
 
 .rec-btn.recording {
   background-color: var(--red) !important;
   color: white !important;
   box-shadow: 0 0 5px var(--red);
+  border-radius: 4px !important;
 }
 
 .play-btn {
@@ -682,13 +684,16 @@ input[type="range"]::-webkit-slider-thumb {
   background-color: var(--green);
   color: var(--gold);
   border: 1px solid var(--gold);
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="record"],
+.track-rec-button,
 #master-record-button {
   background-color: var(--red) !important;
   color: var(--gold) !important;
   border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
 }
 
 
