@@ -550,21 +550,31 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .rev-btn {
-  color: var(--green);
-  border: 2px solid var(--green) !important;
+  background-color: var(--gold) !important;
+  color: #004d00 !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.rev-btn:hover {
+  background-color: var(--gold) !important;
+  filter: brightness(1.2) !important;
 }
 
 .rev-btn.reversed,
 .rev-btn.active {
   background-color: var(--gold) !important;
-  color: var(--green);
-  border: 2px solid var(--green) !important;
+  color: #004d00 !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
 }
 
-.rev-btn.playing-reverse,
-.rev-btn.blinking {
+.rev-btn.playing-reverse {
   background-color: var(--gold) !important;
-  border: 2px solid var(--green) !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
@@ -699,12 +709,23 @@ input[type="range"]::-webkit-slider-thumb {
 .track-buttons button[data-action="reverse"],
 .rev-btn,
 button[id^="t-rev-"] {
-  background-color: var(--gold);
-  color: var(--green);
-  border: 1px solid var(--green) !important;
+  background-color: var(--gold) !important;
+  color: #004d00 !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
   border-radius: 4px !important;
   font-weight: 720;
   box-sizing: border-box !important;
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.track-buttons button[data-action="stop"]:hover,
+.track-buttons button[data-action="reverse"]:hover,
+.rev-btn:hover,
+button[id^="t-rev-"]:hover {
+  background-color: var(--gold) !important;
+  filter: brightness(1.2) !important;
 }
 
 #lfo-toggle,
@@ -739,8 +760,9 @@ button[id^="t-rev-"] {
 button[id^="t-rev-"].reversed,
 button[id^="t-rev-"].active {
   background-color: var(--gold) !important;
-  color: var(--green);
-  border: 1px solid var(--green) !important;
+  color: #004d00 !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
   border-radius: 4px !important;
 }
 
@@ -760,7 +782,8 @@ button[id^="t-rev-"].active {
 .rev-btn.playing-reverse,
 button[id^="t-rev-"].playing-reverse {
   background-color: var(--gold) !important;
-  border: 1px solid var(--green) !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 

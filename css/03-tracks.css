@@ -174,33 +174,46 @@
   border-radius: 4px !important;
 }
 
-.track-buttons button[data-action="stop"] {
+.track-buttons button[data-action="stop"],
+.track-buttons button[data-action="reverse"] {
   background-color: var(--gold) !important;
+}
+
+.track-buttons button[data-action="stop"] {
   color: var(--red) !important;
   border-color: var(--red) !important;
 }
 
 .track-buttons button[data-action="reverse"] {
-  background-color: #333;
-  color: var(--green);
-  border: 1px solid var(--green) !important;
+  color: #004d00 !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
+  position: relative !important;
+  z-index: 2 !important;
   transition: all 0.2s;
+}
+
+.track-buttons button[data-action="stop"]:hover,
+.track-buttons button[data-action="reverse"]:hover {
+  background-color: var(--gold) !important;
+  filter: brightness(1.2) !important;
 }
 
 .track-buttons button[data-action="reverse"].reversed,
 .track-buttons button[data-action="reverse"].active {
   background-color: var(--gold) !important;
-  color: var(--green);
-  border: 1px solid var(--green) !important;
+  color: #004d00 !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
   font-weight: bold;
-  box-shadow: 0 0 5px var(--green);
 }
 
 .track-buttons button[data-action="reverse"].playing-reverse,
 .track-buttons button[data-action="reverse"].reversed.playing,
 .track-buttons button[data-action="reverse"].active.playing {
   background-color: var(--gold) !important;
-  border: 1px solid var(--green) !important;
+  border: 1px solid #004d00 !important;
+  box-shadow: inset 0 0 0 1px #004d00 !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
