@@ -104,7 +104,7 @@
   justify-content: center !important;
   font-family: "Cousine", monospace !important;
   font-weight: 720 !important;
-  border-radius: 4px;
+  border-radius: 4px !important;
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid var(--gold);
@@ -181,15 +181,14 @@
 
 .track-buttons button[data-action="stop"] {
   color: var(--red) !important;
-  border-color: var(--red) !important;
+  border: 1px solid var(--red) !important;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="reverse"] {
-  color: #004d00 !important;
-  border: 1px solid #004d00 !important;
-  box-shadow: inset 0 0 0 1px #004d00 !important;
-  position: relative !important;
-  z-index: 2 !important;
+  color: var(--green) !important;
+  border: 1px solid var(--green) !important;
+  border-radius: 4px !important;
   transition: all 0.2s;
 }
 
@@ -202,9 +201,9 @@
 .track-buttons button[data-action="reverse"].reversed,
 .track-buttons button[data-action="reverse"].active {
   background-color: var(--gold) !important;
-  color: #004d00 !important;
-  border: 1px solid #004d00 !important;
-  box-shadow: inset 0 0 0 1px #004d00 !important;
+  color: var(--green) !important;
+  border: 1px solid var(--green) !important;
+  border-radius: 4px !important;
   font-weight: bold;
 }
 
@@ -212,8 +211,8 @@
 .track-buttons button[data-action="reverse"].reversed.playing,
 .track-buttons button[data-action="reverse"].active.playing {
   background-color: var(--gold) !important;
-  border: 1px solid #004d00 !important;
-  box-shadow: inset 0 0 0 1px #004d00 !important;
+  border: 1px solid var(--green) !important;
+  border-radius: 4px !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
