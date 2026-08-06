@@ -664,7 +664,6 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .track-buttons button:hover,
-#lfo-toggle:hover,
 #master-record-button:hover,
 #show-docs-button:hover {
   filter: brightness(1.2);
@@ -715,16 +714,17 @@ button[id^="t-rev-"] {
   border: 1px solid var(--gold) !important;
   border-radius: 4px !important;
   font-weight: 720;
+  box-sizing: border-box !important;
 }
 
 #lfo-toggle:hover,
 #lfo2-toggle:hover,
 .lfo-toggle-btn:hover {
   background-color: var(--green) !important;
-  border: 1px solid #FFE699 !important;
+  border: 2px solid var(--gold) !important;
   color: var(--gold) !important;
-  box-shadow: 0 0 6px rgba(255, 230, 153, 0.6) !important;
-  filter: brightness(1.1) !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 
 .track-buttons button[data-action="reverse"].reversed,

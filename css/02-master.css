@@ -130,6 +130,7 @@
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  box-sizing: border-box !important;
 }
 
 .master-bottom-buttons button:hover {
@@ -141,10 +142,10 @@
 #lfo2-toggle:hover,
 .lfo-toggle-btn:hover {
   background-color: var(--green) !important;
-  border: 1px solid #FFE699 !important;
+  border: 2px solid var(--gold) !important;
   color: var(--gold) !important;
-  box-shadow: 0 0 6px rgba(255, 230, 153, 0.6) !important;
-  filter: brightness(1.1) !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 
 .master-bottom-buttons button:active {
