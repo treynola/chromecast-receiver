@@ -699,13 +699,20 @@ input[type="range"]::-webkit-slider-thumb {
 
 .track-buttons button[data-action="reverse"],
 .rev-btn,
-button[id^="t-rev-"],
-#lfo-toggle,
-#lfo2-toggle,
-.lfo-toggle-btn {
+button[id^="t-rev-"] {
   background-color: var(--gold);
   color: var(--green);
   border: 2px solid var(--green) !important;
+  border-radius: 4px !important;
+  font-weight: 720;
+}
+
+#lfo-toggle,
+#lfo2-toggle,
+.lfo-toggle-btn {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 2px solid var(--gold) !important;
   border-radius: 4px !important;
   font-weight: 720;
 }
@@ -714,14 +721,20 @@ button[id^="t-rev-"],
 .rev-btn.reversed,
 .rev-btn.active,
 button[id^="t-rev-"].reversed,
-button[id^="t-rev-"].active,
+button[id^="t-rev-"].active {
+  background-color: var(--gold) !important;
+  color: var(--green);
+  border: 2px solid var(--green) !important;
+  border-radius: 4px !important;
+}
+
 #lfo-toggle.sweeping,
 #lfo2-toggle.sweeping,
 .lfo-toggle-btn.sweeping,
 .lfo-toggle-btn.active {
-  background-color: var(--gold) !important;
-  color: var(--green);
-  border: 2px solid var(--green) !important;
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 2px solid var(--gold) !important;
   border-radius: 4px !important;
 }
 
