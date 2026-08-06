@@ -133,19 +133,24 @@
   box-sizing: border-box !important;
 }
 
-.master-bottom-buttons button:hover {
+.master-bottom-buttons button:not(#lfo-toggle):not(#lfo2-toggle):not(.lfo-toggle-btn):hover {
   filter: brightness(1.2) !important;
   box-shadow: 0 0 5px rgba(250, 215, 142, 0.3) !important;
 }
 
 #lfo-toggle:hover,
 #lfo2-toggle:hover,
-.lfo-toggle-btn:hover {
+.lfo-toggle-btn:hover,
+#lfo-toggle.sweeping:hover,
+#lfo2-toggle.sweeping:hover,
+.lfo-toggle-btn.sweeping:hover,
+.lfo-toggle-btn.active:hover {
   background-color: var(--green) !important;
-  border: 2px solid var(--gold) !important;
+  border: 1px solid var(--gold) !important;
   color: var(--gold) !important;
   box-shadow: none !important;
   filter: none !important;
+  outline: none !important;
 }
 
 .master-bottom-buttons button:active {

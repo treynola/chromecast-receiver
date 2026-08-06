@@ -719,12 +719,17 @@ button[id^="t-rev-"] {
 
 #lfo-toggle:hover,
 #lfo2-toggle:hover,
-.lfo-toggle-btn:hover {
+.lfo-toggle-btn:hover,
+#lfo-toggle.sweeping:hover,
+#lfo2-toggle.sweeping:hover,
+.lfo-toggle-btn.sweeping:hover,
+.lfo-toggle-btn.active:hover {
   background-color: var(--green) !important;
-  border: 2px solid var(--gold) !important;
+  border: 1px solid var(--gold) !important;
   color: var(--gold) !important;
   box-shadow: none !important;
   filter: none !important;
+  outline: none !important;
 }
 
 .track-buttons button[data-action="reverse"].reversed,
