@@ -701,9 +701,10 @@ input[type="range"]::-webkit-slider-thumb {
 button[id^="t-rev-"] {
   background-color: var(--gold);
   color: var(--green);
-  border: 2px solid var(--green) !important;
+  border: 1px solid var(--green) !important;
   border-radius: 4px !important;
   font-weight: 720;
+  box-sizing: border-box !important;
 }
 
 #lfo-toggle,
@@ -739,7 +740,7 @@ button[id^="t-rev-"].reversed,
 button[id^="t-rev-"].active {
   background-color: var(--gold) !important;
   color: var(--green);
-  border: 2px solid var(--green) !important;
+  border: 1px solid var(--green) !important;
   border-radius: 4px !important;
 }
 
@@ -759,7 +760,7 @@ button[id^="t-rev-"].active {
 .rev-btn.playing-reverse,
 button[id^="t-rev-"].playing-reverse {
   background-color: var(--gold) !important;
-  border: 2px solid var(--green) !important;
+  border: 1px solid var(--green) !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
