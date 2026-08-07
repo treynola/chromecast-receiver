@@ -755,11 +755,8 @@ button[id^="t-rev-"].active,
 .track-buttons button[data-action="reverse"].playing-reverse,
 .rev-btn.playing-reverse,
 button[id^="t-rev-"].playing-reverse {
-  background-color: var(--gold) !important;
-  color: var(--green) !important;
-  border: 1px solid var(--green) !important;
   border-radius: 4px !important;
-  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
+  animation: rev-blink-green-kelly 0.6s infinite ease-in-out !important;
 }
 
 #lfo-toggle.sweeping,
@@ -786,10 +783,19 @@ button[id^="t-rev-"].playing-reverse {
 
 @keyframes rev-blink-green-kelly {
   0% {
-    color: var(--green);
+    background-color: var(--gold) !important;
+    color: var(--green) !important;
+    border: 1px solid var(--green) !important;
+  }
+  50% {
+    background-color: var(--green) !important;
+    color: var(--gold) !important;
+    border: 1px solid var(--gold) !important;
   }
   100% {
-    color: #4CBB17;
+    background-color: var(--gold) !important;
+    color: var(--green) !important;
+    border: 1px solid var(--green) !important;
   }
 }
 

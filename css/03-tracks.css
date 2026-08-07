@@ -201,12 +201,9 @@
 .track-buttons button[data-action="reverse"].reversed,
 .track-buttons button[data-action="reverse"].active,
 .track-buttons button[data-action="reverse"].playing-reverse {
-  background-color: var(--gold) !important;
-  color: var(--green) !important;
-  border: 1px solid var(--green) !important;
-  border-radius: 4px !important;
   font-weight: bold;
-  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
+  border-radius: 4px !important;
+  animation: rev-blink-green-kelly 0.6s infinite ease-in-out !important;
 }
 
 .track-buttons button.recording {
