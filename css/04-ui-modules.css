@@ -783,19 +783,19 @@ button[id^="t-rev-"].playing-reverse {
 
 @keyframes rev-blink-green-kelly {
   0% {
-    background-color: var(--gold) !important;
-    color: var(--green) !important;
-    border: 1px solid var(--green) !important;
+    background-color: var(--gold);
+    color: var(--green);
+    border-color: var(--green);
   }
   50% {
-    background-color: var(--green) !important;
-    color: var(--gold) !important;
-    border: 1px solid var(--gold) !important;
+    background-color: var(--green);
+    color: var(--gold);
+    border-color: var(--gold);
   }
   100% {
-    background-color: var(--gold) !important;
-    color: var(--green) !important;
-    border: 1px solid var(--green) !important;
+    background-color: var(--gold);
+    color: var(--green);
+    border-color: var(--green);
   }
 }
 
