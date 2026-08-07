@@ -564,15 +564,10 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .rev-btn.reversed,
-.rev-btn.active {
-  background-color: var(--gold) !important;
-  color: var(--green) !important;
-  border: 1px solid var(--green) !important;
-  border-radius: 4px !important;
-}
-
+.rev-btn.active,
 .rev-btn.playing-reverse {
   background-color: var(--gold) !important;
+  color: var(--green) !important;
   border: 1px solid var(--green) !important;
   border-radius: 4px !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
@@ -756,11 +751,15 @@ button[id^="t-rev-"]:hover {
 .rev-btn.reversed,
 .rev-btn.active,
 button[id^="t-rev-"].reversed,
-button[id^="t-rev-"].active {
+button[id^="t-rev-"].active,
+.track-buttons button[data-action="reverse"].playing-reverse,
+.rev-btn.playing-reverse,
+button[id^="t-rev-"].playing-reverse {
   background-color: var(--gold) !important;
   color: var(--green) !important;
   border: 1px solid var(--green) !important;
   border-radius: 4px !important;
+  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
 #lfo-toggle.sweeping,
@@ -771,17 +770,6 @@ button[id^="t-rev-"].active {
   color: var(--gold) !important;
   border: 1px solid var(--gold) !important;
   border-radius: 4px !important;
-}
-
-.track-buttons button[data-action="reverse"].playing-reverse,
-.track-buttons button[data-action="reverse"].reversed.playing,
-.track-buttons button[data-action="reverse"].active.playing,
-.rev-btn.playing-reverse,
-button[id^="t-rev-"].playing-reverse {
-  background-color: var(--gold) !important;
-  border: 1px solid var(--green) !important;
-  border-radius: 4px !important;
-  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
 .track-buttons button.recording,

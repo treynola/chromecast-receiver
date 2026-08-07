@@ -199,20 +199,13 @@
 }
 
 .track-buttons button[data-action="reverse"].reversed,
-.track-buttons button[data-action="reverse"].active {
+.track-buttons button[data-action="reverse"].active,
+.track-buttons button[data-action="reverse"].playing-reverse {
   background-color: var(--gold) !important;
   color: var(--green) !important;
   border: 1px solid var(--green) !important;
   border-radius: 4px !important;
   font-weight: bold;
-}
-
-.track-buttons button[data-action="reverse"].playing-reverse,
-.track-buttons button[data-action="reverse"].reversed.playing,
-.track-buttons button[data-action="reverse"].active.playing {
-  background-color: var(--gold) !important;
-  border: 1px solid var(--green) !important;
-  border-radius: 4px !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
