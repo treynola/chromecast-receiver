@@ -174,20 +174,17 @@
   border-radius: 4px !important;
 }
 
-.track-buttons button[data-action="stop"],
-.track-buttons button[data-action="reverse"] {
-  background-color: var(--gold) !important;
-}
-
 .track-buttons button[data-action="stop"] {
+  background-color: var(--gold) !important;
   color: var(--red) !important;
   border: 1px solid var(--red) !important;
   border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="reverse"] {
-  color: var(--green) !important;
-  border: 1px solid var(--green) !important;
+  background-color: var(--gold);
+  color: var(--green);
+  border: 1px solid var(--green);
   border-radius: 4px !important;
   transition: all 0.2s;
 }

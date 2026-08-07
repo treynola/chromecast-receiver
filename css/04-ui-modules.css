@@ -550,9 +550,9 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .rev-btn {
-  background-color: var(--gold) !important;
-  color: var(--green) !important;
-  border: 1px solid var(--green) !important;
+  background-color: var(--gold);
+  color: var(--green);
+  border: 1px solid var(--green);
   border-radius: 4px !important;
   height: 24px !important;
   box-sizing: border-box !important;
@@ -704,9 +704,9 @@ input[type="range"]::-webkit-slider-thumb {
 .track-buttons button[data-action="reverse"],
 .rev-btn,
 button[id^="t-rev-"] {
-  background-color: var(--gold) !important;
-  color: var(--green) !important;
-  border: 1px solid var(--green) !important;
+  background-color: var(--gold);
+  color: var(--green);
+  border: 1px solid var(--green);
   border-radius: 4px !important;
   height: 24px !important;
   font-weight: 720;
