@@ -2939,7 +2939,7 @@ select option {
   --sampler-pad-border-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
   /* Normal State: Updated color scheme */
   background-color: var(--off-black) !important;
-  color: var(--gold) !important;
+  color: var(--green) !important;
   border: 2px solid var(--green) !important;
   box-shadow: var(--sampler-pad-border-shadow);
 
@@ -3005,7 +3005,7 @@ select option {
 
 .sample-btn.loaded {
   background-color: var(--off-black) !important;
-  color: var(--dark-green) !important;
+  color: var(--green) !important;
   border-color: var(--green) !important;
   font-size: 0.85em !important; /* Scale down for 3-letter labels */
   font-weight: 900 !important;
@@ -4970,6 +4970,12 @@ dialog.input-prompt-dialog {
   background: var(--off-black);
 }
 
+.pad-dialog-bottom-actions .pad-refresh-action {
+  grid-column: 2;
+  justify-self: stretch;
+  width: auto;
+}
+
 .pad-dialog-bottom-control-rows {
   flex: 0 0 auto;
   display: flex;
@@ -4998,6 +5004,12 @@ dialog.input-prompt-dialog {
   font-weight: bold;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.pad-dialog-pad-title {
+  color: var(--gold);
+  font-size: 1.08em;
+  font-weight: bold;
 }
 
 .pad-control-row {
@@ -5075,15 +5087,21 @@ dialog.input-prompt-dialog {
 
 .pad-setting-field {
   display: grid;
-  grid-template-columns: minmax(132px, 0.35fr) minmax(0, 1fr);
+  grid-template-columns: minmax(148px, max-content) minmax(0, 1fr);
   align-items: center;
   gap: 4px;
   min-width: 0;
   color: var(--gold);
   font-family: inherit;
-  font-size: 10px;
-  font-weight: bold;
-  text-transform: uppercase;
+  font-size: 0.75em;
+  font-weight: 720;
+  padding: 0 2px;
+  min-height: 16px;
+  text-transform: none;
+}
+
+.pad-setting-field > span {
+  white-space: nowrap;
 }
 
 .pad-setting-select {
@@ -5098,7 +5116,8 @@ dialog.input-prompt-dialog {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  width: 100%;
+  width: min(100%, 240px);
+  justify-self: end;
   margin: 0;
   background-color: var(--dark-green-transparent);
   color: var(--gold);
@@ -5113,6 +5132,7 @@ dialog.input-prompt-dialog {
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 12px;
+  white-space: nowrap;
 }
 
 .pad-settings-dialog .pad-setting-select:hover {
