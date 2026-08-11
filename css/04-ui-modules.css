@@ -801,8 +801,10 @@ button[id^="t-rev-"].playing-reverse {
 
 .input-source,
 .effect-type-select,
+.pad-settings-dialog .pad-setting-select,
 #record-as-select,
-.recording-action-select {
+.recording-action-select,
+.app-select {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
@@ -812,9 +814,11 @@ button[id^="t-rev-"].playing-reverse {
   border-radius: 5px;
   padding: 0 25px 0 8px;
   height: 24px;
-  /* Reduced height by 20% */
   line-height: 24px;
-  /* Explicitly set line-height for vertical centering */
+  font-family: sans-serif !important;
+  font-size: 0.72em !important;
+  font-weight: normal !important;
+  text-transform: none;
   box-sizing: border-box;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
   background-repeat: no-repeat;
@@ -831,12 +835,11 @@ button[id^="t-rev-"].playing-reverse {
 #record-as-select {
   margin: 0;
   flex: 2 !important;
-  font-family: "Cousine", monospace !important;
-  font-size: 0.72em !important;
 }
 
 .input-source:hover,
 .effect-type-select:hover,
+.pad-settings-dialog .pad-setting-select:hover,
 #record-as-select:hover,
 .recording-action-select:hover {
   background-color: var(--red);
@@ -847,6 +850,8 @@ button[id^="t-rev-"].playing-reverse {
 
 .input-source:focus,
 .effect-type-select:focus,
+.pad-settings-dialog .pad-setting-select:focus,
+.pad-settings-dialog .pad-setting-select:focus-visible,
 #record-as-select:focus,
 .recording-action-select:focus {
   background-color: var(--gold);
@@ -2322,6 +2327,110 @@ select option {
   box-shadow: none !important;
 }
 
+/* Sample Editor — intentionally layered on the Effects dialog shell. */
+.sample-editor-dialog .sample-editor-grid {
+  grid-template-columns: repeat(3, 1fr) !important;
+  align-items: stretch !important;
+}
+
+.sample-editor-dialog .sample-editor-asset-card,
+.sample-editor-dialog .sample-editor-field,
+.sample-editor-dialog .sample-editor-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.sample-editor-dialog .sample-editor-label,
+.sample-editor-dialog .sample-editor-field > span {
+  color: var(--gold);
+  font-family: inherit;
+  font-size: 0.8em;
+}
+
+.sample-editor-dialog .sample-editor-asset-card strong,
+.sample-editor-dialog .sample-editor-asset-card > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sample-editor-dialog .sample-editor-field input,
+.sample-editor-dialog .sample-editor-field select {
+  width: 100%;
+  min-height: 24px;
+  box-sizing: border-box;
+  background: var(--off-black);
+  border: 1px solid var(--green);
+  color: var(--gold);
+  font: inherit;
+}
+
+.sample-editor-dialog .sample-editor-check {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.sample-editor-dialog .sample-editor-check input {
+  width: auto;
+  min-height: auto;
+}
+
+.sample-editor-dialog .sample-editor-actions {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sample-editor-dialog .sample-editor-actions button {
+  min-height: 24px;
+}
+
+/* Reuse the TrackView Loop Start / Loop End control geometry in the editor. */
+.sample-editor-dialog .sample-editor-loop-controls {
+  grid-column: 1 / -1;
+  display: block;
+  min-width: 0;
+  padding: 8px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-grid-layout {
+  padding: 0;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-line-1 > div {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-line-1 > div:last-child {
+  justify-content: space-between;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-line-2 input[type="range"] {
+  width: auto;
+  min-height: 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .param-value {
+  font-family: monospace;
+  color: var(--gold);
+}
+
 /* Audition Params Panel */
 .audition-params-container {
   background: #2a2a2a;
@@ -2806,7 +2915,8 @@ select option {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: 4px;
+  row-gap: 2px;
+  column-gap: 4px;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
@@ -2826,58 +2936,62 @@ select option {
 /* Sample Center Updates */
 .sample-btn {
   --sampler-pad-color: var(--gold);
+  --sampler-pad-border-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
   /* Normal State: Updated color scheme */
-  background-color: var(--green) !important;
+  background-color: var(--off-black) !important;
   color: var(--gold) !important;
-  border: 2px solid var(--sampler-pad-color) !important;
+  border: 2px solid var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow);
 
   font-family: "Cousine", monospace !important;
   font-size: 1.2em !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
 
-  width: 100%;
-  height: 100%;
+  width: calc(100% - 8px);
+  height: calc(100% - 12px);
   min-height: 0;
   aspect-ratio: auto;
   box-sizing: border-box;
   padding: 1px;
   cursor: pointer;
   border-radius: 12px;
-  transition: all 0.1s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   text-shadow: none;
   position: relative;
   z-index: 5;
+  justify-self: center;
+  align-self: center;
 }
 
 /* Hover Effects */
 .sample-btn:hover {
-  background-color: var(--green) !important;
-  border-color: var(--sampler-pad-color) !important;
-  color: var(--gold) !important;
-  box-shadow: 0 0 10px var(--gold);
+  background-color: var(--dark-gray) !important;
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 10px var(--green);
   text-shadow: none;
 }
 
 .sample-btn:active {
-  background-color: var(--green) !important;
-  color: var(--red) !important;
-  box-shadow: 0 0 12px var(--red);
-  border-color: var(--red) !important;
+  background-color: var(--gold) !important;
+  color: var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--gold);
+  border-color: var(--green) !important;
 }
 
 .sample-btn.active {
-  background-color: var(--green) !important;
-  color: var(--red) !important;
-  box-shadow: 0 0 12px var(--red);
-  border-color: var(--sampler-pad-color) !important;
+  background-color: var(--off-black) !important;
+  color: var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--green);
+  border-color: var(--green) !important;
 }
 
 .sample-btn.repeating {
-  box-shadow: 0 0 12px var(--sampler-pad-color), inset 0 0 8px var(--sampler-pad-color);
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--sampler-pad-color), inset 0 0 8px var(--sampler-pad-color);
 }
 
 .sample-btn.reverse::after {
@@ -2890,7 +3004,7 @@ select option {
 }
 
 .sample-btn.loaded {
-  background-color: var(--gold) !important;
+  background-color: var(--off-black) !important;
   color: var(--dark-green) !important;
   border-color: var(--green) !important;
   font-size: 0.85em !important; /* Scale down for 3-letter labels */
@@ -3522,12 +3636,13 @@ body.receiver-mode .sample-grid {
   display: grid !important;
   grid-template-columns: repeat(5, 1fr) !important;
   grid-template-rows: repeat(4, minmax(0, 1fr)) !important;
-  gap: 4px !important;
+  row-gap: 2px !important;
+  column-gap: 4px !important;
   margin-top: 5px !important;
 }
 body.receiver-mode .sample-btn {
-  width: 100% !important;
-  height: 100% !important;
+  width: calc(100% - 8px) !important;
+  height: calc(100% - 12px) !important;
   min-height: 0 !important;
   aspect-ratio: auto !important;
   font-family: "Cousine", monospace !important;
@@ -3538,6 +3653,8 @@ body.receiver-mode .sample-btn {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  justify-self: center !important;
+  align-self: center !important;
   text-transform: uppercase;
 }
 body.receiver-mode .scrolling-text-wrapper {
@@ -4737,18 +4854,22 @@ dialog.input-prompt-dialog {
 /* --- Sampler Pad Settings Dialog Styling --- */
 .pad-settings-dialog {
   position: fixed !important;
-  top: 40px !important;
-  left: 50% !important;
-  transform: translateX(-50%);
-  margin: 0 !important;
-  width: 480px !important;
-  max-width: 92vw !important;
+  top: 0;
+  left: 0;
+  transform: none;
+  margin: 0;
+  width: 490px !important;
+  max-width: 95vw !important;
   max-height: 85vh !important;
   z-index: 2500 !important;
   background: var(--off-black, #121212) !important;
-  border: 2px solid var(--gold, #d8b35a) !important;
-  border-radius: 10px !important;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9) !important;
+  /* Match the Effects parameter dialog: green edge, gold and red outer rings. */
+  border: 1px solid var(--green) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9) !important;
   display: none;
   flex-direction: column;
   overflow: hidden !important;
@@ -4768,4 +4889,322 @@ dialog.input-prompt-dialog {
   overflow-y: auto !important;
   max-height: calc(85vh - 55px) !important;
   padding: 14px 16px !important;
+}
+
+/* Consolidated Sample Station Pad Dialog */
+.pad-settings-dialog .pad-dialog-content {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: var(--off-black) !important;
+}
+
+.pad-dialog-title-row {
+  align-items: center;
+}
+
+.pad-dialog-nav-group {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-right: 22px;
+}
+
+.pad-dialog-nav-group .dialog-title {
+  min-width: 0;
+  color: var(--gold);
+  font-family: inherit;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pad-dialog-pad-label {
+  flex: 0 0 auto;
+}
+
+.pad-dialog-nav-arrow {
+  width: 24px;
+  min-width: 24px;
+  padding: 0 4px;
+}
+
+.pad-control-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.pad-dialog-scroll-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  scrollbar-color: var(--gold) var(--off-black);
+  scrollbar-width: thin;
+}
+
+.pad-dialog-bottom-actions {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px 12px;
+  box-sizing: border-box;
+  border-top: 1px solid #444;
+  background: var(--off-black);
+}
+
+.pad-dialog-bottom-control-rows {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0 10px;
+  box-sizing: border-box;
+  background: var(--off-black);
+}
+
+.pad-control-row-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pad-control-row-single .pad-control-btn {
+  grid-column: 2;
+}
+
+.pad-dialog-section-title {
+  width: 100%;
+  padding-top: 4px;
+  color: var(--gold) !important;
+  font-family: inherit;
+  font-size: 0.8em;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pad-control-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+}
+
+.pad-control-btn {
+  min-width: 0;
+  min-height: 28px;
+  padding: 5px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Same visual and interaction contract as the live Track PLAY button. */
+.pad-control-btn.track-play-contract {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  font-family: monospace;
+  font-size: 0.9em;
+  font-weight: bold;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+
+.pad-control-btn.track-play-contract:hover:not(:disabled) {
+  filter: brightness(1.2);
+  box-shadow: 0 0 5px rgba(250, 215, 142, 0.3);
+}
+
+.pad-control-btn.track-play-contract:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pad-control-btn.track-play-contract:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(100%);
+}
+
+.pad-control-btn.track-play-contract.playing {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+}
+
+.pad-control-btn.track-play-contract.active,
+.pad-control-btn.track-play-contract.playing.active {
+  background: var(--gold) !important;
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+  box-shadow: 0 0 6px rgba(250, 215, 142, 0.35);
+}
+
+.pad-control-btn:focus-visible,
+.pad-setting-select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.pad-settings-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px solid #444;
+}
+
+.pad-setting-field {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.35fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--gold);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.pad-setting-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+}
+
+/* Pad selectors intentionally copy the Effects selector skin without
+   inheriting the track-effect delegated event class. */
+.pad-settings-dialog .pad-setting-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  background-color: var(--dark-green-transparent);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 5px;
+  padding: 0 25px 0 8px;
+  height: 24px;
+  min-height: 24px;
+  line-height: 24px;
+  box-sizing: border-box;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+.pad-settings-dialog .pad-setting-select:hover {
+  background-color: var(--red);
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.pad-settings-dialog .pad-setting-select:focus,
+.pad-settings-dialog .pad-setting-select:focus-visible {
+  background-color: var(--gold);
+  color: var(--dark-red);
+  border-color: var(--gold);
+  outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+}
+
+@media (max-width: 620px) {
+  .pad-settings-dialog {
+    width: calc(100vw - 16px) !important;
+  }
+
+  .pad-settings-strip {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 420px) {
+  .pad-control-row,
+  .pad-control-row-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pad-control-row-single .pad-control-btn {
+    width: 50%;
+    justify-self: center;
+    grid-column: 1 / -1;
+  }
+
+  .pad-control-row:nth-child(1) .pad-control-btn:last-child,
+  .pad-control-row:nth-child(2) .pad-control-btn:last-child {
+    grid-column: span 2;
+  }
+}
+
+/* Canonical app-wide dropdown skin: this is the Track Effects selector
+   contract shared by Master, Track, Sample Station, and dialogs. */
+select.app-select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--dark-green-transparent) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 5px !important;
+  padding: 0 25px 0 8px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  line-height: 24px !important;
+  font-family: sans-serif !important;
+  font-size: 0.72em !important;
+  font-weight: normal !important;
+  text-transform: none !important;
+  box-sizing: border-box !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 12px !important;
+}
+
+select.app-select:hover {
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+}
+
+select.app-select option {
+  font-family: sans-serif !important;
+  font-size: 0.72em !important;
+  font-weight: normal !important;
+}
+
+select.app-select:focus,
+select.app-select:focus-visible {
+  background-color: var(--gold) !important;
+  color: var(--dark-red) !important;
+  border-color: var(--gold) !important;
+  outline: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E") !important;
+}
+
+select.app-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
