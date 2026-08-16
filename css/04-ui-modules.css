@@ -2990,6 +2990,11 @@ select option {
   border-color: var(--green) !important;
 }
 
+.sample-btn.trigger-error {
+  border-color: var(--red) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--red) !important;
+}
+
 .sample-btn.repeating {
   box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--sampler-pad-color), inset 0 0 8px var(--sampler-pad-color);
 }
@@ -5083,6 +5088,72 @@ dialog.input-prompt-dialog {
   width: 100%;
   padding-top: 10px;
   border-top: 1px solid #444;
+}
+
+.pad-setting-range-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 240px);
+  justify-self: end;
+}
+
+.pad-setting-range-control input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--gold);
+}
+
+.pad-setting-value {
+  min-width: 54px;
+  color: var(--gold);
+  font-family: monospace;
+  font-size: 0.9em;
+  font-weight: normal;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pad-setting-check {
+  grid-template-columns: 18px minmax(0, 1fr);
+  cursor: pointer;
+}
+
+.pad-setting-check input[type="checkbox"] {
+  accent-color: var(--gold);
+  justify-self: start;
+  margin: 0;
+}
+
+.pad-setting-check input[type="checkbox"]:focus-visible,
+.pad-setting-range-control input[type="range"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.pad-setting-input {
+  width: min(100%, 240px);
+  justify-self: end;
+  min-height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  background: var(--dark-green-transparent);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 5px;
+  font: inherit;
+  font-weight: normal;
+}
+
+.pad-setting-input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.pad-setting-action-btn {
+  width: min(100%, 240px);
+  justify-self: end;
 }
 
 .pad-setting-field {
