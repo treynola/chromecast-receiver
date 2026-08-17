@@ -2475,6 +2475,17 @@
             try {
               pm.addEventListener(eventType, function (event) {
                 const mediaStatus = event && event.mediaStatus ? event.mediaStatus : null;
+                const mediaVolume = mediaStatus && mediaStatus.volume
+                  ? mediaStatus.volume
+                  : event && event.volume
+                    ? event.volume
+                    : null;
+                const volumeLevel = mediaVolume && Number.isFinite(Number(mediaVolume.level))
+                  ? Number(mediaVolume.level)
+                  : null;
+                const isMuted = mediaVolume && typeof mediaVolume.muted === "boolean"
+                  ? mediaVolume.muted
+                  : null;
                 const playerState = mediaStatus && mediaStatus.playerState
                   ? mediaStatus.playerState
                   : event && event.playerState
@@ -2493,6 +2504,11 @@
                   value,
                   errorCode: event && event.errorCode !== undefined ? event.errorCode : null,
                   mediaTime: Number.isFinite(Number(event?.currentMediaTime)) ? Number(event.currentMediaTime) : null,
+                  mediaSessionId: mediaStatus && mediaStatus.mediaSessionId !== undefined
+                    ? mediaStatus.mediaSessionId
+                    : null,
+                  volumeLevel,
+                  isMuted,
                   readyState: document.getElementById("cast-media-element")?.readyState ?? null,
                 });
                 if (eventType === events.ERROR || eventType === events.PLAYING || eventType === events.PAUSE) {
