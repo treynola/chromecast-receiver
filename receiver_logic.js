@@ -454,6 +454,10 @@
           return buildIdentityAccepted && !buildIdentityRejected;
         }
 
+        function identityAllowsGui() {
+          return buildIdentityAccepted && !buildIdentityRejected;
+        }
+
         function getCastReceiverContext() {
           if (typeof cast === "undefined" || !cast.framework) {
             return null;
@@ -902,10 +906,28 @@
           }
         }
 
+        function emitGuiChannelError(reason, details = {}) {
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
+          const payload = {
+            type: "GUI_ERROR",
+            transport: "gui",
+            guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            reason: String(reason || "unknown_gui_error"),
+            ...details,
+          };
+          try {
+            binaryWS.send(JSON.stringify(payload));
+            return true;
+          } catch (_error) {
+            return false;
+          }
+        }
+
         function rejectGuiChannelMessage(reason, details = {}) {
           guiRejectedCount += 1;
           guiLastRejectReason = reason;
           emitGuiChannelTelemetry("rejected", { reason, ...details });
+          emitGuiChannelError(reason, details);
         }
 
         function configureCastDebugLogger(context) {
@@ -1698,9 +1720,10 @@
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
           guiInteractionRevision += 1;
           const message = {
-            type: "GUI_INTERACTION_EVENT",
+            type: "GUI_ACTION",
             transport: "gui",
             guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            actionType: "interaction",
             guiInteractionRevision,
             kind,
             targetId: element.id,
@@ -1714,6 +1737,11 @@
           try {
             markReceiverGuiInteractionPending(element, guiInteractionRevision, kind);
             binaryWS.send(JSON.stringify(message));
+            emitGuiChannelTelemetry("interaction_sent", {
+              revision: guiInteractionRevision,
+              targetId: element.id,
+              kind,
+            });
             relayLogToStudio("📡 Receiver: GUI interaction sent → " + element.id + " (" + kind + ")");
           } catch (e) {}
         }
@@ -5073,19 +5101,27 @@
 
         function drawMirroredWaveform(id, waveform) {
           const canvas = getEl(id);
-          if (!canvas || !waveform || !Array.isArray(waveform.points)) return;
+          if (!canvas || !waveform || !Array.isArray(waveform.points)) return false;
           const signature = JSON.stringify(waveform);
           const cacheKey = "waveform:" + id;
-          if (valCache[cacheKey] === signature) return;
-          valCache[cacheKey] = signature;
+          if (valCache[cacheKey] === signature) return true;
           const width = canvas.clientWidth || Number(canvas.getAttribute("width")) || 238;
           const height = canvas.clientHeight || Number(canvas.getAttribute("height")) || 26;
           if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
           }
-          const context = canvas.getContext("2d");
-          if (!context) return;
+          let context = null;
+          try {
+            context = canvas.getContext("2d");
+          } catch (_error) {
+            context = null;
+          }
+          if (!context) return false;
+          // Only cache after a drawable canvas/context is available. A GUI
+          // snapshot can arrive during shell construction; that first paint
+          // must remain retryable instead of becoming a permanent cache hit.
+          valCache[cacheKey] = signature;
           context.clearRect(0, 0, width, height);
           context.strokeStyle = waveform.active ? "#d4af37" : "rgba(68, 68, 68, 0.5)";
           context.fillStyle = waveform.active ? "rgba(212, 175, 55, 0.14)" : "transparent";
@@ -5095,7 +5131,7 @@
             context.moveTo(0, height / 2);
             context.lineTo(width, height / 2);
             context.stroke();
-            return;
+            return true;
           }
           context.beginPath();
           waveform.points.forEach((point, index) => {
@@ -5113,6 +5149,7 @@
             context.fill();
             context.globalAlpha = 1;
           }
+          return true;
         }
 
         function updateMirroredPlayhead(id, position) {
@@ -5227,25 +5264,42 @@
         let lastWaveformRenderTime = 0;
         let pendingWaveformState = null;
         let waveformRenderTimer = null;
+        let lastWaveformRenderStats = { expected: 0, drawn: 0 };
 
         function renderWaveformState(s) {
           if (!s) return false;
           try {
+            let expected = 0;
+            let drawn = 0;
             if (s.master && s.master.waveform) {
-              drawMirroredWaveform("master-waveform-L", s.master.waveform.left);
-              drawMirroredWaveform("master-waveform-R", s.master.waveform.right);
+              [
+                ["master-waveform-L", s.master.waveform.left],
+                ["master-waveform-R", s.master.waveform.right],
+              ].forEach(([id, waveform]) => {
+                if (!waveform) return;
+                expected += 1;
+                if (drawMirroredWaveform(id, waveform)) drawn += 1;
+              });
             }
             if (Array.isArray(s.tracks)) {
               s.tracks.forEach((t, i) => {
                 if (!t || !t.waveform) return;
-                drawMirroredWaveform("t-wf-l-" + i, t.waveform.left);
-                drawMirroredWaveform("t-wf-r-" + i, t.waveform.right);
+                [
+                  ["t-wf-l-" + i, t.waveform.left],
+                  ["t-wf-r-" + i, t.waveform.right],
+                ].forEach(([id, waveform]) => {
+                  if (!waveform) return;
+                  expected += 1;
+                  if (drawMirroredWaveform(id, waveform)) drawn += 1;
+                });
                 updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
               });
             }
-            return true;
+            lastWaveformRenderStats = { expected, drawn };
+            return drawn === expected;
           } catch (e) {
             console.error("❌ Receiver Waveform Render Error:", e);
+            lastWaveformRenderStats = { expected: 0, drawn: 0 };
             return false;
           }
         }
@@ -5443,11 +5497,22 @@
                   const pad = getEl(btnId);
                   if (pad) {
                     pad.dataset.padId = String(p.id || i + 1);
+                    pad.dataset.padSelected = p.selected ? "true" : "false";
                     pad.dataset.padName = String(p.name || "");
                     pad.dataset.padMode = String(p.mode || "oneshot");
                     pad.dataset.padLoaded = p.loaded ? "true" : "false";
                     pad.dataset.padMuted = p.muted ? "true" : "false";
                     pad.dataset.padReverse = p.reverse ? "true" : "false";
+                    pad.classList.toggle("selected", Boolean(p.selected));
+                    const padColor = typeof p.color === "string" && /^#[0-9a-f]{6}$/i.test(p.color)
+                      ? p.color
+                      : "";
+                    pad.style.borderColor = padColor || "";
+                    pad.style.boxShadow = p.selected && padColor
+                      ? `0 0 0 2px ${padColor}, 0 0 12px ${padColor}`
+                      : p.selected
+                        ? "0 0 0 2px var(--yellow, #ffcc00)"
+                        : "";
                     pad.title = p.loaded && p.name
                       ? `${p.name} — double-click for settings`
                       : `Pad ${p.id || i + 1} — double-click for settings`;
@@ -5470,10 +5535,14 @@
                 const trackLabel = getEl("t-scroll-" + i);
                 if (trackLabel) {
                   trackLabel.setAttribute("title", trackName);
+                  trackLabel.dataset.trackId = String(t.trackId || i + 1);
                   trackLabel.dataset.trackState = t.isPlaying ? "playing" : t.isPaused ? "paused" : "stopped";
                 }
                 const fileLabel = getEl("t-file-" + i);
-                if (fileLabel) fileLabel.setAttribute("title", t.fileName || "");
+                if (fileLabel) {
+                  fileLabel.setAttribute("title", t.fileName || "");
+                  fileLabel.dataset.trackId = String(t.trackId || i + 1);
+                }
                 updateClass(
                   "t-st-" + i,
                   "status-indicator " +
@@ -5701,9 +5770,10 @@
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
               binaryWS.send(JSON.stringify({
-                type: "GUI_STATE_ACK",
+                type: "GUI_ACK",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                ackType: "snapshot",
                 channel: "gui",
                 guiRevision: revision,
                 guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
@@ -5712,6 +5782,8 @@
                 receivedCount: guiReceivedCount,
                 renderedCount: guiRenderedCount,
                 renderedRevision: guiLastRenderedRevision,
+                waveformExpected: lastWaveformRenderStats.expected,
+                waveformDrawn: lastWaveformRenderStats.drawn,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
@@ -5838,24 +5910,49 @@
         }
 
         function handleReceiverCommand(d, source) {
-          if (d && d.type === "GUI_STATE_UPDATE") {
+          const rawGuiType = d && d.type;
+          if (rawGuiType === "GUI_SNAPSHOT") {
+            d = { ...d, type: "GUI_STATE_UPDATE" };
+          } else if (rawGuiType === "GUI_PATCH") {
+            d = {
+              ...d,
+              type: "CURSOR_UPDATE",
+              transport: "gui_cursor",
+              cursor: d.cursor || d.patch?.cursor,
+            };
+          }
+          if (rawGuiType === "GUI_STATE_UPDATE" || rawGuiType === "GUI_SNAPSHOT") {
             guiRawMessageCount += 1;
             guiLastRawRevision = Number(d.guiRevision ?? -1);
             emitGuiChannelTelemetry("raw_received", {
               revision: guiLastRawRevision,
+              messageType: rawGuiType,
               source: source || "unknown",
             });
           }
-          const requiresAuthenticatedBridge = [
+          const requiresAuthenticatedGui = [
             "GUI_STATE_UPDATE",
             "CURSOR_UPDATE",
+          ].includes(d.type);
+          const requiresAuthenticatedAudio = [
             "PLAYBACK_START",
             "PLAYBACK_STOP",
             "PLAYBACK_PAUSE",
             "PCM_RELAY",
           ].includes(d.type);
           if (
-            requiresAuthenticatedBridge &&
+            requiresAuthenticatedGui &&
+            (!identityAllowsGui() || !receiverBridgeConfigReady)
+          ) {
+            relayLogToStudio(
+              "⏸️ Receiver: Ignored " +
+                d.type +
+                " before verified GUI identity/config readiness.",
+            );
+            return true;
+          }
+          if (
+            requiresAuthenticatedAudio &&
             (!identityAllowsAudio() ||
               !window._handshakeAcked ||
               !receiverBridgeConfigReady)
