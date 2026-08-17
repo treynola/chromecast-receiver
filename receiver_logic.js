@@ -154,6 +154,10 @@
         var lastGuiRevision = -1;
         var lastCursorRevision = -1;
         var guiReceivedCount = 0;
+        var guiRawMessageCount = 0;
+        var guiRejectedCount = 0;
+        var guiLastRejectReason = null;
+        var guiLastRawRevision = -1;
         var guiDeferredCount = 0;
         var guiRenderedCount = 0;
         var guiAckCount = 0;
@@ -869,6 +873,39 @@
               fn.call(logger, CAST_DEBUG_TAG, msg);
             }
           } catch (e) {}
+        }
+
+        function emitGuiChannelTelemetry(event, details = {}) {
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
+          const payload = {
+            type: "GUI_CHANNEL_TELEMETRY",
+            transport: "gui",
+            guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            event,
+            rawCount: guiRawMessageCount,
+            receivedCount: guiReceivedCount,
+            rejectedCount: guiRejectedCount,
+            renderedCount: guiRenderedCount,
+            acknowledgedCount: guiAckCount,
+            lastRawRevision: guiLastRawRevision,
+            lastReceivedRevision: guiLastReceivedRevision,
+            lastRenderedRevision: guiLastRenderedRevision,
+            lastAckRevision: guiLastAckRevision,
+            lastRejectReason: guiLastRejectReason,
+            ...details,
+          };
+          try {
+            binaryWS.send(JSON.stringify(payload));
+            return true;
+          } catch (_error) {
+            return false;
+          }
+        }
+
+        function rejectGuiChannelMessage(reason, details = {}) {
+          guiRejectedCount += 1;
+          guiLastRejectReason = reason;
+          emitGuiChannelTelemetry("rejected", { reason, ...details });
         }
 
         function configureCastDebugLogger(context) {
@@ -5626,10 +5663,16 @@
 
         function handleGuiStateUpdateCommand(state, envelope) {
           if (!acceptGuiRevision(envelope)) {
+            rejectGuiChannelMessage("stale_revision", {
+              revision: Number(envelope?.guiRevision ?? -1),
+            });
             return;
           }
           const normalizedState = normalizeGuiState(state);
           if (!normalizedState) {
+            rejectGuiChannelMessage("unsupported_state_schema", {
+              revision: Number(envelope?.guiRevision ?? -1),
+            });
             writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported state schema.");
             return;
           }
@@ -5647,9 +5690,11 @@
               " acknowledged=" + guiAckCount,
             );
           }
+          emitGuiChannelTelemetry("received", { revision });
           if (renderState(normalizedState)) {
             guiRenderedCount += 1;
             guiLastRenderedRevision = revision;
+            emitGuiChannelTelemetry("rendered", { revision });
           }
           lastMirroredState = normalizedState;
           confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
@@ -5659,14 +5704,18 @@
                 type: "GUI_STATE_ACK",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                channel: "gui",
                 guiRevision: revision,
                 guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
+                rawCount: guiRawMessageCount,
+                rejectedCount: guiRejectedCount,
                 receivedCount: guiReceivedCount,
                 renderedCount: guiRenderedCount,
                 renderedRevision: guiLastRenderedRevision,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
+              emitGuiChannelTelemetry("acknowledged", { revision });
             } catch (e) {}
           }
         }
@@ -5789,6 +5838,14 @@
         }
 
         function handleReceiverCommand(d, source) {
+          if (d && d.type === "GUI_STATE_UPDATE") {
+            guiRawMessageCount += 1;
+            guiLastRawRevision = Number(d.guiRevision ?? -1);
+            emitGuiChannelTelemetry("raw_received", {
+              revision: guiLastRawRevision,
+              source: source || "unknown",
+            });
+          }
           const requiresAuthenticatedBridge = [
             "GUI_STATE_UPDATE",
             "CURSOR_UPDATE",
@@ -5819,6 +5876,9 @@
                 d.transport !== "gui" ||
                 Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION
               ) {
+                rejectGuiChannelMessage("unsupported_protocol_envelope", {
+                  revision: Number(d.guiRevision ?? -1),
+                });
                 writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported protocol envelope.");
                 return true;
               }
