@@ -154,6 +154,14 @@
         var lastGuiRevision = -1;
         var lastCursorRevision = -1;
         var guiReceivedCount = 0;
+        var guiDeferredCount = 0;
+        var guiRenderedCount = 0;
+        var guiAckCount = 0;
+        var guiRenderThrottleSkips = 0;
+        var guiLastReceivedRevision = -1;
+        var guiLastDeferredRevision = -1;
+        var guiLastRenderedRevision = -1;
+        var guiLastAckRevision = -1;
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
         var pcmRuntimeHighWatermarkDiagnostics = 0;
         var pcmRuntimeNativeFallbacks = 0;
@@ -207,6 +215,7 @@
         var receiverBridgeConfigReady = false;
         var pcmAudioPriorityActive = false;
         var deferredGuiState = null;
+        var deferredGuiRevision = -1;
         var deferredReceiverTelemetry = [];
         const MAX_DEFERRED_RECEIVER_TELEMETRY = 128;
 
@@ -531,9 +540,27 @@
           }
           if (deferredGuiState) {
             const state = deferredGuiState;
+            const revision = deferredGuiRevision;
             deferredGuiState = null;
-            renderState(state, true);
+            deferredGuiRevision = -1;
+            if (renderState(state, true)) {
+              guiRenderedCount += 1;
+              guiLastRenderedRevision = revision;
+            }
             lastMirroredState = state;
+            relayLogToStudio(
+              "🎛️ PCM GUI telemetry " + JSON.stringify({
+                reason: "pcm_priority_released",
+                received: guiReceivedCount,
+                deferred: guiDeferredCount,
+                rendered: guiRenderedCount,
+                acknowledged: guiAckCount,
+                lastReceivedRevision: guiLastReceivedRevision,
+                lastDeferredRevision: guiLastDeferredRevision,
+                lastRenderedRevision: guiLastRenderedRevision,
+                lastAckRevision: guiLastAckRevision,
+              }),
+            );
           }
           relayLogToStudio(
             "🎛️ Receiver PCM audio priority released" +
@@ -1648,9 +1675,66 @@
             checked: element.type === "checkbox" ? element.checked : undefined,
           };
           try {
+            markReceiverGuiInteractionPending(element, guiInteractionRevision, kind);
             binaryWS.send(JSON.stringify(message));
             relayLogToStudio("📡 Receiver: GUI interaction sent → " + element.id + " (" + kind + ")");
           } catch (e) {}
+        }
+
+        function clearReceiverGuiInteractionFeedback(element) {
+          if (!element) return;
+          const previousTimer = Number(element.dataset.castInteractionTimer || 0);
+          if (previousTimer) clearTimeout(previousTimer);
+          element.classList.remove("cast-interaction-pending", "cast-interaction-confirmed");
+          element.style.outline = element.dataset.castPreviousOutline || "";
+          element.style.outlineOffset = element.dataset.castPreviousOutlineOffset || "";
+          element.style.boxShadow = element.dataset.castPreviousBoxShadow || "";
+          delete element.dataset.castInteractionTimer;
+          delete element.dataset.castPreviousOutline;
+          delete element.dataset.castPreviousOutlineOffset;
+          delete element.dataset.castPreviousBoxShadow;
+          element.removeAttribute("aria-busy");
+        }
+
+        function markReceiverGuiInteractionPending(element, revision, kind) {
+          if (!element) return;
+          clearReceiverGuiInteractionFeedback(element);
+          element.dataset.castPreviousOutline = element.style.outline || "";
+          element.dataset.castPreviousOutlineOffset = element.style.outlineOffset || "";
+          element.dataset.castPreviousBoxShadow = element.style.boxShadow || "";
+          element.classList.add("cast-interaction-pending");
+          element.dataset.castInteractionRevision = String(revision);
+          element.dataset.castInteractionState = "pending";
+          element.setAttribute("aria-busy", "true");
+          element.style.outline = "2px solid #d4af37";
+          element.style.outlineOffset = "2px";
+          element.style.boxShadow = "0 0 12px rgba(212, 175, 55, 0.75)";
+          const timer = setTimeout(() => {
+            clearReceiverGuiInteractionFeedback(element);
+            element.dataset.castInteractionState = "sent";
+          }, kind === "input" ? 450 : 900);
+          element.dataset.castInteractionTimer = String(timer);
+        }
+
+        function confirmReceiverGuiInteraction(revision) {
+          const value = Number(revision);
+          if (!Number.isSafeInteger(value) || value < 0) return;
+          document.querySelectorAll("[data-cast-interaction-revision]").forEach((element) => {
+            if (Number(element.dataset.castInteractionRevision) !== value) return;
+            const previousTimer = Number(element.dataset.castInteractionTimer || 0);
+            if (previousTimer) clearTimeout(previousTimer);
+            element.classList.remove("cast-interaction-pending");
+            element.classList.add("cast-interaction-confirmed");
+            element.dataset.castInteractionState = "confirmed";
+            element.removeAttribute("aria-busy");
+            element.style.outline = "2px solid #63d471";
+            element.style.boxShadow = "0 0 12px rgba(99, 212, 113, 0.75)";
+            delete element.dataset.castInteractionTimer;
+            setTimeout(() => {
+              clearReceiverGuiInteractionFeedback(element);
+              element.dataset.castInteractionState = "confirmed";
+            }, 650);
+          });
         }
 
         function bindReceiverGuiInteractions() {
@@ -5102,6 +5186,61 @@
         let lastRenderTime = 0;
         const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
         const PCM_RENDER_THROTTLE_MS = 250; // Protect the audio callback from GUI repaint work.
+        const WAVEFORM_RENDER_THROTTLE_MS = 250;
+        let lastWaveformRenderTime = 0;
+        let pendingWaveformState = null;
+        let waveformRenderTimer = null;
+
+        function renderWaveformState(s) {
+          if (!s) return false;
+          try {
+            if (s.master && s.master.waveform) {
+              drawMirroredWaveform("master-waveform-L", s.master.waveform.left);
+              drawMirroredWaveform("master-waveform-R", s.master.waveform.right);
+            }
+            if (Array.isArray(s.tracks)) {
+              s.tracks.forEach((t, i) => {
+                if (!t || !t.waveform) return;
+                drawMirroredWaveform("t-wf-l-" + i, t.waveform.left);
+                drawMirroredWaveform("t-wf-r-" + i, t.waveform.right);
+                updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
+              });
+            }
+            return true;
+          } catch (e) {
+            console.error("❌ Receiver Waveform Render Error:", e);
+            return false;
+          }
+        }
+
+        function flushScheduledWaveformRender() {
+          waveformRenderTimer = null;
+          const state = pendingWaveformState;
+          pendingWaveformState = null;
+          if (!state) return;
+          lastWaveformRenderTime = Date.now();
+          renderWaveformState(state);
+        }
+
+        function scheduleWaveformRender(s, force = false) {
+          if (!s) return;
+          pendingWaveformState = s;
+          const elapsed = Date.now() - lastWaveformRenderTime;
+          if (force || elapsed >= WAVEFORM_RENDER_THROTTLE_MS) {
+            if (waveformRenderTimer) {
+              clearTimeout(waveformRenderTimer);
+              waveformRenderTimer = null;
+            }
+            flushScheduledWaveformRender();
+            return;
+          }
+          if (!waveformRenderTimer) {
+            waveformRenderTimer = setTimeout(
+              flushScheduledWaveformRender,
+              Math.max(0, WAVEFORM_RENDER_THROTTLE_MS - elapsed),
+            );
+          }
+        }
 
         const _lastParamsCache = [];
         const _lastFxCache = [];
@@ -5173,23 +5312,22 @@
         }
 
         function renderState(s, force = false) {
-          if (!s) return;
+          if (!s) return false;
           // Cursor updates are isolated from the full GUI render budget so
-          // PCM playout can defer control repainting without freezing the TV
-          // pointer. Ordering is guarded by cursor.revision.
+          // PCM playout can keep the TV pointer responsive while the regular
+          // GUI render remains throttled. Ordering is guarded by cursor.revision.
           renderCursorState(s.cursor);
-          if (pcmAudioPriorityActive && !force) {
-            pcmV2Telemetry.pcmAudioPriorityGuiSkips++;
-            deferredGuiState = s;
-            return;
-          }
           const now = Date.now();
           const renderThrottleMs =
             window._binaryActive || window._playbackMode === "pcm_fallback"
               ? PCM_RENDER_THROTTLE_MS
               : RENDER_THROTTLE_MS;
-          if (!force && now - lastRenderTime < renderThrottleMs) return;
+          if (!force && now - lastRenderTime < renderThrottleMs) {
+            guiRenderThrottleSkips += 1;
+            return false;
+          }
           lastRenderTime = now;
+          scheduleWaveformRender(s, force);
           try {
             if (s.transport) {
               updateText("recording-time-display", s.transport.position);
@@ -5198,10 +5336,6 @@
               }
             }
             if (s.master) {
-              if (s.master.waveform) {
-                drawMirroredWaveform("master-waveform-L", s.master.waveform.left);
-                drawMirroredWaveform("master-waveform-R", s.master.waveform.right);
-              }
               updateValue("master-volume", s.master.volume || 0);
               updateText(
                 "master-volume-value",
@@ -5319,12 +5453,6 @@
                 updateEffectOptions(`t-effect-select-${i}`, s.effectOptions, t.effectSelection);
                 updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
                 updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
-                if (t.waveform) {
-                  drawMirroredWaveform("t-wf-l-" + i, t.waveform.left);
-                  drawMirroredWaveform("t-wf-r-" + i, t.waveform.right);
-                  updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
-                }
-
                 if (t.params) {
                   const paramsStr = JSON.stringify(t.params);
                   const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
@@ -5419,7 +5547,9 @@
             }
           } catch (e) {
             console.error("❌ Receiver Render Error:", e);
+            return false;
           }
+          return true;
         }
 
         let currentBridgeIp = null;
@@ -5503,29 +5633,40 @@
             writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported state schema.");
             return;
           }
-          if (pcmAudioPriorityActive) {
-            pcmV2Telemetry.pcmAudioPriorityGuiSkips++;
-            deferredGuiState = normalizedState;
-            return;
-          }
+          const revision = Number(envelope.guiRevision || -1);
           guiReceivedCount += 1;
+          guiLastReceivedRevision = revision;
+          // GUI state is latest-value control data. PCM owns the audio clock,
+          // but it must not prevent the receiver from applying authenticated
+          // controls, labels, dialogs, and interaction state.
           if (guiReceivedCount === 1 || guiReceivedCount % 20 === 0) {
             relayLogToStudio(
               "🖥️ Receiver GUI telemetry: received=" + guiReceivedCount +
-              " revision=" + Number(envelope.guiRevision || -1),
+              " revision=" + revision +
+              " rendered=" + guiRenderedCount +
+              " acknowledged=" + guiAckCount,
             );
           }
-          renderState(normalizedState);
+          if (renderState(normalizedState)) {
+            guiRenderedCount += 1;
+            guiLastRenderedRevision = revision;
+          }
           lastMirroredState = normalizedState;
+          confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
               binaryWS.send(JSON.stringify({
                 type: "GUI_STATE_ACK",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
-                guiRevision: Number(envelope.guiRevision || -1),
+                guiRevision: revision,
+                guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
                 receivedCount: guiReceivedCount,
+                renderedCount: guiRenderedCount,
+                renderedRevision: guiLastRenderedRevision,
               }));
+              guiAckCount += 1;
+              guiLastAckRevision = revision;
             } catch (e) {}
           }
         }
