@@ -152,6 +152,7 @@
         var lastOrderedPlaybackAt = 0;
         const PLAYER_MANAGER_ORDER_GUARD_MS = 5000;
         var lastGuiRevision = -1;
+        var guiSessionNonce = null;
         var lastCursorRevision = -1;
         var guiReceivedCount = 0;
         var guiRawMessageCount = 0;
@@ -265,6 +266,7 @@
                 type: "GUI_READY",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                guiSessionNonce,
                 guiRevision: lastGuiRevision,
                 bootStage: "bridge_authenticated",
               }));
@@ -297,6 +299,7 @@
         var castDebugLogger = null;
         var castDebugLoggerConfigured = false;
         const CAST_DEBUG_TAG = "MXS004.RECEIVER";
+        const cafTelemetryLastSentAt = Object.create(null);
 
         function isBuildIdentity(value) {
           return !!(
@@ -482,6 +485,36 @@
           return context.getPlayerManager();
         }
 
+        // Track labels are copied from the sender's authenticated GUI snapshot.
+        // They are optional Cast metadata only; the receiver never derives audio
+        // identity from the media element or changes the native/PCM path here.
+        function getSenderAuthoritativeTrackMetadata() {
+          if (!lastMirroredState || !Array.isArray(lastMirroredState.tracks)) {
+            return null;
+          }
+          const tracks = lastMirroredState.tracks
+            .slice(0, 2)
+            .map(function (track, index) {
+              if (!track || typeof track !== "object") return null;
+              const fileName = String(track.fileName || "").trim();
+              if (!fileName) return null;
+              return {
+                trackId: String(track.trackId || index + 1),
+                fileName,
+                title: fileName,
+              };
+            })
+            .filter(Boolean);
+          if (tracks.length === 0) return null;
+          const activeTrack = lastMirroredState.tracks.find(function (track) {
+            return track && (track.isPlaying || track.isRecording);
+          });
+          return {
+            tracks,
+            activeTrackId: activeTrack ? String(activeTrack.trackId || "") : null,
+          };
+        }
+
         function publishMxsPlaybackStatus(playbackState, reason) {
           const pm = getCastPlayerManager();
           if (!pm) return;
@@ -497,6 +530,10 @@
             reason: reason || "",
             timestampMs: Date.now(),
           };
+          const trackMetadata = getSenderAuthoritativeTrackMetadata();
+          if (trackMetadata) {
+            customState.trackMetadata = trackMetadata;
+          }
           try {
             if (typeof pm.sendCustomState === "function") {
               pm.sendCustomState(customState);
@@ -885,6 +922,7 @@
             type: "GUI_CHANNEL_TELEMETRY",
             transport: "gui",
             guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            guiSessionNonce,
             event,
             rawCount: guiRawMessageCount,
             receivedCount: guiReceivedCount,
@@ -912,7 +950,34 @@
             type: "GUI_ERROR",
             transport: "gui",
             guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            guiSessionNonce,
             reason: String(reason || "unknown_gui_error"),
+            ...details,
+          };
+          try {
+            binaryWS.send(JSON.stringify(payload));
+            return true;
+          } catch (_error) {
+            return false;
+          }
+        }
+
+        function emitCafTelemetry(event, details = {}) {
+          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
+          const now = Date.now();
+          const throttleMs = event === "MEDIA_STATUS" || event === "BUFFERING" ? 250 : 0;
+          if (throttleMs && now - Number(cafTelemetryLastSentAt[event] || 0) < throttleMs) return false;
+          cafTelemetryLastSentAt[event] = now;
+          const payload = {
+            type: "CAF_TELEMETRY",
+            transport: "cast_telemetry",
+            protocolVersion: 1,
+            guiSessionNonce,
+            event: String(event || "unknown"),
+            timestampMs: now,
+            playbackMode: window._playbackMode || "unknown",
+            nativeStreamActive: Boolean(nativeStreamActive),
+            nativeStreamPaused: Boolean(nativeStreamPaused),
             ...details,
           };
           try {
@@ -1723,6 +1788,7 @@
             type: "GUI_ACTION",
             transport: "gui",
             guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            guiSessionNonce,
             actionType: "interaction",
             guiInteractionRevision,
             kind,
@@ -2171,6 +2237,47 @@
             }
           }
 
+          // CAF's supported-command mask is the primary policy boundary. The
+          // explicit interceptors below also return an error for remote/voice
+          // requests that CAF exposes as message types, while preserving the
+          // internal requestId=0 STOP lifecycle used by the native prewarm path.
+          const rejectUnsupportedRemoteCommand = function (commandName, request) {
+            const messages = cast.framework.messages;
+            const errorTypes = messages.ErrorType || {};
+            const errorReasons = messages.ErrorReason || {};
+            const error = new messages.ErrorData(
+              errorTypes.INVALID_REQUEST || errorTypes.LOAD_FAILED,
+            );
+            error.reason = errorReasons.INVALID_REQUEST;
+            relayLogToStudio(
+              "⛔ Receiver: rejected unsupported remote command " +
+                commandName +
+                " (requestId=" +
+                (request && request.requestId !== undefined ? request.requestId : "n/a") +
+                ").",
+            );
+            return error;
+          };
+
+          const unsupportedRemoteMessageTypes = [
+            [messageType.SEEK, "SEEK"],
+            [messageType.NEXT, "NEXT"],
+            [messageType.QUEUE_NEXT, "NEXT"],
+            [messageType.PREVIOUS, "PREVIOUS"],
+            [messageType.QUEUE_PREV, "PREVIOUS"],
+            [messageType.SET_PLAYBACK_RATE, "PLAYBACK_RATE"],
+            [messageType.PLAYBACK_RATE, "PLAYBACK_RATE"],
+          ];
+          const installedUnsupportedMessageTypes = new Set();
+          unsupportedRemoteMessageTypes.forEach(function (entry) {
+            const type = entry[0];
+            if (!type || installedUnsupportedMessageTypes.has(type)) return;
+            installedUnsupportedMessageTypes.add(type);
+            pm.setMessageInterceptor(type, function (request) {
+              return rejectUnsupportedRemoteCommand(entry[1], request);
+            });
+          });
+
           if (typeof pm.setMediaUrlResolver === "function") {
             pm.setMediaUrlResolver(function (request) {
               const media = request && request.media ? request.media : null;
@@ -2211,6 +2318,11 @@
           if (typeof pm.setMessageInterceptor === "function" && messageType && messageType.LOAD) {
             pm.setMessageInterceptor(messageType.LOAD, function (request) {
               writeCastDebug("info", "Intercepting LOAD request");
+              emitCafTelemetry("LOAD", {
+                contentId: request?.media?.contentId || null,
+                contentUrl: request?.media?.contentUrl || null,
+                source: request?.media?.customData?.source || null,
+              });
               if (!request || !request.media) {
                 const error = new cast.framework.messages.ErrorData(
                   cast.framework.messages.ErrorType.LOAD_FAILED,
@@ -2233,12 +2345,19 @@
                 }
                 request.media.contentType = "audio/wav";
                 request.media.streamType = cast.framework.messages.StreamType.LIVE;
+                // CAF Live API audit target: duration=-1. Keep the current
+                // native stream contract unchanged until physical Chromecast
+                // QA validates that switch; production currently uses null.
                 request.media.duration = null;
                 request.media.contentUrl = streamUrl;
                 if (!request.media.customData) {
                   request.media.customData = {};
                 }
                 request.media.customData.streamUrl = streamUrl;
+                const trackMetadata = getSenderAuthoritativeTrackMetadata();
+                if (trackMetadata) {
+                  request.media.customData.trackMetadata = trackMetadata;
+                }
                 writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + streamUrl);
               } else {
                 const contentId = request && request.media ? request.media.contentId : "unknown";
@@ -2324,6 +2443,9 @@
                 return;
               }
               pm.setMessageInterceptor(entry[0], function (request) {
+                if (entry[1] === "STOP" && Number(request && request.requestId) !== 0) {
+                  return rejectUnsupportedRemoteCommand("STOP", request);
+                }
                 return deferPlayerManagerCommand(entry[1], request);
               });
             });
@@ -2340,6 +2462,7 @@
           const events = cast.framework.events && cast.framework.events.EventType ? cast.framework.events.EventType : {};
           const messages = cast.framework.messages || {};
           [
+            events.BUFFERING,
             // PLAYING is the documented CAF event forwarded from the bound
             // HTMLMediaElement. PLAYER_STATE_CHANGED is a sender-side event,
             // not a Web Receiver PlayerManager event.
@@ -2365,6 +2488,13 @@
                       : playerState;
                 const msg = "CAF event " + eventType + (value !== "" ? ": " + value : "");
                 writeCastDebug(eventType === events.ERROR ? "error" : "debug", msg);
+                emitCafTelemetry(eventType, {
+                  playerState,
+                  value,
+                  errorCode: event && event.errorCode !== undefined ? event.errorCode : null,
+                  mediaTime: Number.isFinite(Number(event?.currentMediaTime)) ? Number(event.currentMediaTime) : null,
+                  readyState: document.getElementById("cast-media-element")?.readyState ?? null,
+                });
                 if (eventType === events.ERROR || eventType === events.PLAYING || eventType === events.PAUSE) {
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
@@ -3655,16 +3785,29 @@
             media.contentId = "mxs-native-stream-" + (attemptId !== undefined ? attemptId : Date.now());
             media.contentType = "audio/wav";
             media.streamType = messages.StreamType.LIVE;
+            // See the LOAD interceptor above: duration=-1 remains an isolated
+            // audit target until Chromecast QA approves changing this path.
             media.duration = null;
             // CAF uses this live anchor to avoid replaying an older buffered
             // position when it attaches to the progressive LAN stream.
             media.startAbsoluteTime = Date.now() / 1000;
             media.contentUrl = streamUrl;
             media.customData = { streamUrl: streamUrl, source: "mxs004-native-stream" };
+            const trackMetadata = getSenderAuthoritativeTrackMetadata();
+            if (trackMetadata) {
+              media.customData.trackMetadata = trackMetadata;
+            }
             if (typeof messages.GenericMediaMetadata === "function") {
               const metadata = new messages.GenericMediaMetadata();
               metadata.title = "MXS-004 Studio";
               metadata.subtitle = "Native LAN audio stream";
+              const activeTrack = trackMetadata && trackMetadata.tracks.find(function (track) {
+                return track.trackId === trackMetadata.activeTrackId;
+              });
+              if (activeTrack) {
+                metadata.title = activeTrack.title;
+                metadata.subtitle = "MXS-004 — " + activeTrack.fileName;
+              }
               media.metadata = metadata;
             }
             loadRequestData.media = media;
@@ -5773,6 +5916,7 @@
                 type: "GUI_ACK",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                guiSessionNonce,
                 ackType: "snapshot",
                 channel: "gui",
                 guiRevision: revision,
@@ -5951,6 +6095,12 @@
             );
             return true;
           }
+          if (requiresAuthenticatedGui && d.guiSessionNonce !== guiSessionNonce) {
+            rejectGuiChannelMessage("stale_gui_session", {
+              revision: Number(d.guiRevision ?? -1),
+            });
+            return true;
+          }
           if (
             requiresAuthenticatedAudio &&
             (!identityAllowsAudio() ||
@@ -6097,6 +6247,7 @@
             pcmV2Telemetry = createPcmV2Telemetry();
             playbackModeSocketGeneration++;
             resetGuiRevisionGate("bridge_open");
+            guiSessionNonce = null;
             console.log("✅ Binary Bridge Connected");
             markReceiverBoot("bridge_connected", { url: url });
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
@@ -6106,6 +6257,7 @@
                   type: "GUI_READY",
                   transport: "gui",
                   guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                  guiSessionNonce,
                   guiRevision: lastGuiRevision,
                   bootStage: window._receiverBootStage || "gui_revealed",
                 }));
@@ -6359,6 +6511,11 @@
                   if (d.pcmProtocol && !acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
                     return;
                   }
+                  if (typeof d.guiSessionNonce !== "string" || d.guiSessionNonce.length < 8 || d.guiSessionNonce.length > 128) {
+                    relayLogToStudio("⚠️ Receiver: BRIDGE_CONFIG missing a valid GUI session nonce.");
+                    return;
+                  }
+                  guiSessionNonce = d.guiSessionNonce;
                   receiverBridgeConfigReady = true;
                   maybeEnableReceiverHandshakeTelemetry();
                   flushPendingPlayoutState();
@@ -6500,6 +6657,11 @@
               ) {
                 return;
               }
+              if (typeof d.guiSessionNonce !== "string" || d.guiSessionNonce.length < 8 || d.guiSessionNonce.length > 128) {
+                relayLogToStudio("⚠️ Receiver: Cast BRIDGE_CONFIG missing a valid GUI session nonce.");
+                return;
+              }
+              guiSessionNonce = d.guiSessionNonce;
               const newRate = d.config ? d.config.sampleRate : null;
               configReceived = true;
               if (newRate && window._studioRate !== newRate) {
@@ -6606,7 +6768,14 @@
               playbackConfig.autoPauseDuration = 0;
               playbackConfig.autoResumeDuration = 0;
               options.playbackConfig = playbackConfig;
+              const supportedCommands =
+                (Number(cast.framework.messages?.Command?.PAUSE) || 0) |
+                (Number(cast.framework.messages?.Command?.STREAM_VOLUME) || 0) |
+                (Number(cast.framework.messages?.Command?.STREAM_MUTE) || 0);
+              options.supportedCommands = supportedCommands;
+              options.enforceSupportedCommands = true;
               options.disableIdleTimeout = true;
+              relayLogToStudio("✅ Receiver: CAF remote command policy enforced (PAUSE/VOLUME/MUTE only).");
               context.start(options);
               markReceiverBoot("caf_started");
               setTimeout(function () {
