@@ -1619,9 +1619,14 @@
 
         function isReceiverInteractiveControl(element) {
           if (!element) return false;
-          if (element.dataset.dialogId && element.dataset.controlIndex !== undefined) return true;
+          if (
+            element.dataset.dialogId &&
+            (element.dataset.controlIndex !== undefined ||
+              element.dataset.actionIndex !== undefined ||
+              element.dataset.actionId)
+          ) return true;
           if (!element.id) return false;
-          return /^(t-(rec|stop|play|rev)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain)-sl-\d+|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|sample-\d+)$/.test(element.id);
+          return /^(t-(rec|stop|play|rev|slice)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain|ls|le)-sl-\d+|t-input-\d+|t-effect-select-\d+|t-fx-(left|right)-\d+|t-fx-chk-\d+-\d+|t-lfo[12]-chk-\d+-(pitch|vol|pan|treble|mid_freq|mid_gain|bass)|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|record-as-select|import-files-button|show-docs-button|sample-station-button|settings-button|sample-\d+)$/.test(element.id);
         }
 
         function sendGuiInteraction(element, kind) {
@@ -1637,6 +1642,8 @@
             targetId: element.id,
             dialogId: element.dataset.dialogId || undefined,
             controlIndex: element.dataset.controlIndex === undefined ? undefined : Number(element.dataset.controlIndex),
+            actionIndex: element.dataset.actionIndex === undefined ? undefined : Number(element.dataset.actionIndex),
+            actionId: element.dataset.actionId || undefined,
             value: element.type === "checkbox" ? undefined : element.value,
             checked: element.type === "checkbox" ? element.checked : undefined,
           };
@@ -1650,6 +1657,10 @@
           document.addEventListener("click", (event) => {
             const target = event.target && event.target.closest ? event.target.closest("button") : null;
             if (target) sendGuiInteraction(target, "click");
+          });
+          document.addEventListener("dblclick", (event) => {
+            const target = event.target && event.target.closest ? event.target.closest("button") : null;
+            if (target && /^sample-\d+$/.test(target.id)) sendGuiInteraction(target, "settings");
           });
           document.addEventListener("input", (event) => {
             const target = event.target;
@@ -4032,6 +4043,9 @@
               var b = document.createElement("button");
               b.className = "sample-btn";
               b.id = "sample-" + p;
+              b.dataset.sample = String(p);
+              b.type = "button";
+              b.setAttribute("aria-label", "Sample Pad " + p);
               b.textContent = p;
               g.appendChild(b);
             }
@@ -4042,17 +4056,18 @@
             var t = document.createElement("div");
             t.className = "track";
             t.id = "track-" + i;
+            t.dataset.trackIndex = String(i);
             t.innerHTML = `
                         <div class="track-header">TRACK ${i + 1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
-                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div></div></div>
-                        <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select class="input-source app-select"><option>Microphone</option></select></div><span class="file-name-display" id="t-file-${i}"></span></div>
+                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
+                        <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select id="t-input-${i}" class="input-source app-select"><option value="mic">Microphone</option><option value="file">Import File</option><option value="system">System Loopback</option></select></div><span class="file-name-display" id="t-file-${i}"></span></div>
                         <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button class="fx-chain-arrow">&gt;</button></div></div>
-                        <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select class="effect-type-select app-select flex-1-no-margin"></select></div>
+                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
+                        <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
                         <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
@@ -4062,6 +4077,11 @@
         function prepareReceiverUi() {
           markReceiverBoot("receiver_script_loaded");
           reportReceiverRuntimeCapabilities();
+          const studioRoot = document.getElementById("studio-root");
+          if (studioRoot) {
+            studioRoot.dataset.guiContractVersion = "2";
+            studioRoot.dataset.guiAudioPath = "pcm-native-locked";
+          }
           bindReceiverGuiInteractions();
           markReceiverBoot("gui_structurally_ready");
         }
@@ -4930,6 +4950,75 @@
           el.setAttribute("aria-disabled", buttonState.disabled ? "true" : "false");
         }
 
+        function drawMirroredWaveform(id, waveform) {
+          const canvas = getEl(id);
+          if (!canvas || !waveform || !Array.isArray(waveform.points)) return;
+          const signature = JSON.stringify(waveform);
+          const cacheKey = "waveform:" + id;
+          if (valCache[cacheKey] === signature) return;
+          valCache[cacheKey] = signature;
+          const width = canvas.clientWidth || Number(canvas.getAttribute("width")) || 238;
+          const height = canvas.clientHeight || Number(canvas.getAttribute("height")) || 26;
+          if (canvas.width !== width || canvas.height !== height) {
+            canvas.width = width;
+            canvas.height = height;
+          }
+          const context = canvas.getContext("2d");
+          if (!context) return;
+          context.clearRect(0, 0, width, height);
+          context.strokeStyle = waveform.active ? "#d4af37" : "rgba(68, 68, 68, 0.5)";
+          context.fillStyle = waveform.active ? "rgba(212, 175, 55, 0.14)" : "transparent";
+          context.lineWidth = 1.25;
+          if (!waveform.points.length) {
+            context.beginPath();
+            context.moveTo(0, height / 2);
+            context.lineTo(width, height / 2);
+            context.stroke();
+            return;
+          }
+          context.beginPath();
+          waveform.points.forEach((point, index) => {
+            const x = (index / Math.max(1, waveform.points.length - 1)) * width;
+            const min = Math.max(-1, Math.min(1, Number(point?.[0]) || 0));
+            const max = Math.max(-1, Math.min(1, Number(point?.[1]) || 0));
+            const yTop = ((1 - max) * height) / 2;
+            const yBottom = ((1 - min) * height) / 2;
+            context.moveTo(x, yTop);
+            context.lineTo(x, yBottom);
+          });
+          context.stroke();
+          if (waveform.active) {
+            context.globalAlpha = 0.7;
+            context.fill();
+            context.globalAlpha = 1;
+          }
+        }
+
+        function updateMirroredPlayhead(id, position) {
+          const value = `${Math.max(0, Math.min(1, Number(position) || 0)) * 100}%`;
+          updateStyleLeft(id, value);
+        }
+
+        function updateEffectOptions(id, options, selected) {
+          const select = getEl(id);
+          if (!select || !Array.isArray(options) || !options.length) return;
+          const signature = JSON.stringify(options);
+          const cacheKey = "effect-options:" + id;
+          if (valCache[cacheKey] !== signature) {
+            select.replaceChildren();
+            options.forEach((option) => {
+              const item = document.createElement("option");
+              item.value = String(option);
+              item.textContent = String(option) === "none" ? "None" : String(option);
+              select.appendChild(item);
+            });
+            valCache[cacheKey] = signature;
+          }
+          if (selected !== undefined && selected !== null && select.value !== String(selected)) {
+            select.value = String(selected);
+          }
+        }
+
         let lastDialogMirrorState = "";
         function renderDialogMirrors(dialogs) {
           const root = getEl("gui-dialog-mirror-root");
@@ -4942,7 +5031,10 @@
           root.hidden = list.length === 0;
           list.forEach((dialog) => {
             const panel = document.createElement("section");
-            panel.className = "gui-dialog-mirror";
+            panel.className = `gui-dialog-mirror gui-dialog-${dialog.kind || "generic"}`;
+            panel.dataset.dialogId = dialog.id || "";
+            panel.dataset.dialogKind = dialog.kind || "generic";
+            if (dialog.padId) panel.dataset.padId = String(dialog.padId);
             panel.style.left = `${Math.max(0, Math.min(0.85, Number(dialog.left) || 0.2)) * 100}%`;
             panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
             panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
@@ -4990,6 +5082,18 @@
                 row.appendChild(output);
               }
               panel.appendChild(row);
+            });
+            (dialog.actions || []).forEach((action, actionIndex) => {
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = "gui-dialog-action-btn";
+              button.textContent = action.label || "Action";
+              button.disabled = Boolean(action.disabled);
+              button.dataset.dialogId = dialog.id || "";
+              button.dataset.actionIndex = String(action.actionIndex ?? actionIndex);
+              button.dataset.actionId = action.actionId || `button-${actionIndex}`;
+              button.setAttribute("aria-pressed", action.pressed ? "true" : "false");
+              panel.appendChild(button);
             });
             root.appendChild(panel);
           });
@@ -5094,6 +5198,10 @@
               }
             }
             if (s.master) {
+              if (s.master.waveform) {
+                drawMirroredWaveform("master-waveform-L", s.master.waveform.left);
+                drawMirroredWaveform("master-waveform-R", s.master.waveform.right);
+              }
               updateValue("master-volume", s.master.volume || 0);
               updateText(
                 "master-volume-value",
@@ -5161,6 +5269,19 @@
                   if (p.loaded && p.name) {
                     updateText(btnId, p.name.substring(0, 6));
                   }
+                  const pad = getEl(btnId);
+                  if (pad) {
+                    pad.dataset.padId = String(p.id || i + 1);
+                    pad.dataset.padName = String(p.name || "");
+                    pad.dataset.padMode = String(p.mode || "oneshot");
+                    pad.dataset.padLoaded = p.loaded ? "true" : "false";
+                    pad.dataset.padMuted = p.muted ? "true" : "false";
+                    pad.dataset.padReverse = p.reverse ? "true" : "false";
+                    pad.title = p.loaded && p.name
+                      ? `${p.name} — double-click for settings`
+                      : `Pad ${p.id || i + 1} — double-click for settings`;
+                    pad.setAttribute("aria-label", pad.title);
+                  }
                 });
               }
             }
@@ -5168,6 +5289,7 @@
               s.tracks.forEach((t, i) => {
                 const trackName = t.fileName || "Ready";
                 updateText("t-scroll-" + i, trackName);
+                updateText("t-file-" + i, t.fileName || "");
                 updateClass(
                   "t-scroll-" + i,
                   trackName.length > 15
@@ -5179,6 +5301,8 @@
                   trackLabel.setAttribute("title", trackName);
                   trackLabel.dataset.trackState = t.isPlaying ? "playing" : t.isPaused ? "paused" : "stopped";
                 }
+                const fileLabel = getEl("t-file-" + i);
+                if (fileLabel) fileLabel.setAttribute("title", t.fileName || "");
                 updateClass(
                   "t-st-" + i,
                   "status-indicator " +
@@ -5192,8 +5316,14 @@
                 updateButtonState(`t-stop-${i}`, t.buttons && t.buttons.stop);
                 updateButtonState(`t-play-${i}`, t.buttons && t.buttons.play);
                 updateButtonState(`t-rev-${i}`, t.buttons && t.buttons.reverse);
+                updateEffectOptions(`t-effect-select-${i}`, s.effectOptions, t.effectSelection);
                 updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
                 updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
+                if (t.waveform) {
+                  drawMirroredWaveform("t-wf-l-" + i, t.waveform.left);
+                  drawMirroredWaveform("t-wf-r-" + i, t.waveform.right);
+                  updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
+                }
 
                 if (t.params) {
                   const paramsStr = JSON.stringify(t.params);
@@ -5421,6 +5551,7 @@
           });
           const normalized = {
             ...state,
+            guiContractVersion: Number(state.guiContractVersion) || 1,
             transport: {
               position: String(state.transport?.position || "00:00:00"),
             },
