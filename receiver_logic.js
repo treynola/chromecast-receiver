@@ -70,7 +70,7 @@
         const PENDING_BINARY_FRAMES_MAX = 48;
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
-        const CAST_GUI_PROTOCOL_VERSION = 1;
+        const CAST_GUI_PROTOCOL_VERSION = 3;
         let guiInteractionRevision = 0;
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         var nativeStreamActive = false;
@@ -153,6 +153,7 @@
         const PLAYER_MANAGER_ORDER_GUARD_MS = 5000;
         var lastGuiRevision = -1;
         var guiSessionNonce = null;
+        var lastGuiReadyNonce = null;
         var lastCursorRevision = -1;
         var guiReceivedCount = 0;
         var guiRawMessageCount = 0;
@@ -260,20 +261,35 @@
           // but it can arrive before the authenticated command gate is ready.
           // Send a second readiness edge so the sender can replay its latest
           // GUI snapshot after HANDSHAKE_ACK and BRIDGE_CONFIG are both live.
-          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-            try {
-              binaryWS.send(JSON.stringify({
-                type: "GUI_READY",
-                transport: "gui",
-                guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
-                guiSessionNonce,
-                guiRevision: lastGuiRevision,
-                bootStage: "bridge_authenticated",
-              }));
-              relayLogToStudio("✅ Receiver: Authenticated GUI_READY sent; GUI snapshot replay is now safe.");
-            } catch (e) {
-              relayLogToStudio("⚠️ Receiver: Authenticated GUI_READY send failed: " + e.message);
-            }
+          sendAuthenticatedGuiReady("bridge_authenticated");
+        }
+
+        function sendAuthenticatedGuiReady(bootStage) {
+          if (
+            !binaryWS ||
+            binaryWS.readyState !== WebSocket.OPEN ||
+            typeof guiSessionNonce !== "string" ||
+            guiSessionNonce.length < 8
+          ) return false;
+          const stage = String(bootStage || "gui_revealed");
+          const signature = guiSessionNonce + ":" + stage;
+          if (lastGuiReadyNonce === signature) return true;
+          try {
+            binaryWS.send(JSON.stringify({
+              type: "GUI_READY",
+              transport: "gui",
+              guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+              guiSessionNonce,
+              guiRevision: lastGuiRevision,
+              latestSnapshotReplay: true,
+              bootStage: stage,
+            }));
+            lastGuiReadyNonce = signature;
+            relayLogToStudio("✅ Receiver: Authenticated GUI_READY sent; latest GUI snapshot replay requested.");
+            return true;
+          } catch (e) {
+            relayLogToStudio("⚠️ Receiver: Authenticated GUI_READY send failed: " + e.message);
+            return false;
           }
         }
 
@@ -1770,6 +1786,7 @@
 
         function isReceiverInteractiveControl(element) {
           if (!element) return false;
+          if (element.dataset.registryActionId && element.dataset.registryDialogId) return true;
           if (
             element.dataset.dialogId &&
             (element.dataset.controlIndex !== undefined ||
@@ -1789,10 +1806,10 @@
             transport: "gui",
             guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
             guiSessionNonce,
-            actionType: "interaction",
+            actionType: element.dataset.registryActionId ? "registry" : "interaction",
             guiInteractionRevision,
             kind,
-            targetId: element.id,
+            targetId: element.id || "registry-action",
             dialogId: element.dataset.dialogId || undefined,
             controlIndex: element.dataset.controlIndex === undefined ? undefined : Number(element.dataset.controlIndex),
             actionIndex: element.dataset.actionIndex === undefined ? undefined : Number(element.dataset.actionIndex),
@@ -1800,6 +1817,17 @@
             value: element.type === "checkbox" ? undefined : element.value,
             checked: element.type === "checkbox" ? element.checked : undefined,
           };
+          if (element.dataset.registryActionId) {
+            message.registryActionId = element.dataset.registryActionId;
+            message.registryDialogId = element.dataset.registryDialogId;
+            const panel = element.closest("[data-registry-dialog-id]");
+            const context = {};
+            panel?.querySelectorAll("select[data-registry-context]").forEach((select) => {
+              const key = select.dataset.registryContext;
+              if (key) context[key] = Number(select.value);
+            });
+            message.registryContext = context;
+          }
           try {
             markReceiverGuiInteractionPending(element, guiInteractionRevision, kind);
             binaryWS.send(JSON.stringify(message));
@@ -2491,6 +2519,13 @@
                   : event && event.playerState
                     ? event.playerState
                     : "";
+                const mediaElement = document.getElementById("cast-media-element");
+                const mediaDuration = mediaStatus && Number.isFinite(Number(mediaStatus.streamDuration))
+                  ? Number(mediaStatus.streamDuration)
+                  : (mediaElement && Number.isFinite(Number(mediaElement.duration)) ? Number(mediaElement.duration) : null);
+                const mediaCurrentTime = Number.isFinite(Number(event?.currentMediaTime))
+                  ? Number(event.currentMediaTime)
+                  : (mediaElement && Number.isFinite(Number(mediaElement.currentTime)) ? Number(mediaElement.currentTime) : null);
                 const value =
                   event && event.value !== undefined
                     ? event.value
@@ -2503,7 +2538,12 @@
                   playerState,
                   value,
                   errorCode: event && event.errorCode !== undefined ? event.errorCode : null,
-                  mediaTime: Number.isFinite(Number(event?.currentMediaTime)) ? Number(event.currentMediaTime) : null,
+                  mediaTime: mediaCurrentTime,
+                  currentTime: mediaCurrentTime,
+                  duration: mediaDuration,
+                  playbackRate: mediaElement && Number.isFinite(Number(mediaElement.playbackRate))
+                    ? Number(mediaElement.playbackRate)
+                    : null,
                   mediaSessionId: mediaStatus && mediaStatus.mediaSessionId !== undefined
                     ? mediaStatus.mediaSessionId
                     : null,
@@ -4337,12 +4377,27 @@
         ];
 
         function buildGUI() {
+          if (!document.getElementById("gui-dialog-registry-root")) {
+            const registryRoot = document.createElement("div");
+            registryRoot.id = "gui-dialog-registry-root";
+            registryRoot.setAttribute("aria-live", "polite");
+            const studioRoot = document.getElementById("studio-root");
+            if (studioRoot) studioRoot.appendChild(registryRoot);
+          }
           if (!document.getElementById("gui-dialog-mirror-root")) {
             const dialogRoot = document.createElement("div");
             dialogRoot.id = "gui-dialog-mirror-root";
             dialogRoot.setAttribute("aria-hidden", "true");
             const studioRoot = document.getElementById("studio-root");
             if (studioRoot) studioRoot.appendChild(dialogRoot);
+          }
+          if (!document.getElementById("waveform-render-status")) {
+            const waveformStatus = document.createElement("div");
+            waveformStatus.id = "waveform-render-status";
+            waveformStatus.setAttribute("role", "status");
+            waveformStatus.setAttribute("aria-live", "polite");
+            const studioRoot = document.getElementById("studio-root");
+            if (studioRoot) studioRoot.appendChild(waveformStatus);
           }
           var g = document.getElementById("sample-grid");
           if (g) {
@@ -4376,7 +4431,7 @@
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div>`;
+                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><span class="lfo-marker lfo-marker-1" id="t-lfo-marker-1-${i}-${cfg.p}" hidden>L1</span><span class="lfo-marker lfo-marker-2" id="t-lfo-marker-2-${i}-${cfg.p}" hidden>L2</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
           updateScale();
@@ -4387,7 +4442,7 @@
           reportReceiverRuntimeCapabilities();
           const studioRoot = document.getElementById("studio-root");
           if (studioRoot) {
-            studioRoot.dataset.guiContractVersion = "2";
+            studioRoot.dataset.guiContractVersion = "3";
             studioRoot.dataset.guiAudioPath = "pcm-native-locked";
           }
           bindReceiverGuiInteractions();
@@ -5337,6 +5392,74 @@
         }
 
         let lastDialogMirrorState = "";
+        let lastDialogRegistryState = "";
+        function renderDialogRegistry(registry) {
+          const root = getEl("gui-dialog-registry-root");
+          if (!root) return;
+          const list = Array.isArray(registry) ? registry : [];
+          const signature = JSON.stringify(list);
+          if (signature === lastDialogRegistryState) return;
+          lastDialogRegistryState = signature;
+          root.replaceChildren();
+          root.hidden = list.length === 0;
+          if (!list.length) return;
+          const heading = document.createElement("h2");
+          heading.textContent = "Available Studio Menus";
+          root.appendChild(heading);
+          list.forEach((entry) => {
+            const panel = document.createElement("section");
+            panel.className = "gui-dialog-registry-entry";
+            panel.dataset.dialogId = entry.id || "";
+            panel.dataset.registryDialogId = entry.id || "";
+            panel.dataset.dialogKind = entry.kind || "generic";
+            const title = document.createElement("h3");
+            title.textContent = entry.title || entry.kind || "Studio Menu";
+            panel.appendChild(title);
+            const scope = document.createElement("small");
+            scope.textContent = `${entry.scope || "studio"} · ${entry.available === false ? "unavailable" : "ready"}`;
+            panel.appendChild(scope);
+            (entry.controls || []).forEach((control) => {
+              const item = document.createElement("span");
+              item.className = "gui-dialog-registry-control";
+              item.textContent = String(control);
+              panel.appendChild(item);
+            });
+            (entry.menus || []).forEach((menu) => {
+              const menuLabel = document.createElement("label");
+              menuLabel.className = "gui-dialog-registry-menu";
+              menuLabel.textContent = menu.label || menu.id || "Menu";
+              const select = document.createElement("select");
+              select.disabled = !menu.context;
+              select.dataset.registryContext = menu.context || "";
+              select.dataset.registryMenuId = menu.id || "";
+              (menu.options || []).forEach((option) => {
+                const item = document.createElement("option");
+                item.value = String(option);
+                item.textContent = String(option);
+                select.appendChild(item);
+              });
+              menuLabel.appendChild(select);
+              panel.appendChild(menuLabel);
+            });
+            if (entry.openActionId) {
+              const openButton = document.createElement("button");
+              openButton.type = "button";
+              openButton.className = "gui-dialog-registry-action";
+              openButton.id = `registry-${entry.kind}-${String(entry.id || "menu").replace(/[^a-z0-9]+/gi, "-")}`;
+              openButton.dataset.registryActionId = entry.openActionId;
+              openButton.dataset.registryDialogId = entry.id || "";
+              openButton.textContent = `Open ${entry.title || "Studio Menu"}`;
+              openButton.setAttribute("aria-label", openButton.textContent);
+              panel.appendChild(openButton);
+            }
+            const actions = document.createElement("small");
+            actions.className = "gui-dialog-registry-actions";
+            actions.textContent = `Actions: ${(entry.actions || []).join(", ") || "none"}`;
+            panel.appendChild(actions);
+            root.appendChild(panel);
+          });
+        }
+
         function renderDialogMirrors(dialogs) {
           const root = getEl("gui-dialog-mirror-root");
           if (!root) return;
@@ -5430,6 +5553,10 @@
           try {
             let expected = 0;
             let drawn = 0;
+            let missing = 0;
+            const noteWaveform = (waveform) => {
+              if (waveform && waveform.hasData === false) missing += 1;
+            };
             if (s.master && s.master.waveform) {
               [
                 ["master-waveform-L", s.master.waveform.left],
@@ -5437,6 +5564,7 @@
               ].forEach(([id, waveform]) => {
                 if (!waveform) return;
                 expected += 1;
+                noteWaveform(waveform);
                 if (drawMirroredWaveform(id, waveform)) drawn += 1;
               });
             }
@@ -5449,16 +5577,33 @@
                 ].forEach(([id, waveform]) => {
                   if (!waveform) return;
                   expected += 1;
+                  noteWaveform(waveform);
                   if (drawMirroredWaveform(id, waveform)) drawn += 1;
                 });
                 updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
               });
             }
-            lastWaveformRenderStats = { expected, drawn };
+            lastWaveformRenderStats = {
+              expected,
+              drawn,
+              missing,
+              dataAvailable: Math.max(0, expected - missing),
+            };
+            const status = getEl("waveform-render-status");
+            if (status) {
+              status.hidden = expected === 0;
+              status.textContent = expected === 0
+                ? "Waveforms awaiting sender data"
+                : `Waveforms rendered ${drawn}/${expected}` + (missing ? ` · data pending ${missing}` : "");
+              status.dataset.expected = String(expected);
+              status.dataset.drawn = String(drawn);
+              status.dataset.missing = String(missing);
+            }
+            emitGuiChannelTelemetry("waveform_render", lastWaveformRenderStats);
             return drawn === expected;
           } catch (e) {
             console.error("❌ Receiver Waveform Render Error:", e);
-            lastWaveformRenderStats = { expected: 0, drawn: 0 };
+            lastWaveformRenderStats = { expected: 0, drawn: 0, missing: 0, dataAvailable: 0 };
             return false;
           }
         }
@@ -5637,6 +5782,7 @@
                 ((s.master.lfo2 && s.master.lfo2.time) || 1.8).toFixed(1) + "s",
               );
             }
+            renderDialogRegistry(s.dialogRegistry);
             renderDialogMirrors(s.dialogs);
             if (s.sampler) {
               const samplerStr = JSON.stringify(s.sampler);
@@ -5746,6 +5892,19 @@
                       if (l2 && l2.checked !== l2Checked) {
                         l2.checked = l2Checked;
                       }
+                      const indicator = t.lfoIndicators && t.lfoIndicators[cfg.p];
+                      [
+                        ["1", `t-lfo-marker-1-${i}-${cfg.p}`, Boolean(indicator?.lfo1 ?? l1Checked)],
+                        ["2", `t-lfo-marker-2-${i}-${cfg.p}`, Boolean(indicator?.lfo2 ?? l2Checked)],
+                      ].forEach(([index, id, active]) => {
+                        const marker = getEl(id);
+                        if (!marker) return;
+                        marker.hidden = !active;
+                        marker.textContent = `L${index}`;
+                        marker.title = active ? `LFO ${index} modulates ${cfg.l}` : "";
+                        marker.setAttribute("aria-label", marker.title || `LFO ${index} inactive`);
+                        marker.classList.toggle("active", active);
+                      });
                     });
                     updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
                     updateText(
@@ -5944,6 +6103,8 @@
                 renderedRevision: guiLastRenderedRevision,
                 waveformExpected: lastWaveformRenderStats.expected,
                 waveformDrawn: lastWaveformRenderStats.drawn,
+                waveformMissing: lastWaveformRenderStats.missing,
+                waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
@@ -5973,7 +6134,7 @@
           });
           const normalized = {
             ...state,
-            guiContractVersion: Number(state.guiContractVersion) || 1,
+              guiContractVersion: Number(state.guiContractVersion) || 3,
             transport: {
               position: String(state.transport?.position || "00:00:00"),
             },
@@ -5992,6 +6153,7 @@
               params: track?.params && typeof track.params === "object" ? track.params : {},
             })),
             dialogs: Array.isArray(state.dialogs) ? state.dialogs : [],
+            dialogRegistry: Array.isArray(state.dialogRegistry) ? state.dialogRegistry : [],
             qa: {
               visible: Boolean(state.qa.visible),
               text: String(state.qa.text || "").slice(0, 4000),
@@ -6268,19 +6430,7 @@
             markReceiverBoot("bridge_connected", { url: url });
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             if (window._receiverUiRevealed) {
-              try {
-                binaryWS.send(JSON.stringify({
-                  type: "GUI_READY",
-                  transport: "gui",
-                  guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
-                  guiSessionNonce,
-                  guiRevision: lastGuiRevision,
-                  bootStage: window._receiverBootStage || "gui_revealed",
-                }));
-                relayLogToStudio("✅ Receiver: GUI_READY sent independently of audio handshake.");
-              } catch (e) {
-                relayLogToStudio("⚠️ Receiver: GUI_READY send failed: " + e.message);
-              }
+              sendAuthenticatedGuiReady(window._receiverBootStage || "gui_revealed");
             }
             // [v13.9.504] Reset reconnect backoff counter on success
             window._wsReconnectAttempts = 0;
@@ -6532,6 +6682,8 @@
                     return;
                   }
                   guiSessionNonce = d.guiSessionNonce;
+                  lastGuiReadyNonce = null;
+                  sendAuthenticatedGuiReady("bridge_config");
                   receiverBridgeConfigReady = true;
                   maybeEnableReceiverHandshakeTelemetry();
                   flushPendingPlayoutState();
@@ -6586,6 +6738,7 @@
             // while equal revisions remain suppressed during one connection.
             resetPlaybackRevisionGate("bridge_closed");
             resetGuiRevisionGate("bridge_closed");
+            lastGuiReadyNonce = null;
             const reconnectPlaybackActive = Boolean(
               lastPlaybackStartSignalAt && !playbackPaused
             );
