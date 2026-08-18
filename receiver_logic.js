@@ -285,7 +285,7 @@
               bootStage: stage,
             }));
             lastGuiReadyNonce = signature;
-            relayLogToStudio("✅ Receiver: Authenticated GUI_READY sent; latest GUI snapshot replay requested.");
+            relayLogToStudio("✅ Receiver: Authenticated GUI_READY sent; GUI snapshot replay is now safe.");
             return true;
           } catch (e) {
             relayLogToStudio("⚠️ Receiver: Authenticated GUI_READY send failed: " + e.message);
