@@ -4518,7 +4518,7 @@
                         <div class="track-header">TRACK ${i + 1}</div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
-                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
+                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
                         <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select id="t-input-${i}" class="input-source app-select"><option value="mic">Microphone</option><option value="file">Import File</option><option value="system">System Loopback</option></select></div><span class="file-name-display" id="t-file-${i}"></span></div>
                         <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
@@ -5407,9 +5407,13 @@
           el.setAttribute("aria-disabled", buttonState.disabled ? "true" : "false");
         }
 
-        function drawMirroredWaveform(id, waveform) {
+        function drawMirroredWaveform(id, waveform, source) {
           const canvas = getEl(id);
           if (!canvas || !waveform || !Array.isArray(waveform.points)) return false;
+          const hasData = waveform.hasData !== false;
+          canvas.dataset.waveformState = hasData ? "ready" : "pending";
+          canvas.dataset.waveformSource = source || "unknown";
+          canvas.dataset.waveformSampleCount = String(Number(waveform.sampleCount) || 0);
           const signature = JSON.stringify(waveform);
           const cacheKey = "waveform:" + id;
           if (valCache[cacheKey] === signature) return true;
@@ -5648,8 +5652,10 @@
         const WAVEFORM_RENDER_THROTTLE_MS = 250;
         let lastWaveformRenderTime = 0;
         let pendingWaveformState = null;
+        let pendingWaveformRevision = -1;
         let waveformRenderTimer = null;
-        let lastWaveformRenderStats = { expected: 0, drawn: 0 };
+        let lastWaveformRenderRevision = -1;
+        let lastWaveformRenderStats = { expected: 0, drawn: 0, surfaces: [] };
 
         function renderWaveformState(s) {
           if (!s) return false;
@@ -5657,18 +5663,34 @@
             let expected = 0;
             let drawn = 0;
             let missing = 0;
-            const noteWaveform = (waveform) => {
-              if (waveform && waveform.hasData === false) missing += 1;
+            const surfaces = [];
+            const renderSurface = (id, waveform, owner, source) => {
+              if (!waveform) return;
+              expected += 1;
+              const hasData = waveform.hasData !== false;
+              if (!hasData) missing += 1;
+              const didDraw = drawMirroredWaveform(id, waveform, source);
+              if (didDraw) drawn += 1;
+              surfaces.push({
+                id,
+                owner,
+                source: source || "unknown",
+                hasData,
+                sampleCount: Number(waveform.sampleCount) || 0,
+                drawn: didDraw,
+              });
             };
             if (s.master && s.master.waveform) {
               [
                 ["master-waveform-L", s.master.waveform.left],
                 ["master-waveform-R", s.master.waveform.right],
               ].forEach(([id, waveform]) => {
-                if (!waveform) return;
-                expected += 1;
-                noteWaveform(waveform);
-                if (drawMirroredWaveform(id, waveform)) drawn += 1;
+                renderSurface(
+                  id,
+                  waveform,
+                  "master",
+                  s.master.waveform.source || "master_live_envelope",
+                );
               });
             }
             if (Array.isArray(s.tracks)) {
@@ -5678,10 +5700,7 @@
                   ["t-wf-l-" + i, t.waveform.left],
                   ["t-wf-r-" + i, t.waveform.right],
                 ].forEach(([id, waveform]) => {
-                  if (!waveform) return;
-                  expected += 1;
-                  noteWaveform(waveform);
-                  if (drawMirroredWaveform(id, waveform)) drawn += 1;
+                  renderSurface(id, waveform, `track-${i + 1}`, t.waveform.source);
                 });
                 updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
               });
@@ -5691,6 +5710,7 @@
               drawn,
               missing,
               dataAvailable: Math.max(0, expected - missing),
+              surfaces,
             };
             const status = getEl("waveform-render-status");
             if (status) {
@@ -5706,7 +5726,13 @@
             return drawn === expected;
           } catch (e) {
             console.error("❌ Receiver Waveform Render Error:", e);
-            lastWaveformRenderStats = { expected: 0, drawn: 0, missing: 0, dataAvailable: 0 };
+            lastWaveformRenderStats = {
+              expected: 0,
+              drawn: 0,
+              missing: 0,
+              dataAvailable: 0,
+              surfaces: [],
+            };
             return false;
           }
         }
@@ -5714,15 +5740,24 @@
         function flushScheduledWaveformRender() {
           waveformRenderTimer = null;
           const state = pendingWaveformState;
+          const revision = pendingWaveformRevision;
           pendingWaveformState = null;
+          pendingWaveformRevision = -1;
           if (!state) return;
+          if (revision >= 0 && revision < lastWaveformRenderRevision) return;
           lastWaveformRenderTime = Date.now();
+          if (revision >= 0) lastWaveformRenderRevision = revision;
           renderWaveformState(state);
         }
 
-        function scheduleWaveformRender(s, force = false) {
+        function scheduleWaveformRender(s, force = false, revision = -1) {
           if (!s) return;
+          const nextRevision = Number.isSafeInteger(Number(revision))
+            ? Number(revision)
+            : -1;
+          if (nextRevision >= 0 && nextRevision < pendingWaveformRevision) return;
           pendingWaveformState = s;
+          pendingWaveformRevision = nextRevision;
           const elapsed = Date.now() - lastWaveformRenderTime;
           if (force || elapsed >= WAVEFORM_RENDER_THROTTLE_MS) {
             if (waveformRenderTimer) {
@@ -5809,7 +5844,7 @@
           return nextState;
         }
 
-        function renderState(s, force = false) {
+        function renderState(s, force = false, guiRevision = -1) {
           if (!s) return false;
           // Cursor updates are isolated from the full GUI render budget so
           // PCM playout can keep the TV pointer responsive while the regular
@@ -5820,12 +5855,15 @@
             window._binaryActive || window._playbackMode === "pcm_fallback"
               ? PCM_RENDER_THROTTLE_MS
               : RENDER_THROTTLE_MS;
+          // Waveform state is latest-value data. Queue it before the broader
+          // DOM throttle so a burst of GUI snapshots cannot leave the canvas
+          // one or more revisions behind while controls remain throttled.
+          scheduleWaveformRender(s, force, guiRevision);
           if (!force && now - lastRenderTime < renderThrottleMs) {
             guiRenderThrottleSkips += 1;
             return false;
           }
           lastRenderTime = now;
-          scheduleWaveformRender(s, force);
           try {
             if (s.transport) {
               updateText("recording-time-display", s.transport.position);
@@ -6181,7 +6219,7 @@
             );
           }
           emitGuiChannelTelemetry("received", { revision });
-          if (renderState(normalizedState)) {
+          if (renderState(normalizedState, false, revision)) {
             guiRenderedCount += 1;
             guiLastRenderedRevision = revision;
             emitGuiChannelTelemetry("rendered", { revision });
@@ -6208,6 +6246,7 @@
                 waveformDrawn: lastWaveformRenderStats.drawn,
                 waveformMissing: lastWaveformRenderStats.missing,
                 waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
+                waveformSurfaces: lastWaveformRenderStats.surfaces,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;

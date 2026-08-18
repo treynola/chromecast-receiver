@@ -18,6 +18,7 @@
   margin-bottom: 2px;
 }
 
+.track .waveform-box,
 .track-item .waveform-box {
   width: 100% !important;
   height: 56px !important; /* Adjusted to fit 26px * 2 + 4px gap */
@@ -25,6 +26,19 @@
   flex: 0 0 56px !important;
   display: flex !important;
   align-items: stretch !important; /* Ensure children fill height */
+}
+
+.track .waveform-canvas-container {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  flex: 1 1 auto !important;
+}
+
+.track .waveform-canvas {
+  min-width: 0 !important;
+  min-height: 26px !important;
+  flex: 0 0 26px !important;
 }
 
 .track-input-row {

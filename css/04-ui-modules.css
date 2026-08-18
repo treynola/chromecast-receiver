@@ -148,6 +148,15 @@
   box-sizing: border-box !important;
 }
 
+.waveform-canvas[data-waveform-state="pending"] {
+  border-color: var(--mid-gray) !important;
+  opacity: 0.72;
+}
+
+.waveform-canvas[data-waveform-state="ready"] {
+  opacity: 1;
+}
+
 
 .input-device-select {
   flex: 1;

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-811a7663c67c"></script>
+    <script src="build_identity.js?v=13.9.509-5f97d2dd1c81"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
@@ -13,10 +13,10 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-6680afd1200a" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-6680afd1200a" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-6680afd1200a" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-6680afd1200a" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-72443ba5303b" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-72443ba5303b" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-72443ba5303b" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-72443ba5303b" />
   </head>
   <body class="app-loading receiver-mode">
     <div class="container" id="studio-root">
@@ -80,12 +80,14 @@
                 <canvas
                   id="master-waveform-L"
                   class="waveform-canvas"
+                  data-waveform-surface="master-left"
                   width="242"
                   height="24"
                 ></canvas
                 ><canvas
                   id="master-waveform-R"
                   class="waveform-canvas"
+                  data-waveform-surface="master-right"
                   width="242"
                   height="24"
                 ></canvas>
@@ -258,7 +260,7 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-d567349f9cb5"></script>
-    <script src="receiver_logic.js?v=13.9.509-d567349f9cb5"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-7b795fe8d3fd"></script>
+    <script src="receiver_logic.js?v=13.9.509-7b795fe8d3fd"></script>
   </body>
 </html>
