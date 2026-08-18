@@ -85,6 +85,8 @@
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
         var nativeStartupTrimPending = false;
+        var nativeStartupTrimRetryTimerId = null;
+        var nativeStartupTrimRetryStartedAt = 0;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         var pcmStartupRetryTimerId = null;
@@ -93,6 +95,8 @@
         // decoder that never becomes audible cannot hold the session silent.
         const NATIVE_STARTUP_TIMEOUT_MS = 2000;
         const NATIVE_STARTUP_FADE_MS = 12;
+        const NATIVE_STARTUP_TRIM_RETRY_MS = 25;
+        const NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS = 1000;
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
@@ -2023,6 +2027,14 @@
           lastPlaybackStartSignalAt = 0;
         }
 
+        function clearNativeStartupTrimRetry() {
+          if (nativeStartupTrimRetryTimerId) {
+            clearTimeout(nativeStartupTrimRetryTimerId);
+            nativeStartupTrimRetryTimerId = null;
+          }
+          nativeStartupTrimRetryStartedAt = 0;
+        }
+
         function releasePendingNativeStartupTrim() {
           if (!nativeStartupTrimPending || !lastPlaybackStartSignalAt) {
             return false;
@@ -2056,12 +2068,12 @@
             const playhead = activeAudio.currentTime;
             const latency = liveEdge - playhead;
             if (latency <= NATIVE_STARTUP_TRIM_THRESHOLD_SEC) {
-              return false;
+              return true;
             }
             const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
             const trimTarget = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
             if (trimTarget <= playhead + 0.25) {
-              return false;
+              return true;
             }
             activeAudio.currentTime = trimTarget;
             const trimmedLatency = Math.max(0, liveEdge - trimTarget);
@@ -2083,6 +2095,47 @@
             );
             return false;
           }
+        }
+
+        function scheduleNativeStartupTrimRetry(modeReason, logMessage, attemptId) {
+          if (!nativeStartupTrimPending || !lastPlaybackStartSignalAt) {
+            return false;
+          }
+          if (!nativeStartupTrimRetryStartedAt) {
+            nativeStartupTrimRetryStartedAt = Date.now();
+            logReceiverStartupTiming("native_startup_trim_waiting", {
+              nativeAttemptId: nativeStartupAttemptId,
+              retryMs: NATIVE_STARTUP_TRIM_RETRY_MS,
+              timeoutMs: NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS,
+            });
+          }
+          if (Date.now() - nativeStartupTrimRetryStartedAt >= NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS) {
+            nativeStartupTrimPending = false;
+            relayLogToStudio(
+              "⚠️ Receiver: Native live-edge trim was not seekable within " +
+                NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS +
+                "ms; releasing the bounded prewarm fallback.",
+            );
+            logReceiverStartupTiming("native_startup_trim_timeout", {
+              nativeAttemptId: nativeStartupAttemptId,
+              timeoutMs: NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS,
+            });
+            clearNativeStartupTrimRetry();
+            activateNativeStream(modeReason, logMessage, attemptId);
+            return true;
+          }
+          if (nativeStartupTrimRetryTimerId) {
+            return true;
+          }
+          nativeStartupTrimRetryTimerId = setTimeout(() => {
+            nativeStartupTrimRetryTimerId = null;
+            if (!isCurrentNativeAttempt(attemptId) || !nativeStreamStarting) {
+              clearNativeStartupTrimRetry();
+              return;
+            }
+            activateNativeStream(modeReason, logMessage, attemptId);
+          }, NATIVE_STARTUP_TRIM_RETRY_MS);
+          return true;
         }
 
         function shouldIgnoreStaleInactiveState() {
@@ -3224,11 +3277,23 @@
           if (attemptId && !isCurrentNativeAttempt(attemptId)) {
             return false;
           }
+          if (nativeStartupTrimRetryTimerId) {
+            clearTimeout(nativeStartupTrimRetryTimerId);
+            nativeStartupTrimRetryTimerId = null;
+          }
+          if (
+            lastPlaybackStartSignalAt &&
+            nativeStartupTrimPending &&
+            !releasePendingNativeStartupTrim()
+          ) {
+            scheduleNativeStartupTrimRetry(modeReason, logMessage, attemptId);
+            return true;
+          }
+          nativeStartupTrimRetryStartedAt = 0;
           nativeStreamStarting = false;
           nativeStreamActive = true;
           nativeStreamPaused = false;
           nativeFailureRetryAttempted = false;
-          releasePendingNativeStartupTrim();
           releaseNativeStreamPrewarmMute();
           nativeStreamPrewarmBeforePlayback = false;
           nativeStreamPrewarmReady = false;
@@ -3357,6 +3422,7 @@
             now - lastNativeStopAt <= PCM_QUEUE_RESET_DEDUPE_MS;
           nativeStartupAttemptId++;
           clearNativeStreamReloadTimer();
+          clearNativeStartupTrimRetry();
           nativeStartupTrimPending = false;
           if (!preservePlaybackIntent) {
             clearPlaybackStartSignal();
@@ -5429,63 +5495,12 @@
           if (signature === lastDialogRegistryState) return;
           lastDialogRegistryState = signature;
           root.replaceChildren();
-          root.hidden = list.length === 0;
-          if (!list.length) return;
-          const heading = document.createElement("h2");
-          heading.textContent = "Available Studio Menus";
-          root.appendChild(heading);
-          list.forEach((entry) => {
-            const panel = document.createElement("section");
-            panel.className = "gui-dialog-registry-entry";
-            panel.dataset.dialogId = entry.id || "";
-            panel.dataset.registryDialogId = entry.id || "";
-            panel.dataset.dialogKind = entry.kind || "generic";
-            const title = document.createElement("h3");
-            title.textContent = entry.title || entry.kind || "Studio Menu";
-            panel.appendChild(title);
-            const scope = document.createElement("small");
-            scope.textContent = `${entry.scope || "studio"} · ${entry.available === false ? "unavailable" : "ready"}`;
-            panel.appendChild(scope);
-            (entry.controls || []).forEach((control) => {
-              const item = document.createElement("span");
-              item.className = "gui-dialog-registry-control";
-              item.textContent = String(control);
-              panel.appendChild(item);
-            });
-            (entry.menus || []).forEach((menu) => {
-              const menuLabel = document.createElement("label");
-              menuLabel.className = "gui-dialog-registry-menu";
-              menuLabel.textContent = menu.label || menu.id || "Menu";
-              const select = document.createElement("select");
-              select.disabled = !menu.context;
-              select.dataset.registryContext = menu.context || "";
-              select.dataset.registryMenuId = menu.id || "";
-              (menu.options || []).forEach((option) => {
-                const item = document.createElement("option");
-                item.value = String(option);
-                item.textContent = String(option);
-                select.appendChild(item);
-              });
-              menuLabel.appendChild(select);
-              panel.appendChild(menuLabel);
-            });
-            if (entry.openActionId) {
-              const openButton = document.createElement("button");
-              openButton.type = "button";
-              openButton.className = "gui-dialog-registry-action";
-              openButton.id = `registry-${entry.kind}-${String(entry.id || "menu").replace(/[^a-z0-9]+/gi, "-")}`;
-              openButton.dataset.registryActionId = entry.openActionId;
-              openButton.dataset.registryDialogId = entry.id || "";
-              openButton.textContent = `Open ${entry.title || "Studio Menu"}`;
-              openButton.setAttribute("aria-label", openButton.textContent);
-              panel.appendChild(openButton);
-            }
-            const actions = document.createElement("small");
-            actions.className = "gui-dialog-registry-actions";
-            actions.textContent = `Actions: ${(entry.actions || []).join(", ") || "none"}`;
-            panel.appendChild(actions);
-            root.appendChild(panel);
-          });
+          // The registry is an action/schema catalog, not a visible dialog.
+          // Active app dialogs are rendered exclusively by renderDialogMirrors;
+          // painting this catalog made every sampler/effect menu appear at once.
+          root.hidden = true;
+          root.setAttribute("aria-hidden", "true");
+          root.dataset.registry = JSON.stringify(list);
         }
 
         function renderDialogMirrors(dialogs) {
@@ -5499,7 +5514,16 @@
           root.hidden = list.length === 0;
           list.forEach((dialog) => {
             const panel = document.createElement("section");
-            panel.className = `gui-dialog-mirror gui-dialog-${dialog.kind || "generic"}`;
+            panel.className = [
+              "gui-dialog-mirror",
+              "mxs-dialog",
+              dialog.shellClassName || "",
+              `gui-dialog-${dialog.kind || "generic"}`,
+            ].filter(Boolean).join(" ");
+            panel.setAttribute("open", "");
+            panel.setAttribute("role", dialog.role || "dialog");
+            if (dialog.modal) panel.setAttribute("aria-modal", "true");
+            if (dialog.ariaLabelledby) panel.setAttribute("aria-labelledby", dialog.ariaLabelledby);
             panel.dataset.dialogId = dialog.id || "";
             panel.dataset.dialogKind = dialog.kind || "generic";
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
@@ -5507,62 +5531,113 @@
             panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
             panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
             panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
-            const heading = document.createElement("h3");
-            heading.textContent = dialog.title || "MXS-004";
-            panel.appendChild(heading);
+            const actions = Array.isArray(dialog.actions) ? dialog.actions : [];
+            const isHeaderAction = (action) => /close|pad-nav|fx-chain-arrow|previous|next/i.test(
+              [action?.actionId, action?.className, action?.data?.padNav].filter(Boolean).join(" "),
+            );
+            const renderAction = (action, actionIndex) => {
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = action.className || "gui-dialog-action-btn";
+              button.textContent = action.label || "Action";
+              button.title = action.title || "";
+              button.disabled = Boolean(action.disabled);
+              button.dataset.dialogId = dialog.id || "";
+              button.dataset.actionIndex = String(action.actionIndex ?? actionIndex);
+              button.dataset.actionId = action.actionId || `button-${actionIndex}`;
+              Object.entries(action.data || {}).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) button.dataset[key] = String(value);
+              });
+              if (action.ariaLabel) button.setAttribute("aria-label", action.ariaLabel);
+              button.setAttribute("aria-pressed", action.pressed ? "true" : "false");
+              return button;
+            };
+
+            const headerState = dialog.header || {};
+            const header = document.createElement("div");
+            header.className = headerState.className || "dialog-header";
+            const headerTop = document.createElement("div");
+            headerTop.className = "dialog-header-top";
+            const heading = document.createElement("span");
+            heading.className = headerState.titleClassName || "dialog-header-title";
+            heading.textContent = headerState.title || dialog.title || "MXS-004";
+            headerTop.appendChild(heading);
+            actions.forEach((action, actionIndex) => {
+              if (isHeaderAction(action)) headerTop.appendChild(renderAction(action, actionIndex));
+            });
+            header.appendChild(headerTop);
+            if (headerState.status) {
+              const status = document.createElement("span");
+              status.className = headerState.statusClassName || "dialog-header-status";
+              status.textContent = headerState.status;
+              header.appendChild(status);
+            }
+            panel.appendChild(header);
+
+            const content = document.createElement("div");
+            content.className = dialog.contentClassName || "dialog-content";
             (dialog.text || []).forEach((text) => {
               const help = document.createElement("p");
               help.textContent = text;
-              panel.appendChild(help);
+              content.appendChild(help);
             });
-            (dialog.controls || []).forEach((control) => {
+            (dialog.controls || []).forEach((control, controlIndex) => {
               const row = document.createElement("label");
-              row.className = "gui-dialog-mirror-control";
+              row.className = ["gui-dialog-mirror-control", control.containerClassName || ""].filter(Boolean).join(" ");
               row.dataset.controlType = control.type || "text";
               row.dataset.dialogId = dialog.id || "";
-              row.dataset.controlIndex = String(dialog.controls.indexOf(control));
+              row.dataset.controlIndex = String(controlIndex);
               const label = document.createElement("span");
               label.textContent = control.label || "Parameter";
               row.appendChild(label);
-              if (control.type === "checkbox") {
-                const checkbox = document.createElement("input");
-                checkbox.type = "checkbox";
-                checkbox.checked = !!control.checked;
-                checkbox.disabled = false;
-                checkbox.dataset.dialogId = dialog.id || "";
-                checkbox.dataset.controlIndex = String(dialog.controls.indexOf(control));
-                row.appendChild(checkbox);
-              } else {
-                const value = document.createElement("input");
-                value.type = control.type === "select-one" ? "text" : (control.type || "text");
+              const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
+              const value = document.createElement(
+                tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "input",
+              );
+              if (tagName === "input") value.type = control.type || "text";
+              value.className = control.className || "";
+              value.id = control.id || "";
+              value.name = control.name || "";
+              value.value = control.value === null || control.value === undefined ? "" : control.value;
+              if (control.type === "checkbox") value.checked = Boolean(control.checked);
+              value.min = control.min || "";
+              value.max = control.max || "";
+              value.step = control.step || "";
+              value.placeholder = control.placeholder || "";
+              value.disabled = Boolean(control.disabled);
+              value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
+              value.dataset.dialogId = dialog.id || "";
+              value.dataset.controlIndex = String(controlIndex);
+              Object.entries(control.data || {}).forEach(([key, item]) => {
+                if (item !== undefined && item !== null) value.dataset[key] = String(item);
+              });
+              if (tagName === "select") {
+                (control.options || []).forEach((option) => {
+                  const item = document.createElement("option");
+                  item.value = String(option.value ?? "");
+                  item.textContent = option.label || item.value;
+                  item.disabled = Boolean(option.disabled);
+                  item.selected = Boolean(option.selected);
+                  value.appendChild(item);
+                });
                 value.value = control.value === null || control.value === undefined ? "" : control.value;
-                value.min = control.min || "";
-                value.max = control.max || "";
-                value.step = control.step || "";
-                value.disabled = false;
-                value.setAttribute("aria-label", control.label || "Parameter");
-                value.dataset.dialogId = dialog.id || "";
-                value.dataset.controlIndex = String(dialog.controls.indexOf(control));
-                row.appendChild(value);
+              }
+              row.appendChild(value);
+              if (["range", "number"].includes(control.type)) {
                 const output = document.createElement("output");
                 output.textContent = value.value;
                 output.className = "gui-dialog-mirror-value";
                 row.appendChild(output);
               }
-              panel.appendChild(row);
+              content.appendChild(row);
             });
-            (dialog.actions || []).forEach((action, actionIndex) => {
-              const button = document.createElement("button");
-              button.type = "button";
-              button.className = "gui-dialog-action-btn";
-              button.textContent = action.label || "Action";
-              button.disabled = Boolean(action.disabled);
-              button.dataset.dialogId = dialog.id || "";
-              button.dataset.actionIndex = String(action.actionIndex ?? actionIndex);
-              button.dataset.actionId = action.actionId || `button-${actionIndex}`;
-              button.setAttribute("aria-pressed", action.pressed ? "true" : "false");
-              panel.appendChild(button);
+            panel.appendChild(content);
+            const footer = document.createElement("div");
+            footer.className = "dialog-bottom-actions gui-dialog-actions";
+            actions.forEach((action, actionIndex) => {
+              if (!isHeaderAction(action)) footer.appendChild(renderAction(action, actionIndex));
             });
+            if (footer.childElementCount) panel.appendChild(footer);
             root.appendChild(panel);
           });
         }
