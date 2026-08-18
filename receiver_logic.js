@@ -2229,6 +2229,26 @@
             return;
           }
           const messageType = cast.framework.messages.MessageType;
+          const installMessageInterceptor = function (type, handler, label) {
+            if (!type || typeof pm.setMessageInterceptor !== "function") {
+              return false;
+            }
+            try {
+              pm.setMessageInterceptor(type, handler);
+              return true;
+            } catch (error) {
+              // CAF versions on physical Chromecast devices do not expose the
+              // same queue message aliases. An unsupported alias must not
+              // abort the entire receiver startup (notably "QUE").
+              relayLogToStudio(
+                "⚠️ Receiver: CAF ignored unsupported " +
+                  (label || String(type)) +
+                  " interceptor: " +
+                  (error && error.message ? error.message : String(error)),
+              );
+              return false;
+            }
+          };
 
           // Give CAF the exact media element that owns the native stream. The
           // PlayerManager API exposes setMediaElement(), but not the
@@ -2301,9 +2321,13 @@
             const type = entry[0];
             if (!type || installedUnsupportedMessageTypes.has(type)) return;
             installedUnsupportedMessageTypes.add(type);
-            pm.setMessageInterceptor(type, function (request) {
-              return rejectUnsupportedRemoteCommand(entry[1], request);
-            });
+            installMessageInterceptor(
+              type,
+              function (request) {
+                return rejectUnsupportedRemoteCommand(entry[1], request);
+              },
+              entry[1],
+            );
           });
 
           if (typeof pm.setMediaUrlResolver === "function") {
@@ -2343,8 +2367,8 @@
             });
           }
 
-          if (typeof pm.setMessageInterceptor === "function" && messageType && messageType.LOAD) {
-            pm.setMessageInterceptor(messageType.LOAD, function (request) {
+          if (messageType && messageType.LOAD) {
+            installMessageInterceptor(messageType.LOAD, function (request) {
               writeCastDebug("info", "Intercepting LOAD request");
               emitCafTelemetry("LOAD", {
                 contentId: request?.media?.contentId || null,
@@ -2392,7 +2416,7 @@
                 writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
               }
               return request;
-            });
+            }, "LOAD");
 
             // Standard Cast transport controls must use the same lifecycle as
             // the MXS custom channel. Let CAF finish its normal request first,
@@ -2470,12 +2494,16 @@
               if (!entry[0]) {
                 return;
               }
-              pm.setMessageInterceptor(entry[0], function (request) {
-                if (entry[1] === "STOP" && Number(request && request.requestId) !== 0) {
-                  return rejectUnsupportedRemoteCommand("STOP", request);
-                }
-                return deferPlayerManagerCommand(entry[1], request);
-              });
+              installMessageInterceptor(
+                entry[0],
+                function (request) {
+                  if (entry[1] === "STOP" && Number(request && request.requestId) !== 0) {
+                    return rejectUnsupportedRemoteCommand("STOP", request);
+                  }
+                  return deferPlayerManagerCommand(entry[1], request);
+                },
+                entry[1],
+              );
             });
           }
           cafLoadInterceptorConfigured = true;
