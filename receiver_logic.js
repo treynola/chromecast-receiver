@@ -6675,8 +6675,15 @@
             // Record that the receiver audio path is ready; low-latency PCM startup begins only
             // once the handshake/configuration path is ready.
             markReceiverPlayoutPathReady();
-            if (nativeStreamActive || nativeStreamStarting) {
+            if (nativeStreamActive) {
+              // Only an actually active CAF path may reopen the ready gate.
+              // A reconnect can observe nativeStreamStarting while CAF is
+              // still buffering; publishing ready there makes the sender
+              // release work to an inaudible path.
               notifyPlaybackMode("native", "socket_reconnected");
+            } else if (nativeStreamStarting) {
+              notifyPlaybackMode("native", "socket_reconnected_starting", false);
+              notifyPlayoutSelecting("native_reconnect_starting", "socket_reconnected");
             } else if (
               receiverPlayoutPreference === "pcm_fallback" &&
               !window._pcmDegraded
@@ -6688,7 +6695,7 @@
               // briefly become audible before that preparation runs.
               notifyPlaybackMode("native", "socket_reconnected", false);
               notifyPlayoutSelecting("native_preparation", "socket_reconnected");
-            } else if (workletNode || workletReady || window._binaryActive) {
+            } else if (workletNode && workletReady && window._binaryActive) {
               notifyPlaybackMode("pcm_fallback", "socket_reconnected");
             }
           };
