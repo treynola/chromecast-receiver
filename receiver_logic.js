@@ -85,6 +85,7 @@
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
         var nativeStartupTrimPending = false;
+        var nativeStartupTrimState = "idle";
         var nativeStartupTrimRetryTimerId = null;
         var nativeStartupTrimRetryStartedAt = 0;
         var nativeStartupWatchdogId = null;
@@ -1129,6 +1130,7 @@
               mode: mode,
               reason: reason || "",
               ready: ready !== false,
+              socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
             };
             binaryWS.send(JSON.stringify({ type: "PLAYBACK_MODE", ...readiness }));
@@ -1163,6 +1165,7 @@
               mode: "unknown",
               reason: reason || "",
               ready: false,
+              socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
             }));
           } catch (e) {}
@@ -1672,6 +1675,8 @@
               binaryWS.send(JSON.stringify({
                 type: "RECEIVER_READY",
                 reason: "native_recovery_retry",
+                socketGeneration: playbackModeSocketGeneration,
+                lifecycleGeneration: workletLifecycleGeneration,
               }));
               relayLogToStudio(
                 "🔁 Receiver: Native Play recovery retry requested after bounded startup silence.",
@@ -2058,24 +2063,42 @@
           // not turn a late/failed preparation into an audible live seek.
           const mutedForPrewarm = activeAudio._mxsPrewarmMuted === true ||
             activeAudio.muted === true || Number(activeAudio.volume) <= 0.001;
-          nativeStartupTrimPending = false;
           if (!mutedForPrewarm) {
+            nativeStartupTrimPending = false;
+            nativeStartupTrimState = "skipped_audible";
             relayLogToStudio("⏭️ Receiver: Skipped native startup trim because output was already audible.");
-            return false;
+            logReceiverStartupTiming("native_startup_trim_skipped_audible", {
+              nativeAttemptId: nativeStartupAttemptId,
+            });
+            return true;
           }
           try {
             const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const playhead = activeAudio.currentTime;
             const latency = liveEdge - playhead;
             if (latency <= NATIVE_STARTUP_TRIM_THRESHOLD_SEC) {
+              nativeStartupTrimPending = false;
+              nativeStartupTrimState = "not_needed";
+              logReceiverStartupTiming("native_startup_trim_not_needed", {
+                nativeAttemptId: nativeStartupAttemptId,
+                latencyBeforeSec: latency,
+              });
               return true;
             }
             const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
             const trimTarget = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
             if (trimTarget <= playhead + 0.25) {
+              nativeStartupTrimPending = false;
+              nativeStartupTrimState = "not_needed";
+              logReceiverStartupTiming("native_startup_trim_not_needed", {
+                nativeAttemptId: nativeStartupAttemptId,
+                latencyBeforeSec: latency,
+              });
               return true;
             }
             activeAudio.currentTime = trimTarget;
+            nativeStartupTrimPending = false;
+            nativeStartupTrimState = "trimmed";
             const trimmedLatency = Math.max(0, liveEdge - trimTarget);
             relayLogToStudio(
               "✂️ Receiver: Ordered PLAYBACK_START released native buffer at " +
@@ -2093,6 +2116,11 @@
               "⚠️ Receiver: Ordered native startup trim failed: " +
                 (trimError && trimError.message ? trimError.message : trimError),
             );
+            nativeStartupTrimState = "retrying";
+            logReceiverStartupTiming("native_startup_trim_retryable_error", {
+              nativeAttemptId: nativeStartupAttemptId,
+              error: String(trimError && trimError.message ? trimError.message : trimError),
+            });
             return false;
           }
         }
@@ -2103,6 +2131,7 @@
           }
           if (!nativeStartupTrimRetryStartedAt) {
             nativeStartupTrimRetryStartedAt = Date.now();
+            nativeStartupTrimState = "retrying";
             logReceiverStartupTiming("native_startup_trim_waiting", {
               nativeAttemptId: nativeStartupAttemptId,
               retryMs: NATIVE_STARTUP_TRIM_RETRY_MS,
@@ -2111,6 +2140,7 @@
           }
           if (Date.now() - nativeStartupTrimRetryStartedAt >= NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS) {
             nativeStartupTrimPending = false;
+            nativeStartupTrimState = "timeout";
             relayLogToStudio(
               "⚠️ Receiver: Native live-edge trim was not seekable within " +
                 NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS +
@@ -3295,6 +3325,9 @@
           nativeStreamPaused = false;
           nativeFailureRetryAttempted = false;
           releaseNativeStreamPrewarmMute();
+          if (nativeStartupTrimState !== "idle" && nativeStartupTrimState !== "cancelled") {
+            nativeStartupTrimState = "released";
+          }
           nativeStreamPrewarmBeforePlayback = false;
           nativeStreamPrewarmReady = false;
           nativeStreamCompanionForPcm = false;
@@ -3424,6 +3457,7 @@
           clearNativeStreamReloadTimer();
           clearNativeStartupTrimRetry();
           nativeStartupTrimPending = false;
+          nativeStartupTrimState = "cancelled";
           if (!preservePlaybackIntent) {
             clearPlaybackStartSignal();
           }
@@ -4039,6 +4073,7 @@
           nativeStreamActive = false;
           nativeStreamUrl = streamUrl;
           nativeStartupTrimPending = true;
+          nativeStartupTrimState = "pending";
           window._nativeStreamActive = false;
           armNativeStartupWatchdog();
 
@@ -6804,7 +6839,11 @@
                   if (window._receiverReadyGeneration !== playbackModeSocketGeneration) {
                     window._receiverReadyGeneration = playbackModeSocketGeneration;
                     try {
-                      binaryWS.send(JSON.stringify({ type: "RECEIVER_READY" }));
+                      binaryWS.send(JSON.stringify({
+                        type: "RECEIVER_READY",
+                        socketGeneration: playbackModeSocketGeneration,
+                        lifecycleGeneration: workletLifecycleGeneration,
+                      }));
                     } catch (e) {}
                   }
 
