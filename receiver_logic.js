@@ -80,6 +80,7 @@
         var nativeStreamPrewarmBeforePlayback = false;
         var nativeStreamPrewarmReady = false;
         var nativeStreamCompanionForPcm = false;
+        var nativeStreamReconnectReloadPending = false;
         var nativeFailureRetryAttempted = false;
         var playbackPaused = false;
         var nativeStartupAttemptId = 0;
@@ -1549,7 +1550,12 @@
           return true;
         }
 
-        function maybeStartNativeStream(reason, allowPriming = false, allowPcmCompanion = false) {
+        function maybeStartNativeStream(
+          reason,
+          allowPriming = false,
+          allowPcmCompanion = false,
+          forcePrewarm = false,
+        ) {
           if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
             return false;
@@ -1592,7 +1598,9 @@
             reason || "native_stream_starting",
             false,
           );
-          const shouldPrewarm = allowPriming && (!lastPlaybackStartSignalAt || allowPcmCompanion);
+          const shouldPrewarm =
+            forcePrewarm ||
+            (allowPriming && (!lastPlaybackStartSignalAt || allowPcmCompanion));
           if (shouldPrewarm) {
             nativeStreamPrewarmBeforePlayback = true;
             nativeStreamPrewarmReady = false;
@@ -1610,6 +1618,36 @@
               nativeStreamPrewarmReady = false;
               nativeStreamCompanionForPcm = false;
             }
+          }
+          return started;
+        }
+
+        function reloadNativeStreamAfterBridgeReconnect(reason) {
+          if (
+            !nativeStreamActive ||
+            !nativeStreamPaused ||
+            !currentBridgeIp ||
+            window._receiverShutdownInProgress
+          ) {
+            return false;
+          }
+          const reloadReason = reason || "socket_reconnected_native_reload";
+          // A progressive-WAV response can remain in CAF BUFFERING after a
+          // bridge outage even though the sender has resumed. Reopen exactly
+          // once for this reconnect, keep native authoritative, and hold the
+          // new item muted until ordered PLAYBACK_START replay.
+          setReceiverPlayoutPreference("native", reloadReason);
+          stopNativeStreamPlayout(reloadReason, true);
+          const started = maybeStartNativeStream(
+            reloadReason,
+            true,
+            false,
+            true,
+          );
+          if (started) {
+            relayLogToStudio(
+              "🔄 Receiver: Native /stream.wav reloaded after bridge reconnect; awaiting ordered replay.",
+            );
           }
           return started;
         }
@@ -6893,6 +6931,12 @@
                   }
                   if (d.ip) {
                     markReceiverPlayoutPathReady();
+                    if (nativeStreamReconnectReloadPending) {
+                      nativeStreamReconnectReloadPending = false;
+                      reloadNativeStreamAfterBridgeReconnect(
+                        "socket_reconnected_native_reload",
+                      );
+                    }
                     // Begin the native CAF progressive-WAV prewarm as soon as
                     // the authenticated bridge advertises its LAN endpoint.
                     // The stream remains muted until the ordered Play command;
@@ -6930,6 +6974,8 @@
             const reconnectPlaybackActive = Boolean(
               lastPlaybackStartSignalAt && !playbackPaused
             );
+            nativeStreamReconnectReloadPending =
+              reconnectPlaybackActive && nativeStreamActive;
             stopAllPlayout(
               "websocket_closed",
               undefined,
