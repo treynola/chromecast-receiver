@@ -938,6 +938,49 @@
           } catch (e) {}
         }
 
+        function describeCafError(error) {
+          if (error === null || error === undefined) {
+            return { value: null };
+          }
+          if (typeof error !== "object") {
+            return { value: String(error) };
+          }
+          const details = {};
+          [
+            "name",
+            "message",
+            "code",
+            "errorCode",
+            "detailedErrorCode",
+            "reason",
+            "type",
+            "severity",
+            "description",
+            "status",
+          ].forEach(function (key) {
+            if (error[key] !== undefined && error[key] !== null) {
+              details[key] = error[key];
+            }
+          });
+          try {
+            details.raw = JSON.parse(JSON.stringify(error));
+          } catch (e) {
+            details.raw = String(error);
+          }
+          if (!Object.keys(details).length) {
+            details.value = String(error);
+          }
+          return details;
+        }
+
+        function formatCafError(error) {
+          try {
+            return JSON.stringify(describeCafError(error));
+          } catch (e) {
+            return String(error);
+          }
+        }
+
         function emitGuiChannelTelemetry(event, details = {}) {
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
           const payload = {
@@ -2431,9 +2474,7 @@
           const unsupportedRemoteMessageTypes = [
             [messageType.SEEK, "SEEK"],
             [messageType.NEXT, "NEXT"],
-            [messageType.QUEUE_NEXT, "NEXT"],
             [messageType.PREVIOUS, "PREVIOUS"],
-            [messageType.QUEUE_PREV, "PREVIOUS"],
             [messageType.SET_PLAYBACK_RATE, "PLAYBACK_RATE"],
             [messageType.PLAYBACK_RATE, "PLAYBACK_RATE"],
           ];
@@ -2683,10 +2724,14 @@
                       : playerState;
                 const msg = "CAF event " + eventType + (value !== "" ? ": " + value : "");
                 writeCastDebug(eventType === events.ERROR ? "error" : "debug", msg);
-                emitCafTelemetry(eventType, {
+                const cafTelemetryDetails = {
                   playerState,
                   value,
-                  errorCode: event && event.errorCode !== undefined ? event.errorCode : null,
+                  errorCode: event && event.errorCode !== undefined
+                    ? event.errorCode
+                    : event && event.detailedErrorCode !== undefined
+                      ? event.detailedErrorCode
+                      : null,
                   mediaTime: mediaCurrentTime,
                   currentTime: mediaCurrentTime,
                   duration: mediaDuration,
@@ -2699,7 +2744,11 @@
                   volumeLevel,
                   isMuted,
                   readyState: document.getElementById("cast-media-element")?.readyState ?? null,
-                });
+                };
+                if (eventType === events.ERROR) {
+                  cafTelemetryDetails.errorDetails = describeCafError(event);
+                }
+                emitCafTelemetry(eventType, cafTelemetryDetails);
                 if (eventType === events.ERROR || eventType === events.PLAYING || eventType === events.PAUSE) {
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
@@ -3915,6 +3964,12 @@
             nativeAudio.addEventListener("playing", onNativeAudioPlaying, { once: true });
             nativeAudio.onerror = function () {
               if (!isCurrentNativeAttempt(attemptId)) return;
+              if (nativeStreamActive && window._playbackMode === "native") {
+                relayLogToStudio(
+                  "⏭️ Receiver: Ignored HTML companion media error after CAF native takeover.",
+                );
+                return;
+              }
               if (!nativeStreamActive && !nativeStreamStarting) return;
               nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
               nativeStreamStarting = false;
@@ -3932,6 +3987,12 @@
                 })
                 .catch(function (e) {
                   if (!isCurrentNativeAttempt(attemptId)) return;
+                  if (nativeStreamActive && window._playbackMode === "native") {
+                    relayLogToStudio(
+                      "⏭️ Receiver: Ignored HTML companion play rejection after CAF native takeover.",
+                    );
+                    return;
+                  }
                   nativeAudio.removeEventListener("playing", onNativeAudioPlaying);
                   nativeStreamStarting = false;
                   nativeStreamActive = false;
@@ -4057,8 +4118,28 @@
                 })
                 .catch(function (e) {
                   if (!isCurrentNativeAttempt(attemptId)) return;
-                  writeCastDebug("error", "CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
-                  relayLogToStudio("⚠️ Receiver: CAF native stream LOAD failed: " + (e && e.message ? e.message : e));
+                  const errorDetails = formatCafError(e);
+                  writeCastDebug("error", "CAF native stream LOAD failed: " + errorDetails);
+                  relayLogToStudio("⚠️ Receiver: CAF native stream LOAD failed: " + errorDetails);
+                  // A progressive live LOAD can reject its promise while CAF
+                  // continues attaching the bound media element. During a
+                  // muted prewarm, starting HTML audio here races that late
+                  // CAF attach; CAF then stops the companion and its AbortError
+                  // incorrectly demotes the native path to PCM fallback.
+                  // Keep CAF authoritative and let the ordered Play boundary
+                  // or the bounded startup watchdog settle the attempt.
+                  if (nativeStreamPrewarmBeforePlayback) {
+                    relayLogToStudio(
+                      "⏳ Receiver: Retaining CAF native prewarm after LOAD rejection; awaiting ordered PLAYBACK_START.",
+                    );
+                    return;
+                  }
+                  if (nativeStreamActive && window._playbackMode === "native") {
+                    relayLogToStudio(
+                      "⏭️ Receiver: Ignored CAF LOAD rejection after native takeover.",
+                    );
+                    return;
+                  }
                   startHtmlAudioStreamPlayout(streamUrl, attemptId);
                 });
             } else {
