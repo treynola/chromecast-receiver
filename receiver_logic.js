@@ -80,7 +80,6 @@
         var nativeStreamPrewarmBeforePlayback = false;
         var nativeStreamPrewarmReady = false;
         var nativeStreamCompanionForPcm = false;
-        var nativeStreamReconnectReloadPending = false;
         var nativeFailureRetryAttempted = false;
         var playbackPaused = false;
         var nativeStartupAttemptId = 0;
@@ -322,6 +321,8 @@
         var castDebugLoggerConfigured = false;
         const CAST_DEBUG_TAG = "MXS004.RECEIVER";
         const cafTelemetryLastSentAt = Object.create(null);
+        var lastNativePlayoutProofAt = 0;
+        var lastNativePlayoutProofTime = null;
 
         function isBuildIdentity(value) {
           return !!(
@@ -1665,36 +1666,6 @@
           return started;
         }
 
-        function reloadNativeStreamAfterBridgeReconnect(reason) {
-          if (
-            !nativeStreamActive ||
-            !nativeStreamPaused ||
-            !currentBridgeIp ||
-            window._receiverShutdownInProgress
-          ) {
-            return false;
-          }
-          const reloadReason = reason || "socket_reconnected_native_reload";
-          // A progressive-WAV response can remain in CAF BUFFERING after a
-          // bridge outage even though the sender has resumed. Reopen exactly
-          // once for this reconnect, keep native authoritative, and hold the
-          // new item muted until ordered PLAYBACK_START replay.
-          setReceiverPlayoutPreference("native", reloadReason);
-          stopNativeStreamPlayout(reloadReason, true);
-          const started = maybeStartNativeStream(
-            reloadReason,
-            true,
-            false,
-            true,
-          );
-          if (started) {
-            relayLogToStudio(
-              "🔄 Receiver: Native /stream.wav reloaded after bridge reconnect; awaiting ordered replay.",
-            );
-          }
-          return started;
-        }
-
         function prepareNativePcmHandoff(reason) {
           if (
             nativeStreamActive ||
@@ -1887,9 +1858,25 @@
           return /^(t-(rec|stop|play|rev|slice)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain|ls|le)-sl-\d+|t-input-\d+|t-effect-select-\d+|t-fx-(left|right)-\d+|t-fx-chk-\d+-\d+|t-lfo[12]-chk-\d+-(pitch|vol|pan|treble|mid_freq|mid_gain|bass)|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|record-as-select|import-files-button|show-docs-button|sample-station-button|settings-button|sample-\d+)$/.test(element.id);
         }
 
-        function sendGuiInteraction(element, kind) {
+        const pendingGuiInputTimers = new WeakMap();
+
+        function sendGuiInteraction(element, kind, flushInput = false) {
           if (!isReceiverInteractiveControl(element)) return;
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+          if (
+            kind === "input" &&
+            !flushInput &&
+            element.matches?.("input[type=range]")
+          ) {
+            const previousTimer = pendingGuiInputTimers.get(element);
+            if (previousTimer) clearTimeout(previousTimer);
+            const timer = setTimeout(() => {
+              pendingGuiInputTimers.delete(element);
+              sendGuiInteraction(element, kind, true);
+            }, 50);
+            pendingGuiInputTimers.set(element, timer);
+            return;
+          }
           guiInteractionRevision += 1;
           const message = {
             type: "GUI_ACTION",
@@ -1997,7 +1984,7 @@
           });
           document.addEventListener("input", (event) => {
             const target = event.target;
-            if (target && (target.matches("input[type=range], input[type=checkbox]") || target.tagName === "SELECT")) {
+            if (target && target.matches("input[type=range], input[type=checkbox]")) {
               const output = target.parentElement?.querySelector(".gui-dialog-mirror-value");
               if (output) output.textContent = target.value;
               sendGuiInteraction(target, "input");
@@ -2084,6 +2071,41 @@
               0,
               reportedLiveEdge - reportedBufferedStart,
             );
+            const progressNow = Date.now();
+            if (
+              Number.isFinite(lastNativePlayoutProofTime) &&
+              reportedPlayhead + 0.05 < lastNativePlayoutProofTime
+            ) {
+              lastNativePlayoutProofTime = null;
+            }
+            const playoutAdvanced =
+              !Number.isFinite(lastNativePlayoutProofTime) ||
+              reportedPlayhead - lastNativePlayoutProofTime >= 0.05;
+            const outputAudible =
+              !nativeStreamPaused &&
+              activeAudio.muted !== true &&
+              Number(activeAudio.volume) > 0.001;
+            if (
+              outputAudible &&
+              playoutAdvanced &&
+              progressNow - lastNativePlayoutProofAt >= 1000
+            ) {
+              emitCafTelemetry("PLAYOUT_PROGRESS", {
+                mediaElementId: activeAudio.id || "native-media",
+                currentTime: reportedPlayhead,
+                previousTime: lastNativePlayoutProofTime,
+                advancedSeconds: Number.isFinite(lastNativePlayoutProofTime)
+                  ? Math.max(0, reportedPlayhead - lastNativePlayoutProofTime)
+                  : null,
+                readyState: activeAudio.readyState,
+                networkState: activeAudio.networkState,
+                muted: activeAudio.muted === true,
+                volume: Number(activeAudio.volume),
+                bufferedEnd: reportedLiveEdge,
+              });
+              lastNativePlayoutProofAt = progressNow;
+              lastNativePlayoutProofTime = reportedPlayhead;
+            }
 
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               binaryWS.send(
@@ -5977,6 +5999,104 @@
           }
         }
 
+        function mergeGuiLivePatch(patch) {
+          if (
+            !lastMirroredState ||
+            !patch ||
+            typeof patch !== "object"
+          ) {
+            return null;
+          }
+          const nextState = cloneMirroredState(lastMirroredState);
+          if (!nextState) return null;
+
+          if (patch.transport && typeof patch.transport === "object") {
+            nextState.transport = {
+              ...(nextState.transport || {}),
+              ...patch.transport,
+            };
+          }
+          if (patch.master && typeof patch.master === "object") {
+            const previousMaster = nextState.master || {};
+            nextState.master = {
+              ...previousMaster,
+              ...patch.master,
+              meters: {
+                ...(previousMaster.meters || {}),
+                ...(patch.master.meters || {}),
+              },
+              buttons: {
+                ...(previousMaster.buttons || {}),
+                ...(patch.master.buttons || {}),
+              },
+              lfo1: {
+                ...(previousMaster.lfo1 || {}),
+                ...(patch.master.lfo1 || {}),
+              },
+              lfo2: {
+                ...(previousMaster.lfo2 || {}),
+                ...(patch.master.lfo2 || {}),
+              },
+            };
+          }
+          if (Array.isArray(patch.tracks) && Array.isArray(nextState.tracks)) {
+            nextState.tracks = nextState.tracks.map((previousTrack, index) => {
+              const trackPatch = patch.tracks.find((candidate) => {
+                if (!candidate || typeof candidate !== "object") return false;
+                if (Number.isInteger(Number(candidate.index))) {
+                  return Number(candidate.index) === index;
+                }
+                return (
+                  candidate.trackId != null &&
+                  String(candidate.trackId) === String(previousTrack?.trackId)
+                );
+              });
+              if (!trackPatch) return previousTrack;
+              return {
+                ...previousTrack,
+                ...trackPatch,
+                meters: {
+                  ...(previousTrack?.meters || {}),
+                  ...(trackPatch.meters || {}),
+                },
+                waveform: {
+                  ...(previousTrack?.waveform || {}),
+                  ...(trackPatch.waveform || {}),
+                },
+                buttons: {
+                  ...(previousTrack?.buttons || {}),
+                  ...(trackPatch.buttons || {}),
+                },
+                params: {
+                  ...(previousTrack?.params || {}),
+                  ...(trackPatch.params || {}),
+                },
+                lfo: {
+                  ...(previousTrack?.lfo || {}),
+                  ...(trackPatch.lfo || {}),
+                },
+                lfoIndicators: {
+                  ...(previousTrack?.lfoIndicators || {}),
+                  ...(trackPatch.lfoIndicators || {}),
+                },
+              };
+            });
+          }
+          if (Array.isArray(patch.sampler) && Array.isArray(nextState.sampler)) {
+            nextState.sampler = nextState.sampler.map((previousPad, index) => {
+              const padPatch = patch.sampler.find((candidate) => {
+                if (!candidate || typeof candidate !== "object") return false;
+                if (candidate.id != null && previousPad?.id != null) {
+                  return String(candidate.id) === String(previousPad.id);
+                }
+                return Number(candidate.index) === index;
+              });
+              return padPatch ? { ...previousPad, ...padPatch } : previousPad;
+            });
+          }
+          return nextState;
+        }
+
         function buildImmediatePlaybackState(trackId) {
           if (lastMirroredState == null) {
             return null;
@@ -6343,7 +6463,7 @@
           schedulePlaybackRecoveryRetry();
         }
 
-        function handleGuiStateUpdateCommand(state, envelope) {
+        function handleGuiStateUpdateCommand(state, envelope, ackType = "snapshot") {
           if (!acceptGuiRevision(envelope)) {
             rejectGuiChannelMessage("stale_revision", {
               revision: Number(envelope?.guiRevision ?? -1),
@@ -6387,7 +6507,7 @@
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
                 guiSessionNonce,
-                ackType: "snapshot",
+                ackType,
                 channel: "gui",
                 guiRevision: revision,
                 guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
@@ -6532,14 +6652,22 @@
           if (rawGuiType === "GUI_SNAPSHOT") {
             d = { ...d, type: "GUI_STATE_UPDATE" };
           } else if (rawGuiType === "GUI_PATCH") {
-            d = {
-              ...d,
-              type: "CURSOR_UPDATE",
-              transport: "gui_cursor",
-              cursor: d.cursor || d.patch?.cursor,
-            };
+            if (d.patchType === "live_state") {
+              d = { ...d, type: "GUI_STATE_PATCH" };
+            } else {
+              d = {
+                ...d,
+                type: "CURSOR_UPDATE",
+                transport: "gui_cursor",
+                cursor: d.cursor || d.patch?.cursor,
+              };
+            }
           }
-          if (rawGuiType === "GUI_STATE_UPDATE" || rawGuiType === "GUI_SNAPSHOT") {
+          if (
+            rawGuiType === "GUI_STATE_UPDATE" ||
+            rawGuiType === "GUI_SNAPSHOT" ||
+            (rawGuiType === "GUI_PATCH" && d.type === "GUI_STATE_PATCH")
+          ) {
             guiRawMessageCount += 1;
             guiLastRawRevision = Number(d.guiRevision ?? -1);
             emitGuiChannelTelemetry("raw_received", {
@@ -6550,6 +6678,7 @@
           }
           const requiresAuthenticatedGui = [
             "GUI_STATE_UPDATE",
+            "GUI_STATE_PATCH",
             "CURSOR_UPDATE",
           ].includes(d.type);
           const requiresAuthenticatedAudio = [
@@ -6605,6 +6734,28 @@
               }
               handleGuiStateUpdateCommand(d.state, d);
               return true;
+            case "GUI_STATE_PATCH": {
+              if (
+                d.transport !== "gui" ||
+                Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION
+              ) {
+                rejectGuiChannelMessage("unsupported_protocol_envelope", {
+                  revision: Number(d.guiRevision ?? -1),
+                });
+                writeCastDebug("warn", "Receiver rejected GUI_STATE_PATCH with an unsupported protocol envelope.");
+                return true;
+              }
+              const mergedState = mergeGuiLivePatch(d.patch);
+              if (!mergedState) {
+                rejectGuiChannelMessage("missing_patch_base", {
+                  revision: Number(d.guiRevision ?? -1),
+                });
+                writeCastDebug("warn", "Receiver rejected GUI_STATE_PATCH without a full snapshot base.");
+                return true;
+              }
+              handleGuiStateUpdateCommand(mergedState, d, "patch");
+              return true;
+            }
             case "CURSOR_UPDATE":
               if (
                 d.transport !== "gui_cursor" ||
@@ -7012,12 +7163,6 @@
                   }
                   if (d.ip) {
                     markReceiverPlayoutPathReady();
-                    if (nativeStreamReconnectReloadPending) {
-                      nativeStreamReconnectReloadPending = false;
-                      reloadNativeStreamAfterBridgeReconnect(
-                        "socket_reconnected_native_reload",
-                      );
-                    }
                     // Begin the native CAF progressive-WAV prewarm as soon as
                     // the authenticated bridge advertises its LAN endpoint.
                     // The stream remains muted until the ordered Play command;
@@ -7046,8 +7191,8 @@
             pendingBinaryFrames = [];
             workletReady = false;
             window._isDrainingStartup = false;
-            // The bridge close tears down receiver playout. Allow the sender's
-            // same-revision RECEIVER_READY replay to re-arm that fresh session,
+            // A bridge close creates a new control generation. Allow the
+            // sender's same-revision RECEIVER_READY replay to re-arm control,
             // while equal revisions remain suppressed during one connection.
             resetPlaybackRevisionGate("bridge_closed");
             resetGuiRevisionGate("bridge_closed");
@@ -7055,16 +7200,29 @@
             const reconnectPlaybackActive = Boolean(
               lastPlaybackStartSignalAt && !playbackPaused
             );
-            nativeStreamReconnectReloadPending =
+            const preserveLiveNative =
               reconnectPlaybackActive && nativeStreamActive;
-            stopAllPlayout(
-              "websocket_closed",
-              undefined,
-              false,
-              reconnectPlaybackActive,
-              reconnectPlaybackActive,
-            );
-            if (reconnectPlaybackActive) {
+            if (preserveLiveNative) {
+              // The native progressive-WAV request is independent from the
+              // control WebSocket. Keep its CAF media clock and audible item
+              // untouched through a transient bridge reconnect; reopening or
+              // muting it here causes the exact cast-audio cancellation this
+              // reconnect path is meant to recover from.
+              resetBinaryPlayoutState("websocket_closed_native_continuity");
+              setPcmAudioPriority(false, "websocket_closed_native_continuity");
+              relayLogToStudio(
+                "🔁 Receiver: Native CAF remained live across control bridge reconnect.",
+              );
+            } else {
+              stopAllPlayout(
+                "websocket_closed",
+                undefined,
+                false,
+                reconnectPlaybackActive,
+                reconnectPlaybackActive,
+              );
+            }
+            if (reconnectPlaybackActive && !preserveLiveNative) {
               relayLogToStudio(
                 "🔁 Receiver: Active PLAYBACK_START intent retained across bridge reconnect; awaiting ordered replay.",
               );
