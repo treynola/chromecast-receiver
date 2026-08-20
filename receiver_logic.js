@@ -2089,6 +2089,7 @@
           lastGuiRevision = -1;
           lastCursorRevision = -1;
           lastDialogMirrorState = "";
+          resetSmoothLfoVisuals();
           if (reason) {
             writeCastDebug("debug", "GUI revision gate reset (" + reason + ").");
           }
@@ -2224,8 +2225,13 @@
 
         function bindReceiverGuiInteractions() {
           document.addEventListener("click", (event) => {
-            const target = event.target && event.target.closest ? event.target.closest("button") : null;
-            if (target) sendGuiInteraction(target, "click");
+            const target = event.target && event.target.closest
+              ? event.target.closest('button, label[data-dialog-id][data-action-index]')
+              : null;
+            if (target) {
+              if (target.tagName === "LABEL") event.preventDefault();
+              sendGuiInteraction(target, "click");
+            }
           });
           document.addEventListener("dblclick", (event) => {
             const target = event.target && event.target.closest ? event.target.closest("button") : null;
@@ -6011,7 +6017,7 @@
           };
           list.forEach((dialog) => {
             const shellClassName = normalizeClassName(dialog.shellClassName);
-            const exactEffectDialog = dialog.dialogLayoutVersion === 1 &&
+            const exactEffectDialog = dialog.dialogLayoutVersion >= 1 &&
               /(?:^|\s)(?:effect-params-dialog|audition-params-dialog)(?:\s|$)/.test(shellClassName);
             const panel = document.createElement(exactEffectDialog ? "dialog" : "section");
             panel.className = [
@@ -6039,12 +6045,21 @@
             );
             const actionPlacement = (action) => action?.placement || (isHeaderAction(action) ? "header" : "footer");
             const renderAction = (action, actionIndex) => {
-              const button = document.createElement("button");
-              button.type = "button";
+              const isLabel = action.tagName === "label";
+              const button = document.createElement(isLabel ? "label" : "button");
+              if (!isLabel) button.type = "button";
               button.className = normalizeClassName(action.className, "gui-dialog-action-btn");
-              button.textContent = action.label || "Action";
+              if (action.contentClassName) {
+                const content = document.createElement("span");
+                content.className = normalizeClassName(action.contentClassName);
+                content.textContent = action.label || "Action";
+                button.appendChild(content);
+              } else {
+                button.textContent = action.label || "Action";
+              }
               button.title = action.title || "";
-              button.disabled = Boolean(action.disabled);
+              if (!isLabel) button.disabled = Boolean(action.disabled);
+              if (isLabel && action.htmlFor) button.htmlFor = String(action.htmlFor);
               button.dataset.dialogId = dialog.id || "";
               button.dataset.actionIndex = String(action.actionIndex ?? actionIndex);
               button.dataset.actionId = action.actionId || `button-${actionIndex}`;
@@ -6105,7 +6120,7 @@
               content.appendChild(help);
             });
             const controls = Array.isArray(dialog.controls) ? dialog.controls : [];
-            const exactEffectLayout = dialog.dialogLayoutVersion === 1 &&
+            const exactEffectLayout = dialog.dialogLayoutVersion >= 1 &&
               dialog.kind === "effectAudition" && controls.some((control) => control.groupClassName);
             let controlsRoot = content;
             if (exactEffectLayout) {
@@ -6173,6 +6188,49 @@
               controlsRoot.appendChild(row);
             });
             panel.appendChild(content);
+            const effectSlotTabs = dialog.effectSlotTabs;
+            if (
+              exactEffectDialog &&
+              effectSlotTabs &&
+              Array.isArray(effectSlotTabs.items) &&
+              effectSlotTabs.items.length
+            ) {
+              const tabs = document.createElement("div");
+              tabs.className = normalizeClassName(
+                effectSlotTabs.className,
+                "vertical-slot-tabs",
+              );
+              effectSlotTabs.items.forEach((item) => {
+                if (item?.kind === "action") {
+                  const action = actions.find(
+                    (candidate) => Number(candidate.actionIndex) === Number(item.actionIndex),
+                  );
+                  if (action) tabs.appendChild(renderAction(action, action.actionIndex));
+                  return;
+                }
+                if (item?.kind !== "slot" || !item.control) return;
+                const slot = document.createElement("div");
+                slot.className = normalizeClassName(
+                  item.className,
+                  "fx-chain-slot vertical-tab-slot",
+                );
+                const input = document.createElement("input");
+                applyControlState(
+                  input,
+                  item.control,
+                  dialog,
+                  item.control.controlIndex,
+                );
+                slot.appendChild(input);
+                const labelAction = actions.find(
+                  (candidate) =>
+                    Number(candidate.actionIndex) === Number(item.labelActionIndex),
+                );
+                if (labelAction) slot.appendChild(renderAction(labelAction, labelAction.actionIndex));
+                tabs.appendChild(slot);
+              });
+              panel.appendChild(tabs);
+            }
             const footer = document.createElement("div");
             footer.className = "dialog-bottom-actions gui-dialog-actions";
             actions.forEach((action, actionIndex) => {
@@ -6318,6 +6376,214 @@
         const _lastFxCache = [];
         let _lastSamplerCache = "";
         let lastMirroredState = null;
+        const LFO_VISUAL_FRAME_INTERVAL_MS = 1000 / 30;
+        const LFO_VISUAL_PHASE_CORRECTION_MS = 180;
+        const LFO_VISUAL_TWO_PI = Math.PI * 2;
+        const smoothLfoClocks = {
+          1: { active: false, phase: null, correction: 0, period: 1.8, lastFrameMs: 0 },
+          2: { active: false, phase: null, correction: 0, period: 1.8, lastFrameMs: 0 },
+        };
+        let smoothLfoFrameHandle = null;
+        let smoothLfoFrameUsesTimeout = false;
+        let lastSmoothLfoPaintMs = 0;
+
+        function normalizeLfoPhase(value) {
+          const phase = Number(value);
+          if (!Number.isFinite(phase)) return null;
+          return ((phase % LFO_VISUAL_TWO_PI) + LFO_VISUAL_TWO_PI) % LFO_VISUAL_TWO_PI;
+        }
+
+        function shortestLfoPhaseDelta(from, to) {
+          let delta = to - from;
+          while (delta > Math.PI) delta -= LFO_VISUAL_TWO_PI;
+          while (delta < -Math.PI) delta += LFO_VISUAL_TWO_PI;
+          return delta;
+        }
+
+        function getLfoVisualNow() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
+
+        function advanceSmoothLfoClock(clock, nowMs) {
+          if (!clock || !clock.active || clock.phase === null) {
+            if (clock) clock.lastFrameMs = nowMs;
+            return;
+          }
+          if (!clock.lastFrameMs) {
+            clock.lastFrameMs = nowMs;
+            return;
+          }
+          const deltaSeconds = Math.max(0, Math.min(0.1, (nowMs - clock.lastFrameMs) / 1000));
+          clock.lastFrameMs = nowMs;
+          clock.phase = normalizeLfoPhase(
+            clock.phase + (LFO_VISUAL_TWO_PI * deltaSeconds) / Math.max(0.1, clock.period),
+          );
+          if (Math.abs(clock.correction) > 0.0001 && deltaSeconds > 0) {
+            const correctionRatio = Math.min(
+              1,
+              (deltaSeconds * 1000) / LFO_VISUAL_PHASE_CORRECTION_MS,
+            );
+            const correctionStep = clock.correction * correctionRatio;
+            clock.phase = normalizeLfoPhase(clock.phase + correctionStep);
+            clock.correction -= correctionStep;
+          }
+        }
+
+        function syncSmoothLfoClock(index, state, nowMs) {
+          const clock = smoothLfoClocks[index];
+          if (!clock) return;
+          advanceSmoothLfoClock(clock, nowMs);
+          const wasActive = clock.active;
+          const nextActive = Boolean(state?.active);
+          const nextPeriod = Number(state?.time);
+          if (Number.isFinite(nextPeriod) && nextPeriod > 0) {
+            clock.period = Math.max(0.1, Math.min(60, nextPeriod));
+          }
+          const sampledPhase = normalizeLfoPhase(state?.phase);
+          clock.active = nextActive;
+          if (!nextActive) {
+            clock.correction = 0;
+            if (sampledPhase !== null) clock.phase = sampledPhase;
+            clock.lastFrameMs = nowMs;
+            return;
+          }
+          if (!wasActive || clock.phase === null) {
+            clock.phase = sampledPhase;
+            clock.correction = 0;
+          } else if (sampledPhase !== null) {
+            clock.correction = shortestLfoPhaseDelta(clock.phase, sampledPhase);
+          }
+          clock.lastFrameMs = nowMs;
+        }
+
+        function canRenderSmoothLfo(index) {
+          const clock = smoothLfoClocks[index];
+          return Boolean(clock?.active && clock.phase !== null);
+        }
+
+        function getTrackLfoVisualBinding(track, parameter) {
+          if (!track || !parameter) return null;
+          const indicator = track.lfoIndicators?.[parameter];
+          for (const index of [1, 2]) {
+            const visual = indicator?.[`lfo${index}`];
+            const assigned = Boolean(
+              visual && typeof visual === "object"
+                ? visual.checked
+                : visual ?? track.lfoAssigns?.[index]?.includes?.(parameter),
+            );
+            if (!assigned) continue;
+            return {
+              index,
+              reversed: Boolean(visual && typeof visual === "object" && visual.reversed),
+              minMarker: indicator?.minMarker,
+              maxMarker: indicator?.maxMarker,
+            };
+          }
+          return null;
+        }
+
+        function markerValueFromPercent(marker, minimum, maximum, fallback) {
+          if (!marker?.active) return fallback;
+          const left = Number(marker.left);
+          if (!Number.isFinite(left)) return fallback;
+          return minimum + (Math.max(0, Math.min(100, left)) / 100) * (maximum - minimum);
+        }
+
+        function scheduleSmoothLfoRender() {
+          if (smoothLfoFrameHandle !== null) return;
+          if (typeof window.requestAnimationFrame === "function") {
+            smoothLfoFrameUsesTimeout = false;
+            smoothLfoFrameHandle = window.requestAnimationFrame(renderSmoothLfoFrame);
+          } else {
+            smoothLfoFrameUsesTimeout = true;
+            smoothLfoFrameHandle = window.setTimeout(
+              () => renderSmoothLfoFrame(getLfoVisualNow()),
+              LFO_VISUAL_FRAME_INTERVAL_MS,
+            );
+          }
+        }
+
+        function resetSmoothLfoVisuals() {
+          if (smoothLfoFrameHandle !== null) {
+            if (smoothLfoFrameUsesTimeout) window.clearTimeout(smoothLfoFrameHandle);
+            else if (typeof window.cancelAnimationFrame === "function") {
+              window.cancelAnimationFrame(smoothLfoFrameHandle);
+            }
+          }
+          smoothLfoFrameHandle = null;
+          lastSmoothLfoPaintMs = 0;
+          [1, 2].forEach((index) => {
+            Object.assign(smoothLfoClocks[index], {
+              active: false,
+              phase: null,
+              correction: 0,
+              period: 1.8,
+              lastFrameMs: 0,
+            });
+          });
+        }
+
+        function renderSmoothLfoFrame(frameTime) {
+          smoothLfoFrameHandle = null;
+          const nowMs = Number.isFinite(Number(frameTime))
+            ? Number(frameTime)
+            : getLfoVisualNow();
+          [1, 2].forEach((index) => advanceSmoothLfoClock(smoothLfoClocks[index], nowMs));
+          const hasActiveClock = canRenderSmoothLfo(1) || canRenderSmoothLfo(2);
+          if (!hasActiveClock) return;
+          if (nowMs - lastSmoothLfoPaintMs >= LFO_VISUAL_FRAME_INTERVAL_MS - 1) {
+            lastSmoothLfoPaintMs = nowMs;
+            [1, 2].forEach((index) => {
+              if (!canRenderSmoothLfo(index)) return;
+              const signedValue = Math.sin(smoothLfoClocks[index].phase);
+              updateStyleWidth(
+                index === 1 ? "lfo-meter-bar" : "lfo2-meter-bar",
+                `${Math.abs(signedValue) * 100}%`,
+              );
+            });
+            (lastMirroredState?.tracks || []).forEach((track, trackIndex) => {
+              KNOB_CONFIGS.forEach((config) => {
+                const binding = getTrackLfoVisualBinding(track, config.p);
+                if (!binding || !canRenderSmoothLfo(binding.index)) return;
+                const sliderId = `t-${config.p}-sl-${trackIndex}`;
+                const slider = getEl(sliderId);
+                if (!slider || slider.dataset.castInteractionState === "pending") return;
+                const minimum = Number.isFinite(Number(slider.min)) ? Number(slider.min) : config.min;
+                const maximum = Number.isFinite(Number(slider.max)) ? Number(slider.max) : config.max;
+                const rangeMinimum = markerValueFromPercent(
+                  binding.minMarker,
+                  minimum,
+                  maximum,
+                  minimum,
+                );
+                const rangeMaximum = markerValueFromPercent(
+                  binding.maxMarker,
+                  minimum,
+                  maximum,
+                  maximum,
+                );
+                let signedValue = Math.sin(smoothLfoClocks[binding.index].phase);
+                if (binding.reversed) signedValue = -signedValue;
+                const scaled =
+                  ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum;
+                updateValue(sliderId, scaled);
+                updateText(`t-${config.p}-val-${trackIndex}`, scaled.toFixed(2));
+              });
+            });
+          }
+          scheduleSmoothLfoRender();
+        }
+
+        function syncSmoothLfoVisuals(master) {
+          const nowMs = getLfoVisualNow();
+          syncSmoothLfoClock(1, master?.lfo1, nowMs);
+          syncSmoothLfoClock(2, master?.lfo2, nowMs);
+          if (canRenderSmoothLfo(1) || canRenderSmoothLfo(2)) {
+            scheduleSmoothLfoRender();
+          }
+        }
 
         function renderCursorState(cursor) {
           const cur = getEl("cursor-mirror");
@@ -6509,6 +6775,7 @@
               }
             }
             if (s.master) {
+              syncSmoothLfoVisuals(s.master);
               updateValue("master-volume", s.master.volume || 0);
               updateText(
                 "master-volume-value",
@@ -6527,10 +6794,12 @@
                 "lfo-toggle",
                 s.master.lfo1 && s.master.lfo1.active ? "active" : "",
               );
-              updateStyleWidth(
-                "lfo-meter-bar",
-                `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo1?.value) || 0))) * 100}%`,
-              );
+              if (!canRenderSmoothLfo(1)) {
+                updateStyleWidth(
+                  "lfo-meter-bar",
+                  `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo1?.value) || 0))) * 100}%`,
+                );
+              }
               updateValue(
                 "lfo-time",
                 (s.master.lfo1 && s.master.lfo1.time) || 1.8,
@@ -6543,10 +6812,12 @@
                 "lfo2-toggle",
                 s.master.lfo2 && s.master.lfo2.active ? "active" : "",
               );
-              updateStyleWidth(
-                "lfo2-meter-bar",
-                `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo2?.value) || 0))) * 100}%`,
-              );
+              if (!canRenderSmoothLfo(2)) {
+                updateStyleWidth(
+                  "lfo2-meter-bar",
+                  `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo2?.value) || 0))) * 100}%`,
+                );
+              }
               updateButtonState(
                 "master-record-button",
                 s.master.buttons && s.master.buttons.record,
@@ -6648,12 +6919,20 @@
                   const paramsStr = JSON.stringify(t.params);
                   const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
                   const lfoIndicatorsStr = JSON.stringify(t.lfoIndicators);
-                  const trackCacheKey = paramsStr + "_" + lfoAssignsStr + "_" + lfoIndicatorsStr;
+                  const lfoActivityKey = `${s.master?.lfo1?.active ? 1 : 0}${s.master?.lfo2?.active ? 1 : 0}`;
+                  const trackCacheKey =
+                    paramsStr + "_" + lfoAssignsStr + "_" + lfoIndicatorsStr + "_" + lfoActivityKey;
                   if (_lastParamsCache[i] !== trackCacheKey) {
                     _lastParamsCache[i] = trackCacheKey;
                     KNOB_CONFIGS.forEach((cfg) => {
-                      updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
-                      updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
+                      const smoothBinding = getTrackLfoVisualBinding(t, cfg.p);
+                      const smoothOwned = Boolean(
+                        smoothBinding && canRenderSmoothLfo(smoothBinding.index),
+                      );
+                      if (!smoothOwned) {
+                        updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
+                        updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
+                      }
 
                       const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
                       const l1Checked = !!(
