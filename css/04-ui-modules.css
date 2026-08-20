@@ -1,4 +1,4 @@
-/* Receiver build: pruned 60 Studio-only modal/session CSS blocks. */
+/* Receiver build: pruned 31 Studio-only modal/session CSS blocks. */
 /* 04-ui-modules.css - All specific UI modules, modals, and dialogs */
 
 
@@ -1581,6 +1581,26 @@ select option {
     opacity: 0;
   }
 }
+.effect-params-dialog,
+.audition-params-dialog {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  overflow: visible;
+  width: 92vw;
+  height: 92vh;
+  max-width: 1200px;
+  transform: scale(0.12);
+  opacity: 0;
+}
+.effect-params-dialog[open],
+.audition-params-dialog[open] {
+  animation: dialog-open 1.44s ease-in-out forwards;
+}
+.effect-params-dialog::backdrop,
+.audition-params-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
 
 #close-docs-button,
 #close-qa-button {
@@ -2215,6 +2235,94 @@ select option {
   color: #888;
 }
 
+/* Effect Parameter Dialogs (vNewStrategy) */
+.effect-dialogs-container {
+  position: relative;
+  width: 100%;
+  z-index: 10;
+  /* Base z-index */
+}
+
+/* --- Effect Params Dialogs (Universal Styling) --- */
+.effect-params-dialog,
+.audition-params-dialog {
+  position: fixed;
+  /* Always floating */
+  z-index: 2000;
+  background: var(--off-black);
+  border: 1px solid var(--green);
+  border-radius: 12px;
+  padding: 0;
+  width: 490px; /* Increased by 36% from 360px */
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9);
+  margin: 10px;
+  max-width: 95vw;
+  height: auto;
+  max-height: 85vh;
+  min-height: 100px;
+  /* Small base for empty state */
+  overflow: visible;
+  display: none;
+  flex-direction: column;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.effect-params-dialog[open],
+.audition-params-dialog[open] {
+  display: flex;
+}
+
+.effect-params-dialog:focus,
+.effect-params-dialog:focus-visible,
+.audition-params-dialog:focus,
+.audition-params-dialog:focus-visible {
+  outline: none;
+}
+
+.effect-params-dialog::backdrop,
+.audition-params-dialog::backdrop {
+  display: none;
+}
+
+/* .dialog-content is the OUTER container - it must be a simple flex column,
+   NOT a grid. The grid lives inside it via .effect-params-grid */
+.effect-params-dialog .dialog-content,
+.audition-params-dialog .dialog-content,
+.audition-dialog-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 70vh;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) var(--off-black);
+}
+
+.effect-params-dialog .dialog-content::-webkit-scrollbar,
+.audition-params-dialog .dialog-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.effect-params-dialog .dialog-content::-webkit-scrollbar-track,
+.audition-params-dialog .dialog-content::-webkit-scrollbar-track {
+  background: var(--off-black);
+}
+
+.effect-params-dialog .dialog-content::-webkit-scrollbar-thumb,
+.audition-params-dialog .dialog-content::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: 3px;
+}
+
 /* .effect-params-grid is the INNER grid - this is the ONLY grid container */
 .effect-params-grid {
   display: grid !important;
@@ -2237,6 +2345,79 @@ select option {
   .effect-params-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+.effect-params-dialog .effect-param-slider,
+.audition-params-dialog .effect-param-slider {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  margin: 0;
+  cursor: pointer;
+  background: var(--mid-gray);
+  border-radius: 5px;
+  outline: none;
+  accent-color: var(--gold);
+}
+
+.effect-params-dialog .effect-param-slider::-webkit-slider-runnable-track,
+.audition-params-dialog .effect-param-slider::-webkit-slider-runnable-track {
+  height: 5px;
+  background: var(--mid-gray);
+  border-radius: 5px;
+}
+
+.effect-params-dialog .effect-param-slider::-webkit-slider-thumb,
+.audition-params-dialog .effect-param-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4.5px;
+  background: var(--gold);
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.effect-params-dialog .effect-param-slider::-moz-range-track,
+.audition-params-dialog .effect-param-slider::-moz-range-track {
+  height: 5px;
+  background: var(--mid-gray);
+  border-radius: 5px;
+}
+
+.effect-params-dialog .effect-param-slider::-moz-range-thumb,
+.audition-params-dialog .effect-param-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--gold);
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.effect-params-dialog .effect-param-slider:focus,
+.effect-params-dialog .effect-param-slider:focus-visible,
+.audition-params-dialog .effect-param-slider:focus,
+.audition-params-dialog .effect-param-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.effect-params-dialog .dialog-header,
+.audition-params-dialog .dialog-header {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  padding: 13px 30px 10px 12px;
+  background: #222;
+  border-bottom: 1px solid #444;
+  border-radius: 11px 11px 0 0;
+  position: relative;
+  z-index: 10;
+  cursor: move;
 }
 
 .dialog-header-top {
@@ -2298,11 +2479,53 @@ select option {
   letter-spacing: 0.5px;
 }
 
+.effect-params-dialog .dialog-header .dialog-title-top,
+.audition-params-dialog .dialog-header .dialog-title-top {
+  display: block;
+  font-size: 1.1em;
+  color: var(--gold);
+  opacity: 0.8;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.effect-params-dialog .dialog-header .dialog-title-bottom,
+.audition-params-dialog .dialog-header .dialog-title-bottom {
+  display: block;
+  font-size: 1.15em;
+  color: var(--green);
+  text-transform: uppercase;
+}
+
+.effect-params-dialog .dialog-header .dialog-title-bottom--effect,
+.audition-params-dialog .dialog-header .dialog-title-bottom--effect {
+  font-size: 1.1em;
+}
+
 .dialog-header-status--audition {
   text-align: center;
   margin-left: 0;
   margin-top: 4px;
   width: 100%;
+}
+
+.effect-params-dialog .dialog-header span,
+.audition-params-dialog .dialog-header span {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.effect-params-dialog .dialog-header-title,
+.audition-params-dialog .dialog-header-title {
+  max-width: calc(100% - 34px);
+}
+
+.effect-params-dialog .dialog-header-title.dialog-header-title--stacked,
+.audition-params-dialog .dialog-header-title.dialog-header-title--stacked,
+.effect-params-dialog .dialog-header-title.dialog-header-title--slot,
+.audition-params-dialog .dialog-header-title.dialog-header-title--slot {
+  max-width: none;
 }
 
 .close-dialog-btn {
@@ -2334,6 +2557,35 @@ select option {
 .close-dialog-btn:focus-visible {
   outline: none !important;
   box-shadow: none !important;
+}
+
+/* Ensure z-index stacking for 7 slots - increased to stay above other UI */
+.effect-params-dialog[data-slot-index="0"] {
+  z-index: 500;
+}
+
+.effect-params-dialog[data-slot-index="1"] {
+  z-index: 501;
+}
+
+.effect-params-dialog[data-slot-index="2"] {
+  z-index: 502;
+}
+
+.effect-params-dialog[data-slot-index="3"] {
+  z-index: 503;
+}
+
+.effect-params-dialog[data-slot-index="4"] {
+  z-index: 504;
+}
+
+.effect-params-dialog[data-slot-index="5"] {
+  z-index: 505;
+}
+
+.effect-params-dialog[data-slot-index="6"] {
+  z-index: 506;
 }
 
 /* Sample Editor — intentionally layered on the Effects dialog shell. */
@@ -3576,7 +3828,7 @@ body.receiver-mode #gui-dialog-mirror-root {
 body.receiver-mode #gui-dialog-mirror-root[hidden] {
   display: none !important;
 }
-body.receiver-mode .gui-dialog-mirror {
+body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog) {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -3590,6 +3842,16 @@ body.receiver-mode .gui-dialog-mirror {
   border-radius: 4px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
   pointer-events: auto;
+}
+body.receiver-mode .gui-dialog-mirror.effect-params-dialog,
+body.receiver-mode .gui-dialog-mirror.audition-params-dialog {
+  pointer-events: auto;
+}
+body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
+body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open] {
+  animation: none;
+  transform: none;
+  opacity: 1;
 }
 body.receiver-mode .gui-dialog-mirror h3 {
   margin: 0;
@@ -5308,31 +5570,6 @@ select.app-select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-/* Receiver GUI LFO assignment markers. */
-body.receiver-mode .lfo-marker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.3em;
-  height: 1.3em;
-  margin-left: 2px;
-  color: #111;
-  background: var(--gold, #ffcc00);
-  border-radius: 3px;
-  font-size: 0.58em;
-  font-weight: 800;
-  line-height: 1;
-  vertical-align: middle;
-}
-
-body.receiver-mode .lfo-marker[hidden] {
-  display: none;
-}
-
-body.receiver-mode .lfo-marker.active {
-  box-shadow: 0 0 5px rgba(255, 204, 0, 0.9);
-}
-
 /* Receiver GUI dialog/menu registry. */
 body.receiver-mode #gui-dialog-registry-root {
   position: absolute;

@@ -84,6 +84,10 @@
         var playbackPaused = false;
         var nativeStartupAttemptId = 0;
         var nativeStreamReloadTimerId = null;
+        var nativeResumeProbeTimerId = null;
+        var nativeResumeProbe = null;
+        var nativeResumeReloadRevision = -1;
+        var nativeResumeReloadEpoch = -1;
         var nativeStartupTrimPending = false;
         var nativeStartupTrimState = "idle";
         var nativeStartupTrimRetryTimerId = null;
@@ -95,6 +99,10 @@
         // ordered Play boundary. Keep the native fallback bounded so a
         // decoder that never becomes audible cannot hold the session silent.
         const NATIVE_STARTUP_TIMEOUT_MS = 2000;
+        const CAF_NATIVE_RESUME_PROBE_TIMEOUT_MS = 2500;
+        const CAF_NATIVE_RESUME_RELOAD_TIMEOUT_MS = 5000;
+        const CAF_NATIVE_RESUME_PROBE_INTERVAL_MS = 250;
+        const CAF_NATIVE_RESUME_PROGRESS_EPSILON_SEC = 0.05;
         const NATIVE_STARTUP_FADE_MS = 12;
         const NATIVE_STARTUP_TRIM_RETRY_MS = 25;
         const NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS = 1000;
@@ -1054,6 +1062,247 @@
           }
         }
 
+        function readNativeResumeMediaState() {
+          const cafAudio = document.getElementById("cast-media-element");
+          const htmlAudio = document.getElementById("native-stream-audio");
+          const mediaElement = htmlAudio && htmlAudio.src && !htmlAudio.paused
+            ? htmlAudio
+            : cafAudio || htmlAudio;
+          let playerState = "";
+          try {
+            const playerManager = getCastPlayerManager();
+            if (playerManager && typeof playerManager.getPlayerState === "function") {
+              playerState = String(playerManager.getPlayerState() || "");
+            }
+          } catch (_error) {}
+          return {
+            mediaElementId: mediaElement?.id || "native-media",
+            currentTime: Number.isFinite(Number(mediaElement?.currentTime))
+              ? Number(mediaElement.currentTime)
+              : null,
+            readyState: Number.isFinite(Number(mediaElement?.readyState))
+              ? Number(mediaElement.readyState)
+              : null,
+            networkState: Number.isFinite(Number(mediaElement?.networkState))
+              ? Number(mediaElement.networkState)
+              : null,
+            paused: mediaElement?.paused === true,
+            playerState,
+            nativeAttemptId: nativeStartupAttemptId,
+          };
+        }
+
+        function cancelNativeResumeProgressProbe(reason) {
+          if (nativeResumeProbeTimerId) {
+            clearTimeout(nativeResumeProbeTimerId);
+            nativeResumeProbeTimerId = null;
+          }
+          if (nativeResumeProbe && reason) {
+            writeCastDebug(
+              "debug",
+              "Cancelled ordered native resume probe revision=" +
+                nativeResumeProbe.playbackRevision + " (" + reason + ").",
+            );
+          }
+          nativeResumeProbe = null;
+        }
+
+        function failNativeResumeProgressProbe(reason, mediaState) {
+          const probe = nativeResumeProbe;
+          if (!probe) return false;
+          const elapsedMs = Date.now() - probe.probeStartedAt;
+          emitCafTelemetry("CAF_RESUME_FAILED", {
+            playbackEpoch: probe.playbackEpoch,
+            playbackRevision: probe.playbackRevision,
+            elapsedMs,
+            reloaded: Boolean(probe.reloaded),
+            reason: reason || "native_resume_no_progress",
+            ...(mediaState || readNativeResumeMediaState()),
+          });
+          relayLogToStudio(
+            "❌ Receiver: Ordered native resume failed after bounded CAF recovery " +
+              "(revision=" + probe.playbackRevision + ", reason=" +
+              (reason || "native_resume_no_progress") + ").",
+          );
+          cancelNativeResumeProgressProbe("failed");
+          stopNativeStreamPlayout("caf_resume_failed", true);
+          return startPcmFallbackAfterNativeFailure("caf_resume_failed");
+        }
+
+        function noteNativeResumeProgress(currentTime, mediaState) {
+          const probe = nativeResumeProbe;
+          const nextTime = Number(currentTime);
+          if (!probe || !Number.isFinite(nextTime)) return false;
+          if (!Number.isFinite(probe.baselineTime)) {
+            probe.baselineTime = nextTime;
+            return false;
+          }
+          const advancedSeconds = nextTime - probe.baselineTime;
+          if (advancedSeconds < CAF_NATIVE_RESUME_PROGRESS_EPSILON_SEC) return false;
+          emitCafTelemetry("CAF_RESUME_RECOVERED", {
+            playbackEpoch: probe.playbackEpoch,
+            playbackRevision: probe.playbackRevision,
+            elapsedMs: Date.now() - probe.probeStartedAt,
+            reloaded: Boolean(probe.reloaded),
+            advancedSeconds,
+            ...(mediaState || readNativeResumeMediaState()),
+          });
+          relayLogToStudio(
+            "✅ Receiver: Ordered native resume media clock recovered " +
+              "(revision=" + probe.playbackRevision +
+              ", reloaded=" + Boolean(probe.reloaded) + ").",
+          );
+          cancelNativeResumeProgressProbe("playout_progress");
+          return true;
+        }
+
+        function reloadNativeStreamAfterOrderedResumeStall(playbackRevision, mediaState) {
+          const probe = nativeResumeProbe;
+          if (
+            !probe ||
+            probe.playbackRevision !== playbackRevision ||
+            probe.playbackEpoch !== lastPlaybackEpoch ||
+            playbackRevision !== lastPlaybackRevision ||
+            lastOrderedPlaybackAction !== "PLAYBACK_START" ||
+            playbackPaused ||
+            nativeStreamPaused ||
+            !nativeStreamActive ||
+            !nativeStreamUrl
+          ) {
+            return false;
+          }
+          if (
+            playbackRevision === nativeResumeReloadRevision &&
+            probe.playbackEpoch === nativeResumeReloadEpoch
+          ) {
+            return false;
+          }
+          nativeResumeReloadRevision = playbackRevision;
+          nativeResumeReloadEpoch = probe.playbackEpoch;
+          const resumeCacheKey = Date.now() + "-" + playbackRevision;
+          const cleanStreamUrl = nativeStreamUrl
+            .replace(/([?&])resumeCb=[^&]*/g, "$1")
+            .replace(/[?&]$/, "");
+          const reloadStreamUrl = cleanStreamUrl +
+            (cleanStreamUrl.indexOf("?") === -1 ? "?" : "&") +
+            "resumeCb=" + resumeCacheKey;
+          const reloadAttemptId = ++nativeStartupAttemptId;
+          nativeStreamUrl = reloadStreamUrl;
+          nativeStreamStarting = true;
+          nativeStartupTrimPending = false;
+          nativeStartupTrimState = "resume_reload";
+          probe.reloaded = true;
+          probe.phaseStartedAt = Date.now();
+          probe.baselineTime = null;
+          probe.nativeAttemptId = reloadAttemptId;
+          emitCafTelemetry("CAF_RESUME_RELOAD", {
+            playbackEpoch: probe.playbackEpoch,
+            playbackRevision,
+            elapsedMs: Date.now() - probe.probeStartedAt,
+            reloadAttemptId,
+            streamCacheKey: resumeCacheKey,
+            ...(mediaState || readNativeResumeMediaState()),
+          });
+          relayLogToStudio(
+            "🔄 Receiver: Ordered native resume clock stalled; reloading CAF once " +
+              "(revision=" + playbackRevision + ", attempt=" + reloadAttemptId + ").",
+          );
+          if (!startCafStreamPlayout(reloadStreamUrl, reloadAttemptId)) {
+            return failNativeResumeProgressProbe("caf_resume_reload_unavailable", mediaState);
+          }
+          return true;
+        }
+
+        function pollNativeResumeProgressProbe() {
+          nativeResumeProbeTimerId = null;
+          const probe = nativeResumeProbe;
+          if (!probe) return;
+          if (
+            probe.playbackEpoch !== lastPlaybackEpoch ||
+            probe.playbackRevision !== lastPlaybackRevision ||
+            lastOrderedPlaybackAction !== "PLAYBACK_START" ||
+            playbackPaused ||
+            nativeStreamPaused ||
+            !nativeStreamActive
+          ) {
+            cancelNativeResumeProgressProbe("ordered_resume_no_longer_active");
+            return;
+          }
+          const mediaState = readNativeResumeMediaState();
+          if (noteNativeResumeProgress(mediaState.currentTime, mediaState)) return;
+          const phaseElapsedMs = Date.now() - probe.phaseStartedAt;
+          const phaseTimeoutMs = probe.reloaded
+            ? CAF_NATIVE_RESUME_RELOAD_TIMEOUT_MS
+            : CAF_NATIVE_RESUME_PROBE_TIMEOUT_MS;
+          if (phaseElapsedMs >= phaseTimeoutMs) {
+            const fixedClock =
+              !Number.isFinite(mediaState.currentTime) ||
+              !Number.isFinite(probe.baselineTime) ||
+              Math.abs(mediaState.currentTime - probe.baselineTime) <
+                CAF_NATIVE_RESUME_PROGRESS_EPSILON_SEC;
+            const buffering =
+              mediaState.readyState === null ||
+              mediaState.readyState <= 2 ||
+              /BUFFERING/i.test(mediaState.playerState);
+            if (!probe.reloaded && fixedClock && buffering) {
+              reloadNativeStreamAfterOrderedResumeStall(
+                probe.playbackRevision,
+                mediaState,
+              );
+            } else {
+              failNativeResumeProgressProbe(
+                probe.reloaded ? "caf_resume_reload_no_progress" : "caf_resume_stalled_not_buffering",
+                mediaState,
+              );
+              return;
+            }
+          }
+          if (nativeResumeProbe) {
+            nativeResumeProbeTimerId = setTimeout(
+              pollNativeResumeProgressProbe,
+              CAF_NATIVE_RESUME_PROBE_INTERVAL_MS,
+            );
+          }
+        }
+
+        function startNativeResumeProgressProbe(playbackRevision) {
+          const revision = Number(playbackRevision);
+          if (
+            !Number.isSafeInteger(revision) ||
+            revision < 0 ||
+            revision !== lastPlaybackRevision ||
+            lastOrderedPlaybackAction !== "PLAYBACK_START" ||
+            !nativeStreamActive ||
+            nativeStreamPaused ||
+            playbackPaused
+          ) {
+            return false;
+          }
+          cancelNativeResumeProgressProbe("superseded_ordered_resume");
+          const mediaState = readNativeResumeMediaState();
+          const now = Date.now();
+          nativeResumeProbe = {
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: revision,
+            probeStartedAt: now,
+            phaseStartedAt: now,
+            baselineTime: mediaState.currentTime,
+            nativeAttemptId: nativeStartupAttemptId,
+            reloaded: false,
+          };
+          emitCafTelemetry("CAF_RESUME_PROBE", {
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: revision,
+            timeoutMs: CAF_NATIVE_RESUME_PROBE_TIMEOUT_MS,
+            ...mediaState,
+          });
+          nativeResumeProbeTimerId = setTimeout(
+            pollNativeResumeProgressProbe,
+            CAF_NATIVE_RESUME_PROBE_INTERVAL_MS,
+          );
+          return true;
+        }
+
         function rejectGuiChannelMessage(reason, details = {}) {
           guiRejectedCount += 1;
           guiLastRejectReason = reason;
@@ -1985,8 +2234,15 @@
           document.addEventListener("input", (event) => {
             const target = event.target;
             if (target && target.matches("input[type=range], input[type=checkbox]")) {
-              const output = target.parentElement?.querySelector(".gui-dialog-mirror-value");
-              if (output) output.textContent = target.value;
+              const output = target.closest(".effect-control-group, .gui-dialog-mirror-control")?.querySelector(
+                ".effect-param-value .param-value, .gui-dialog-mirror-value",
+              );
+              if (output && target.type !== "checkbox") {
+                const unit = String(output.textContent || "").match(
+                  /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(.*?)\s*$/,
+                )?.[1] || "";
+                output.textContent = `${target.value}${unit}`;
+              }
               sendGuiInteraction(target, "input");
             }
           });
@@ -2090,6 +2346,15 @@
               playoutAdvanced &&
               progressNow - lastNativePlayoutProofAt >= 1000
             ) {
+              noteNativeResumeProgress(reportedPlayhead, {
+                mediaElementId: activeAudio.id || "native-media",
+                currentTime: reportedPlayhead,
+                readyState: activeAudio.readyState,
+                networkState: activeAudio.networkState,
+                paused: activeAudio.paused === true,
+                playerState: "PLAYING",
+                nativeAttemptId: nativeStartupAttemptId,
+              });
               emitCafTelemetry("PLAYOUT_PROGRESS", {
                 mediaElementId: activeAudio.id || "native-media",
                 currentTime: reportedPlayhead,
@@ -3551,6 +3816,7 @@
         }
 
         function stopNativeStreamPlayout(reason, preservePlaybackIntent = false) {
+          cancelNativeResumeProgressProbe(reason || "native_stream_stop");
           const hadNativePlayout =
             nativeStreamActive ||
             nativeStreamStarting ||
@@ -3623,6 +3889,7 @@
         }
 
         function holdNativeStreamForReplay(reason) {
+          cancelNativeResumeProgressProbe(reason || "native_stream_replay_hold");
           if (!nativeStreamActive && !nativeStreamStarting) {
             return false;
           }
@@ -3653,6 +3920,7 @@
         }
 
         function pauseNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
+          cancelNativeResumeProgressProbe(reason || "native_stream_pause");
           if (!nativeStreamActive && !nativeStreamStarting) return false;
           nativeStreamPaused = true;
           const cafAudio = document.getElementById("cast-media-element");
@@ -4637,13 +4905,13 @@
           }
         }
         const KNOB_CONFIGS = [
-          { l: "Pitch", p: "pitch" },
-          { l: "Volume", p: "vol" },
-          { l: "Pan", p: "pan" },
-          { l: "Treble", p: "treble" },
-          { l: "Mid Freq", p: "mid_freq" },
-          { l: "Mid Gain", p: "mid_gain" },
-          { l: "Bass", p: "bass" },
+          { l: "Pitch", p: "pitch", min: -100, max: 100, val: 0, u: "%", s: 1 },
+          { l: "Volume", p: "vol", min: -48, max: 6, val: 0, u: "dB", s: 0.1 },
+          { l: "Pan", p: "pan", min: -1, max: 1, val: 0, u: "", s: 0.05 },
+          { l: "Treble", p: "treble", min: -12, max: 12, val: 0, u: "dB", s: 0.1 },
+          { l: "Mid Freq", p: "mid_freq", min: 400, max: 2000, val: 1200, u: "Hz", s: 10 },
+          { l: "Mid Gain", p: "mid_gain", min: -12, max: 12, val: 0, u: "dB", s: 0.1 },
+          { l: "Bass", p: "bass", min: -12, max: 12, val: 0, u: "dB", s: 0.1 },
         ];
 
         function buildGUI() {
@@ -4695,13 +4963,13 @@
                         <div class="track-time-display" id="t-time-${i}">00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
                         <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
-                        <div class="control-group"><div class="track-input-layout"><label style="font-size: 0.72em;">Input</label><select id="t-input-${i}" class="input-source app-select"><option value="mic">Microphone</option><option value="file">Import File</option><option value="system">System Loopback</option></select></div><span class="file-name-display" id="t-file-${i}"></span></div>
-                        <div class="control-group pa-mic-adjustment" id="t-gain-grp-${i}" style="display: flex;"><label style="font-size: 0.72em;">Input Gain</label><input type="range" class="pa-mic-slider" id="t-gain-sl-${i}" min="-48" max="48" step="0.1"><span class="pa-mic-value" id="t-gain-val-${i}" style="font-size: 0.72em;">0.0 dB</span></div>
+                        <div class="control-group track-input-group"><div class="track-input-layout"><label>Input</label><select id="t-input-${i}" class="input-source app-select" data-action="select-input"><option value="mic" selected>Microphone</option><option value="file">Import File</option><option value="directory">Import Directory</option><option value="mc-pa">MC PA Mode</option><option value="system">System Loopback</option></select></div></div>
+                        <div class="control-group track-input-gain-group master-row-layout pa-mic-adjustment" id="input-gain-group-${i}"><label class="master-label">Input Gain</label><input type="range" class="pa-mic-slider" data-param="inputGain" id="t-gain-sl-${i}" min="-48" max="24" step="0.1" value="0" title="Increment: 0.1"><span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}">0</span><span class="lfo-marker lfo-marker-1" id="t-lfo-marker-1-${i}-${cfg.p}" hidden>L1</span><span class="lfo-marker lfo-marker-2" id="t-lfo-marker-2-${i}-${cfg.p}" hidden>L2</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" class="pa-mic-slider"></div></div>`).join("")}</div>`;
+                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group" data-param-label="${cfg.p}"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}" data-value-for="${cfg.p}">${Number(cfg.val).toFixed(1)}${cfg.u}</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" title="Click to assign ${cfg.l} LFO 1. Double-click to reverse." aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" title="Click to assign ${cfg.l} LFO 2. Double-click to reverse." aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" data-param="${cfg.p}" min="${cfg.min}" max="${cfg.max}" step="${cfg.s}" value="${cfg.val}" title="Increment: ${cfg.s}"><span class="preset-marker min-preset-marker" id="t-min-marker-${i}-${cfg.p}" data-min-marker-for="${cfg.p}"></span><span class="preset-marker max-preset-marker" id="t-max-marker-${i}-${cfg.p}" data-max-marker-for="${cfg.p}"></span></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
           updateScale();
@@ -5692,12 +5960,64 @@
           lastDialogMirrorState = signature;
           root.replaceChildren();
           root.hidden = list.length === 0;
+          const normalizeClassName = (value, fallback = "") => {
+            const normalized = String(value || "")
+              .split(/\s+/)
+              .filter((token) => /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(token))
+              .slice(0, 24)
+              .join(" ");
+            return normalized || fallback;
+          };
+          const applyDataset = (element, data) => {
+            Object.entries(data || {}).forEach(([key, value]) => {
+              if (!/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(key)) return;
+              if (value === undefined || value === null) return;
+              element.dataset[key] = String(value).slice(0, 128);
+            });
+          };
+          const applyControlState = (value, control, dialog, controlIndex) => {
+            const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
+            if (tagName === "input") value.type = control.type || "text";
+            value.className = normalizeClassName(control.className);
+            if (/^[A-Za-z][A-Za-z0-9_:.-]{0,127}$/.test(String(control.id || ""))) {
+              value.id = control.id;
+            }
+            value.name = String(control.name || "").slice(0, 128);
+            value.value = control.value === null || control.value === undefined ? "" : control.value;
+            if (control.type === "checkbox") value.checked = Boolean(control.checked);
+            value.min = control.min ?? "";
+            value.max = control.max ?? "";
+            value.step = control.step ?? "";
+            value.defaultValue = control.defaultValue ?? value.value;
+            value.title = String(control.title || "").slice(0, 256);
+            value.placeholder = String(control.placeholder || "").slice(0, 256);
+            value.disabled = Boolean(control.disabled);
+            value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
+            value.dataset.dialogId = dialog.id || "";
+            value.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
+            applyDataset(value, control.data);
+            if (tagName === "select") {
+              (control.options || []).forEach((option) => {
+                const item = document.createElement("option");
+                item.value = String(option.value ?? "");
+                item.textContent = option.label || item.value;
+                item.disabled = Boolean(option.disabled);
+                item.selected = Boolean(option.selected);
+                value.appendChild(item);
+              });
+              value.value = control.value === null || control.value === undefined ? "" : control.value;
+            }
+            return value;
+          };
           list.forEach((dialog) => {
-            const panel = document.createElement("section");
+            const shellClassName = normalizeClassName(dialog.shellClassName);
+            const exactEffectDialog = dialog.dialogLayoutVersion === 1 &&
+              /(?:^|\s)(?:effect-params-dialog|audition-params-dialog)(?:\s|$)/.test(shellClassName);
+            const panel = document.createElement(exactEffectDialog ? "dialog" : "section");
             panel.className = [
               "gui-dialog-mirror",
-              "mxs-dialog",
-              dialog.shellClassName || "",
+              exactEffectDialog ? "" : "mxs-dialog",
+              shellClassName,
               `gui-dialog-${dialog.kind || "generic"}`,
             ].filter(Boolean).join(" ");
             panel.setAttribute("open", "");
@@ -5709,25 +6029,26 @@
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
             panel.style.left = `${Math.max(0, Math.min(0.85, Number(dialog.left) || 0.2)) * 100}%`;
             panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
-            panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
-            panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
+            if (!exactEffectDialog) {
+              panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
+              panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
+            }
             const actions = Array.isArray(dialog.actions) ? dialog.actions : [];
             const isHeaderAction = (action) => /close|pad-nav|fx-chain-arrow|previous|next/i.test(
               [action?.actionId, action?.className, action?.data?.padNav].filter(Boolean).join(" "),
             );
+            const actionPlacement = (action) => action?.placement || (isHeaderAction(action) ? "header" : "footer");
             const renderAction = (action, actionIndex) => {
               const button = document.createElement("button");
               button.type = "button";
-              button.className = action.className || "gui-dialog-action-btn";
+              button.className = normalizeClassName(action.className, "gui-dialog-action-btn");
               button.textContent = action.label || "Action";
               button.title = action.title || "";
               button.disabled = Boolean(action.disabled);
               button.dataset.dialogId = dialog.id || "";
               button.dataset.actionIndex = String(action.actionIndex ?? actionIndex);
               button.dataset.actionId = action.actionId || `button-${actionIndex}`;
-              Object.entries(action.data || {}).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) button.dataset[key] = String(value);
-              });
+              applyDataset(button, action.data);
               if (action.ariaLabel) button.setAttribute("aria-label", action.ariaLabel);
               button.setAttribute("aria-pressed", action.pressed ? "true" : "false");
               return button;
@@ -5735,33 +6056,105 @@
 
             const headerState = dialog.header || {};
             const header = document.createElement("div");
-            header.className = headerState.className || "dialog-header";
-            const headerTop = document.createElement("div");
-            headerTop.className = "dialog-header-top";
-            const heading = document.createElement("span");
-            heading.className = headerState.titleClassName || "dialog-header-title";
-            heading.textContent = headerState.title || dialog.title || "MXS-004";
-            headerTop.appendChild(heading);
+            header.className = normalizeClassName(headerState.className, "dialog-header");
             actions.forEach((action, actionIndex) => {
-              if (isHeaderAction(action)) headerTop.appendChild(renderAction(action, actionIndex));
+              if (actionPlacement(action) === "header") header.appendChild(renderAction(action, actionIndex));
             });
+            const headerTop = document.createElement("div");
+            headerTop.className = normalizeClassName(headerState.topClassName, "dialog-header-top");
+            const heading = document.createElement("span");
+            heading.className = normalizeClassName(headerState.titleClassName, "dialog-header-title");
+            const titleLines = Array.isArray(headerState.titleLines) ? headerState.titleLines : [];
+            if (titleLines.length) {
+              titleLines.forEach((line) => {
+                const titleLine = document.createElement("span");
+                titleLine.className = normalizeClassName(line.className);
+                titleLine.textContent = line.text || "";
+                heading.appendChild(titleLine);
+              });
+            } else {
+              heading.textContent = headerState.title || dialog.title || "MXS-004";
+            }
+            headerTop.appendChild(heading);
             header.appendChild(headerTop);
             if (headerState.status) {
               const status = document.createElement("span");
-              status.className = headerState.statusClassName || "dialog-header-status";
+              status.className = normalizeClassName(headerState.statusClassName, "dialog-header-status");
               status.textContent = headerState.status;
               header.appendChild(status);
+            }
+            const headerActions = actions.filter((action) => actionPlacement(action) === "headerActions");
+            if (headerActions.length) {
+              const actionsBar = document.createElement("div");
+              actionsBar.className = normalizeClassName(
+                headerState.actionsClassName,
+                "dialog-header-actions-bar",
+              );
+              headerActions.forEach((action) => {
+                actionsBar.appendChild(renderAction(action, action.actionIndex));
+              });
+              header.appendChild(actionsBar);
             }
             panel.appendChild(header);
 
             const content = document.createElement("div");
-            content.className = dialog.contentClassName || "dialog-content";
+            content.className = normalizeClassName(dialog.contentClassName, "dialog-content");
             (dialog.text || []).forEach((text) => {
               const help = document.createElement("p");
               help.textContent = text;
               content.appendChild(help);
             });
-            (dialog.controls || []).forEach((control, controlIndex) => {
+            const controls = Array.isArray(dialog.controls) ? dialog.controls : [];
+            const exactEffectLayout = dialog.dialogLayoutVersion === 1 &&
+              dialog.kind === "effectAudition" && controls.some((control) => control.groupClassName);
+            let controlsRoot = content;
+            if (exactEffectLayout) {
+              const grid = document.createElement("div");
+              grid.className = normalizeClassName(
+                controls.find((control) => control.gridClassName)?.gridClassName,
+                "effect-params-wrapper effect-params-grid",
+              );
+              content.appendChild(grid);
+              controlsRoot = grid;
+            }
+            controls.forEach((control, controlIndex) => {
+              const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
+              const value = document.createElement(
+                tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "input",
+              );
+              applyControlState(value, control, dialog, controlIndex);
+              if (exactEffectLayout) {
+                const group = document.createElement("div");
+                group.className = normalizeClassName(
+                  control.groupClassName,
+                  "control-group effect-control-group",
+                );
+                group.dataset.dialogId = dialog.id || "";
+                group.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
+                const title = document.createElement("div");
+                title.className = normalizeClassName(control.titleClassName, "effect-param-title");
+                const label = document.createElement("label");
+                label.textContent = control.label || control.parameterKey || "Parameter";
+                title.appendChild(label);
+                const sliderWrapper = document.createElement("div");
+                sliderWrapper.className = normalizeClassName(
+                  control.sliderWrapperClassName,
+                  "slider-wrapper",
+                );
+                sliderWrapper.appendChild(value);
+                const valueContainer = document.createElement("div");
+                valueContainer.className = normalizeClassName(
+                  control.valueContainerClassName,
+                  "effect-param-value",
+                );
+                const output = document.createElement("span");
+                output.className = normalizeClassName(control.valueClassName, "param-value");
+                output.textContent = control.displayValue || `${control.rawValue ?? ""}${control.unit || ""}`;
+                valueContainer.appendChild(output);
+                group.append(title, sliderWrapper, valueContainer);
+                controlsRoot.appendChild(group);
+                return;
+              }
               const row = document.createElement("label");
               row.className = ["gui-dialog-mirror-control", control.containerClassName || ""].filter(Boolean).join(" ");
               row.dataset.controlType = control.type || "text";
@@ -5770,38 +6163,6 @@
               const label = document.createElement("span");
               label.textContent = control.label || "Parameter";
               row.appendChild(label);
-              const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
-              const value = document.createElement(
-                tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "input",
-              );
-              if (tagName === "input") value.type = control.type || "text";
-              value.className = control.className || "";
-              value.id = control.id || "";
-              value.name = control.name || "";
-              value.value = control.value === null || control.value === undefined ? "" : control.value;
-              if (control.type === "checkbox") value.checked = Boolean(control.checked);
-              value.min = control.min || "";
-              value.max = control.max || "";
-              value.step = control.step || "";
-              value.placeholder = control.placeholder || "";
-              value.disabled = Boolean(control.disabled);
-              value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
-              value.dataset.dialogId = dialog.id || "";
-              value.dataset.controlIndex = String(controlIndex);
-              Object.entries(control.data || {}).forEach(([key, item]) => {
-                if (item !== undefined && item !== null) value.dataset[key] = String(item);
-              });
-              if (tagName === "select") {
-                (control.options || []).forEach((option) => {
-                  const item = document.createElement("option");
-                  item.value = String(option.value ?? "");
-                  item.textContent = option.label || item.value;
-                  item.disabled = Boolean(option.disabled);
-                  item.selected = Boolean(option.selected);
-                  value.appendChild(item);
-                });
-                value.value = control.value === null || control.value === undefined ? "" : control.value;
-              }
               row.appendChild(value);
               if (["range", "number"].includes(control.type)) {
                 const output = document.createElement("output");
@@ -5809,13 +6170,15 @@
                 output.className = "gui-dialog-mirror-value";
                 row.appendChild(output);
               }
-              content.appendChild(row);
+              controlsRoot.appendChild(row);
             });
             panel.appendChild(content);
             const footer = document.createElement("div");
             footer.className = "dialog-bottom-actions gui-dialog-actions";
             actions.forEach((action, actionIndex) => {
-              if (!isHeaderAction(action)) footer.appendChild(renderAction(action, actionIndex));
+              if (["footer", "content"].includes(actionPlacement(action))) {
+                footer.appendChild(renderAction(action, actionIndex));
+              }
             });
             if (footer.childElementCount) panel.appendChild(footer);
             root.appendChild(panel);
@@ -6164,6 +6527,10 @@
                 "lfo-toggle",
                 s.master.lfo1 && s.master.lfo1.active ? "active" : "",
               );
+              updateStyleWidth(
+                "lfo-meter-bar",
+                `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo1?.value) || 0))) * 100}%`,
+              );
               updateValue(
                 "lfo-time",
                 (s.master.lfo1 && s.master.lfo1.time) || 1.8,
@@ -6175,6 +6542,10 @@
               updateClass(
                 "lfo2-toggle",
                 s.master.lfo2 && s.master.lfo2.active ? "active" : "",
+              );
+              updateStyleWidth(
+                "lfo2-meter-bar",
+                `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo2?.value) || 0))) * 100}%`,
               );
               updateButtonState(
                 "master-record-button",
@@ -6245,7 +6616,6 @@
               s.tracks.forEach((t, i) => {
                 const trackName = t.fileName || "Ready";
                 updateText("t-scroll-" + i, trackName);
-                updateText("t-file-" + i, t.fileName || "");
                 updateClass(
                   "t-scroll-" + i,
                   trackName.length > 15
@@ -6257,11 +6627,6 @@
                   trackLabel.setAttribute("title", trackName);
                   trackLabel.dataset.trackId = String(t.trackId || i + 1);
                   trackLabel.dataset.trackState = t.isPlaying ? "playing" : t.isPaused ? "paused" : "stopped";
-                }
-                const fileLabel = getEl("t-file-" + i);
-                if (fileLabel) {
-                  fileLabel.setAttribute("title", t.fileName || "");
-                  fileLabel.dataset.trackId = String(t.trackId || i + 1);
                 }
                 updateClass(
                   "t-st-" + i,
@@ -6282,7 +6647,8 @@
                 if (t.params) {
                   const paramsStr = JSON.stringify(t.params);
                   const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
-                  const trackCacheKey = paramsStr + "_" + lfoAssignsStr;
+                  const lfoIndicatorsStr = JSON.stringify(t.lfoIndicators);
+                  const trackCacheKey = paramsStr + "_" + lfoAssignsStr + "_" + lfoIndicatorsStr;
                   if (_lastParamsCache[i] !== trackCacheKey) {
                     _lastParamsCache[i] = trackCacheKey;
                     KNOB_CONFIGS.forEach((cfg) => {
@@ -6308,17 +6674,28 @@
                         l2.checked = l2Checked;
                       }
                       const indicator = t.lfoIndicators && t.lfoIndicators[cfg.p];
+                      const l1Visual = indicator?.lfo1 && typeof indicator.lfo1 === "object"
+                        ? indicator.lfo1
+                        : { checked: Boolean(indicator?.lfo1 ?? l1Checked), reversed: false };
+                      const l2Visual = indicator?.lfo2 && typeof indicator.lfo2 === "object"
+                        ? indicator.lfo2
+                        : { checked: Boolean(indicator?.lfo2 ?? l2Checked), reversed: false };
+                      if (l1) {
+                        l1.checked = Boolean(l1Visual.checked);
+                        l1.classList.toggle("reversed", Boolean(l1Visual.reversed));
+                      }
+                      if (l2) {
+                        l2.checked = Boolean(l2Visual.checked);
+                        l2.classList.toggle("reversed", Boolean(l2Visual.reversed));
+                      }
                       [
-                        ["1", `t-lfo-marker-1-${i}-${cfg.p}`, Boolean(indicator?.lfo1 ?? l1Checked)],
-                        ["2", `t-lfo-marker-2-${i}-${cfg.p}`, Boolean(indicator?.lfo2 ?? l2Checked)],
-                      ].forEach(([index, id, active]) => {
-                        const marker = getEl(id);
+                        ["min", indicator?.minMarker],
+                        ["max", indicator?.maxMarker],
+                      ].forEach(([kind, markerState]) => {
+                        const marker = getEl(`t-${kind}-marker-${i}-${cfg.p}`);
                         if (!marker) return;
-                        marker.hidden = !active;
-                        marker.textContent = `L${index}`;
-                        marker.title = active ? `LFO ${index} modulates ${cfg.l}` : "";
-                        marker.setAttribute("aria-label", marker.title || `LFO ${index} inactive`);
-                        marker.classList.toggle("active", active);
+                        marker.classList.toggle("active", Boolean(markerState?.active));
+                        marker.style.left = `${Math.max(0, Math.min(100, Number(markerState?.left) || 0))}%`;
                       });
                     });
                     updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
@@ -6453,7 +6830,11 @@
             lastMirroredState = immediateState;
           }
           const resumingNative = nativeStreamActive && nativeStreamPaused;
+          const playbackRevision = Number(d.playbackRevision);
           requestNativePlaybackStart(reason || "playback_start");
+          if (resumingNative) {
+            startNativeResumeProgressProbe(playbackRevision);
+          }
           if (nativeStreamActive) {
             publishMxsPlaybackStatus("PLAYING", reason || "playback_start");
           } else if (!resumingNative) {
@@ -6461,6 +6842,36 @@
           }
           acknowledgePlaybackRevision(d, "playback_start");
           schedulePlaybackRecoveryRetry();
+        }
+
+        function summarizeLfoVisualState(state) {
+          const summary = {
+            lfoAssignmentCount: 0,
+            lfoReversedCount: 0,
+            lfoMinMarkerCount: 0,
+            lfoMaxMarkerCount: 0,
+            lfoMeter1: Number(state?.master?.lfo1?.value) || 0,
+            lfoMeter2: Number(state?.master?.lfo2?.value) || 0,
+            track1Pan: null,
+          };
+          (state?.tracks || []).forEach((track, trackIndex) => {
+            if (trackIndex === 0 && Number.isFinite(Number(track?.params?.pan))) {
+              summary.track1Pan = Number(track.params.pan);
+            }
+            Object.values(track?.lfoIndicators || {}).forEach((indicator) => {
+              [indicator?.lfo1, indicator?.lfo2].forEach((lfo) => {
+                if (lfo && typeof lfo === "object") {
+                  if (lfo.checked) summary.lfoAssignmentCount += 1;
+                  if (lfo.checked && lfo.reversed) summary.lfoReversedCount += 1;
+                } else if (lfo) {
+                  summary.lfoAssignmentCount += 1;
+                }
+              });
+              if (indicator?.minMarker?.active) summary.lfoMinMarkerCount += 1;
+              if (indicator?.maxMarker?.active) summary.lfoMaxMarkerCount += 1;
+            });
+          });
+          return summary;
         }
 
         function handleGuiStateUpdateCommand(state, envelope, ackType = "snapshot") {
@@ -6502,6 +6913,7 @@
           confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
+              const lfoVisualTelemetry = summarizeLfoVisualState(normalizedState);
               binaryWS.send(JSON.stringify({
                 type: "GUI_ACK",
                 transport: "gui",
@@ -6521,6 +6933,7 @@
                 waveformMissing: lastWaveformRenderStats.missing,
                 waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
                 waveformSurfaces: lastWaveformRenderStats.surfaces,
+                ...lfoVisualTelemetry,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
