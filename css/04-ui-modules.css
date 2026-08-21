@@ -572,6 +572,28 @@ input[type="range"]::-webkit-slider-thumb {
   filter: brightness(1.2) !important;
 }
 
+.track-buttons button[data-action="reverse"].reverse-preparing,
+.rev-btn.reverse-preparing,
+button[id^="t-rev-"].reverse-preparing {
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+  animation: reverse-prepare-pulse 0.9s infinite alternate ease-in-out !important;
+  cursor: progress;
+}
+
+.track-buttons button[data-action="reverse"].reverse-failed,
+.rev-btn.reverse-failed,
+button[id^="t-rev-"].reverse-failed {
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  animation: none !important;
+}
+
+@keyframes reverse-prepare-pulse {
+  from { filter: brightness(0.8); }
+  to { filter: brightness(1.35); }
+}
+
 .rev-btn.reversed,
 .rev-btn.active,
 .rev-btn.playing-reverse {

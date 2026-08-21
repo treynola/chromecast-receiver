@@ -6115,8 +6115,23 @@
               !!buttonState.active && id.indexOf("rec") >= 0,
             );
             el.classList.toggle("mirrored-active", !!buttonState.active);
-            el.dataset.mirroredState = buttonState.active ? "active" : "idle";
+            const operationState = buttonState.operationState || buttonState.state || (buttonState.active ? "active" : "inactive");
+            el.classList.toggle("reversed", id.indexOf("t-rev-") === 0 && operationState === "active");
+            el.classList.toggle("reverse-preparing", operationState === "preparing");
+            el.classList.toggle("reverse-failed", operationState === "failed");
+            el.dataset.mirroredState = operationState;
+            el.dataset.reverseState = operationState;
+            el.dataset.reverseProgress = Number.isFinite(buttonState.progress)
+              ? String(buttonState.progress)
+              : "";
+            el.dataset.reverseError = buttonState.error?.code || buttonState.errorCode || "";
             el.setAttribute("aria-pressed", buttonState.pressed ? "true" : "false");
+            el.setAttribute("aria-busy", operationState === "preparing" ? "true" : "false");
+            if (id.indexOf("t-rev-") === 0) {
+              el.title = operationState === "preparing"
+                ? `Preparing reverse${Number.isFinite(buttonState.progress) ? ` ${Math.round(buttonState.progress * 100)}%` : ""}`
+                : buttonState.error?.message || "Reverse playback";
+            }
             valCache[cacheKey] = stateKey;
           }
           el.disabled = !!buttonState.disabled;
@@ -6174,6 +6189,7 @@
           const nonFlat = Boolean(waveform.nonFlat ?? peak > 0.000001);
           canvas.dataset.waveformState = hasData ? "ready" : "pending";
           canvas.dataset.waveformSource = resolvedSource;
+          canvas.dataset.waveformAnalysisSource = waveform.analysisSource || "unknown";
           canvas.dataset.waveformSampleCount = String(Number(waveform.sampleCount) || 0);
           canvas.dataset.waveformActive = active ? "true" : "false";
           canvas.dataset.waveformPeak = peak.toFixed(6);
