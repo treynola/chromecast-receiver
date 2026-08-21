@@ -1358,7 +1358,8 @@
           if (!root || !grid || !sampleGrid || sampleGrid.children.length !== 20) {
             return false;
           }
-          for (let index = 0; index < 4; index++) {
+          const expectedTrackCount = Math.max(1, mirroredTrackCount || 4);
+          for (let index = 0; index < expectedTrackCount; index++) {
             const track = document.getElementById("track-" + index);
             if (!track || track.parentNode !== grid) {
               return false;
@@ -2089,7 +2090,9 @@
           lastGuiRevision = -1;
           lastCursorRevision = -1;
           lastDialogMirrorState = "";
+          lastDialogMirrorLayoutState = "";
           resetSmoothLfoVisuals();
+          resetMirroredWaveformVisuals();
           if (reason) {
             writeCastDebug("debug", "GUI revision gate reset (" + reason + ").");
           }
@@ -2143,6 +2146,9 @@
             actionId: element.dataset.actionId || undefined,
             value: element.type === "checkbox" ? undefined : element.value,
             checked: element.type === "checkbox" ? element.checked : undefined,
+            parameterKey: element.dataset.parameterKey || element.dataset.param || undefined,
+            optimisticDisplay: element.dataset.optimisticDisplay || undefined,
+            confirmedDisplay: element.dataset.confirmedDisplay || undefined,
           };
           if (element.dataset.registryActionId) {
             message.registryActionId = element.dataset.registryActionId;
@@ -2162,6 +2168,10 @@
               revision: guiInteractionRevision,
               targetId: element.id,
               kind,
+              parameterKey: message.parameterKey,
+              rawValue: message.value,
+              optimisticDisplay: message.optimisticDisplay,
+              confirmedDisplay: message.confirmedDisplay,
             });
             relayLogToStudio("📡 Receiver: GUI interaction sent → " + element.id + " (" + kind + ")");
           } catch (e) {}
@@ -2240,15 +2250,7 @@
           document.addEventListener("input", (event) => {
             const target = event.target;
             if (target && target.matches("input[type=range], input[type=checkbox]")) {
-              const output = target.closest(".effect-control-group, .gui-dialog-mirror-control")?.querySelector(
-                ".effect-param-value .param-value, .gui-dialog-mirror-value",
-              );
-              if (output && target.type !== "checkbox") {
-                const unit = String(output.textContent || "").match(
-                  /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)\s*(.*?)\s*$/,
-                )?.[1] || "";
-                output.textContent = `${target.value}${unit}`;
-              }
+              if (target.type !== "checkbox") applyOptimisticMirroredParameterDisplay(target);
               sendGuiInteraction(target, "input");
             }
           });
@@ -4920,7 +4922,168 @@
           { l: "Bass", p: "bass", min: -12, max: 12, val: 0, u: "dB", s: 0.1 },
         ];
 
-        function buildGUI() {
+        function formatMirroredLoopTimecode(seconds) {
+          const totalCentiseconds = Math.max(
+            0,
+            Math.round((Number(seconds) || 0) * 100),
+          );
+          const centiseconds = totalCentiseconds % 100;
+          const totalSeconds = Math.floor(totalCentiseconds / 100);
+          const secs = totalSeconds % 60;
+          const totalMinutes = Math.floor(totalSeconds / 60);
+          const mins = totalMinutes % 60;
+          const hours = Math.floor(totalMinutes / 60);
+          const pad = (value) => String(value).padStart(2, "0");
+          return `${pad(hours)}:${pad(mins)}:${pad(secs)}:${pad(centiseconds)}`;
+        }
+
+        function formatMirroredParameterDisplay(descriptor, rawValue) {
+          const meta = descriptor && typeof descriptor === "object" ? descriptor : {};
+          const value = Number(rawValue);
+          if (!Number.isFinite(value)) return String(meta.displayValue ?? rawValue ?? "");
+          const formatterKind = String(meta.formatterKind || "observed_numeric_v1");
+          if (formatterKind === "loop_timecode_v1") {
+            return formatMirroredLoopTimecode(value);
+          }
+          const parameterKey = String(meta.parameterKey || "").toLowerCase();
+          const unit = String(meta.unit || "");
+          let displayValue = Object.is(value, -0) ? 0 : value;
+          let decimals = Math.max(0, Math.min(6, Number(meta.decimals) || 0));
+          let unitSpacing = String(meta.unitSpacing || "");
+          if (formatterKind === "effect_parameter_v1") {
+            const absolute = Math.abs(displayValue);
+            decimals = absolute < 10 && displayValue !== 0 ? 2 : 1;
+            if (absolute < 1 && displayValue !== 0) decimals = 3;
+            if (
+              parameterKey.includes("freq") ||
+              parameterKey === "pitch" ||
+              Number(meta.step) === 1
+            ) {
+              decimals = 0;
+            }
+            if (unit === "%") {
+              displayValue *= 100;
+              decimals = 0;
+            }
+            unitSpacing = "";
+          } else {
+            displayValue *= Number(meta.displayScale) || 1;
+          }
+          return `${displayValue.toFixed(decimals)}${unit ? unitSpacing + unit : ""}`;
+        }
+
+        function readMirroredDisplayDescriptor(element) {
+          const source = element?.dataset?.castDisplayDescriptor;
+          if (!source) return null;
+          try {
+            const descriptor = JSON.parse(source);
+            return descriptor && typeof descriptor === "object" ? descriptor : null;
+          } catch (_error) {
+            return null;
+          }
+        }
+
+        function writeMirroredDisplayDescriptor(element, descriptor, confirmedDisplay) {
+          if (!element) return;
+          if (descriptor && typeof descriptor === "object") {
+            element.dataset.castDisplayDescriptor = JSON.stringify(descriptor);
+            element.dataset.parameterKey = String(descriptor.parameterKey || "");
+          }
+          if (confirmedDisplay !== undefined) {
+            element.dataset.confirmedDisplay = String(confirmedDisplay);
+          }
+          delete element.dataset.optimisticDisplay;
+        }
+
+        function applyMirroredParameterDisplay(controlId, outputId, descriptor, rawValue) {
+          const control = getEl(controlId);
+          const output = getEl(outputId);
+          if (!control || !output) return false;
+          if (control.dataset.castInteractionState === "pending") return false;
+          const meta = descriptor && typeof descriptor === "object"
+            ? descriptor
+            : readMirroredDisplayDescriptor(control) || {};
+          const confirmedDisplay = meta.displayValue !== undefined
+            ? String(meta.displayValue)
+            : formatMirroredParameterDisplay(meta, rawValue);
+          updateValue(controlId, rawValue);
+          updateText(outputId, confirmedDisplay);
+          writeMirroredDisplayDescriptor(control, meta, confirmedDisplay);
+          writeMirroredDisplayDescriptor(output, meta, confirmedDisplay);
+          return true;
+        }
+
+        function resolveMirroredParameterBinding(element) {
+          const dialogRoot = element.closest(
+            ".effect-control-group, .gui-dialog-mirror-control",
+          );
+          if (dialogRoot) {
+            return {
+              descriptor: readMirroredDisplayDescriptor(element),
+              output: dialogRoot.querySelector(
+                ".effect-param-value .param-value, .gui-dialog-mirror-value",
+              ),
+            };
+          }
+          const trackElement = element.closest(".track");
+          if (trackElement) {
+            const trackIndex = Number(trackElement.dataset.trackIndex);
+            const parameterKey = String(element.dataset.param || "");
+            const outputId = parameterKey === "inputGain"
+              ? `t-gain-val-${trackIndex}`
+              : parameterKey === "loopStart"
+                ? `t-ls-val-${trackIndex}`
+                : parameterKey === "loopEnd"
+                  ? `t-le-val-${trackIndex}`
+                  : `t-${parameterKey}-val-${trackIndex}`;
+            return {
+              descriptor:
+                lastMirroredState?.tracks?.[trackIndex]?.paramDisplays?.[parameterKey] ||
+                readMirroredDisplayDescriptor(element),
+              output: getEl(outputId),
+            };
+          }
+          const masterBindings = {
+            "master-volume": ["volume", "master-volume-value"],
+            "loop-length": ["loopLength", "loop-length-value"],
+            "lfo-time": ["lfo1Time", "lfo-time-value"],
+            "lfo2-time": ["lfo2Time", "lfo2-time-value"],
+          };
+          const binding = masterBindings[element.id];
+          if (!binding) return { descriptor: readMirroredDisplayDescriptor(element), output: null };
+          return {
+            descriptor:
+              lastMirroredState?.master?.paramDisplays?.[binding[0]] ||
+              readMirroredDisplayDescriptor(element),
+            output: getEl(binding[1]),
+          };
+        }
+
+        function applyOptimisticMirroredParameterDisplay(element) {
+          const binding = resolveMirroredParameterBinding(element);
+          if (!binding.output) return false;
+          const descriptor = binding.descriptor || {};
+          const optimisticDisplay = formatMirroredParameterDisplay(
+            descriptor,
+            element.value,
+          );
+          binding.output.textContent = optimisticDisplay;
+          binding.output.dataset.optimisticDisplay = optimisticDisplay;
+          element.dataset.optimisticDisplay = optimisticDisplay;
+          if (descriptor.parameterKey) {
+            element.dataset.parameterKey = String(descriptor.parameterKey);
+          }
+          if (binding.output.id) delete valCache[binding.output.id];
+          return true;
+        }
+
+        let mirroredTrackCount = 0;
+
+        function buildGUI(trackCount = 4) {
+          const normalizedTrackCount = Math.max(
+            1,
+            Math.min(32, Math.floor(Number(trackCount) || 4)),
+          );
           if (!document.getElementById("gui-dialog-registry-root")) {
             const registryRoot = document.createElement("div");
             registryRoot.id = "gui-dialog-registry-root";
@@ -4944,7 +5107,7 @@
             if (studioRoot) studioRoot.appendChild(waveformStatus);
           }
           var g = document.getElementById("sample-grid");
-          if (g) {
+          if (g && g.children.length !== 20) {
             g.innerHTML = "";
             for (var p = 1; p <= 20; p++) {
               var b = document.createElement("button");
@@ -4958,7 +5121,23 @@
             }
           }
           var grid = document.getElementById("main-grid");
-          for (var i = 0; i < 4; i++) {
+          if (grid) {
+            grid.style.gridTemplateColumns = `repeat(${normalizedTrackCount + 1}, minmax(0, 1fr))`;
+            Array.from(grid.querySelectorAll(".track[data-track-index]")).forEach(
+              (trackNode) => {
+                const index = Number(trackNode.dataset.trackIndex);
+                if (Number.isInteger(index) && index >= normalizedTrackCount) {
+                  [trackNode, ...trackNode.querySelectorAll("[id]")].forEach((element) => {
+                    if (!element.id) return;
+                    delete elCache[element.id];
+                    delete valCache[element.id];
+                  });
+                  trackNode.remove();
+                }
+              },
+            );
+          }
+          for (var i = 0; i < normalizedTrackCount; i++) {
             if (document.getElementById("track-" + i)) continue;
             var t = document.createElement("div");
             t.className = "track";
@@ -4972,12 +5151,13 @@
                         <div class="control-group track-input-group"><div class="track-input-layout"><label>Input</label><select id="t-input-${i}" class="input-source app-select" data-action="select-input"><option value="mic" selected>Microphone</option><option value="file">Import File</option><option value="directory">Import Directory</option><option value="mc-pa">MC PA Mode</option><option value="system">System Loopback</option></select></div></div>
                         <div class="control-group track-input-gain-group master-row-layout pa-mic-adjustment" id="input-gain-group-${i}"><label class="master-label">Input Gain</label><input type="range" class="pa-mic-slider" data-param="inputGain" id="t-gain-sl-${i}" min="-48" max="24" step="0.1" value="0" title="Increment: 0.1"><span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
-                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" id="t-ls-val-${i}">0.00s</span><span class="param-value" id="t-le-val-${i}">1.00s</span></div></div></div>
+                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
                         <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group" data-param-label="${cfg.p}"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}" data-value-for="${cfg.p}">${Number(cfg.val).toFixed(1)}${cfg.u}</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" title="Click to assign ${cfg.l} LFO 1. Double-click to reverse." aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" title="Click to assign ${cfg.l} LFO 2. Double-click to reverse." aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" data-param="${cfg.p}" min="${cfg.min}" max="${cfg.max}" step="${cfg.s}" value="${cfg.val}" title="Increment: ${cfg.s}"><span class="preset-marker min-preset-marker" id="t-min-marker-${i}-${cfg.p}" data-min-marker-for="${cfg.p}"></span><span class="preset-marker max-preset-marker" id="t-max-marker-${i}-${cfg.p}" data-max-marker-for="${cfg.p}"></span></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
+          mirroredTrackCount = normalizedTrackCount;
           updateScale();
         }
 
@@ -5857,16 +6037,65 @@
           el.setAttribute("aria-disabled", buttonState.disabled ? "true" : "false");
         }
 
-        function drawMirroredWaveform(id, waveform, source) {
+        function calculateMirroredWaveformVisualGain(peak) {
+          const value = Math.max(0, Number(peak) || 0);
+          if (value < 0.01) return 20;
+          if (value < 0.05) return 10;
+          if (value < 0.15) return 5;
+          if (value < 0.5) return 2;
+          return 1;
+        }
+
+        function interpolateMirroredWaveform(previous, next, progress) {
+          if (!previous || !next) return next || previous || null;
+          const amount = Math.max(0, Math.min(1, Number(progress) || 0));
+          const interpolateNumber = (from, to) =>
+            (Number(from) || 0) + ((Number(to) || 0) - (Number(from) || 0)) * amount;
+          const interpolateList = (from, to, pairValues = false) => {
+            if (!Array.isArray(to)) return [];
+            if (!Array.isArray(from) || from.length !== to.length) return to;
+            return to.map((value, index) => {
+              if (!pairValues) return interpolateNumber(from[index], value);
+              return [
+                interpolateNumber(from[index]?.[0], value?.[0]),
+                interpolateNumber(from[index]?.[1], value?.[1]),
+              ];
+            });
+          };
+          return {
+            ...next,
+            points: interpolateList(previous.points, next.points, true),
+            line: interpolateList(previous.line, next.line, false),
+            peak: interpolateNumber(previous.peak, next.peak),
+            nonFlat: Boolean(previous.nonFlat || next.nonFlat),
+          };
+        }
+
+        function drawMirroredWaveform(id, waveform, source, cacheResult = true) {
           const canvas = getEl(id);
           if (!canvas || !waveform || !Array.isArray(waveform.points)) return false;
           const hasData = waveform.hasData !== false;
+          const active = waveform.active !== false;
+          const resolvedSource = waveform.source || source || "unknown";
+          const paintMode = waveform.paintMode || (
+            resolvedSource === "decoded_buffer"
+              ? "decoded_envelope"
+              : resolvedSource === "live_analyser"
+                ? "live_line"
+                : "master_envelope"
+          );
+          const peak = Math.max(0, Number(waveform.peak) || 0);
+          const nonFlat = Boolean(waveform.nonFlat ?? peak > 0.000001);
           canvas.dataset.waveformState = hasData ? "ready" : "pending";
-          canvas.dataset.waveformSource = source || "unknown";
+          canvas.dataset.waveformSource = resolvedSource;
           canvas.dataset.waveformSampleCount = String(Number(waveform.sampleCount) || 0);
+          canvas.dataset.waveformActive = active ? "true" : "false";
+          canvas.dataset.waveformPeak = peak.toFixed(6);
+          canvas.dataset.waveformNonFlat = nonFlat ? "true" : "false";
+          canvas.dataset.waveformPaintMode = paintMode;
           const signature = JSON.stringify(waveform);
           const cacheKey = "waveform:" + id;
-          if (valCache[cacheKey] === signature) return true;
+          if (cacheResult && valCache[cacheKey] === signature) return true;
           const width = canvas.clientWidth || Number(canvas.getAttribute("width")) || 238;
           const height = canvas.clientHeight || Number(canvas.getAttribute("height")) || 26;
           if (canvas.width !== width || canvas.height !== height) {
@@ -5883,33 +6112,71 @@
           // Only cache after a drawable canvas/context is available. A GUI
           // snapshot can arrive during shell construction; that first paint
           // must remain retryable instead of becoming a permanent cache hit.
-          valCache[cacheKey] = signature;
+          if (cacheResult) valCache[cacheKey] = signature;
           context.clearRect(0, 0, width, height);
-          context.strokeStyle = waveform.active ? "#d4af37" : "rgba(68, 68, 68, 0.5)";
-          context.fillStyle = waveform.active ? "rgba(212, 175, 55, 0.14)" : "transparent";
-          context.lineWidth = 1.25;
-          if (!waveform.points.length) {
+          if (!active || !hasData || (!waveform.points.length && !waveform.line?.length)) {
             context.beginPath();
+            context.strokeStyle = "rgba(68, 68, 68, 0.5)";
+            context.lineWidth = 1;
             context.moveTo(0, height / 2);
             context.lineTo(width, height / 2);
             context.stroke();
             return true;
           }
-          context.beginPath();
-          waveform.points.forEach((point, index) => {
-            const x = (index / Math.max(1, waveform.points.length - 1)) * width;
-            const min = Math.max(-1, Math.min(1, Number(point?.[0]) || 0));
-            const max = Math.max(-1, Math.min(1, Number(point?.[1]) || 0));
-            const yTop = ((1 - max) * height) / 2;
-            const yBottom = ((1 - min) * height) / 2;
-            context.moveTo(x, yTop);
-            context.lineTo(x, yBottom);
-          });
-          context.stroke();
-          if (waveform.active) {
-            context.globalAlpha = 0.7;
+          const visualGain = calculateMirroredWaveformVisualGain(peak);
+          const strokeColor = paintMode === "decoded_envelope"
+            ? "rgba(212, 175, 55, 0.9)"
+            : peak > 0.95
+              ? "#ff4444"
+              : peak > 0.7
+                ? "#ffcc00"
+                : "#d4af37";
+          context.strokeStyle = strokeColor;
+          context.lineWidth = paintMode === "decoded_envelope" ? 1 : 1.5;
+          if (paintMode === "live_line" && Array.isArray(waveform.line) && waveform.line.length) {
+            const coordinates = waveform.line.map((sample, index) => ({
+              x: (index / Math.max(1, waveform.line.length - 1)) * width,
+              y: ((Math.max(-1, Math.min(1, (Number(sample) || 0) * visualGain)) + 1) / 2) * height,
+            }));
+            context.beginPath();
+            context.moveTo(0, height / 2);
+            coordinates.forEach(({ x, y }) => context.lineTo(x, y));
+            context.lineTo(width, height / 2);
+            if (typeof context.closePath === "function") context.closePath();
+            const gradient = typeof context.createLinearGradient === "function"
+              ? context.createLinearGradient(0, 0, 0, height)
+              : null;
+            if (gradient) {
+              gradient.addColorStop(0, "rgba(212, 175, 55, 0)");
+              gradient.addColorStop(0.5, "rgba(212, 175, 55, 0.15)");
+              gradient.addColorStop(1, "rgba(212, 175, 55, 0)");
+              context.fillStyle = gradient;
+            } else {
+              context.fillStyle = "rgba(212, 175, 55, 0.12)";
+            }
             context.fill();
-            context.globalAlpha = 1;
+            context.beginPath();
+            coordinates.forEach(({ x, y }, index) => {
+              if (index === 0) context.moveTo(x, y);
+              else context.lineTo(x, y);
+            });
+            context.stroke();
+          } else {
+            context.beginPath();
+            waveform.points.forEach((point, index) => {
+              const x = (index / Math.max(1, waveform.points.length - 1)) * width;
+              const min = Math.max(-1, Math.min(1, (Number(point?.[0]) || 0) * visualGain));
+              const max = Math.max(-1, Math.min(1, (Number(point?.[1]) || 0) * visualGain));
+              const yTop = ((1 - max) * height) / 2;
+              const yBottom = ((1 - min) * height) / 2;
+              context.moveTo(x, yTop);
+              context.lineTo(x, yBottom);
+            });
+            context.stroke();
+          }
+          if (peak > 0.98 && paintMode !== "decoded_envelope") {
+            context.fillStyle = "rgba(255, 0, 0, 0.3)";
+            context.fillRect(0, 0, width, height);
           }
           return true;
         }
@@ -5940,6 +6207,7 @@
         }
 
         let lastDialogMirrorState = "";
+        let lastDialogMirrorLayoutState = "";
         let lastDialogRegistryState = "";
         function renderDialogRegistry(registry) {
           const root = getEl("gui-dialog-registry-root");
@@ -5957,6 +6225,131 @@
           root.dataset.registry = JSON.stringify(list);
         }
 
+        function getDialogMirrorLayoutSignature(dialogs) {
+          return JSON.stringify((dialogs || []).map((dialog) => ({
+            ...dialog,
+            left: undefined,
+            top: undefined,
+            width: undefined,
+            height: undefined,
+            controls: (dialog.controls || []).map((control) => ({
+              ...control,
+              value: undefined,
+              rawValue: undefined,
+              defaultValue: undefined,
+              displayValue: undefined,
+              checked: undefined,
+              disabled: undefined,
+              displayDescriptor: control.displayDescriptor
+                ? {
+                    ...control.displayDescriptor,
+                    rawValue: undefined,
+                    displayValue: undefined,
+                    decimals: undefined,
+                    defaultValue: undefined,
+                    disabled: undefined,
+                  }
+                : undefined,
+              options: (control.options || []).map((option) => ({
+                ...option,
+                selected: undefined,
+                disabled: undefined,
+              })),
+            })),
+            actions: (dialog.actions || []).map((action) => ({
+              ...action,
+              pressed: undefined,
+              disabled: undefined,
+            })),
+            effectSlotTabs: dialog.effectSlotTabs
+              ? {
+                  ...dialog.effectSlotTabs,
+                  items: (dialog.effectSlotTabs.items || []).map((item) => ({
+                    ...item,
+                    control: item.control
+                      ? {
+                          ...item.control,
+                          checked: undefined,
+                          disabled: undefined,
+                        }
+                      : null,
+                  })),
+                }
+              : null,
+          })));
+        }
+
+        function patchMirroredDialogState(root, dialogs) {
+          const panels = Array.from(root.children);
+          if (panels.length !== dialogs.length) return false;
+          for (const dialog of dialogs) {
+            const panel = panels.find(
+              (candidate) => candidate.dataset.dialogId === String(dialog.id || ""),
+            );
+            if (!panel) return false;
+            panel.style.left = `${Math.max(0, Math.min(0.85, Number(dialog.left) || 0.2)) * 100}%`;
+            panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
+            if (!panel.matches(".effect-params-dialog, .audition-params-dialog")) {
+              panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
+              panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
+            }
+            (dialog.controls || []).forEach((control, controlIndex) => {
+              const resolvedIndex = Number(control.controlIndex ?? controlIndex);
+              const value = panel.querySelector(
+                `input[data-control-index="${resolvedIndex}"], ` +
+                `select[data-control-index="${resolvedIndex}"], ` +
+                `textarea[data-control-index="${resolvedIndex}"]`,
+              );
+              if (!value) return;
+              const pending = value.dataset.castInteractionState === "pending";
+              if (!pending) {
+                if (control.type === "checkbox") value.checked = Boolean(control.checked);
+                else value.value = control.value === null || control.value === undefined
+                  ? ""
+                  : String(control.value);
+              }
+              value.disabled = Boolean(control.disabled);
+              const descriptor = control.displayDescriptor || readMirroredDisplayDescriptor(value);
+              const confirmedDisplay = control.displayValue !== undefined
+                ? String(control.displayValue)
+                : formatMirroredParameterDisplay(descriptor, control.rawValue ?? control.value);
+              if (!pending) {
+                writeMirroredDisplayDescriptor(value, descriptor, confirmedDisplay);
+                const output = value.closest(
+                  ".effect-control-group, .gui-dialog-mirror-control",
+                )?.querySelector(
+                  ".effect-param-value .param-value, .gui-dialog-mirror-value",
+                );
+                if (output) {
+                  output.textContent = confirmedDisplay;
+                  writeMirroredDisplayDescriptor(output, descriptor, confirmedDisplay);
+                }
+              }
+            });
+            (dialog.effectSlotTabs?.items || []).forEach((item) => {
+              if (!item?.control) return;
+              const resolvedIndex = Number(item.control.controlIndex);
+              const input = panel.querySelector(
+                `input[data-control-index="${resolvedIndex}"]`,
+              );
+              if (!input) return;
+              input.checked = Boolean(item.control.checked);
+              input.disabled = Boolean(item.control.disabled);
+            });
+            (dialog.actions || []).forEach((action, actionIndex) => {
+              const resolvedIndex = Number(action.actionIndex ?? actionIndex);
+              const actionElement = panel.querySelector(`[data-action-index="${resolvedIndex}"]`);
+              if (!actionElement) return;
+              if (actionElement.tagName === "BUTTON") {
+                actionElement.disabled = Boolean(action.disabled);
+              }
+              actionElement.setAttribute("aria-pressed", action.pressed ? "true" : "false");
+            });
+          }
+          root.hidden = dialogs.length === 0;
+          return true;
+        }
+
         function renderDialogMirrors(dialogs) {
           const root = getEl("gui-dialog-mirror-root");
           if (!root) return;
@@ -5964,6 +6357,14 @@
           const signature = JSON.stringify(list);
           if (signature === lastDialogMirrorState) return;
           lastDialogMirrorState = signature;
+          const layoutSignature = getDialogMirrorLayoutSignature(list);
+          if (
+            layoutSignature === lastDialogMirrorLayoutState &&
+            patchMirroredDialogState(root, list)
+          ) {
+            return;
+          }
+          lastDialogMirrorLayoutState = layoutSignature;
           root.replaceChildren();
           root.hidden = list.length === 0;
           const normalizeClassName = (value, fallback = "") => {
@@ -6001,6 +6402,29 @@
             value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
             value.dataset.dialogId = dialog.id || "";
             value.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
+            const displayDescriptor = control.displayDescriptor || (
+              control.formatterKind
+                ? {
+                    parameterKey: control.parameterKey,
+                    displayValue: control.displayValue,
+                    formatterKind: control.formatterKind,
+                    unit: control.unit,
+                    unitSpacing: control.unitSpacing || "",
+                    displayScale: control.displayScale || 1,
+                    decimals: control.decimals || 0,
+                    min: control.min,
+                    max: control.max,
+                    step: control.step,
+                  }
+                : null
+            );
+            if (displayDescriptor) {
+              writeMirroredDisplayDescriptor(
+                value,
+                displayDescriptor,
+                displayDescriptor.displayValue ?? control.displayValue ?? "",
+              );
+            }
             applyDataset(value, control.data);
             if (tagName === "select") {
               (control.options || []).forEach((option) => {
@@ -6165,6 +6589,8 @@
                 const output = document.createElement("span");
                 output.className = normalizeClassName(control.valueClassName, "param-value");
                 output.textContent = control.displayValue || `${control.rawValue ?? ""}${control.unit || ""}`;
+                writeMirroredDisplayDescriptor(output, control.displayDescriptor, output.textContent);
+                writeMirroredDisplayDescriptor(value, control.displayDescriptor, output.textContent);
                 valueContainer.appendChild(output);
                 group.append(title, sliderWrapper, valueContainer);
                 controlsRoot.appendChild(group);
@@ -6181,8 +6607,13 @@
               row.appendChild(value);
               if (["range", "number"].includes(control.type)) {
                 const output = document.createElement("output");
-                output.textContent = value.value;
+                output.textContent = control.displayValue ?? formatMirroredParameterDisplay(
+                  control.displayDescriptor,
+                  control.rawValue ?? value.value,
+                );
                 output.className = "gui-dialog-mirror-value";
+                writeMirroredDisplayDescriptor(output, control.displayDescriptor, output.textContent);
+                writeMirroredDisplayDescriptor(value, control.displayDescriptor, output.textContent);
                 row.appendChild(output);
               }
               controlsRoot.appendChild(row);
@@ -6247,12 +6678,112 @@
         const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
         const PCM_RENDER_THROTTLE_MS = 250; // Protect the audio callback from GUI repaint work.
         const WAVEFORM_RENDER_THROTTLE_MS = 250;
+        const WAVEFORM_VISUAL_FRAME_INTERVAL_MS = 1000 / 30;
+        const WAVEFORM_INTERPOLATION_MS = WAVEFORM_RENDER_THROTTLE_MS;
+        const mirroredWaveformVisuals = new Map();
+        let mirroredWaveformFrameHandle = null;
+        let mirroredWaveformFrameUsesTimeout = false;
         let lastWaveformRenderTime = 0;
         let pendingWaveformState = null;
         let pendingWaveformRevision = -1;
         let waveformRenderTimer = null;
         let lastWaveformRenderRevision = -1;
         let lastWaveformRenderStats = { expected: 0, drawn: 0, surfaces: [] };
+
+        function getMirroredWaveformNow() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
+
+        function scheduleMirroredWaveformFrame() {
+          if (mirroredWaveformFrameHandle !== null) return;
+          if (typeof window.requestAnimationFrame === "function") {
+            mirroredWaveformFrameUsesTimeout = false;
+            mirroredWaveformFrameHandle = window.requestAnimationFrame(
+              paintMirroredWaveformFrame,
+            );
+          } else {
+            mirroredWaveformFrameUsesTimeout = true;
+            mirroredWaveformFrameHandle = window.setTimeout(
+              () => paintMirroredWaveformFrame(getMirroredWaveformNow()),
+              WAVEFORM_VISUAL_FRAME_INTERVAL_MS,
+            );
+          }
+        }
+
+        function paintMirroredWaveformFrame(frameTime) {
+          mirroredWaveformFrameHandle = null;
+          const nowMs = Number.isFinite(Number(frameTime))
+            ? Number(frameTime)
+            : getMirroredWaveformNow();
+          let needsAnotherFrame = false;
+          mirroredWaveformVisuals.forEach((state, id) => {
+            if (!state?.target) return;
+            const elapsed = Math.max(0, nowMs - state.startedAt);
+            const progress = state.interpolate
+              ? Math.min(1, elapsed / WAVEFORM_INTERPOLATION_MS)
+              : 1;
+            const frame = progress >= 1
+              ? state.target
+              : interpolateMirroredWaveform(state.from, state.target, progress);
+            state.displayed = frame;
+            drawMirroredWaveform(id, frame, state.source, progress >= 1);
+            if (progress < 1) needsAnotherFrame = true;
+          });
+          if (needsAnotherFrame) scheduleMirroredWaveformFrame();
+        }
+
+        function queueMirroredWaveform(id, waveform, source) {
+          if (!waveform) return false;
+          const resolvedSource = waveform.source || source || "unknown";
+          const signature = JSON.stringify(waveform);
+          const previous = mirroredWaveformVisuals.get(id);
+          if (previous?.signature === signature) {
+            return drawMirroredWaveform(id, waveform, resolvedSource);
+          }
+          const sourceChanged = previous && previous.source !== resolvedSource;
+          const canInterpolate = Boolean(
+            previous?.displayed &&
+              !sourceChanged &&
+              resolvedSource !== "decoded_buffer" &&
+              Array.isArray(previous.displayed.points) &&
+              previous.displayed.points.length === waveform.points?.length,
+          );
+          const nextState = {
+            source: resolvedSource,
+            signature,
+            from: canInterpolate ? previous.displayed : waveform,
+            target: waveform,
+            displayed: canInterpolate ? previous.displayed : waveform,
+            interpolate: canInterpolate,
+            startedAt: getMirroredWaveformNow(),
+          };
+          mirroredWaveformVisuals.set(id, nextState);
+          const didDraw = drawMirroredWaveform(
+            id,
+            nextState.displayed,
+            resolvedSource,
+            !canInterpolate,
+          );
+          if (canInterpolate) scheduleMirroredWaveformFrame();
+          return didDraw;
+        }
+
+        function resetMirroredWaveformVisuals() {
+          if (mirroredWaveformFrameHandle !== null) {
+            if (mirroredWaveformFrameUsesTimeout) {
+              window.clearTimeout(mirroredWaveformFrameHandle);
+            } else if (typeof window.cancelAnimationFrame === "function") {
+              window.cancelAnimationFrame(mirroredWaveformFrameHandle);
+            }
+          }
+          mirroredWaveformFrameHandle = null;
+          mirroredWaveformVisuals.clear();
+          Object.keys(valCache).forEach((key) => {
+            if (key.startsWith("waveform:")) delete valCache[key];
+          });
+        }
 
         function renderWaveformState(s) {
           if (!s) return false;
@@ -6266,13 +6797,19 @@
               expected += 1;
               const hasData = waveform.hasData !== false;
               if (!hasData) missing += 1;
-              const didDraw = drawMirroredWaveform(id, waveform, source);
+              const didDraw = queueMirroredWaveform(id, waveform, source);
               if (didDraw) drawn += 1;
+              const peak = Math.max(0, Number(waveform.peak) || 0);
+              const nonFlat = Boolean(waveform.nonFlat ?? peak > 0.000001);
               surfaces.push({
                 id,
                 owner,
-                source: source || "unknown",
+                source: waveform.source || source || "unknown",
                 hasData,
+                active: waveform.active !== false,
+                peak,
+                nonFlat,
+                paintMode: waveform.paintMode || "unknown",
                 sampleCount: Number(waveform.sampleCount) || 0,
                 drawn: didDraw,
               });
@@ -6569,7 +7106,13 @@
                 const scaled =
                   ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum;
                 updateValue(sliderId, scaled);
-                updateText(`t-${config.p}-val-${trackIndex}`, scaled.toFixed(2));
+                updateText(
+                  `t-${config.p}-val-${trackIndex}`,
+                  formatMirroredParameterDisplay(
+                    track.paramDisplays?.[config.p],
+                    scaled,
+                  ),
+                );
               });
             });
           }
@@ -6638,6 +7181,15 @@
           }
           const nextState = cloneMirroredState(lastMirroredState);
           if (!nextState) return null;
+          if (Number.isInteger(Number(patch.trackCount)) && Number(patch.trackCount) > 0) {
+            nextState.trackCount = Number(patch.trackCount);
+          }
+          if (
+            Number.isInteger(Number(patch.waveformSurfaceCount)) &&
+            Number(patch.waveformSurfaceCount) > 0
+          ) {
+            nextState.waveformSurfaceCount = Number(patch.waveformSurfaceCount);
+          }
 
           if (patch.transport && typeof patch.transport === "object") {
             nextState.transport = {
@@ -6700,6 +7252,10 @@
                   ...(previousTrack?.params || {}),
                   ...(trackPatch.params || {}),
                 },
+                paramDisplays: {
+                  ...(previousTrack?.paramDisplays || {}),
+                  ...(trackPatch.paramDisplays || {}),
+                },
                 lfo: {
                   ...(previousTrack?.lfo || {}),
                   ...(trackPatch.lfo || {}),
@@ -6749,6 +7305,11 @@
 
         function renderState(s, force = false, guiRevision = -1) {
           if (!s) return false;
+          const stateTrackCount = Math.max(
+            1,
+            Math.floor(Number(s.trackCount) || s.tracks?.length || mirroredTrackCount || 4),
+          );
+          if (stateTrackCount !== mirroredTrackCount) buildGUI(stateTrackCount);
           // Cursor updates are isolated from the full GUI render budget so
           // PCM playout can keep the TV pointer responsive while the regular
           // GUI render remains throttled. Ordering is guarded by cursor.revision.
@@ -6770,21 +7331,31 @@
           try {
             if (s.transport) {
               updateText("recording-time-display", s.transport.position);
-              for (var i = 0; i < 4; i++) {
+              for (var i = 0; i < stateTrackCount; i++) {
                 updateText("t-time-" + i, s.transport.position);
               }
             }
             if (s.master) {
               syncSmoothLfoVisuals(s.master);
-              updateValue("master-volume", s.master.volume || 0);
-              updateText(
+              applyMirroredParameterDisplay(
+                "master-volume",
                 "master-volume-value",
-                (s.master.volume || 0).toFixed(1) + " dB",
+                s.master.paramDisplays?.volume || {
+                  parameterKey: "volume",
+                  decimals: 1,
+                  unit: "dB",
+                  unitSpacing: " ",
+                },
+                s.master.volume ?? 0,
               );
-              updateValue("loop-length", s.master.loopLength || 4);
-              updateText(
+              applyMirroredParameterDisplay(
+                "loop-length",
                 "loop-length-value",
-                (s.master.loopLength || 4).toFixed(1) + "s",
+                s.master.paramDisplays?.loopLength || {
+                  parameterKey: "loopLength",
+                  formatterKind: "loop_timecode_v1",
+                },
+                s.master.loopLength ?? 4,
               );
               updateClass(
                 "master-record-button",
@@ -6800,13 +7371,15 @@
                   `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo1?.value) || 0))) * 100}%`,
                 );
               }
-              updateValue(
+              applyMirroredParameterDisplay(
                 "lfo-time",
-                (s.master.lfo1 && s.master.lfo1.time) || 1.8,
-              );
-              updateText(
                 "lfo-time-value",
-                ((s.master.lfo1 && s.master.lfo1.time) || 1.8).toFixed(1) + "s",
+                s.master.paramDisplays?.lfo1Time || {
+                  parameterKey: "lfo1Time",
+                  decimals: 1,
+                  unit: "s",
+                },
+                (s.master.lfo1 && s.master.lfo1.time) ?? 1.8,
               );
               updateClass(
                 "lfo2-toggle",
@@ -6830,13 +7403,15 @@
                 "lfo2-toggle",
                 s.master.buttons && s.master.buttons.lfo2,
               );
-              updateValue(
+              applyMirroredParameterDisplay(
                 "lfo2-time",
-                (s.master.lfo2 && s.master.lfo2.time) || 1.8,
-              );
-              updateText(
                 "lfo2-time-value",
-                ((s.master.lfo2 && s.master.lfo2.time) || 1.8).toFixed(1) + "s",
+                s.master.paramDisplays?.lfo2Time || {
+                  parameterKey: "lfo2Time",
+                  decimals: 1,
+                  unit: "s",
+                },
+                (s.master.lfo2 && s.master.lfo2.time) ?? 1.8,
               );
             }
             renderDialogRegistry(s.dialogRegistry);
@@ -6917,11 +7492,12 @@
                 updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
                 if (t.params) {
                   const paramsStr = JSON.stringify(t.params);
+                  const paramDisplaysStr = JSON.stringify(t.paramDisplays || {});
                   const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
                   const lfoIndicatorsStr = JSON.stringify(t.lfoIndicators);
                   const lfoActivityKey = `${s.master?.lfo1?.active ? 1 : 0}${s.master?.lfo2?.active ? 1 : 0}`;
                   const trackCacheKey =
-                    paramsStr + "_" + lfoAssignsStr + "_" + lfoIndicatorsStr + "_" + lfoActivityKey;
+                    paramsStr + "_" + paramDisplaysStr + "_" + lfoAssignsStr + "_" + lfoIndicatorsStr + "_" + lfoActivityKey;
                   if (_lastParamsCache[i] !== trackCacheKey) {
                     _lastParamsCache[i] = trackCacheKey;
                     KNOB_CONFIGS.forEach((cfg) => {
@@ -6930,8 +7506,12 @@
                         smoothBinding && canRenderSmoothLfo(smoothBinding.index),
                       );
                       if (!smoothOwned) {
-                        updateValue(`t-${cfg.p}-sl-${i}`, t.params[cfg.p] || 0);
-                        updateText(`t-${cfg.p}-val-${i}`, t.params[cfg.p] || 0);
+                        applyMirroredParameterDisplay(
+                          `t-${cfg.p}-sl-${i}`,
+                          `t-${cfg.p}-val-${i}`,
+                          t.paramDisplays?.[cfg.p],
+                          t.params[cfg.p] ?? 0,
+                        );
                       }
 
                       const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
@@ -6977,11 +7557,32 @@
                         marker.style.left = `${Math.max(0, Math.min(100, Number(markerState?.left) || 0))}%`;
                       });
                     });
-                    updateValue(`t-gain-sl-${i}`, t.params.inputGain || 0);
-                    updateText(
+                    applyMirroredParameterDisplay(
+                      `t-gain-sl-${i}`,
                       `t-gain-val-${i}`,
-                      (t.params.inputGain || 0).toFixed(1) + " dB",
+                      t.paramDisplays?.inputGain,
+                      t.params.inputGain ?? 0,
                     );
+                    [
+                      ["loopStart", `t-ls-sl-${i}`, `t-ls-val-${i}`, 0],
+                      ["loopEnd", `t-le-sl-${i}`, `t-le-val-${i}`, 1],
+                    ].forEach(([parameterKey, controlId, outputId, fallback]) => {
+                      const descriptor = t.paramDisplays?.[parameterKey] || {
+                        parameterKey,
+                        formatterKind: "loop_timecode_v1",
+                      };
+                      const rawValue = t.params[parameterKey] ?? descriptor.rawValue ?? fallback;
+                      const control = getEl(controlId);
+                      if (control && descriptor.max !== undefined && descriptor.max !== null) {
+                        control.max = String(descriptor.max);
+                      }
+                      applyMirroredParameterDisplay(
+                        controlId,
+                        outputId,
+                        descriptor,
+                        rawValue,
+                      );
+                    });
                   }
                 }
                 if (t.fxSlots) {
@@ -7183,13 +7784,16 @@
             );
           }
           emitGuiChannelTelemetry("received", { revision });
+          // Release only the interaction revision this authoritative snapshot
+          // confirms. Newer local drags remain pending and are not overwritten
+          // by an older echoed value during render.
+          confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
           if (renderState(normalizedState, false, revision)) {
             guiRenderedCount += 1;
             guiLastRenderedRevision = revision;
             emitGuiChannelTelemetry("rendered", { revision });
           }
           lastMirroredState = normalizedState;
-          confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
               const lfoVisualTelemetry = summarizeLfoVisualState(normalizedState);
