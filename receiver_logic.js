@@ -88,6 +88,8 @@
         var nativeResumeProbe = null;
         var nativeResumeReloadRevision = -1;
         var nativeResumeReloadEpoch = -1;
+        var nativeOrderedResumeRecovery = null;
+        var nativeOrderedResumeRecoveryTimerId = null;
         var nativeStartupTrimPending = false;
         var nativeStartupTrimState = "idle";
         var nativeStartupTrimRetryTimerId = null;
@@ -1117,6 +1119,66 @@
           return { resumable: true, reason: "native_media_warm" };
         }
 
+        function clearNativeOrderedResumeRecovery(reason) {
+          if (nativeOrderedResumeRecoveryTimerId) {
+            clearTimeout(nativeOrderedResumeRecoveryTimerId);
+            nativeOrderedResumeRecoveryTimerId = null;
+          }
+          const recovery = nativeOrderedResumeRecovery;
+          nativeOrderedResumeRecovery = null;
+          if (recovery && reason) {
+            writeCastDebug(
+              "debug",
+              "Cleared ordered native resume recovery revision=" +
+                recovery.playbackRevision + " (" + reason + ").",
+            );
+          }
+          return recovery;
+        }
+
+        function armNativeOrderedResumeRecoveryFallback() {
+          if (!nativeOrderedResumeRecovery || nativeOrderedResumeRecoveryTimerId) {
+            return false;
+          }
+          const recoveryEpoch = nativeOrderedResumeRecovery.playbackEpoch;
+          const recoveryRevision = nativeOrderedResumeRecovery.playbackRevision;
+          nativeOrderedResumeRecoveryTimerId = setTimeout(function () {
+            nativeOrderedResumeRecoveryTimerId = null;
+            if (
+              !nativeOrderedResumeRecovery ||
+              nativeOrderedResumeRecovery.playbackEpoch !== recoveryEpoch ||
+              nativeOrderedResumeRecovery.playbackRevision !== recoveryRevision ||
+              recoveryEpoch !== lastPlaybackEpoch ||
+              recoveryRevision !== lastPlaybackRevision
+            ) {
+              return;
+            }
+            if (nativeStreamActive || nativeStreamStarting) {
+              return;
+            }
+            const recovery = clearNativeOrderedResumeRecovery(
+              "native_restart_unavailable_timeout",
+            );
+            emitCafTelemetry("CAF_RESUME_RESTART_FALLBACK", {
+              playbackEpoch: recoveryEpoch,
+              playbackRevision: recoveryRevision,
+              reason: "fresh_native_start_unavailable",
+              recoveryReason: recovery?.reason || null,
+              timeoutMs: NATIVE_STARTUP_TIMEOUT_MS,
+            });
+            relayLogToStudio(
+              "⚠️ Receiver: Fresh native resume could not start within the bounded budget; " +
+                "opening prebuffered PCM fallback.",
+            );
+            setReceiverPlayoutPreference(
+              "pcm_fallback",
+              "ordered_native_resume_unavailable",
+            );
+            maybeStartLowLatencyPlayout("ordered_native_resume_fallback");
+          }, NATIVE_STARTUP_TIMEOUT_MS);
+          return true;
+        }
+
         function restartUnavailableNativeResume(reason, playbackRevision) {
           if (!nativeStreamActive || !nativeStreamPaused) return false;
           const mediaState = readNativeResumeMediaState();
@@ -1141,6 +1203,24 @@
           // fresh-start path instead of waiting through the resume probe and
           // one-shot reload while the receiver is silent.
           stopNativeStreamPlayout("caf_resume_media_unavailable", true);
+          nativeOrderedResumeRecovery = {
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: Number.isSafeInteger(revision)
+              ? revision
+              : lastPlaybackRevision,
+            reason: classification.reason,
+            startedAt: Date.now(),
+          };
+          const nativeRestartStarted = maybeStartNativeStream(
+            "ordered_native_resume_recovery",
+            false,
+            false,
+            true,
+            true,
+          );
+          if (!nativeRestartStarted) {
+            armNativeOrderedResumeRecoveryFallback();
+          }
           return true;
         }
 
@@ -1933,6 +2013,7 @@
           allowPriming = false,
           allowPcmCompanion = false,
           forcePrewarm = false,
+          forceNativeOwnership = false,
         ) {
           if (!identityAllowsAudio()) return false;
           if (window._receiverShutdownInProgress) {
@@ -1947,7 +2028,8 @@
           if (
             receiverPlayoutPreference === "pcm_fallback" &&
             !window._pcmDegraded &&
-            !allowPcmCompanion
+            !allowPcmCompanion &&
+            !forceNativeOwnership
           ) {
             return false;
           }
@@ -2740,6 +2822,21 @@
             if (!nativeStartupWatchdogId) {
               armNativeStartupWatchdog();
             }
+            return true;
+          }
+          if (nativeOrderedResumeRecovery) {
+            const nativeRestartStarted = maybeStartNativeStream(
+              "ordered_native_resume_recovery",
+              false,
+              false,
+              true,
+              true,
+            );
+            if (!nativeRestartStarted) {
+              armNativeOrderedResumeRecoveryFallback();
+            }
+            // This ordered revision owns a bounded fresh native attempt. PCM
+            // must not cold-start in the same command turn and race CAF.
             return true;
           }
           if (receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded) {
@@ -3661,7 +3758,13 @@
               );
               return;
             }
-            if (window._playbackMode === "native" || nativeStreamActive || workletNode || audioInitializing) {
+            if (
+              nativeStreamActive ||
+              (workletNode && pcmPathOwnsAudio()) ||
+              (audioInitializing &&
+                receiverPlayoutPreference === "pcm_fallback" &&
+                !nativeStreamStarting)
+            ) {
               return;
             }
             if (isPcmWorkletKnownUnavailable()) {
@@ -3690,13 +3793,23 @@
                 NATIVE_STARTUP_TIMEOUT_MS +
                 "ms; switching to PCM fallback.",
             );
+            if (nativeOrderedResumeRecovery) {
+              emitCafTelemetry("CAF_RESUME_RESTART_FALLBACK", {
+                playbackEpoch: nativeOrderedResumeRecovery.playbackEpoch,
+                playbackRevision: nativeOrderedResumeRecovery.playbackRevision,
+                reason: "fresh_native_start_timeout",
+                recoveryReason: nativeOrderedResumeRecovery.reason,
+                timeoutMs: NATIVE_STARTUP_TIMEOUT_MS,
+                nativeAttemptId: watchdogAttemptId,
+              });
+            }
             // The native attempt failed, but the ordered PLAYBACK_START is
             // still active. Preserve that intent so the recovery path can
             // start native immediately instead of waiting for another Play.
             stopNativeStreamPlayout("startup_timeout", true);
             setReceiverPlayoutPreference("pcm_fallback", "native_startup_timeout");
             if (configReceived) {
-              initAudio(true, false);
+              maybeStartLowLatencyPlayout("native_startup_timeout");
             }
           }, NATIVE_STARTUP_TIMEOUT_MS);
           return true;
@@ -3791,6 +3904,16 @@
           nativeStreamActive = true;
           nativeStreamPaused = false;
           nativeFailureRetryAttempted = false;
+          if (nativeOrderedResumeRecovery) {
+            emitCafTelemetry("CAF_RESUME_RESTART_READY", {
+              playbackEpoch: nativeOrderedResumeRecovery.playbackEpoch,
+              playbackRevision: nativeOrderedResumeRecovery.playbackRevision,
+              recoveryReason: nativeOrderedResumeRecovery.reason,
+              elapsedMs: Date.now() - nativeOrderedResumeRecovery.startedAt,
+              nativeAttemptId: nativeStartupAttemptId,
+            });
+            clearNativeOrderedResumeRecovery("native_restart_ready");
+          }
           releaseNativeStreamPrewarmMute();
           if (nativeStartupTrimState !== "idle" && nativeStartupTrimState !== "cancelled") {
             nativeStartupTrimState = "released";
@@ -3910,6 +4033,7 @@
 
         function stopNativeStreamPlayout(reason, preservePlaybackIntent = false) {
           cancelNativeResumeProgressProbe(reason || "native_stream_stop");
+          clearNativeOrderedResumeRecovery(reason || "native_stream_stop");
           const hadNativePlayout =
             nativeStreamActive ||
             nativeStreamStarting ||
@@ -6844,9 +6968,28 @@
           if (previous?.signature === signature) {
             return drawMirroredWaveform(id, waveform, resolvedSource);
           }
+          // Source inactivity is authoritative. Never interpolate a stale
+          // analyser frame toward silence because that keeps a visibly moving
+          // waveform alive after Pause. Replace the per-surface cache and
+          // paint the explicit centerline immediately.
+          if (waveform.active === false) {
+            const inactiveState = {
+              source: resolvedSource,
+              signature,
+              from: waveform,
+              target: waveform,
+              displayed: waveform,
+              interpolate: false,
+              startedAt: getMirroredWaveformNow(),
+            };
+            mirroredWaveformVisuals.set(id, inactiveState);
+            delete valCache["waveform:" + id];
+            return drawMirroredWaveform(id, waveform, resolvedSource, true);
+          }
           const sourceChanged = previous && previous.source !== resolvedSource;
           const canInterpolate = Boolean(
             previous?.displayed &&
+              previous.displayed.active !== false &&
               !sourceChanged &&
               resolvedSource !== "decoded_buffer" &&
               Array.isArray(previous.displayed.points) &&
@@ -8047,6 +8190,7 @@
           }
           noteOrderedPlaybackAction("PLAYBACK_PAUSE");
           clearPlaybackRecoveryRetry();
+          clearNativeOrderedResumeRecovery("playback_pause");
           pauseAllPlayout(d.reason || "playback_pause");
           acknowledgePlaybackRevision(d, "playback_pause");
         }
