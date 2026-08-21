@@ -1092,6 +1092,58 @@
           };
         }
 
+        function classifyNativeResumeMediaState(mediaState) {
+          const state = mediaState || {};
+          const playerState = String(state.playerState || "").toUpperCase();
+          const cafOwnsState = state.mediaElementId !== "native-stream-audio";
+          if (cafOwnsState && /(^|[^A-Z])(IDLE|ERROR)([^A-Z]|$)/.test(playerState)) {
+            return {
+              resumable: false,
+              reason: /ERROR/.test(playerState)
+                ? "caf_player_error"
+                : "caf_player_idle",
+            };
+          }
+          if (Number(state.networkState) === 3) {
+            return { resumable: false, reason: "native_media_no_source" };
+          }
+          if (
+            state.paused === true &&
+            Number.isFinite(Number(state.readyState)) &&
+            Number(state.readyState) <= 1
+          ) {
+            return { resumable: false, reason: "native_media_empty_or_metadata_only" };
+          }
+          return { resumable: true, reason: "native_media_warm" };
+        }
+
+        function restartUnavailableNativeResume(reason, playbackRevision) {
+          if (!nativeStreamActive || !nativeStreamPaused) return false;
+          const mediaState = readNativeResumeMediaState();
+          const classification = nativeStreamUrl
+            ? classifyNativeResumeMediaState(mediaState)
+            : { resumable: false, reason: "native_stream_url_missing" };
+          if (classification.resumable) return false;
+          const revision = Number(playbackRevision);
+          emitCafTelemetry("CAF_RESUME_RESTART", {
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: Number.isSafeInteger(revision) ? revision : null,
+            reason: classification.reason,
+            ...mediaState,
+          });
+          relayLogToStudio(
+            "🔄 Receiver: Native resume media is unavailable (" +
+              classification.reason +
+              "); starting a fresh cache-busted /stream.wav immediately.",
+          );
+          // The ordered playback intent remains active. Clearing the stale
+          // CAF item here makes requestNativePlaybackStart() take the proven
+          // fresh-start path instead of waiting through the resume probe and
+          // one-shot reload while the receiver is silent.
+          stopNativeStreamPlayout("caf_resume_media_unavailable", true);
+          return true;
+        }
+
         function cancelNativeResumeProgressProbe(reason) {
           if (nativeResumeProbeTimerId) {
             clearTimeout(nativeResumeProbeTimerId);
@@ -1351,11 +1403,43 @@
           }
         }
 
+        const RECEIVER_SAMPLER_COLUMNS = 5;
+        const RECEIVER_SAMPLER_ROWS = 4;
+        const RECEIVER_SAMPLER_PAD_COUNT =
+          RECEIVER_SAMPLER_COLUMNS * RECEIVER_SAMPLER_ROWS;
+
+        function lockReceiverSamplerGridLayout(sampleGrid) {
+          if (!sampleGrid) return false;
+          sampleGrid.style.display = "grid";
+          sampleGrid.style.gridTemplateColumns =
+            "repeat(" + RECEIVER_SAMPLER_COLUMNS + ", minmax(0, 1fr))";
+          sampleGrid.style.gridTemplateRows =
+            "repeat(" + RECEIVER_SAMPLER_ROWS + ", minmax(0, 1fr))";
+          sampleGrid.style.gridAutoFlow = "row";
+          sampleGrid.style.gridAutoColumns = "minmax(0, 1fr)";
+          sampleGrid.dataset.samplerColumns = String(RECEIVER_SAMPLER_COLUMNS);
+          sampleGrid.dataset.samplerRows = String(RECEIVER_SAMPLER_ROWS);
+          Array.from(sampleGrid.children).forEach(function positionSamplerPad(pad, index) {
+            const column = (index % RECEIVER_SAMPLER_COLUMNS) + 1;
+            const row = Math.floor(index / RECEIVER_SAMPLER_COLUMNS) + 1;
+            pad.style.gridColumn = String(column);
+            pad.style.gridRow = String(row);
+            pad.dataset.samplerColumn = String(column);
+            pad.dataset.samplerRow = String(row);
+          });
+          return sampleGrid.children.length === RECEIVER_SAMPLER_PAD_COUNT;
+        }
+
         function isReceiverUiStructurallyComplete() {
           const root = document.getElementById("studio-root");
           const grid = document.getElementById("main-grid");
           const sampleGrid = document.getElementById("sample-grid");
-          if (!root || !grid || !sampleGrid || sampleGrid.children.length !== 20) {
+          if (
+            !root ||
+            !grid ||
+            !sampleGrid ||
+            !lockReceiverSamplerGridLayout(sampleGrid)
+          ) {
             return false;
           }
           const expectedTrackCount = Math.max(1, mirroredTrackCount || 4);
@@ -2925,6 +3009,7 @@
                 if (command === "PLAY") {
                   markPlaybackStartSignal();
                   playbackPaused = false;
+                  restartUnavailableNativeResume("player_manager_play", null);
                   if (nativeStreamActive && nativeStreamPaused) {
                     resumeNativeStreamPlayout("player_manager_play", true);
                   } else {
@@ -5120,6 +5205,7 @@
               g.appendChild(b);
             }
           }
+          lockReceiverSamplerGridLayout(g);
           var grid = document.getElementById("main-grid");
           if (grid) {
             grid.style.gridTemplateColumns = `repeat(${normalizedTrackCount + 1}, minmax(0, 1fr))`;
@@ -7709,8 +7795,12 @@
             renderState(immediateState, true);
             lastMirroredState = immediateState;
           }
-          const resumingNative = nativeStreamActive && nativeStreamPaused;
           const playbackRevision = Number(d.playbackRevision);
+          restartUnavailableNativeResume(
+            reason || "playback_start",
+            playbackRevision,
+          );
+          const resumingNative = nativeStreamActive && nativeStreamPaused;
           requestNativePlaybackStart(reason || "playback_start");
           if (resumingNative) {
             startNativeResumeProgressProbe(playbackRevision);
@@ -7751,6 +7841,55 @@
               if (indicator?.maxMarker?.active) summary.lfoMaxMarkerCount += 1;
             });
           });
+          return summary;
+        }
+
+        function summarizeSamplerVisualLayout() {
+          const grid = document.getElementById("sample-grid");
+          const summary = {
+            samplerExpected: RECEIVER_SAMPLER_PAD_COUNT,
+            samplerRendered: 0,
+            samplerVisible: 0,
+            samplerColumns: 0,
+            samplerRows: 0,
+            samplerLayoutValid: false,
+          };
+          if (!grid) return summary;
+          lockReceiverSamplerGridLayout(grid);
+          const pads = Array.from(grid.children).filter(function isSamplerPad(child) {
+            return child.classList && child.classList.contains("sample-btn");
+          });
+          summary.samplerRendered = pads.length;
+          const columnPositions = new Set();
+          const rowPositions = new Set();
+          let gridRect = null;
+          try {
+            gridRect = grid.getBoundingClientRect();
+          } catch (_error) {}
+          pads.forEach(function measureSamplerPad(pad) {
+            let rect = null;
+            try {
+              rect = pad.getBoundingClientRect();
+            } catch (_error) {}
+            if (!rect || rect.width <= 0 || rect.height <= 0) return;
+            const intersectsGrid =
+              !gridRect ||
+              (rect.right > gridRect.left &&
+                rect.left < gridRect.right &&
+                rect.bottom > gridRect.top &&
+                rect.top < gridRect.bottom);
+            if (!intersectsGrid) return;
+            summary.samplerVisible += 1;
+            columnPositions.add(Math.round(rect.left));
+            rowPositions.add(Math.round(rect.top));
+          });
+          summary.samplerColumns = columnPositions.size;
+          summary.samplerRows = rowPositions.size;
+          summary.samplerLayoutValid =
+            summary.samplerRendered === RECEIVER_SAMPLER_PAD_COUNT &&
+            summary.samplerVisible === RECEIVER_SAMPLER_PAD_COUNT &&
+            summary.samplerColumns === RECEIVER_SAMPLER_COLUMNS &&
+            summary.samplerRows === RECEIVER_SAMPLER_ROWS;
           return summary;
         }
 
@@ -7797,6 +7936,7 @@
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
               const lfoVisualTelemetry = summarizeLfoVisualState(normalizedState);
+              const samplerLayoutTelemetry = summarizeSamplerVisualLayout();
               binaryWS.send(JSON.stringify({
                 type: "GUI_ACK",
                 transport: "gui",
@@ -7817,6 +7957,7 @@
                 waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
                 waveformSurfaces: lastWaveformRenderStats.surfaces,
                 ...lfoVisualTelemetry,
+                ...samplerLayoutTelemetry,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
