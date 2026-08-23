@@ -90,6 +90,9 @@
         var nativeResumeReloadEpoch = -1;
         var nativeOrderedResumeRecovery = null;
         var nativeOrderedResumeRecoveryTimerId = null;
+        // Preserve the last audible gain across the pause mute (volume=0).
+        // CAF can report that muted zero before ordered resume restores audio.
+        var nativeLastAudibleVolume = 1;
         var nativeStartupTrimPending = false;
         var nativeStartupTrimState = "idle";
         var nativeStartupTrimRetryTimerId = null;
@@ -3835,6 +3838,26 @@
           } catch (e) {}
         }
 
+        function rememberNativeAudibleVolume(element, candidate) {
+          const volume = Number(candidate);
+          if (!Number.isFinite(volume) || volume <= 0.001) return;
+          nativeLastAudibleVolume = volume;
+          if (element) element._mxsLastAudibleVolume = volume;
+        }
+
+        function getNativeResumeVolume(element) {
+          const candidates = [
+            element && element._mxsVolumeBeforePause,
+            element && element._mxsLastAudibleVolume,
+            nativeLastAudibleVolume,
+          ];
+          const volume = candidates.find((candidate) => {
+            const value = Number(candidate);
+            return Number.isFinite(value) && value > 0.001;
+          });
+          return volume === undefined ? 1 : Number(volume);
+        }
+
         function releaseNativeStreamPrewarmMute() {
           [
             document.getElementById("cast-media-element"),
@@ -3847,6 +3870,7 @@
               const targetVolume = element._mxsVolumeBeforePrewarm === undefined
                 ? 1
                 : element._mxsVolumeBeforePrewarm;
+              rememberNativeAudibleVolume(element, targetVolume);
               element.muted = false;
               element.volume = 0;
               delete element._mxsVolumeBeforePrewarm;
@@ -4116,9 +4140,7 @@
             if (!element) return;
             try {
               if (element._mxsVolumeBeforePause === undefined) {
-                element._mxsVolumeBeforePause = Number.isFinite(element.volume)
-                  ? element.volume
-                  : 1;
+                element._mxsVolumeBeforePause = getNativeResumeVolume(element);
               }
               element.muted = true;
               element.volume = 0;
@@ -4146,7 +4168,7 @@
             if (!element) return;
             try {
               if (element._mxsVolumeBeforePause === undefined) {
-                element._mxsVolumeBeforePause = Number.isFinite(element.volume) ? element.volume : 1;
+                element._mxsVolumeBeforePause = getNativeResumeVolume(element);
               }
               element.muted = true;
               element.volume = 0;
@@ -4168,10 +4190,10 @@
           [cafAudio, htmlAudio].forEach(function unmuteNativeElement(element) {
             if (!element) return;
             try {
+              const targetVolume = getNativeResumeVolume(element);
+              rememberNativeAudibleVolume(element, targetVolume);
               element.muted = false;
-              element.volume = element._mxsVolumeBeforePause === undefined
-                ? 1
-                : element._mxsVolumeBeforePause;
+              element.volume = targetVolume;
               delete element._mxsVolumeBeforePause;
             } catch (e) {}
           });
