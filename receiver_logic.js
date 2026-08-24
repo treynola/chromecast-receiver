@@ -235,6 +235,7 @@
         var playbackRecoveryRetryAttempted = false;
         var receiverStartupTimingStartAt = Date.now();
         var receiverStartupTimingMarks = {};
+        var receiverBootDiagnosticCount = 0;
         var receiverHandshakeTelemetryReady = false;
         var receiverBridgeConfigReady = false;
         var pcmAudioPriorityActive = false;
@@ -4744,6 +4745,10 @@
           suppressBinaryReconnect = true;
           clearBinaryReconnectTimer();
           clearLowLatencyStartupWatchdog();
+          if (handshakeRetryInterval) {
+            clearInterval(handshakeRetryInterval);
+            handshakeRetryInterval = null;
+          }
           window._wsReconnectAttempts = 0;
           window._handshakeAcked = false;
           receiverHandshakeTelemetryReady = false;
@@ -7920,9 +7925,68 @@
         let currentBridgeToken = null;
         let binaryWS = null;
         let wsConnectTimeout = null;
+        let handshakeRetryInterval = null;
         let playoutPathLogged = false;
         let suppressBinaryReconnect = false;
         let binaryConnectionGeneration = 0;
+        const RECEIVER_BOOT_DIAGNOSTIC_PROTOCOL_VERSION = 1;
+
+        function sendReceiverBootDiagnostic(stage, details) {
+          if (!stage || receiverBootDiagnosticCount >= 32) return false;
+          receiverBootDiagnosticCount += 1;
+          const payload = {
+            type: "RECEIVER_BOOT_DIAGNOSTIC",
+            protocolVersion: RECEIVER_BOOT_DIAGNOSTIC_PROTOCOL_VERSION,
+            stage: String(stage),
+            elapsedMs: Math.max(0, Date.now() - receiverStartupTimingStartAt),
+            receiverBootStage: window._receiverBootStage || null,
+            details: details && typeof details === "object"
+              ? details
+              : { message: String(details || "") },
+          };
+          let sent = false;
+          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            try {
+              binaryWS.send(JSON.stringify(payload));
+              sent = true;
+            } catch (_error) {}
+          }
+          if (!sent && typeof cast !== "undefined" && cast.framework) {
+            try {
+              const context = getCastReceiverContext();
+              const senders = context && context.getSenders ? context.getSenders() : [];
+              if (context && senders.length > 0) {
+                context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, payload);
+                sent = true;
+              }
+            } catch (_error) {}
+          }
+          if (!sent) {
+            const pageHost = window.location.hostname;
+            const pageHostIsStudio =
+              pageHost === "localhost" ||
+              pageHost === "127.0.0.1" ||
+              /^\d{1,3}(?:\.\d{1,3}){3}$/.test(pageHost);
+            const targetIp = currentBridgeIp || (pageHostIsStudio ? pageHost : null);
+            if (targetIp) {
+              const targetPort = currentBridgePort ||
+                (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{")
+                  ? window.SERVER_PORT
+                  : "8080");
+              const url = "http://" + targetIp + ":" + targetPort + "/log?m=" +
+                encodeURIComponent(JSON.stringify(payload));
+              try {
+                if (navigator.sendBeacon) {
+                  sent = navigator.sendBeacon(url);
+                } else {
+                  fetch(url).catch(() => {});
+                  sent = true;
+                }
+              } catch (_error) {}
+            }
+          }
+          return sent;
+        }
 
         function clearBinaryReconnectTimer() {
           if (wsConnectTimeout) {
@@ -8494,6 +8558,11 @@
             guiSessionNonce = null;
             console.log("✅ Binary Bridge Connected");
             markReceiverBoot("bridge_connected", { url: url });
+            sendReceiverBootDiagnostic("bridge_connected", {
+              generation,
+              readyState: binaryWS.readyState,
+              url: String(url).replace(/([?&]token=)[^&]+/i, "$1<redacted>"),
+            });
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
             if (window._receiverUiRevealed) {
               sendAuthenticatedGuiReady(window._receiverBootStage || "gui_revealed");
@@ -8572,29 +8641,50 @@
                 buildIdentity: window.MXS_BUILD_IDENTITY,
               };
               try {
+                sendReceiverBootDiagnostic("handshake_attempt", {
+                  generation,
+                  sampleRate: rate,
+                  readyState: binaryWS.readyState,
+                });
                 binaryWS.send(JSON.stringify(handshake));
+                sendReceiverBootDiagnostic("handshake_sent", {
+                  generation,
+                  sampleRate: rate,
+                  readyState: binaryWS.readyState,
+                });
                 relayLogToStudio(`🤝 Receiver: Handshake sent → ${rate}Hz / 16-bit`);
               } catch (e) {
+                sendReceiverBootDiagnostic("handshake_send_failed", {
+                  generation,
+                  sampleRate: rate,
+                  error: e && e.message ? e.message : String(e),
+                });
                 relayLogToStudio(`⚠️ Receiver: Failed to send handshake: ${e.message}`);
               }
             }
 
             window._sendHandshake = sendHandshake;
             window._handshakeAcked = false;
+            if (handshakeRetryInterval) {
+              clearInterval(handshakeRetryInterval);
+              handshakeRetryInterval = null;
+            }
             sendHandshake();
             markReceiverBoot("handshake_sent", {
               sampleRate: (audioCtx && audioCtx.sampleRate) || window._hwRate || hwRate || 48000,
             });
 
             // Set up a retry interval in case the initial handshake is lost/dropped by sender
-            const handshakeRetryInterval = setInterval(() => {
+            const retryInterval = setInterval(() => {
               if (generation !== binaryConnectionGeneration || !binaryWS || binaryWS.readyState !== WebSocket.OPEN || window._handshakeAcked) {
-                clearInterval(handshakeRetryInterval);
+                clearInterval(retryInterval);
+                if (handshakeRetryInterval === retryInterval) handshakeRetryInterval = null;
                 return;
               }
               relayLogToStudio("⏳ Receiver: Retrying Handshake (no ACK received yet)...");
               sendHandshake();
             }, 1500);
+            handshakeRetryInterval = retryInterval;
 
             // Record that the receiver audio path is ready; low-latency PCM startup begins only
             // once the handshake/configuration path is ready.
@@ -8716,6 +8806,10 @@
                   }
                   configReceived = true;
                   window._handshakeAcked = true;
+                  if (handshakeRetryInterval) {
+                    clearInterval(handshakeRetryInterval);
+                    handshakeRetryInterval = null;
+                  }
                   markReceiverBoot("handshake_ack", { sampleRate: ackRate, bitDepth: ackBitDepth });
                   maybeEnableReceiverHandshakeTelemetry();
                   flushPendingPlayoutState();
@@ -8748,6 +8842,14 @@
                     preloadPcmWorklet("native_preparation_unavailable");
                   }
                 } else if (d.type === "BRIDGE_CONFIG") {
+                  sendReceiverBootDiagnostic("bridge_config_received", {
+                    source: "websocket",
+                    generation,
+                    hasBuildIdentity: !!d.buildIdentity,
+                    hasPcmProtocol: !!d.pcmProtocol,
+                    hasGuiSessionNonce: typeof d.guiSessionNonce === "string",
+                    hasEndpoint: !!(d.ip && d.port && d.token),
+                  });
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
                     return;
                   }
@@ -8797,8 +8899,23 @@
             }
           };
 
-          binaryWS.onclose = () => {
+          binaryWS.onclose = (event) => {
             if (generation !== binaryConnectionGeneration) return;
+            const closeDetails = {
+              generation,
+              code: Number.isFinite(Number(event?.code)) ? Number(event.code) : null,
+              reason: typeof event?.reason === "string" ? event.reason.slice(0, 256) : "",
+              wasClean: event?.wasClean === true,
+              readyState: binaryWS ? binaryWS.readyState : null,
+              handshakeAcked: window._handshakeAcked === true,
+              bridgeConfigReady: receiverBridgeConfigReady === true,
+            };
+            console.warn("🛑 Receiver: Binary bridge closed", closeDetails);
+            sendReceiverBootDiagnostic("bridge_closed", closeDetails);
+            if (handshakeRetryInterval) {
+              clearInterval(handshakeRetryInterval);
+              handshakeRetryInterval = null;
+            }
             buildIdentityAccepted = false;
             window._buildIdentityAccepted = false;
             receiverHandshakeTelemetryReady = false;
@@ -8891,6 +9008,12 @@
           binaryWS.onerror = (e) => {
             if (generation !== binaryConnectionGeneration) return;
             if (window._receiverShutdownInProgress) return;
+            sendReceiverBootDiagnostic("bridge_error", {
+              generation,
+              eventType: e && e.type ? e.type : "error",
+              message: e && e.message ? e.message : null,
+              readyState: binaryWS ? binaryWS.readyState : null,
+            });
             console.error("❌ Binary Bridge Error:", e);
             relayLogToStudio(`❌ Receiver: WebSocket Error on ${url}`);
             // [v13.9.504] Retry with full connection params (port + token preserved)
@@ -8906,6 +9029,13 @@
 
             // 1. Hardware Alignment
             if (d.type === "BRIDGE_CONFIG") {
+              sendReceiverBootDiagnostic("bridge_config_received", {
+                source: "cast_channel",
+                hasBuildIdentity: !!d.buildIdentity,
+                hasPcmProtocol: !!d.pcmProtocol,
+                hasGuiSessionNonce: typeof d.guiSessionNonce === "string",
+                hasEndpoint: !!(d.ip && d.port && d.token),
+              });
               if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) {
                 // Connect only to report the rejection through the authoritative
                 // sender/backend path; no handshake or audio startup is allowed.
@@ -8951,6 +9081,22 @@
 
         // Keep the milestone's direct browser load lifecycle. The current
         // audio and handshake implementation remains unchanged inside it.
+        window.addEventListener("error", function (event) {
+          sendReceiverBootDiagnostic("runtime_error", {
+            message: event && event.message ? String(event.message).slice(0, 512) : "window_error",
+            filename: event && event.filename ? String(event.filename).slice(-256) : null,
+            line: Number.isFinite(Number(event?.lineno)) ? Number(event.lineno) : null,
+            column: Number.isFinite(Number(event?.colno)) ? Number(event.colno) : null,
+          });
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          const reason = event && event.reason;
+          sendReceiverBootDiagnostic("unhandled_rejection", {
+            message: reason && reason.message
+              ? String(reason.message).slice(0, 512)
+              : String(reason || "unhandled_rejection").slice(0, 512),
+          });
+        });
         window.onload = function () {
           // Preserve the known-good receiver order: construct the complete
           // static/dynamic GUI first, then start the native latency monitor.
