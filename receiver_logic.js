@@ -50,6 +50,24 @@
             return true;
           }
 
+          promote(expectedOwner, nextOwner, generation, reason = "owner_promote") {
+            const nextGeneration = Number(generation);
+            if (
+              typeof expectedOwner !== "string" ||
+              expectedOwner === "" ||
+              typeof nextOwner !== "string" ||
+              nextOwner === "" ||
+              !Number.isSafeInteger(nextGeneration) ||
+              nextGeneration !== this.generation ||
+              this.owner !== expectedOwner
+            ) {
+              return false;
+            }
+            this.owner = nextOwner;
+            this.reason = reason || this.reason;
+            return true;
+          }
+
           release(owner, generation, reason = "owner_release") {
             const nextGeneration = Number(generation);
             if (
@@ -733,7 +751,14 @@
             : castAudioOwnerArbiter.snapshot().generation;
           const accepted = nextPath === "none"
             ? castAudioOwnerArbiter.release(activeAudioPathOwner === "none" ? "" : activeAudioPathOwner, ownerGeneration, reason || "owner_release")
-            : castAudioOwnerArbiter.claim(nextPath, ownerGeneration, reason || "owner_claim");
+            : activeAudioPathOwner === "native_caf_starting" && nextPath === "native_caf"
+              ? castAudioOwnerArbiter.promote(
+                  "native_caf_starting",
+                  "native_caf",
+                  ownerGeneration,
+                  reason || "owner_promote",
+                )
+              : castAudioOwnerArbiter.claim(nextPath, ownerGeneration, reason || "owner_claim");
           if (!accepted) {
             const snapshot = castAudioOwnerArbiter.snapshot();
             relayLogToStudio(
@@ -2094,7 +2119,18 @@
             // PCM v2 is the live path: advertise readiness at the ordered Play
             // boundary so the sender can release frames without waiting for a
             // redundant native-mode transition.
-            notifyPlaybackMode("pcm_fallback", "playback_start_pcm_ready");
+            const readyReason = reason || "playback_start_pcm_ready";
+            if (
+              activeAudioPathOwner !== "pcm_v2" &&
+              !setActiveAudioPathOwner("pcm_v2", readyReason)
+            ) {
+              relayLogToStudio(
+                "⛔ Receiver: PCM fallback is ready but could not claim audio ownership (" +
+                  readyReason + ").",
+              );
+              return false;
+            }
+            notifyPlaybackMode("pcm_fallback", readyReason);
             return true;
           }
           if (!configReceived || !currentBridgeIp) {
@@ -2215,7 +2251,9 @@
                 " native stream on " + reason + ".",
             );
           }
-          setActiveAudioPathOwner("native_caf_starting", reason || "native_stream_starting");
+          if (!setActiveAudioPathOwner("native_caf_starting", reason || "native_stream_starting")) {
+            return false;
+          }
           setPcmAudioPriority(false, reason || "native_stream_starting");
           // A native attempt is an ownership decision, even while CAF is
           // still buffering. This gates sender/backend PCM admission until
@@ -4157,6 +4195,10 @@
             return true;
           }
           nativeStartupTrimRetryStartedAt = 0;
+          if (!setActiveAudioPathOwner("native_caf", modeReason || "native_active")) {
+            stopNativeStreamPlayout("native_owner_promotion_failed");
+            return false;
+          }
           nativeStreamStarting = false;
           nativeStreamActive = true;
           nativeStreamPaused = false;
@@ -4179,7 +4221,6 @@
           nativeStreamPrewarmReady = false;
           nativeStreamCompanionForPcm = false;
           window._nativeStreamActive = true;
-          setActiveAudioPathOwner("native_caf", modeReason || "native_active");
           clearNativeStartupWatchdog();
           logReceiverStartupTiming("receiver_ready", {
             modeReason: modeReason || "",
@@ -4321,6 +4362,12 @@
           nativeStreamUrl = "";
           window._nativeStreamActive = false;
           window._playbackMode = "unknown";
+          if (
+            activeAudioPathOwner === "native_caf" ||
+            activeAudioPathOwner === "native_caf_starting"
+          ) {
+            setActiveAudioPathOwner("none", reason || "native_stream_stop");
+          }
           try {
             window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
           } catch (e) {
@@ -6093,10 +6140,18 @@
                     !nativeStreamStarting &&
                     window._playbackMode !== "native";
                   if (pcmMayOwnAudio) {
-                    flushPendingBinaryFrames();
-                    setActiveAudioPathOwner("pcm_v2", "worklet_ready");
-                    notifyPlaybackMode("pcm_fallback", "worklet_ready");
-                    relayLogToStudio("✅ Receiver: Live PCM playout active.");
+                    const pcmClaimed =
+                      activeAudioPathOwner === "pcm_v2" ||
+                      setActiveAudioPathOwner("pcm_v2", "worklet_ready");
+                    if (pcmClaimed) {
+                      flushPendingBinaryFrames();
+                      notifyPlaybackMode("pcm_fallback", "worklet_ready");
+                      relayLogToStudio("✅ Receiver: Live PCM playout active.");
+                    } else {
+                      relayLogToStudio(
+                        "⛔ Receiver: PCM worklet became ready without audio ownership; pending frames remain gated.",
+                      );
+                    }
                   } else {
                     relayLogToStudio(
                       "✅ Receiver: PCM worklet ready as standby; native playout retains ownership.",
@@ -6492,26 +6547,43 @@
           const cacheKey = "button:" + id;
           const stateKey = JSON.stringify(buttonState);
           if (valCache[cacheKey] !== stateKey) {
-            el.classList.toggle("active", !!buttonState.active);
-            el.classList.toggle("playing", !!buttonState.active);
-            el.classList.toggle(
-              "recording",
-              !!buttonState.active && id.indexOf("rec") >= 0,
-            );
-            el.classList.toggle("mirrored-active", !!buttonState.active);
-            const operationState = buttonState.operationState || buttonState.state || (buttonState.active ? "active" : "inactive");
-            el.classList.toggle("reversed", id.indexOf("t-rev-") === 0 && operationState === "active");
-            el.classList.toggle("reverse-preparing", operationState === "preparing");
-            el.classList.toggle("reverse-failed", operationState === "failed");
+            const action = buttonState.action ||
+              (id.indexOf("t-rec-") === 0 ? "record" :
+                id.indexOf("t-stop-") === 0 ? "stop" :
+                  id.indexOf("t-play-") === 0 ? "play" :
+                    id.indexOf("t-rev-") === 0 ? "reverse" :
+                      id === "master-record-button" ? "master-record" :
+                        id === "lfo-toggle" ? "lfo1" :
+                          id === "lfo2-toggle" ? "lfo2" : "unknown");
+            const operationState = buttonState.operationState ||
+              buttonState.state ||
+              (buttonState.active ? "active" : "inactive");
+            const active = buttonState.active === true;
+            const isRecord = action === "record" || action === "master-record";
+            const isPlay = action === "play";
+            const isStop = action === "stop";
+            const isReverse = action === "reverse";
+            const isLfo = action === "lfo1" || action === "lfo2";
+            el.dataset.action = action;
+            el.classList.toggle("active", active);
+            el.classList.toggle("mirrored-active", active);
+            el.classList.toggle("playing", isPlay && operationState === "playing");
+            el.classList.toggle("paused", isPlay && operationState === "paused");
+            el.classList.toggle("stopped", isStop && operationState === "stopped");
+            el.classList.toggle("recording", isRecord && operationState === "recording");
+            el.classList.toggle("reversed", isReverse && operationState === "active");
+            el.classList.toggle("reverse-preparing", isReverse && operationState === "preparing");
+            el.classList.toggle("reverse-failed", isReverse && operationState === "failed");
+            el.classList.toggle("sweeping", isLfo && active);
             el.dataset.mirroredState = operationState;
-            el.dataset.reverseState = operationState;
+            if (isReverse) el.dataset.reverseState = operationState;
             el.dataset.reverseProgress = Number.isFinite(buttonState.progress)
               ? String(buttonState.progress)
               : "";
             el.dataset.reverseError = buttonState.error?.code || buttonState.errorCode || "";
-            el.setAttribute("aria-pressed", buttonState.pressed ? "true" : "false");
-            el.setAttribute("aria-busy", operationState === "preparing" ? "true" : "false");
-            if (id.indexOf("t-rev-") === 0) {
+            el.setAttribute("aria-pressed", buttonState.pressed === true ? "true" : "false");
+            el.setAttribute("aria-busy", isReverse && operationState === "preparing" ? "true" : "false");
+            if (isReverse) {
               el.title = operationState === "preparing"
                 ? `Preparing reverse${Number.isFinite(buttonState.progress) ? ` ${Math.round(buttonState.progress * 100)}%` : ""}`
                 : buttonState.error?.message || "Reverse playback";
@@ -7956,14 +8028,6 @@
                 },
                 s.master.loopLength ?? 4,
               );
-              updateClass(
-                "master-record-button",
-                s.master.isRecording ? "rec-btn recording" : "rec-btn",
-              );
-              updateClass(
-                "lfo-toggle",
-                s.master.lfo1 && s.master.lfo1.active ? "active" : "",
-              );
               if (!canRenderSmoothLfo(1)) {
                 updateStyleWidth(
                   "lfo-meter-bar",
@@ -7979,10 +8043,6 @@
                   unit: "s",
                 },
                 (s.master.lfo1 && s.master.lfo1.time) ?? 1.8,
-              );
-              updateClass(
-                "lfo2-toggle",
-                s.master.lfo2 && s.master.lfo2.active ? "active" : "",
               );
               if (!canRenderSmoothLfo(2)) {
                 updateStyleWidth(
@@ -8212,7 +8272,6 @@
                     });
                   }
                 }
-                updateClass(`t-rec-${i}`, t.isRecording ? "recording" : "");
               });
             if (s.qa) {
               const qaRoot = getEl("qa-overlay-root");
@@ -8257,6 +8316,9 @@
         let suppressBinaryReconnect = false;
         let binaryConnectionGeneration = 0;
         const RECEIVER_BOOT_DIAGNOSTIC_PROTOCOL_VERSION = 1;
+        const CAST_SESSION_HEARTBEAT_PROTOCOL_VERSION = 1;
+        let lastCastSessionHeartbeatAt = 0;
+        let lastCastSessionHeartbeatSequence = 0;
 
         function sendReceiverBootDiagnostic(stage, details) {
           if (!stage || receiverBootDiagnosticCount >= 32) return false;
@@ -8313,6 +8375,97 @@
             }
           }
           return sent;
+        }
+
+        function sendCastSessionHeartbeatAck(payload, source) {
+          if (source === "binary bridge") {
+            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+              try {
+                binaryWS.send(JSON.stringify(payload));
+                return true;
+              } catch (_error) {}
+            }
+          } else if (source === "Cast channel" && typeof cast !== "undefined" && cast.framework) {
+            try {
+              const context = getCastReceiverContext();
+              const senders = context && context.getSenders ? context.getSenders() : [];
+              if (context && senders.length > 0) {
+                context.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, payload);
+                return true;
+              }
+            } catch (_error) {}
+          }
+          return false;
+        }
+
+        function acknowledgeCastSessionHeartbeat(message, source) {
+          let rejectionReason = null;
+          if (!identityAllowsGui()) rejectionReason = "identity_not_verified";
+          else if (!receiverBridgeConfigReady) rejectionReason = "bridge_config_not_ready";
+          else if (Number(message?.protocolVersion) !== CAST_SESSION_HEARTBEAT_PROTOCOL_VERSION) {
+            rejectionReason = "protocol_version_mismatch";
+          } else if (typeof guiSessionNonce !== "string" || message?.guiSessionNonce !== guiSessionNonce) {
+            rejectionReason = "gui_session_nonce_mismatch";
+          }
+          if (rejectionReason) {
+            console.warn(JSON.stringify({
+              type: "CAST_SESSION_HEARTBEAT_RECEIVER",
+              accepted: false,
+              reason: rejectionReason,
+              sequence: Number(message?.sequence) || 0,
+              source: source || "unknown",
+            }));
+            return false;
+          }
+          const sequence = Number(message?.sequence);
+          if (!Number.isSafeInteger(sequence) || sequence <= 0) {
+            console.warn(JSON.stringify({
+              type: "CAST_SESSION_HEARTBEAT_RECEIVER",
+              accepted: false,
+              reason: "invalid_sequence",
+              sequence: Number.isFinite(sequence) ? sequence : null,
+              source: source || "unknown",
+            }));
+            return false;
+          }
+          const firstHeartbeat = lastCastSessionHeartbeatAt === 0;
+          lastCastSessionHeartbeatAt = Date.now();
+          lastCastSessionHeartbeatSequence = Math.max(
+            lastCastSessionHeartbeatSequence,
+            sequence,
+          );
+          window._lastCastSessionHeartbeatAt = lastCastSessionHeartbeatAt;
+          window._lastCastSessionHeartbeatSequence = lastCastSessionHeartbeatSequence;
+          clearNoSenderShutdownTimer();
+          revealReceiverUi("session_heartbeat");
+
+          const acknowledged = sendCastSessionHeartbeatAck({
+            type: "CAST_SESSION_HEARTBEAT_ACK",
+            protocolVersion: CAST_SESSION_HEARTBEAT_PROTOCOL_VERSION,
+            sequence,
+            receivedAtMs: lastCastSessionHeartbeatAt,
+            guiSessionNonce,
+            source: source || "unknown",
+            playbackMode: window._playbackMode || "unknown",
+            audioPathOwner: activeAudioPathOwner,
+            receiverUiRevealed: window._receiverUiRevealed === true,
+          }, source);
+          if (firstHeartbeat || sequence % 12 === 0) {
+            relayLogToStudio(
+              "💓 Receiver: Cast session heartbeat acknowledged " +
+                "(sequence=" + sequence +
+                ", source=" + (source || "unknown") +
+                ", sent=" + acknowledged + ").",
+            );
+            console.log(JSON.stringify({
+              type: "CAST_SESSION_HEARTBEAT_RECEIVER",
+              accepted: true,
+              sequence,
+              source: source || "unknown",
+              ackSent: acknowledged,
+            }));
+          }
+          return true;
         }
 
         function clearBinaryReconnectTimer() {
@@ -8414,6 +8567,46 @@
             });
           });
           return summary;
+        }
+
+        function summarizeMirroredButtonVisualState(state) {
+          const expected = [];
+          const add = (id, buttonState) => {
+            if (!buttonState) return;
+            expected.push({
+              id,
+              active: buttonState.active === true,
+              phase: buttonState.operationState || buttonState.state ||
+                (buttonState.active ? "active" : "inactive"),
+            });
+          };
+          add("master-record-button", state?.master?.buttons?.record);
+          add("lfo-toggle", state?.master?.buttons?.lfo1);
+          add("lfo2-toggle", state?.master?.buttons?.lfo2);
+          (state?.tracks || []).forEach((track, index) => {
+            add(`t-rec-${index}`, track?.buttons?.record);
+            add(`t-stop-${index}`, track?.buttons?.stop);
+            add(`t-play-${index}`, track?.buttons?.play);
+            add(`t-rev-${index}`, track?.buttons?.reverse);
+          });
+          const activeExpected = expected.filter((item) => item.active).map((item) => item.id);
+          const activePainted = [];
+          const mismatches = [];
+          expected.forEach((item) => {
+            const element = document.getElementById(item.id);
+            const paintedActive = element?.classList.contains("mirrored-active") === true;
+            const paintedPhase = element?.dataset?.mirroredState || "missing";
+            if (paintedActive) activePainted.push(item.id);
+            if (!element || paintedActive !== item.active || paintedPhase !== item.phase) {
+              mismatches.push(item.id);
+            }
+          });
+          return {
+            buttonActiveExpected: activeExpected,
+            buttonActivePainted: activePainted,
+            buttonStateMismatchCount: mismatches.length,
+            buttonStateMismatchIds: mismatches,
+          };
         }
 
         function summarizeSamplerVisualLayout() {
@@ -8529,6 +8722,7 @@
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
               const lfoVisualTelemetry = summarizeLfoVisualState(normalizedState);
+              const buttonVisualTelemetry = summarizeMirroredButtonVisualState(normalizedState);
               const samplerLayoutTelemetry = summarizeSamplerVisualLayout();
               binaryWS.send(JSON.stringify({
                 type: "GUI_ACK",
@@ -8553,6 +8747,7 @@
                 waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
                 waveformSurfaces: lastWaveformRenderStats.surfaces,
                 ...lfoVisualTelemetry,
+                ...buttonVisualTelemetry,
                 ...samplerLayoutTelemetry,
               }));
               guiAckCount += 1;
@@ -8796,6 +8991,9 @@
             case "RECEIVER_SHUTDOWN":
               shutdownReceiver(d.reason || "signal");
               return true;
+            case "CAST_SESSION_HEARTBEAT":
+              acknowledgeCastSessionHeartbeat(d, source);
+              return true;
             case "GUI_STATE_UPDATE":
               if (
                 d.transport !== "gui" ||
@@ -8946,9 +9144,14 @@
             pcmV2AllowInitialOffset = true;
             pcmV2Telemetry = createPcmV2Telemetry();
             playbackModeSocketGeneration++;
+            const preserveAudioOwner =
+              nativeStreamActive && activeAudioPathOwner === "native_caf";
             castAudioOwnerArbiter.begin(playbackModeSocketGeneration, "bridge_open", {
-              preserveOwner: nativeStreamActive && activeAudioPathOwner === "native_caf",
+              preserveOwner: preserveAudioOwner,
             });
+            if (!preserveAudioOwner && activeAudioPathOwner !== "none") {
+              setActiveAudioPathOwner("none", "bridge_open_owner_reset");
+            }
             resetGuiRevisionGate("bridge_open");
             guiSessionNonce = null;
             console.log("✅ Binary Bridge Connected");

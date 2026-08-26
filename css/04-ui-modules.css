@@ -3919,6 +3919,69 @@ body.receiver-mode #lfo2-toggle.mirrored-active {
   outline: 1px solid var(--gold);
   box-shadow: 0 0 5px rgba(255, 196, 0, 0.55);
 }
+body.receiver-mode .track-buttons button[id^="t-play-"].playing,
+body.receiver-mode .track-buttons button[id^="t-play-"].mirrored-active {
+  background-color: var(--green) !important;
+  color: white !important;
+  border-color: white !important;
+  box-shadow: 0 0 6px var(--green), inset 0 0 0 1px rgba(255, 255, 255, 0.45) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-stop-"].stopped,
+body.receiver-mode .track-buttons button[id^="t-stop-"].mirrored-active {
+  background-color: var(--gold) !important;
+  color: var(--red) !important;
+  border-color: white !important;
+  box-shadow: 0 0 6px var(--gold) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rec-"].recording,
+body.receiver-mode .track-buttons button[id^="t-rec-"].mirrored-active,
+body.receiver-mode #master-record-button.recording,
+body.receiver-mode #master-record-button.mirrored-active {
+  background-color: var(--red) !important;
+  color: white !important;
+  border-color: white !important;
+  box-shadow: 0 0 7px var(--red) !important;
+  animation: receiver-record-active-pulse 0.7s infinite alternate ease-in-out !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"].reversed,
+body.receiver-mode .track-buttons button[id^="t-rev-"].mirrored-active {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 7px var(--gold) !important;
+  animation: receiver-reverse-active-pulse 0.6s infinite alternate ease-in-out !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"].reverse-preparing {
+  background-color: var(--dark-gray) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+  animation: reverse-prepare-pulse 0.9s infinite alternate ease-in-out !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"].reverse-failed {
+  background-color: var(--dark-gray) !important;
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  box-shadow: 0 0 7px var(--red) !important;
+  animation: none !important;
+}
+body.receiver-mode #lfo-toggle.sweeping,
+body.receiver-mode #lfo2-toggle.sweeping,
+body.receiver-mode #lfo-toggle.mirrored-active,
+body.receiver-mode #lfo2-toggle.mirrored-active {
+  background-color: var(--green) !important;
+  color: white !important;
+  border-color: var(--gold) !important;
+  outline: 1px solid var(--gold) !important;
+  box-shadow: 0 0 7px var(--green) !important;
+}
+@keyframes receiver-record-active-pulse {
+  from { filter: brightness(0.82); }
+  to { filter: brightness(1.18); }
+}
+@keyframes receiver-reverse-active-pulse {
+  from { filter: brightness(0.78); }
+  to { filter: brightness(1.22); }
+}
 body.receiver-mode .meter-bar {
   transition: none !important;
 }

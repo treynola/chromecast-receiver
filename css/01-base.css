@@ -344,6 +344,54 @@ input[type="range"]:focus {
   filter: drop-shadow(0 0 5px var(--gold));
 }
 
+#cast-btn.cast-connecting,
+#cast-btn.cast-active,
+#cast-btn.cast-recovering,
+#cast-btn.cast-stopping {
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  cursor: default;
+}
+
+#cast-btn.cast-connecting {
+  color: var(--gold);
+  filter: drop-shadow(0 0 5px var(--gold));
+}
+
+#cast-btn.cast-active {
+  color: #35d04f;
+  filter: drop-shadow(0 0 6px #35d04f);
+  animation: cast-icon-active-pulse 1.8s ease-in-out infinite;
+}
+
+#cast-btn.cast-recovering {
+  color: var(--gold);
+  filter: drop-shadow(0 0 7px var(--red));
+}
+
+#cast-btn.cast-stopping {
+  color: var(--red);
+  filter: drop-shadow(0 0 7px var(--red));
+  cursor: wait;
+}
+
+#cast-btn.cast-connecting:hover,
+#cast-btn.cast-active:hover,
+#cast-btn.cast-recovering:hover,
+#cast-btn.cast-stopping:hover {
+  color: inherit;
+}
+
+@keyframes cast-icon-active-pulse {
+  0%,
+  100% {
+    opacity: 0.82;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .main-content {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
