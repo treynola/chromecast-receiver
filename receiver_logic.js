@@ -12,6 +12,75 @@
         } catch (e) {}
 
       (function () {
+        class CastAudioOwnerArbiter {
+          constructor() {
+            this.owner = "none";
+            this.generation = -1;
+            this.reason = "initial";
+          }
+
+          begin(generation, reason = "bridge_open", { preserveOwner = false } = {}) {
+            const nextGeneration = Number(generation);
+            if (!Number.isSafeInteger(nextGeneration) || nextGeneration < this.generation) {
+              return false;
+            }
+            if (!(preserveOwner && this.owner !== "none")) {
+              this.owner = "none";
+            }
+            this.generation = nextGeneration;
+            this.reason = reason || this.reason;
+            return true;
+          }
+
+          claim(owner, generation, reason = "owner_claim") {
+            const nextGeneration = Number(generation);
+            if (
+              typeof owner !== "string" ||
+              owner === "" ||
+              !Number.isSafeInteger(nextGeneration) ||
+              nextGeneration !== this.generation
+            ) {
+              return false;
+            }
+            if (this.owner !== "none" && this.owner !== owner) {
+              return false;
+            }
+            this.owner = owner;
+            this.reason = reason || this.reason;
+            return true;
+          }
+
+          release(owner, generation, reason = "owner_release") {
+            const nextGeneration = Number(generation);
+            if (
+              !Number.isSafeInteger(nextGeneration) ||
+              nextGeneration !== this.generation ||
+              (owner && this.owner !== "none" && this.owner !== owner)
+            ) {
+              return false;
+            }
+            this.owner = "none";
+            this.reason = reason || this.reason;
+            return true;
+          }
+
+          owns(owner, generation) {
+            return (
+              this.owner === owner &&
+              Number(generation) === this.generation
+            );
+          }
+
+          snapshot() {
+            return {
+              owner: this.owner,
+              generation: this.generation,
+              reason: this.reason,
+            };
+          }
+        }
+
+        const castAudioOwnerArbiter = new CastAudioOwnerArbiter();
         var audioCtx = null;
         var masterGain = null;
         var workletNode = null;
@@ -45,6 +114,8 @@
         var lastNativeStopReason = "";
         var lastNativeStopAt = 0;
         const BUILD_IDENTITY_SCHEMA = "mxs-004.clock-sync-pcm.build-identity";
+        const COMPATIBILITY_IDENTITY_SCHEMA = "mxs-004.cast-compatibility";
+        const COMPATIBILITY_IDENTITY_VERSION = 2;
         const BUILD_IDENTITY_COMPONENTS = [
           "senderCritical",
           "tauriCastingBackend",
@@ -52,6 +123,8 @@
           "receiverLogic",
           "receiverPcmWorklet",
         ];
+        const COMPATIBILITY_PROTOCOL_KEYS = ["audio", "gui", "session"];
+        const COMPATIBILITY_SCHEMA_KEYS = ["pcm", "gui", "actions"];
         var buildIdentityAccepted = false;
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
@@ -186,6 +259,8 @@
         var guiLastDeferredRevision = -1;
         var guiLastRenderedRevision = -1;
         var guiLastAckRevision = -1;
+        var guiLastRenderTimeMs = 0;
+        var guiLastPayloadBytes = 0;
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
         var pcmRuntimeHighWatermarkDiagnostics = 0;
         var pcmRuntimeNativeFallbacks = 0;
@@ -339,7 +414,7 @@
         var lastNativePlayoutProofTime = null;
 
         function isBuildIdentity(value) {
-          return !!(
+          const legacy = !!(
             value &&
             typeof value === "object" &&
             value.schema === BUILD_IDENTITY_SCHEMA &&
@@ -353,12 +428,66 @@
               return /^[a-f0-9]{64}$/.test(value.components[key]);
             })
           );
+          const compatible = !!(
+            value &&
+            typeof value === "object" &&
+            value.schema === COMPATIBILITY_IDENTITY_SCHEMA &&
+            value.version === COMPATIBILITY_IDENTITY_VERSION &&
+            value.algorithm === "sha256" &&
+            Object.keys(value).length === 7 &&
+            value.artifacts &&
+            typeof value.artifacts === "object" &&
+            Object.keys(value.artifacts).length === BUILD_IDENTITY_COMPONENTS.length &&
+            BUILD_IDENTITY_COMPONENTS.every(function (key) {
+              return /^[a-f0-9]{64}$/.test(value.artifacts[key]);
+            }) &&
+            value.protocols &&
+            typeof value.protocols === "object" &&
+            Object.keys(value.protocols).length === COMPATIBILITY_PROTOCOL_KEYS.length &&
+            COMPATIBILITY_PROTOCOL_KEYS.every(function (key) {
+              return typeof value.protocols[key] === "string";
+            }) &&
+            value.schemas &&
+            typeof value.schemas === "object" &&
+            Object.keys(value.schemas).length === COMPATIBILITY_SCHEMA_KEYS.length &&
+            COMPATIBILITY_SCHEMA_KEYS.every(function (key) {
+              return typeof value.schemas[key] === "string";
+            }) &&
+            Array.isArray(value.capabilities) &&
+            value.capabilities.length > 0 &&
+            value.capabilities.every(function (capability) {
+              return typeof capability === "string";
+            }) &&
+            new Set(value.capabilities).size === value.capabilities.length
+          );
+          return legacy || compatible;
         }
 
         function buildIdentitiesMatch(expected, received) {
+          if (
+            isBuildIdentity(expected) &&
+            isBuildIdentity(received) &&
+            expected.schema === COMPATIBILITY_IDENTITY_SCHEMA &&
+            received.schema === COMPATIBILITY_IDENTITY_SCHEMA
+          ) {
+            return (
+              COMPATIBILITY_PROTOCOL_KEYS.every(function (key) {
+                return expected.protocols[key] === received.protocols[key];
+              }) &&
+              COMPATIBILITY_SCHEMA_KEYS.every(function (key) {
+                return expected.schemas[key] === received.schemas[key];
+              }) &&
+              expected.capabilities.length === received.capabilities.length &&
+              expected.capabilities.every(function (capability) {
+                return received.capabilities.indexOf(capability) >= 0;
+              })
+            );
+          }
           return (
             isBuildIdentity(expected) &&
             isBuildIdentity(received) &&
+            expected.schema === BUILD_IDENTITY_SCHEMA &&
+            received.schema === BUILD_IDENTITY_SCHEMA &&
             BUILD_IDENTITY_COMPONENTS.every(function (key) {
               return expected.components[key] === received.components[key];
             })
@@ -563,6 +692,8 @@
             authoritative: "mxs_playback",
             playbackState: playbackState || "IDLE",
             playoutPath,
+            audioPathOwner: activeAudioPathOwner,
+            audioPathOwnerGeneration: castAudioOwnerArbiter.snapshot().generation,
             paused: playbackState === "PAUSED",
             reason: reason || "",
             timestampMs: Date.now(),
@@ -591,11 +722,31 @@
         let receiverPlayoutPreference = "pcm_fallback";
         let lowLatencyStartupRetryCount = 0;
         let activeAudioPathOwner = "none";
+        window._activeAudioPathOwner = "none";
         window._receiverPlayoutPreference = receiverPlayoutPreference;
 
         function setActiveAudioPathOwner(path, reason) {
           const nextPath = path || "none";
-          if (activeAudioPathOwner === nextPath) return;
+          const socketGeneration = Number(playbackModeSocketGeneration);
+          const ownerGeneration = Number.isSafeInteger(socketGeneration)
+            ? socketGeneration
+            : castAudioOwnerArbiter.snapshot().generation;
+          const accepted = nextPath === "none"
+            ? castAudioOwnerArbiter.release(activeAudioPathOwner === "none" ? "" : activeAudioPathOwner, ownerGeneration, reason || "owner_release")
+            : castAudioOwnerArbiter.claim(nextPath, ownerGeneration, reason || "owner_claim");
+          if (!accepted) {
+            const snapshot = castAudioOwnerArbiter.snapshot();
+            relayLogToStudio(
+              "⛔ Receiver: Rejected audio path owner transition " +
+                activeAudioPathOwner + " -> " + nextPath +
+                " (generation=" + ownerGeneration +
+                ", active=" + snapshot.owner +
+                ", activeGeneration=" + snapshot.generation +
+                (reason ? ", reason=" + reason : "") + ").",
+            );
+            return false;
+          }
+          if (activeAudioPathOwner === nextPath) return true;
           const previousPath = activeAudioPathOwner;
           activeAudioPathOwner = nextPath;
           window._activeAudioPathOwner = nextPath;
@@ -603,6 +754,7 @@
             "🎚️ Receiver audio path owner: " + previousPath + " -> " + nextPath +
               (reason ? " (" + reason + ")" : "") + ".",
           );
+          return true;
         }
 
         function setPcmAudioPriority(active, reason) {
@@ -1013,6 +1165,8 @@
             lastReceivedRevision: guiLastReceivedRevision,
             lastRenderedRevision: guiLastRenderedRevision,
             lastAckRevision: guiLastAckRevision,
+            lastRenderTimeMs: guiLastRenderTimeMs,
+            lastPayloadBytes: guiLastPayloadBytes,
             lastRejectReason: guiLastRejectReason,
             ...details,
           };
@@ -1593,6 +1747,8 @@
               mode: mode,
               reason: reason || "",
               ready: ready !== false,
+              audioPathOwner: activeAudioPathOwner,
+              audioPathOwnerGeneration: castAudioOwnerArbiter.snapshot().generation,
               socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
             };
@@ -1628,6 +1784,8 @@
               mode: "unknown",
               reason: reason || "",
               ready: false,
+              audioPathOwner: activeAudioPathOwner,
+              audioPathOwnerGeneration: castAudioOwnerArbiter.snapshot().generation,
               socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
             }));
@@ -2043,6 +2201,11 @@
           if (!configReceived || !currentBridgeIp) {
             return false;
           }
+          if (activeAudioPathOwner !== "none" && activeAudioPathOwner !== "native_caf") {
+            if (!setActiveAudioPathOwner("none", reason || "native_takeover")) {
+              return false;
+            }
+          }
           if (!allowPcmCompanion && (workletNode || audioInitializing || window._binaryActive)) {
             resetBinaryPlayoutState("native_takeover");
           }
@@ -2252,8 +2415,14 @@
           if (revision <= lastGuiRevision) {
             return false;
           }
-          lastGuiRevision = revision;
           return true;
+        }
+
+        function commitGuiRevision(message) {
+          const revision = Number(message && message.guiRevision);
+          if (Number.isSafeInteger(revision) && revision >= 0) {
+            lastGuiRevision = revision;
+          }
         }
 
         function resetGuiRevisionGate(reason) {
@@ -2270,7 +2439,13 @@
 
         function isReceiverInteractiveControl(element) {
           if (!element) return false;
-          if (element.dataset.registryActionId && element.dataset.registryDialogId) return true;
+          if (
+            element.dataset.registryActionId &&
+            element.dataset.registryDialogId &&
+            window.MXSCastGuiActionCatalog?.isSupportedRegistryActionId?.(
+              element.dataset.registryActionId,
+            ) === true
+          ) return true;
           if (
             element.dataset.dialogId &&
             (element.dataset.controlIndex !== undefined ||
@@ -2278,34 +2453,80 @@
               element.dataset.actionId)
           ) return true;
           if (!element.id) return false;
-          return /^(t-(rec|stop|play|rev|slice)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain|ls|le)-sl-\d+|t-input-\d+|t-effect-select-\d+|t-fx-(left|right)-\d+|t-fx-chk-\d+-\d+|t-lfo[12]-chk-\d+-(pitch|vol|pan|treble|mid_freq|mid_gain|bass)|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|record-as-select|import-files-button|show-docs-button|sample-station-button|settings-button|sample-\d+)$/.test(element.id);
+          return window.MXSCastGuiActionCatalog?.isSupportedTargetId?.(element.id) === true;
         }
 
         const pendingGuiInputTimers = new WeakMap();
+        const lastGuiInputDispatch = new WeakMap();
+
+        function readGuiInteractionValue(element) {
+          if (!element) return "";
+          if (element.type === "checkbox") return `checked:${element.checked ? "1" : "0"}`;
+          return `value:${String(element.value ?? "")}`;
+        }
 
         function sendGuiInteraction(element, kind, flushInput = false) {
           if (!isReceiverInteractiveControl(element)) return;
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return;
+          const interactionValue = readGuiInteractionValue(element);
+          if (kind === "change") {
+            const pending = pendingGuiInputTimers.get(element);
+            if (pending) {
+              clearTimeout(pending.timer);
+              pendingGuiInputTimers.delete(element);
+              sendGuiInteraction(element, "input", true);
+              emitGuiChannelTelemetry("interaction_coalesced", {
+                reason: "pending_input_before_change",
+                targetId: element.id,
+              });
+              return;
+            }
+            const previous = lastGuiInputDispatch.get(element);
+            if (previous?.kind === "input" && previous.value === interactionValue) {
+              emitGuiChannelTelemetry("interaction_coalesced", {
+                reason: "input_change_duplicate",
+                targetId: element.id,
+              });
+              return;
+            }
+          }
           if (
             kind === "input" &&
             !flushInput &&
             element.matches?.("input[type=range]")
           ) {
-            const previousTimer = pendingGuiInputTimers.get(element);
-            if (previousTimer) clearTimeout(previousTimer);
+            const previous = pendingGuiInputTimers.get(element);
+            if (previous) clearTimeout(previous.timer);
             const timer = setTimeout(() => {
               pendingGuiInputTimers.delete(element);
               sendGuiInteraction(element, kind, true);
             }, 50);
-            pendingGuiInputTimers.set(element, timer);
+            pendingGuiInputTimers.set(element, { timer, value: interactionValue });
             return;
           }
           guiInteractionRevision += 1;
+          const guiActionProtocolVersion = 1;
+          const actionId = `${guiSessionNonce}:${guiInteractionRevision}`;
+          const targetKey =
+            element.dataset.castTargetKey ||
+            element.dataset.registryActionId ||
+            element.id ||
+            "registry-action";
+          const commandName = element.dataset.registryActionId
+            ? "registry.invoke"
+            : kind === "click"
+              ? "control.activate"
+              : "control.set";
           const message = {
             type: "GUI_ACTION",
             transport: "gui",
             guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
             guiSessionNonce,
+            guiActionProtocolVersion,
+            actionId,
+            commandName,
+            targetKey,
+            senderGuiRevision: guiLastReceivedRevision,
             actionType: element.dataset.registryActionId ? "registry" : "interaction",
             guiInteractionRevision,
             kind,
@@ -2313,7 +2534,7 @@
             dialogId: element.dataset.dialogId || undefined,
             controlIndex: element.dataset.controlIndex === undefined ? undefined : Number(element.dataset.controlIndex),
             actionIndex: element.dataset.actionIndex === undefined ? undefined : Number(element.dataset.actionIndex),
-            actionId: element.dataset.actionId || undefined,
+            legacyActionId: element.dataset.actionId || undefined,
             value: element.type === "checkbox" ? undefined : element.value,
             checked: element.type === "checkbox" ? element.checked : undefined,
             parameterKey: element.dataset.parameterKey || element.dataset.param || undefined,
@@ -2334,6 +2555,10 @@
           try {
             markReceiverGuiInteractionPending(element, guiInteractionRevision, kind);
             binaryWS.send(JSON.stringify(message));
+            lastGuiInputDispatch.set(element, {
+              kind,
+              value: interactionValue,
+            });
             emitGuiChannelTelemetry("interaction_sent", {
               revision: guiInteractionRevision,
               targetId: element.id,
@@ -2426,7 +2651,13 @@
           });
           document.addEventListener("change", (event) => {
             const target = event.target;
-            if (target && target.tagName === "SELECT") sendGuiInteraction(target, "change");
+            if (
+              target &&
+              (target.tagName === "SELECT" ||
+                target.matches?.("input[type=range], input[type=checkbox]"))
+            ) {
+              sendGuiInteraction(target, "change");
+            }
           });
         }
 
@@ -3437,6 +3668,7 @@
           clearLowLatencyStartupWatchdog();
           setReceiverPlayoutPreference("native", reason || "pcm_runtime_unsustainable");
           resetBinaryPlayoutState("native_runtime_fallback");
+          setActiveAudioPathOwner("none", reason || "pcm_runtime_unsustainable");
           // Publish the ownership change before attempting CAF startup. The
           // Rust writer uses PLAYBACK_MODE as its PCM admission gate; a mere
           // selecting state leaves the backend emitting packets while this
@@ -4312,6 +4544,7 @@
             // starting a second native prewarm behind it.
             notifyPlaybackMode("native", stopReason, false);
           } else if (hadPublishedAudioMode) {
+            setActiveAudioPathOwner("none", stopReason);
             notifyPlaybackMode("unknown", stopReason, false);
           }
           resetBinaryPlayoutState(stopReason);
@@ -6603,6 +6836,98 @@
           return true;
         }
 
+        function getMirroredDialogElementKey(element) {
+          if (!element) return "";
+          const panel = element.closest?.("[data-dialog-id]");
+          const dialogId = element.dataset?.dialogId || panel?.dataset?.dialogId || "";
+          return [
+            dialogId,
+            element.dataset?.controlIndex || "",
+            element.dataset?.actionIndex || "",
+            element.id || "",
+          ].join("|");
+        }
+
+        function captureMirroredDialogInteractionState(root) {
+          const active = document.activeElement;
+          const focusedKey = root.contains?.(active)
+            ? getMirroredDialogElementKey(active)
+            : "";
+          const pending = Array.from(root.querySelectorAll?.(
+            "[data-cast-interaction-state], [data-cast-interaction-revision]",
+          ) || []).map((element) => ({
+            key: getMirroredDialogElementKey(element),
+            state: element.dataset.castInteractionState || "",
+            revision: element.dataset.castInteractionRevision || "",
+            className: element.className || "",
+            ariaBusy: element.getAttribute("aria-busy"),
+            outline: element.style.outline || "",
+            outlineOffset: element.style.outlineOffset || "",
+            boxShadow: element.style.boxShadow || "",
+            previousOutline: element.dataset.castPreviousOutline || "",
+            previousOutlineOffset: element.dataset.castPreviousOutlineOffset || "",
+            previousBoxShadow: element.dataset.castPreviousBoxShadow || "",
+          }));
+          const scroll = Array.from(root.children).map((panel) => ({
+            dialogId: panel.dataset.dialogId || "",
+            scrollTop: panel.scrollTop || 0,
+            scrollLeft: panel.scrollLeft || 0,
+          }));
+          return {
+            focusedKey,
+            selectionStart: Number.isInteger(active?.selectionStart) ? active.selectionStart : null,
+            selectionEnd: Number.isInteger(active?.selectionEnd) ? active.selectionEnd : null,
+            pending,
+            scroll,
+          };
+        }
+
+        function restoreMirroredDialogInteractionState(root, saved) {
+          if (!root || !saved) return;
+          const elements = Array.from(root.querySelectorAll?.("*") || []);
+          const findByKey = (key) => elements.find(
+            (element) => getMirroredDialogElementKey(element) === key,
+          );
+          (saved.pending || []).forEach((state) => {
+            const element = findByKey(state.key);
+            if (!element) return;
+            if (state.state) element.dataset.castInteractionState = state.state;
+            if (state.revision) element.dataset.castInteractionRevision = state.revision;
+            if (state.className) element.className = state.className;
+            if (state.ariaBusy === null) element.removeAttribute("aria-busy");
+            else if (state.ariaBusy) element.setAttribute("aria-busy", state.ariaBusy);
+            element.style.outline = state.outline;
+            element.style.outlineOffset = state.outlineOffset;
+            element.style.boxShadow = state.boxShadow;
+            if (state.previousOutline) element.dataset.castPreviousOutline = state.previousOutline;
+            if (state.previousOutlineOffset) element.dataset.castPreviousOutlineOffset = state.previousOutlineOffset;
+            if (state.previousBoxShadow) element.dataset.castPreviousBoxShadow = state.previousBoxShadow;
+          });
+          (saved.scroll || []).forEach((state) => {
+            const panel = elements.find(
+              (element) =>
+                element.dataset?.dialogId === state.dialogId &&
+                element.parentElement === root,
+            );
+            if (!panel) return;
+            panel.scrollTop = state.scrollTop;
+            panel.scrollLeft = state.scrollLeft;
+          });
+          const focused = saved.focusedKey ? findByKey(saved.focusedKey) : null;
+          if (!focused || typeof focused.focus !== "function") return;
+          try {
+            focused.focus({ preventScroll: true });
+          } catch (_error) {
+            focused.focus();
+          }
+          if (saved.selectionStart !== null && "selectionStart" in focused) {
+            try {
+              focused.selectionStart = saved.selectionStart;
+              focused.selectionEnd = saved.selectionEnd;
+            } catch (_error) {}
+          }
+        }
+
         function renderDialogMirrors(dialogs) {
           const root = getEl("gui-dialog-mirror-root");
           if (!root) return;
@@ -6618,6 +6943,7 @@
             return;
           }
           lastDialogMirrorLayoutState = layoutSignature;
+          const preservedInteractionState = captureMirroredDialogInteractionState(root);
           root.replaceChildren();
           root.hidden = list.length === 0;
           const normalizeClassName = (value, fallback = "") => {
@@ -6925,6 +7251,7 @@
             if (footer.childElementCount) panel.appendChild(footer);
             root.appendChild(panel);
           });
+          restoreMirroredDialogInteractionState(root, preservedInteractionState);
         }
 
         let lastRenderTime = 0;
@@ -7597,7 +7924,7 @@
           scheduleWaveformRender(s, force, guiRevision);
           if (!force && now - lastRenderTime < renderThrottleMs) {
             guiRenderThrottleSkips += 1;
-            return false;
+            return "throttled";
           }
           lastRenderTime = now;
           try {
@@ -8154,6 +8481,29 @@
             return;
           }
           const revision = Number(envelope.guiRevision || -1);
+          const renderStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+          const renderResult = renderState(normalizedState, false, revision);
+          const renderFinishedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+          const renderTimeMs = Math.max(0, renderFinishedAt - renderStartedAt);
+          const payloadBytes = JSON.stringify(state).length;
+          if (renderResult === false) {
+            rejectGuiChannelMessage("render_failed", {
+              revision: Number(envelope?.guiRevision ?? -1),
+            });
+            writeCastDebug("warn", "Receiver failed to render GUI_STATE_UPDATE; revision remains replayable.");
+            return;
+          }
+          // Release only the interaction revision this authoritative snapshot
+          // confirms. Newer local drags remain pending and are not overwritten
+          // by an older echoed value during render.
+          confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
+          // Throttled renders still represent a valid accepted latest-value
+          // state. Only a real render failure leaves the revision replayable.
+          commitGuiRevision(envelope);
           guiReceivedCount += 1;
           guiLastReceivedRevision = revision;
           // GUI state is latest-value control data. PCM owns the audio clock,
@@ -8168,15 +8518,13 @@
             );
           }
           emitGuiChannelTelemetry("received", { revision });
-          // Release only the interaction revision this authoritative snapshot
-          // confirms. Newer local drags remain pending and are not overwritten
-          // by an older echoed value during render.
-          confirmReceiverGuiInteraction(envelope.guiInteractionRevision);
-          if (renderState(normalizedState, false, revision)) {
+          if (renderResult === true) {
             guiRenderedCount += 1;
             guiLastRenderedRevision = revision;
-            emitGuiChannelTelemetry("rendered", { revision });
+            emitGuiChannelTelemetry("rendered", { revision, renderTimeMs, payloadBytes });
           }
+          guiLastRenderTimeMs = renderTimeMs;
+          guiLastPayloadBytes = payloadBytes;
           lastMirroredState = normalizedState;
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
@@ -8196,6 +8544,9 @@
                 receivedCount: guiReceivedCount,
                 renderedCount: guiRenderedCount,
                 renderedRevision: guiLastRenderedRevision,
+                renderResult,
+                renderTimeMs,
+                payloadBytes,
                 waveformExpected: lastWaveformRenderStats.expected,
                 waveformDrawn: lastWaveformRenderStats.drawn,
                 waveformMissing: lastWaveformRenderStats.missing,
@@ -8206,7 +8557,14 @@
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
-              emitGuiChannelTelemetry("acknowledged", { revision });
+              emitGuiChannelTelemetry("acknowledged", {
+                revision,
+                renderResult,
+                renderTimeMs,
+                payloadBytes,
+                waveformDrawn: lastWaveformRenderStats.drawn,
+                waveformMissing: lastWaveformRenderStats.missing,
+              });
             } catch (e) {}
           }
         }
@@ -8331,6 +8689,40 @@
         }
 
         function handleReceiverCommand(d, source) {
+          if (d && d.type === "GUI_ACTION_RESULT") {
+            if (
+              d.transport !== "gui" ||
+              Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION ||
+              d.guiSessionNonce !== guiSessionNonce
+            ) {
+              emitGuiChannelTelemetry("rejected", {
+                reason: "unsupported_action_result_envelope",
+                actionId: d?.actionId || null,
+              });
+              return true;
+            }
+            const status = String(d.status || "failed");
+            if (status === "applied" || status === "duplicate") {
+              confirmReceiverGuiInteraction(d.guiInteractionRevision);
+            } else {
+              document.querySelectorAll("[data-cast-interaction-revision]").forEach((element) => {
+                if (Number(element.dataset.castInteractionRevision) !== Number(d.guiInteractionRevision)) return;
+                clearReceiverGuiInteractionFeedback(element);
+                element.dataset.castInteractionState = status;
+              });
+            }
+            emitGuiChannelTelemetry("action_result", {
+              actionId: d.actionId || null,
+              status,
+              reason: d.reason || null,
+              revision: Number(d.guiInteractionRevision ?? -1),
+            });
+            relayLogToStudio(
+              "🖥️ Receiver: GUI action " + String(d.actionId || "legacy") +
+                " -> " + status + (d.reason ? " (" + d.reason + ")" : ""),
+            );
+            return true;
+          }
           const rawGuiType = d && d.type;
           if (rawGuiType === "GUI_SNAPSHOT") {
             d = { ...d, type: "GUI_STATE_UPDATE" };
@@ -8554,6 +8946,9 @@
             pcmV2AllowInitialOffset = true;
             pcmV2Telemetry = createPcmV2Telemetry();
             playbackModeSocketGeneration++;
+            castAudioOwnerArbiter.begin(playbackModeSocketGeneration, "bridge_open", {
+              preserveOwner: nativeStreamActive && activeAudioPathOwner === "native_caf",
+            });
             resetGuiRevisionGate("bridge_open");
             guiSessionNonce = null;
             console.log("✅ Binary Bridge Connected");
@@ -9146,6 +9541,7 @@
                   window._lastBinaryTime = 0;
                   window._playbackMode = "unknown";
                   stopNativeStreamPlayout("sender_disconnected");
+                  setActiveAudioPathOwner("none", "sender_disconnected");
                   clearLegacyMediaStream();
                   suppressBinaryReconnect = true;
                   binaryConnectionGeneration++;
