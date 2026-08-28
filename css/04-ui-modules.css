@@ -1587,14 +1587,14 @@ select option {
   }
 
   to {
-    transform: scale(0.84);
+    transform: scale(var(--effect-dialog-resting-scale));
     opacity: 1;
   }
 }
 
 @keyframes dialog-close {
   from {
-    transform: scale(0.84);
+    transform: scale(var(--effect-dialog-resting-scale));
     opacity: 1;
   }
 
@@ -3844,15 +3844,19 @@ body.receiver-mode:not(.app-loading) #tv-console {
   overflow-wrap: anywhere;
 }
 body.receiver-mode #gui-dialog-mirror-root {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  isolation: isolate;
   z-index: 10001;
   pointer-events: none;
 }
 body.receiver-mode #gui-dialog-mirror-root[hidden] {
   display: none !important;
 }
-body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog) {
+body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog) {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -3868,13 +3872,19 @@ body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-p
   pointer-events: auto;
 }
 body.receiver-mode .gui-dialog-mirror.effect-params-dialog,
-body.receiver-mode .gui-dialog-mirror.audition-params-dialog {
+body.receiver-mode .gui-dialog-mirror.audition-params-dialog,
+body.receiver-mode .gui-dialog-mirror.pad-settings-dialog {
   pointer-events: auto;
 }
 body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
 body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open] {
   animation: none;
-  transform: none;
+  /* Sender geometry is the transformed visual border box. Anchor the receiver
+     at that exact box origin, then apply the app's resting scale from the
+     top-left so native <dialog> centering/margins cannot shift it again. */
+  margin: 0;
+  transform: scale(var(--effect-dialog-resting-scale));
+  transform-origin: 0 0;
   opacity: 1;
 }
 body.receiver-mode .gui-dialog-mirror h3 {
@@ -5448,6 +5458,20 @@ dialog.input-prompt-dialog {
   width: 100%;
   padding-top: 10px;
   border-top: 1px solid #444;
+}
+
+.pad-settings-group-header {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold, #f39c12);
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--gold, #f39c12);
+  border-radius: 3px;
+  padding: 6px 10px;
+  margin: 10px 0 4px 0;
+  user-select: none;
 }
 
 .pad-setting-range-control {

@@ -31,6 +31,7 @@
   --text-color: #f0f0f0;
   --dark-green-transparent: rgba(0, 100, 0, 0.5);
   --dark-red: #8b0000;
+  --effect-dialog-resting-scale: 0.84;
 }
 
 html {
@@ -348,8 +349,6 @@ input[type="range"]:focus {
 #cast-btn.cast-active,
 #cast-btn.cast-recovering,
 #cast-btn.cast-stopping {
-  border: 1px solid currentColor;
-  border-radius: 4px;
   cursor: default;
 }
 

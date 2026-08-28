@@ -512,6 +512,20 @@
           );
         }
 
+        function buildIdentityArtifactStatus(expected, received) {
+          const expectedArtifacts = expected && (expected.artifacts || expected.components);
+          const receivedArtifacts = received && (received.artifacts || received.components);
+          const artifactMismatches = BUILD_IDENTITY_COMPONENTS.filter(function (key) {
+            return !expectedArtifacts ||
+              !receivedArtifacts ||
+              expectedArtifacts[key] !== receivedArtifacts[key];
+          });
+          return {
+            artifactParity: artifactMismatches.length === 0,
+            artifactMismatches: artifactMismatches,
+          };
+        }
+
         function logReceiverStartupTiming(stage, details) {
           if (!stage || receiverStartupTimingMarks[stage]) {
             return;
@@ -620,6 +634,10 @@
           buildIdentityAccepted = true;
           window._buildIdentityAccepted = true;
           if (!wasAccepted) {
+            const artifactStatus = buildIdentityArtifactStatus(
+              window.MXS_BUILD_IDENTITY,
+              received,
+            );
             try {
               sessionStorage.removeItem(BUILD_IDENTITY_RELOAD_SESSION_KEY);
             } catch (e) {}
@@ -629,6 +647,9 @@
                   event: "build_identity_verified",
                   role: "receiver",
                   match: true,
+                  compatible: true,
+                  artifactParity: artifactStatus.artifactParity,
+                  artifactMismatches: artifactStatus.artifactMismatches,
                   expected: window.MXS_BUILD_IDENTITY,
                   received: received,
                 }),
@@ -2468,6 +2489,12 @@
           lastCursorRevision = -1;
           lastDialogMirrorState = "";
           lastDialogMirrorLayoutState = "";
+          lastDialogRenderStats = {
+            mode: "none",
+            renderTimeMs: 0,
+            dialogCount: 0,
+            domNodeCount: 0,
+          };
           resetSmoothLfoVisuals();
           resetMirroredWaveformVisuals();
           if (reason) {
@@ -2628,6 +2655,15 @@
         function markReceiverGuiInteractionPending(element, revision, kind) {
           if (!element) return;
           clearReceiverGuiInteractionFeedback(element);
+          const exactDialog = element.closest?.(
+            '.pad-settings-dialog[data-dialog-dom-schema="mxs-004.cast-dialog-dom.v1"]',
+          );
+          if (exactDialog) {
+            element.dataset.castInteractionRevision = String(revision);
+            element.dataset.castInteractionState = "pending";
+            element.setAttribute("aria-busy", "true");
+            return;
+          }
           element.dataset.castPreviousOutline = element.style.outline || "";
           element.dataset.castPreviousOutlineOffset = element.style.outlineOffset || "";
           element.dataset.castPreviousBoxShadow = element.style.boxShadow || "";
@@ -2652,6 +2688,15 @@
             if (Number(element.dataset.castInteractionRevision) !== value) return;
             const previousTimer = Number(element.dataset.castInteractionTimer || 0);
             if (previousTimer) clearTimeout(previousTimer);
+            const exactDialog = element.closest?.(
+              '.pad-settings-dialog[data-dialog-dom-schema="mxs-004.cast-dialog-dom.v1"]',
+            );
+            if (exactDialog) {
+              element.dataset.castInteractionState = "confirmed";
+              element.removeAttribute("aria-busy");
+              delete element.dataset.castInteractionTimer;
+              return;
+            }
             element.classList.remove("cast-interaction-pending");
             element.classList.add("cast-interaction-confirmed");
             element.dataset.castInteractionState = "confirmed";
@@ -2692,7 +2737,8 @@
             if (
               target &&
               (target.tagName === "SELECT" ||
-                target.matches?.("input[type=range], input[type=checkbox]"))
+                target.tagName === "TEXTAREA" ||
+                target.matches?.("input[type=range], input[type=checkbox], input[type=text]"))
             ) {
               sendGuiInteraction(target, "change");
             }
@@ -5461,6 +5507,20 @@
           if (formatterKind === "loop_timecode_v1") {
             return formatMirroredLoopTimecode(value);
           }
+          if (formatterKind === "exact_numeric_v1") {
+            const normalized = Object.is(value, -0) ? 0 : value;
+            if (normalized === 0 && meta.zeroDisplay !== null && meta.zeroDisplay !== undefined) {
+              return String(meta.zeroDisplay);
+            }
+            const scaled = normalized * (Number(meta.scale) || 1);
+            const numeric = meta.rounding === "round"
+              ? String(Math.round(scaled))
+              : scaled.toFixed(Math.max(0, Math.min(6, Number(meta.decimals) || 0)));
+            const signed = meta.signPolicy === "always" && scaled > 0
+              ? `+${numeric}`
+              : numeric;
+            return `${String(meta.prefix || "")}${signed}${String(meta.suffix || "")}`;
+          }
           const parameterKey = String(meta.parameterKey || "").toLowerCase();
           const unit = String(meta.unit || "");
           let displayValue = Object.is(value, -0) ? 0 : value;
@@ -5531,13 +5591,13 @@
 
         function resolveMirroredParameterBinding(element) {
           const dialogRoot = element.closest(
-            ".effect-control-group, .gui-dialog-mirror-control",
+            ".effect-control-group, .gui-dialog-mirror-control, .pad-setting-field",
           );
           if (dialogRoot) {
             return {
               descriptor: readMirroredDisplayDescriptor(element),
               output: dialogRoot.querySelector(
-                ".effect-param-value .param-value, .gui-dialog-mirror-value",
+                ".effect-param-value .param-value, .gui-dialog-mirror-value, .pad-setting-value",
               ),
             };
           }
@@ -5611,8 +5671,7 @@
             const dialogRoot = document.createElement("div");
             dialogRoot.id = "gui-dialog-mirror-root";
             dialogRoot.setAttribute("aria-hidden", "true");
-            const studioRoot = document.getElementById("studio-root");
-            if (studioRoot) studioRoot.appendChild(dialogRoot);
+            document.body.appendChild(dialogRoot);
           }
           if (!document.getElementById("waveform-render-status")) {
             const waveformStatus = document.createElement("div");
@@ -6767,6 +6826,77 @@
         let lastDialogMirrorState = "";
         let lastDialogMirrorLayoutState = "";
         let lastDialogRegistryState = "";
+        let lastDialogRenderStats = {
+          mode: "none",
+          renderTimeMs: 0,
+          dialogCount: 0,
+          domNodeCount: 0,
+        };
+        const RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX = 10;
+        function normalizeMirroredDialogClassName(value, fallback = "") {
+          const normalized = String(value || "")
+            .split(/\s+/)
+            .filter((token) => /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(token))
+            .slice(0, 24)
+            .join(" ");
+          return normalized || fallback;
+        }
+        function syncMirroredElementDataset(element, data) {
+          if (!element) return;
+          let previousKeys = [];
+          try {
+            previousKeys = JSON.parse(element.dataset.castMirroredDataKeys || "[]");
+          } catch (_error) {}
+          previousKeys.forEach((key) => {
+            if (/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(key)) delete element.dataset[key];
+          });
+          const nextKeys = [];
+          Object.entries(data || {}).forEach(([key, value]) => {
+            if (!/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(key)) return;
+            if (value === undefined || value === null) return;
+            element.dataset[key] = String(value).slice(0, 128);
+            nextKeys.push(key);
+          });
+          element.dataset.castMirroredDataKeys = JSON.stringify(nextKeys);
+        }
+        function applyMirroredDialogPosition(panel, dialog, exactEffectDialog = false) {
+          const geometry = dialog?.geometry;
+          if (geometry?.coordinateSpace === "viewport_css_pixels") {
+            const viewportWidth = Math.max(
+              1,
+              Number(document.documentElement?.clientWidth) || Number(window.innerWidth) || 1,
+            );
+            const viewportHeight = Math.max(
+              1,
+              Number(document.documentElement?.clientHeight) || Number(window.innerHeight) || 1,
+            );
+            const width = Math.max(0, Number(geometry.widthPx) || 0);
+            const height = Math.max(0, Number(geometry.heightPx) || 0);
+            const maxLeft = Math.max(0, viewportWidth - Math.min(width, viewportWidth));
+            const maxTop = Math.max(0, viewportHeight - Math.min(height, viewportHeight));
+            const leftPx = Math.max(0, Math.min(maxLeft, Number(geometry.leftPx) || 0));
+            const topPx = Math.max(0, Math.min(maxTop, Number(geometry.topPx) || 0));
+            panel.style.left = exactEffectDialog
+              ? `${Math.max(0, leftPx - RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX)}px`
+              : `${leftPx}px`;
+            panel.style.top = exactEffectDialog
+              ? `${Math.max(0, topPx - RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX)}px`
+              : `${topPx}px`;
+            return;
+          }
+          const normalizeRatio = (value) => {
+            const numeric = Number(value);
+            return Math.max(0, Math.min(0.85, Number.isFinite(numeric) ? numeric : 0.2));
+          };
+          const left = `${normalizeRatio(dialog?.left) * 100}%`;
+          const top = `${normalizeRatio(dialog?.top) * 100}%`;
+          panel.style.left = exactEffectDialog
+            ? `calc(${left} - ${RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX}px)`
+            : left;
+          panel.style.top = exactEffectDialog
+            ? `calc(${top} - ${RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX}px)`
+            : top;
+        }
         function renderDialogRegistry(registry) {
           const root = getEl("gui-dialog-registry-root");
           if (!root) return;
@@ -6783,57 +6913,154 @@
           root.dataset.registry = JSON.stringify(list);
         }
 
+        const MIRRORED_DIALOG_DYNAMIC_CLASS_TOKENS = new Set([
+          "active",
+          "playing",
+          "control-error",
+          "cast-interaction-pending",
+          "cast-interaction-confirmed",
+        ]);
+        const MIRRORED_DIALOG_DYNAMIC_DATA_KEYS = new Set([
+          "actionResult",
+          "actionRoute",
+          "active",
+        ]);
+        function normalizeMirroredDialogStructuralClassName(value) {
+          return normalizeMirroredDialogClassName(value)
+            .split(/\s+/)
+            .filter((token) => token && !MIRRORED_DIALOG_DYNAMIC_CLASS_TOKENS.has(token))
+            .join(" ");
+        }
+        function normalizeMirroredDialogStructuralData(data) {
+          const structuralData = {};
+          Object.entries(data || {}).forEach(([key, value]) => {
+            if (!MIRRORED_DIALOG_DYNAMIC_DATA_KEYS.has(key)) structuralData[key] = value;
+          });
+          return structuralData;
+        }
+        function getMirroredDialogManifestLayout(manifest) {
+          const normalizeNode = (node, dynamicText = false) => {
+            if (!node || typeof node !== "object") return null;
+            if (node.nodeType === "text") {
+              return { nodeType: "text", text: dynamicText ? "<dynamic>" : node.text };
+            }
+            const attributes = node.attributes || {};
+            const className = normalizeMirroredDialogStructuralClassName(attributes.className);
+            const data = normalizeMirroredDialogStructuralData(node.data);
+            const nodeHasDynamicText = dynamicText ||
+              (
+                node.actionIndex !== null &&
+                node.actionIndex !== undefined &&
+                Number.isInteger(Number(node.actionIndex))
+              ) ||
+              Object.prototype.hasOwnProperty.call(data, "padSampleName") ||
+              String(node.tagName || "") === "output" ||
+              /(?:^|\s)pad-setting-value(?:\s|$)/.test(className);
+            return {
+              nodeType: "element",
+              tagName: node.tagName,
+              attributes: {
+                id: attributes.id,
+                className,
+                role: attributes.role,
+                for: attributes.for,
+                "aria-labelledby": attributes["aria-labelledby"],
+              },
+              data,
+              controlIndex: node.controlIndex,
+              actionIndex: node.actionIndex,
+              children: (node.children || [])
+                .map((child) => normalizeNode(child, nodeHasDynamicText))
+                .filter(Boolean),
+            };
+          };
+          if (!manifest || typeof manifest !== "object") return null;
+          return {
+            schema: manifest.schema,
+            version: manifest.version,
+            nodeCount: manifest.nodeCount,
+            truncated: manifest.truncated,
+            children: (manifest.children || []).map((node) => normalizeNode(node)).filter(Boolean),
+          };
+        }
         function getDialogMirrorLayoutSignature(dialogs) {
+          const normalizeControl = (control) => ({
+            ...control,
+            value: undefined,
+            rawValue: undefined,
+            defaultValue: undefined,
+            displayValue: undefined,
+            checked: undefined,
+            disabled: undefined,
+            className: normalizeMirroredDialogStructuralClassName(control?.className),
+            title: undefined,
+            ariaLabel: undefined,
+            ariaInvalid: undefined,
+            data: normalizeMirroredDialogStructuralData(control?.data),
+            displayDescriptor: control?.displayDescriptor
+              ? {
+                  ...control.displayDescriptor,
+                  rawValue: undefined,
+                  displayValue: undefined,
+                  defaultValue: undefined,
+                  disabled: undefined,
+                }
+              : undefined,
+            options: (control?.options || []).map((option) => ({
+              ...option,
+              selected: undefined,
+              disabled: undefined,
+            })),
+          });
           return JSON.stringify((dialogs || []).map((dialog) => ({
             ...dialog,
+            shellClassName: normalizeMirroredDialogStructuralClassName(dialog.shellClassName),
+            title: undefined,
+            geometry: undefined,
             left: undefined,
             top: undefined,
             width: undefined,
             height: undefined,
-            controls: (dialog.controls || []).map((control) => ({
-              ...control,
-              value: undefined,
-              rawValue: undefined,
-              defaultValue: undefined,
-              displayValue: undefined,
-              checked: undefined,
-              disabled: undefined,
-              displayDescriptor: control.displayDescriptor
-                ? {
-                    ...control.displayDescriptor,
-                    rawValue: undefined,
-                    displayValue: undefined,
-                    decimals: undefined,
-                    defaultValue: undefined,
-                    disabled: undefined,
-                  }
-                : undefined,
-              options: (control.options || []).map((option) => ({
-                ...option,
-                selected: undefined,
-                disabled: undefined,
-              })),
-            })),
+            header: dialog.header
+              ? {
+                  ...dialog.header,
+                  title: undefined,
+                  status: undefined,
+                  titleLines: (dialog.header.titleLines || []).map((line) => ({
+                    ...line,
+                    text: undefined,
+                  })),
+                }
+              : undefined,
+            controls: (dialog.controls || []).map(normalizeControl),
             actions: (dialog.actions || []).map((action) => ({
               ...action,
+              label: undefined,
+              className: normalizeMirroredDialogStructuralClassName(action?.className),
+              title: undefined,
+              ariaLabel: undefined,
+              ariaInvalid: undefined,
+              ariaPressed: undefined,
               pressed: undefined,
               disabled: undefined,
+              data: normalizeMirroredDialogStructuralData(action?.data),
             })),
             effectSlotTabs: dialog.effectSlotTabs
               ? {
                   ...dialog.effectSlotTabs,
                   items: (dialog.effectSlotTabs.items || []).map((item) => ({
                     ...item,
-                    control: item.control
-                      ? {
-                          ...item.control,
-                          checked: undefined,
-                          disabled: undefined,
-                        }
-                      : null,
+                    className: normalizeMirroredDialogStructuralClassName(item?.className),
+                    control: item.control ? normalizeControl(item.control) : null,
                   })),
                 }
               : null,
+            samplePadLayout: dialog.samplePadLayout
+              ? { ...dialog.samplePadLayout, sampleNameText: undefined }
+              : null,
+            samplePadDomManifest: dialog.kind === "samplePadSettings"
+              ? getMirroredDialogManifestLayout(dialog.samplePadDomManifest)
+              : dialog.samplePadDomManifest,
           })));
         }
 
@@ -6845,11 +7072,49 @@
               (candidate) => candidate.dataset.dialogId === String(dialog.id || ""),
             );
             if (!panel) return false;
-            panel.style.left = `${Math.max(0, Math.min(0.85, Number(dialog.left) || 0.2)) * 100}%`;
-            panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
-            if (!panel.matches(".effect-params-dialog, .audition-params-dialog")) {
+            const exactEffectDialog = panel.matches(
+              ".effect-params-dialog, .audition-params-dialog",
+            );
+            const exactSamplePadDialog = panel.matches(".pad-settings-dialog");
+            applyMirroredDialogPosition(panel, dialog, exactEffectDialog);
+            panel.className = [
+              "gui-dialog-mirror",
+              exactEffectDialog || exactSamplePadDialog ? "" : "mxs-dialog",
+              normalizeMirroredDialogClassName(dialog.shellClassName),
+              `gui-dialog-${dialog.kind || "generic"}`,
+            ].filter(Boolean).join(" ");
+            if (!exactEffectDialog && !exactSamplePadDialog) {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
+            }
+            if (exactSamplePadDialog) {
+              const padTitle = panel.querySelector(".pad-dialog-pad-title");
+              const sampleName = panel.querySelector("[data-pad-sample-name]");
+              if (padTitle && dialog.samplePadLayout?.padTitleText !== undefined) {
+                padTitle.textContent = String(dialog.samplePadLayout.padTitleText);
+              }
+              if (sampleName && dialog.samplePadLayout?.sampleNameText !== undefined) {
+                sampleName.textContent = String(dialog.samplePadLayout.sampleNameText);
+              }
+            } else if (dialog.header) {
+              const titleLines = Array.from(
+                panel.querySelectorAll(".dialog-title-top,.dialog-title-bottom"),
+              );
+              (dialog.header.titleLines || []).forEach((line, index) => {
+                if (titleLines[index] && line?.text !== undefined) {
+                  titleLines[index].textContent = String(line.text);
+                }
+              });
+              if (titleLines.length === 0 && dialog.header.title !== undefined) {
+                const title = panel.querySelector("h1,h2,h3,.dialog-title,.dialog-header-title");
+                if (title) title.textContent = String(dialog.header.title);
+              }
+              const status = panel.querySelector(
+                ".dialog-header-status,[data-sample-editor-status]",
+              );
+              if (status && dialog.header.status !== undefined) {
+                status.textContent = String(dialog.header.status);
+              }
             }
             (dialog.controls || []).forEach((control, controlIndex) => {
               const resolvedIndex = Number(control.controlIndex ?? controlIndex);
@@ -6866,7 +7131,24 @@
                   ? ""
                   : String(control.value);
               }
+              value.className = normalizeMirroredDialogClassName(control.className);
               value.disabled = Boolean(control.disabled);
+              value.title = String(control.title || "").slice(0, 256);
+              value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
+              if (control.ariaInvalid === null || control.ariaInvalid === undefined) {
+                value.removeAttribute("aria-invalid");
+              } else {
+                value.setAttribute("aria-invalid", String(control.ariaInvalid));
+              }
+              syncMirroredElementDataset(value, control.data);
+              if (value.tagName === "SELECT" && Array.isArray(control.options)) {
+                Array.from(value.options || []).forEach((option, optionIndex) => {
+                  const optionState = control.options[optionIndex];
+                  if (!optionState) return;
+                  option.disabled = Boolean(optionState.disabled);
+                  option.selected = Boolean(optionState.selected);
+                });
+              }
               const descriptor = control.displayDescriptor || readMirroredDisplayDescriptor(value);
               const confirmedDisplay = control.displayValue !== undefined
                 ? String(control.displayValue)
@@ -6874,9 +7156,9 @@
               if (!pending) {
                 writeMirroredDisplayDescriptor(value, descriptor, confirmedDisplay);
                 const output = value.closest(
-                  ".effect-control-group, .gui-dialog-mirror-control",
+                  ".effect-control-group, .gui-dialog-mirror-control, .pad-setting-field",
                 )?.querySelector(
-                  ".effect-param-value .param-value, .gui-dialog-mirror-value",
+                  ".effect-param-value .param-value, .gui-dialog-mirror-value, .pad-setting-value",
                 );
                 if (output) {
                   output.textContent = confirmedDisplay;
@@ -6901,10 +7183,32 @@
               if (actionElement.tagName === "BUTTON") {
                 actionElement.disabled = Boolean(action.disabled);
               }
-              actionElement.setAttribute("aria-pressed", action.pressed ? "true" : "false");
+              actionElement.className = normalizeMirroredDialogClassName(action.className);
+              actionElement.title = String(action.title || "").slice(0, 256);
+              if (action.ariaLabel) actionElement.setAttribute("aria-label", action.ariaLabel);
+              else actionElement.removeAttribute("aria-label");
+              if (action.ariaInvalid === null || action.ariaInvalid === undefined) {
+                actionElement.removeAttribute("aria-invalid");
+              } else {
+                actionElement.setAttribute("aria-invalid", String(action.ariaInvalid));
+              }
+              syncMirroredElementDataset(actionElement, action.data);
+              if (action.label !== undefined) {
+                const content = action.contentClassName
+                  ? actionElement.querySelector(`.${String(action.contentClassName).split(/\s+/)[0]}`)
+                  : null;
+                if (content) content.textContent = String(action.label);
+                else actionElement.textContent = String(action.label);
+              }
+              if (action.ariaPressed === null || action.ariaPressed === undefined) {
+                actionElement.removeAttribute("aria-pressed");
+              } else {
+                actionElement.setAttribute("aria-pressed", String(action.ariaPressed));
+              }
             });
           }
           root.hidden = dialogs.length === 0;
+          root.setAttribute("aria-hidden", dialogs.length === 0 ? "true" : "false");
           return true;
         }
 
@@ -6914,10 +7218,23 @@
           const dialogId = element.dataset?.dialogId || panel?.dataset?.dialogId || "";
           return [
             dialogId,
-            element.dataset?.controlIndex || "",
-            element.dataset?.actionIndex || "",
+            element.dataset?.controlIndex ?? "",
+            element.dataset?.actionIndex ?? "",
             element.id || "",
           ].join("|");
+        }
+
+        function getMirroredDialogScrollKey(element) {
+          if (!element) return "";
+          const panel = element.closest?.("[data-dialog-id]");
+          if (!panel) return "";
+          const dialogId = panel.dataset.dialogId || "";
+          if (element === panel) return `${dialogId}|panel`;
+          const scrollables = Array.from(panel.querySelectorAll(
+            ".pad-dialog-scroll-content,.dialog-content",
+          ));
+          const index = scrollables.indexOf(element);
+          return index >= 0 ? `${dialogId}|content|${index}` : "";
         }
 
         function captureMirroredDialogInteractionState(root) {
@@ -6940,11 +7257,17 @@
             previousOutlineOffset: element.dataset.castPreviousOutlineOffset || "",
             previousBoxShadow: element.dataset.castPreviousBoxShadow || "",
           }));
-          const scroll = Array.from(root.children).map((panel) => ({
-            dialogId: panel.dataset.dialogId || "",
-            scrollTop: panel.scrollTop || 0,
-            scrollLeft: panel.scrollLeft || 0,
-          }));
+          const scrollElements = [
+            ...Array.from(root.children),
+            ...Array.from(root.querySelectorAll(
+              ".pad-dialog-scroll-content,.dialog-content",
+            )),
+          ];
+          const scroll = scrollElements.map((element) => ({
+            key: getMirroredDialogScrollKey(element),
+            scrollTop: element.scrollTop || 0,
+            scrollLeft: element.scrollLeft || 0,
+          })).filter((state) => state.key);
           return {
             focusedKey,
             selectionStart: Number.isInteger(active?.selectionStart) ? active.selectionStart : null,
@@ -6965,7 +7288,10 @@
             if (!element) return;
             if (state.state) element.dataset.castInteractionState = state.state;
             if (state.revision) element.dataset.castInteractionRevision = state.revision;
-            if (state.className) element.className = state.className;
+            const exactDialog = element.closest?.(
+              '.pad-settings-dialog[data-dialog-dom-schema="mxs-004.cast-dialog-dom.v1"]',
+            );
+            if (state.className && !exactDialog) element.className = state.className;
             if (state.ariaBusy === null) element.removeAttribute("aria-busy");
             else if (state.ariaBusy) element.setAttribute("aria-busy", state.ariaBusy);
             element.style.outline = state.outline;
@@ -6976,14 +7302,12 @@
             if (state.previousBoxShadow) element.dataset.castPreviousBoxShadow = state.previousBoxShadow;
           });
           (saved.scroll || []).forEach((state) => {
-            const panel = elements.find(
-              (element) =>
-                element.dataset?.dialogId === state.dialogId &&
-                element.parentElement === root,
+            const element = [root, ...elements].find(
+              (candidate) => getMirroredDialogScrollKey(candidate) === state.key,
             );
-            if (!panel) return;
-            panel.scrollTop = state.scrollTop;
-            panel.scrollLeft = state.scrollLeft;
+            if (!element) return;
+            element.scrollTop = state.scrollTop;
+            element.scrollLeft = state.scrollLeft;
           });
           const focused = saved.focusedKey ? findByKey(saved.focusedKey) : null;
           if (!focused || typeof focused.focus !== "function") return;
@@ -7003,35 +7327,50 @@
         function renderDialogMirrors(dialogs) {
           const root = getEl("gui-dialog-mirror-root");
           if (!root) return;
+          const renderStartedAt = Date.now();
           const list = Array.isArray(dialogs) ? dialogs : [];
+          const finishDialogRender = (mode) => {
+            lastDialogRenderStats = {
+              mode,
+              renderTimeMs: Math.max(0, Date.now() - renderStartedAt),
+              dialogCount: list.length,
+              domNodeCount: root.querySelectorAll?.("*")?.length || 0,
+            };
+          };
           const signature = JSON.stringify(list);
-          if (signature === lastDialogMirrorState) return;
+          if (signature === lastDialogMirrorState) {
+            finishDialogRender("unchanged");
+            return;
+          }
           lastDialogMirrorState = signature;
           const layoutSignature = getDialogMirrorLayoutSignature(list);
           if (
             layoutSignature === lastDialogMirrorLayoutState &&
             patchMirroredDialogState(root, list)
           ) {
+            finishDialogRender("patch");
             return;
           }
           lastDialogMirrorLayoutState = layoutSignature;
           const preservedInteractionState = captureMirroredDialogInteractionState(root);
           root.replaceChildren();
           root.hidden = list.length === 0;
-          const normalizeClassName = (value, fallback = "") => {
-            const normalized = String(value || "")
-              .split(/\s+/)
-              .filter((token) => /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(token))
-              .slice(0, 24)
-              .join(" ");
-            return normalized || fallback;
-          };
-          const applyDataset = (element, data) => {
-            Object.entries(data || {}).forEach(([key, value]) => {
-              if (!/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(key)) return;
-              if (value === undefined || value === null) return;
-              element.dataset[key] = String(value).slice(0, 128);
-            });
+          root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
+          const normalizeClassName = normalizeMirroredDialogClassName;
+          const applyDataset = syncMirroredElementDataset;
+          const appendMirroredPanel = (panel, useModalTopLayer = false) => {
+            root.appendChild(panel);
+            if (
+              useModalTopLayer &&
+              panel.tagName === "DIALOG" &&
+              typeof panel.showModal === "function"
+            ) {
+              try {
+                panel.showModal();
+                return;
+              } catch (_error) {}
+            }
+            panel.setAttribute("open", "");
           };
           const applyControlState = (value, control, dialog, controlIndex) => {
             const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
@@ -7049,8 +7388,14 @@
             value.defaultValue = control.defaultValue ?? value.value;
             value.title = String(control.title || "").slice(0, 256);
             value.placeholder = String(control.placeholder || "").slice(0, 256);
+            if (Number(control.maxLength) > 0 && "maxLength" in value) {
+              value.maxLength = Number(control.maxLength);
+            }
             value.disabled = Boolean(control.disabled);
             value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
+            if (control.ariaInvalid !== null && control.ariaInvalid !== undefined) {
+              value.setAttribute("aria-invalid", String(control.ariaInvalid));
+            }
             value.dataset.dialogId = dialog.id || "";
             value.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
             const displayDescriptor = control.displayDescriptor || (
@@ -7094,23 +7439,26 @@
             const shellClassName = normalizeClassName(dialog.shellClassName);
             const exactEffectDialog = dialog.dialogLayoutVersion >= 1 &&
               /(?:^|\s)(?:effect-params-dialog|audition-params-dialog)(?:\s|$)/.test(shellClassName);
-            const panel = document.createElement(exactEffectDialog ? "dialog" : "section");
+            const exactSamplePadDialog = dialog.dialogLayoutVersion >= 3 &&
+              dialog.kind === "samplePadSettings" &&
+              dialog.samplePadLayout;
+            const panel = document.createElement(
+              exactEffectDialog || exactSamplePadDialog ? "dialog" : "section",
+            );
             panel.className = [
               "gui-dialog-mirror",
-              exactEffectDialog ? "" : "mxs-dialog",
+              exactEffectDialog || exactSamplePadDialog ? "" : "mxs-dialog",
               shellClassName,
               `gui-dialog-${dialog.kind || "generic"}`,
             ].filter(Boolean).join(" ");
-            panel.setAttribute("open", "");
             panel.setAttribute("role", dialog.role || "dialog");
             if (dialog.modal) panel.setAttribute("aria-modal", "true");
             if (dialog.ariaLabelledby) panel.setAttribute("aria-labelledby", dialog.ariaLabelledby);
             panel.dataset.dialogId = dialog.id || "";
             panel.dataset.dialogKind = dialog.kind || "generic";
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
-            panel.style.left = `${Math.max(0, Math.min(0.85, Number(dialog.left) || 0.2)) * 100}%`;
-            panel.style.top = `${Math.max(0, Math.min(0.85, Number(dialog.top) || 0.2)) * 100}%`;
-            if (!exactEffectDialog) {
+            applyMirroredDialogPosition(panel, dialog, exactEffectDialog);
+            if (!exactEffectDialog && !exactSamplePadDialog) {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
@@ -7140,9 +7488,278 @@
               button.dataset.actionId = action.actionId || `button-${actionIndex}`;
               applyDataset(button, action.data);
               if (action.ariaLabel) button.setAttribute("aria-label", action.ariaLabel);
-              button.setAttribute("aria-pressed", action.pressed ? "true" : "false");
+              if (action.ariaInvalid !== null && action.ariaInvalid !== undefined) {
+                button.setAttribute("aria-invalid", String(action.ariaInvalid));
+              }
+              if (action.ariaPressed !== null && action.ariaPressed !== undefined) {
+                button.setAttribute("aria-pressed", String(action.ariaPressed));
+              }
               return button;
             };
+
+            const samplePadManifest = exactSamplePadDialog
+              ? dialog.samplePadDomManifest
+              : null;
+            if (
+              samplePadManifest?.schema === "mxs-004.cast-dialog-dom.v1" &&
+              samplePadManifest.version === 1 &&
+              samplePadManifest.truncated !== true &&
+              Array.isArray(samplePadManifest.children)
+            ) {
+              const allowedTags = new Set([
+                "button",
+                "div",
+                "input",
+                "label",
+                "option",
+                "output",
+                "select",
+                "span",
+                "textarea",
+              ]);
+              const allowedAttributes = new Set([
+                "aria-current",
+                "aria-expanded",
+                "aria-hidden",
+                "aria-label",
+                "aria-labelledby",
+                "aria-live",
+                "aria-pressed",
+                "for",
+                "role",
+                "title",
+              ]);
+              let hydratedNodeCount = 0;
+              const hydrateNode = (node, depth = 0) => {
+                if (!node || depth > 24 || hydratedNodeCount >= 2048) return null;
+                if (node.nodeType === "text") {
+                  hydratedNodeCount += 1;
+                  return document.createTextNode(String(node.text || "").slice(0, 512));
+                }
+                const tagName = String(node.tagName || "").toLowerCase();
+                if (node.nodeType !== "element" || !allowedTags.has(tagName)) return null;
+                hydratedNodeCount += 1;
+                const element = document.createElement(tagName);
+                const attributes = node.attributes || {};
+                element.className = normalizeClassName(attributes.className);
+                if (/^[A-Za-z][A-Za-z0-9_:.-]{0,127}$/.test(String(attributes.id || ""))) {
+                  element.id = String(attributes.id);
+                }
+                Object.entries(attributes).forEach(([name, value]) => {
+                  if (!allowedAttributes.has(name) || value === undefined || value === null) return;
+                  element.setAttribute(name, String(value).slice(0, 256));
+                });
+                applyDataset(element, node.data);
+
+                const controlIndex = Number(node.controlIndex);
+                if (Number.isInteger(controlIndex) && controlIndex >= 0) {
+                  const control = (dialog.controls || []).find(
+                    (candidate, index) =>
+                      Number(candidate.controlIndex ?? index) === controlIndex,
+                  );
+                  if (control) applyControlState(element, control, dialog, controlIndex);
+                }
+
+                const actionIndex = Number(node.actionIndex);
+                if (Number.isInteger(actionIndex) && actionIndex >= 0) {
+                  const action = actions.find(
+                    (candidate, index) =>
+                      Number(candidate.actionIndex ?? index) === actionIndex,
+                  );
+                  if (action) {
+                    if (element.tagName === "BUTTON") {
+                      element.type = "button";
+                      element.disabled = Boolean(action.disabled);
+                    }
+                    if (element.tagName === "LABEL" && action.htmlFor) {
+                      element.htmlFor = String(action.htmlFor);
+                    }
+                    element.dataset.dialogId = dialog.id || "";
+                    element.dataset.actionIndex = String(actionIndex);
+                    element.dataset.actionId = action.actionId || `button-${actionIndex}`;
+                    applyDataset(element, action.data);
+                    if (action.title) element.title = String(action.title);
+                    if (action.ariaLabel) element.setAttribute("aria-label", action.ariaLabel);
+                    if (action.ariaInvalid !== null && action.ariaInvalid !== undefined) {
+                      element.setAttribute("aria-invalid", String(action.ariaInvalid));
+                    }
+                    if (action.ariaPressed !== null && action.ariaPressed !== undefined) {
+                      element.setAttribute("aria-pressed", String(action.ariaPressed));
+                    }
+                  }
+                }
+
+                if (tagName !== "select" && tagName !== "input") {
+                  (node.children || []).forEach((child) => {
+                    const hydrated = hydrateNode(child, depth + 1);
+                    if (hydrated) element.appendChild(hydrated);
+                  });
+                }
+                return element;
+              };
+              samplePadManifest.children.forEach((node) => {
+                const hydrated = hydrateNode(node);
+                if (hydrated) panel.appendChild(hydrated);
+              });
+              panel.dataset.dialogDomSchema = samplePadManifest.schema;
+              panel.dataset.dialogDomNodes = String(hydratedNodeCount);
+              appendMirroredPanel(panel, dialog.modal === true);
+              return;
+            }
+
+            if (exactSamplePadDialog) {
+              const layout = dialog.samplePadLayout;
+              const actionByIndex = (index) => actions.find(
+                (action) => Number(action.actionIndex) === Number(index),
+              );
+              const controls = Array.isArray(dialog.controls) ? dialog.controls : [];
+              const controlByIndex = (index) => controls.find(
+                (control, controlIndex) =>
+                  Number(control.controlIndex ?? controlIndex) === Number(index),
+              );
+              const appendActionByIndex = (container, index) => {
+                const action = actionByIndex(index);
+                if (action) container.appendChild(renderAction(action, action.actionIndex));
+              };
+              const appendActionRows = (container, rows) => {
+                (rows || []).forEach((rowState) => {
+                  const row = document.createElement("div");
+                  row.className = normalizeClassName(rowState.className, "pad-control-row");
+                  (rowState.actionIndices || []).forEach((index) => {
+                    appendActionByIndex(row, index);
+                  });
+                  container.appendChild(row);
+                });
+              };
+
+              const headerState = dialog.header || {};
+              const header = document.createElement("div");
+              header.className = normalizeClassName(headerState.className, "dialog-header");
+              const headerTop = document.createElement("div");
+              headerTop.className = normalizeClassName(
+                layout.headerTopClassName || headerState.topClassName,
+                "dialog-header-top pad-dialog-title-row",
+              );
+              const navGroup = document.createElement("div");
+              navGroup.className = normalizeClassName(
+                layout.navGroupClassName,
+                "pad-dialog-nav-group",
+              );
+              appendActionByIndex(navGroup, layout.previousActionIndex);
+              const heading = document.createElement("span");
+              heading.className = normalizeClassName(
+                headerState.titleClassName,
+                "dialog-title",
+              );
+              if (layout.titleId) heading.id = String(layout.titleId);
+              const padTitle = document.createElement("span");
+              padTitle.className = "pad-dialog-pad-title";
+              padTitle.textContent = layout.padTitleText || `Pad ${dialog.padId || ""}:`;
+              const sampleName = document.createElement("span");
+              sampleName.dataset.padSampleName = "";
+              sampleName.textContent = layout.sampleNameText || "No sample loaded";
+              heading.append(padTitle, document.createTextNode(" "), sampleName);
+              navGroup.appendChild(heading);
+              appendActionByIndex(navGroup, layout.nextActionIndex);
+              headerTop.appendChild(navGroup);
+              appendActionByIndex(headerTop, layout.closeActionIndex);
+              header.appendChild(headerTop);
+              panel.appendChild(header);
+
+              const content = document.createElement("div");
+              content.className = normalizeClassName(
+                dialog.contentClassName,
+                "dialog-content pad-dialog-content",
+              );
+              const scrollContent = document.createElement("div");
+              scrollContent.className = normalizeClassName(
+                layout.scrollClassName,
+                "pad-dialog-scroll-content",
+              );
+              const primaryRows = document.createElement("div");
+              primaryRows.className = normalizeClassName(
+                layout.primaryRowsClassName,
+                "pad-control-rows",
+              );
+              appendActionRows(primaryRows, layout.primaryRows);
+              scrollContent.appendChild(primaryRows);
+              const bottomControlRows = document.createElement("div");
+              bottomControlRows.className = normalizeClassName(
+                layout.bottomControlRowsClassName,
+                "pad-dialog-bottom-control-rows",
+              );
+              appendActionRows(bottomControlRows, layout.bottomControlRows);
+              scrollContent.appendChild(bottomControlRows);
+              const settingsStrip = document.createElement("div");
+              settingsStrip.className = normalizeClassName(
+                layout.settingsStripClassName,
+                "pad-settings-strip",
+              );
+              (layout.settings || []).forEach((item) => {
+                const isAction = item.kind === "action";
+                const field = document.createElement(isAction ? "div" : "label");
+                field.className = normalizeClassName(
+                  item.className,
+                  isAction ? "pad-setting-field pad-setting-action-field" : "pad-setting-field",
+                );
+                applyDataset(field, item.data);
+                const caption = document.createElement("span");
+                caption.textContent = item.caption || "Parameter";
+                if (isAction) {
+                  field.appendChild(caption);
+                  appendActionByIndex(field, item.actionIndex);
+                  settingsStrip.appendChild(field);
+                  return;
+                }
+                const control = controlByIndex(item.controlIndex);
+                if (!control) return;
+                const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
+                const value = document.createElement(
+                  tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "input",
+                );
+                applyControlState(value, control, dialog, item.controlIndex);
+                if (control.type === "checkbox") {
+                  field.append(value, caption);
+                } else if (control.type === "range") {
+                  const wrapper = document.createElement("span");
+                  wrapper.className = normalizeClassName(
+                    control.controlWrapperClassName,
+                    "pad-setting-range-control",
+                  );
+                  const output = document.createElement("output");
+                  output.className = normalizeClassName(
+                    control.settingValueClassName,
+                    "pad-setting-value",
+                  );
+                  output.textContent = control.displayValue ?? formatMirroredParameterDisplay(
+                    control.displayDescriptor,
+                    control.rawValue ?? value.value,
+                  );
+                  writeMirroredDisplayDescriptor(output, control.displayDescriptor, output.textContent);
+                  writeMirroredDisplayDescriptor(value, control.displayDescriptor, output.textContent);
+                  wrapper.append(value, output);
+                  field.append(caption, wrapper);
+                } else {
+                  field.append(caption, value);
+                }
+                settingsStrip.appendChild(field);
+              });
+              scrollContent.appendChild(settingsStrip);
+              content.appendChild(scrollContent);
+              panel.appendChild(content);
+
+              const footer = document.createElement("div");
+              footer.className = normalizeClassName(
+                layout.footerClassName,
+                "pad-dialog-bottom-actions",
+              );
+              (layout.footerActionIndices || []).forEach((index) => {
+                appendActionByIndex(footer, index);
+              });
+              panel.appendChild(footer);
+              appendMirroredPanel(panel, dialog.modal === true);
+              return;
+            }
 
             const headerState = dialog.header || {};
             const header = document.createElement("div");
@@ -7321,9 +7938,10 @@
               }
             });
             if (footer.childElementCount) panel.appendChild(footer);
-            root.appendChild(panel);
+            appendMirroredPanel(panel, false);
           });
           restoreMirroredDialogInteractionState(root, preservedInteractionState);
+          finishDialogRender("rebuild");
         }
 
         let lastRenderTime = 0;
@@ -7948,6 +8566,89 @@
                 return Number(candidate.index) === index;
               });
               return padPatch ? { ...previousPad, ...padPatch } : previousPad;
+            });
+          }
+          if (Array.isArray(patch.dialogStates) && Array.isArray(nextState.dialogs)) {
+            const mergeControl = (previousControl, controlPatch) => {
+              if (!controlPatch) return previousControl;
+              return {
+                ...previousControl,
+                ...controlPatch,
+                displayDescriptor: controlPatch.displayDescriptor
+                  ? {
+                      ...(previousControl?.displayDescriptor || {}),
+                      ...controlPatch.displayDescriptor,
+                    }
+                  : previousControl?.displayDescriptor,
+                options: Array.isArray(controlPatch.options)
+                  ? controlPatch.options.map((optionPatch, optionIndex) => ({
+                      ...(previousControl?.options?.[optionIndex] || {}),
+                      ...optionPatch,
+                    }))
+                  : previousControl?.options,
+              };
+            };
+            nextState.dialogs = nextState.dialogs.map((previousDialog) => {
+              const dialogPatch = patch.dialogStates.find(
+                (candidate) =>
+                  candidate && String(candidate.id || "") === String(previousDialog?.id || ""),
+              );
+              if (!dialogPatch) return previousDialog;
+              const controls = (previousDialog.controls || []).map((previousControl, index) => {
+                const controlPatch = (dialogPatch.controls || []).find(
+                  (candidate, candidateIndex) =>
+                    Number(candidate?.controlIndex ?? candidateIndex) ===
+                    Number(previousControl?.controlIndex ?? index),
+                );
+                return mergeControl(previousControl, controlPatch);
+              });
+              const actions = (previousDialog.actions || []).map((previousAction, index) => {
+                const actionPatch = (dialogPatch.actions || []).find(
+                  (candidate, candidateIndex) =>
+                    Number(candidate?.actionIndex ?? candidateIndex) ===
+                    Number(previousAction?.actionIndex ?? index),
+                );
+                return actionPatch ? { ...previousAction, ...actionPatch } : previousAction;
+              });
+              const effectSlotTabs = previousDialog.effectSlotTabs && dialogPatch.effectSlotTabs
+                ? {
+                    ...previousDialog.effectSlotTabs,
+                    ...dialogPatch.effectSlotTabs,
+                    items: (previousDialog.effectSlotTabs.items || []).map(
+                      (previousItem, index) => {
+                        const itemPatch = dialogPatch.effectSlotTabs.items?.[index];
+                        if (!itemPatch) return previousItem;
+                        return {
+                          ...previousItem,
+                          ...itemPatch,
+                          control: mergeControl(previousItem?.control, itemPatch.control),
+                        };
+                      },
+                    ),
+                  }
+                : previousDialog.effectSlotTabs;
+              return {
+                ...previousDialog,
+                ...dialogPatch,
+                geometry: {
+                  ...(previousDialog.geometry || {}),
+                  ...(dialogPatch.geometry || {}),
+                },
+                header: {
+                  ...(previousDialog.header || {}),
+                  ...(dialogPatch.header || {}),
+                },
+                controls,
+                actions,
+                effectSlotTabs,
+                samplePadLayout: previousDialog.samplePadLayout || dialogPatch.samplePadLayout
+                  ? {
+                      ...(previousDialog.samplePadLayout || {}),
+                      ...(dialogPatch.samplePadLayout || {}),
+                    }
+                  : null,
+                samplePadDomManifest: previousDialog.samplePadDomManifest,
+              };
             });
           }
           return nextState;
@@ -8746,6 +9447,10 @@
                 waveformMissing: lastWaveformRenderStats.missing,
                 waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
                 waveformSurfaces: lastWaveformRenderStats.surfaces,
+                dialogRenderMode: lastDialogRenderStats.mode,
+                dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
+                dialogCount: lastDialogRenderStats.dialogCount,
+                dialogDomNodes: lastDialogRenderStats.domNodeCount,
                 ...lfoVisualTelemetry,
                 ...buttonVisualTelemetry,
                 ...samplerLayoutTelemetry,
