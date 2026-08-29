@@ -2617,6 +2617,7 @@ select option {
 }
 
 .sample-editor-dialog .sample-editor-asset-card,
+.sample-editor-dialog .sample-editor-waveform-card,
 .sample-editor-dialog .sample-editor-field,
 .sample-editor-dialog .sample-editor-actions {
   display: flex;
@@ -2627,6 +2628,51 @@ select option {
   background: #2a2a2a;
   border: 1px solid #444;
   box-sizing: border-box;
+}
+
+.sample-editor-dialog .sample-editor-waveform-card {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sample-editor-waveform-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sample-editor-waveform-header label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-size: 0.78em;
+}
+
+.sample-editor-waveform-header select {
+  min-width: 72px;
+}
+
+.sampler-waveform-canvas,
+.sampler-envelope-canvas {
+  display: block;
+  width: 100%;
+  background: #111;
+  border: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.sampler-waveform-canvas {
+  height: 128px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.sampler-envelope-canvas {
+  height: 88px;
 }
 
 .sample-editor-dialog .sample-editor-label,
@@ -3279,6 +3325,35 @@ select option {
   border-color: var(--red) !important;
   box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--red) !important;
 }
+
+.sample-btn.import-error {
+  border-color: var(--red) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 14px var(--red) !important;
+}
+
+.sample-btn.drag-source {
+  opacity: 0.58;
+}
+
+.sampler-status-message {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 12000;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 9px 14px;
+  color: var(--white);
+  background: var(--off-black);
+  border: 1px solid var(--gold);
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.6);
+  font-family: "Cousine", monospace;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.sampler-status-message[data-tone="error"] { border-color: var(--red); }
+.sampler-status-message[data-tone="success"] { border-color: var(--green); }
 
 .sample-btn.repeating {
   box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--sampler-pad-color), inset 0 0 8px var(--sampler-pad-color);
@@ -5349,6 +5424,11 @@ dialog.input-prompt-dialog {
   grid-column: 2;
   justify-self: stretch;
   width: auto;
+}
+
+.pad-envelope-preview {
+  grid-template-columns: minmax(148px, max-content) minmax(0, 1fr);
+  min-height: 92px;
 }
 
 .pad-dialog-bottom-control-rows {

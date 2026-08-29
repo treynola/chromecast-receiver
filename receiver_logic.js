@@ -6859,6 +6859,145 @@
           });
           element.dataset.castMirroredDataKeys = JSON.stringify(nextKeys);
         }
+        function renderMirroredSamplerCanvases(panel, dialog) {
+          if (!panel) return;
+          const envelopeCanvas = panel.querySelector("[data-sampler-envelope]");
+          if (envelopeCanvas) {
+            const read = (label, fallback) => {
+              const value = Number(panel.querySelector(`[aria-label="${label}"]`)?.value);
+              return Number.isFinite(value) ? value : fallback;
+            };
+            const attack = Math.max(0.001, read("Amp Attack", Number(envelopeCanvas.dataset.envelopeAttack) || 0.002));
+            const decay = Math.max(0.001, read("Amp Decay", Number(envelopeCanvas.dataset.envelopeDecay) || 0.1));
+            const sustain = Math.max(0, Math.min(1, read("Amp Sustain", Number(envelopeCanvas.dataset.envelopeSustain) || 0)));
+            const release = Math.max(0.001, read("Amp Release", Number(envelopeCanvas.dataset.envelopeRelease) || 0.01));
+            const context = envelopeCanvas.getContext?.("2d");
+            if (context) {
+              const width = Math.max(1, Math.round(envelopeCanvas.clientWidth || 560));
+              const height = Math.max(1, Math.round(envelopeCanvas.clientHeight || 88));
+              if (envelopeCanvas.width !== width) envelopeCanvas.width = width;
+              if (envelopeCanvas.height !== height) envelopeCanvas.height = height;
+              const hold = Math.max(0.15, (attack + decay + release) * 0.22);
+              const total = attack + decay + hold + release;
+              const x = (time) => 8 + ((width - 16) * time / total);
+              const y = (level) => 8 + ((height - 16) * (1 - level));
+              context.clearRect(0, 0, width, height);
+              context.fillStyle = "#111";
+              context.fillRect(0, 0, width, height);
+              context.strokeStyle = "#ffcc00";
+              context.lineWidth = 2;
+              context.beginPath();
+              context.moveTo(x(0), y(0));
+              context.lineTo(x(attack), y(1));
+              context.lineTo(x(attack + decay), y(sustain));
+              context.lineTo(x(attack + decay + hold), y(sustain));
+              context.lineTo(x(total), y(0));
+              context.stroke();
+            }
+          }
+
+          const canvas = panel.querySelector("[data-sample-editor-waveform]");
+          const waveform = dialog?.sampleEditorVisual?.waveform;
+          if (!canvas || !waveform) return;
+          const startInput = panel.querySelector("[data-sample-editor-start]");
+          const endInput = panel.querySelector("[data-sample-editor-end]");
+          const zoomInput = panel.querySelector("[data-sample-editor-zoom]");
+          const duration = Math.max(0, Number(canvas.dataset.waveformDuration) || Number(endInput?.max) || 0);
+          const start = Math.max(0, Math.min(duration, Number(startInput?.value) || 0));
+          const end = Math.max(start, Math.min(duration, Number(endInput?.value) || duration));
+          const zoom = Math.max(1, Math.min(8, Number(zoomInput?.value) || 1));
+          const viewDuration = duration / zoom;
+          const center = Math.max(viewDuration / 2, Math.min(duration - (viewDuration / 2), (start + end) / 2));
+          const viewStart = Math.max(0, center - (viewDuration / 2));
+          const viewEnd = Math.min(duration, center + (viewDuration / 2));
+          const context = canvas.getContext?.("2d");
+          if (context) {
+            const width = Math.max(1, Math.round(canvas.clientWidth || 720));
+            const height = Math.max(1, Math.round(canvas.clientHeight || 128));
+            if (canvas.width !== width) canvas.width = width;
+            if (canvas.height !== height) canvas.height = height;
+            context.clearRect(0, 0, width, height);
+            context.fillStyle = "#111";
+            context.fillRect(0, 0, width, height);
+            const centerY = height / 2;
+            context.strokeStyle = "rgba(255, 204, 0, 0.22)";
+            context.beginPath();
+            context.moveTo(0, centerY);
+            context.lineTo(width, centerY);
+            context.stroke();
+            const fullCount = Math.min(waveform.mins?.length || 0, waveform.maxs?.length || 0);
+            const firstPeak = fullCount && duration ? Math.max(0, Math.min(fullCount - 1, Math.floor((viewStart / duration) * fullCount))) : 0;
+            const lastPeak = fullCount && duration ? Math.max(firstPeak + 1, Math.min(fullCount, Math.ceil((viewEnd / duration) * fullCount))) : fullCount;
+            const count = Math.max(0, lastPeak - firstPeak);
+            if (count) {
+              context.strokeStyle = "#00c853";
+              context.lineWidth = 1;
+              context.beginPath();
+              for (let index = 0; index < count; index += 1) {
+                const x = (index / Math.max(1, count - 1)) * width;
+                const peakIndex = firstPeak + index;
+                context.moveTo(x, centerY - (Number(waveform.maxs[peakIndex]) || 0) * centerY);
+                context.lineTo(x, centerY - (Number(waveform.mins[peakIndex]) || 0) * centerY);
+              }
+              context.stroke();
+            }
+            const visibleDuration = Math.max(0.000001, viewEnd - viewStart || duration || 1);
+            const startRatio = Math.max(0, Math.min(1, (start - viewStart) / visibleDuration));
+            const endRatio = Math.max(startRatio, Math.min(1, (end - viewStart) / visibleDuration));
+            context.fillStyle = "rgba(255, 204, 0, 0.09)";
+            context.fillRect(startRatio * width, 0, Math.max(1, (endRatio - startRatio) * width), height);
+            [[startRatio, "#00c853"], [endRatio, "#ff3b30"]].forEach(([ratio, color]) => {
+              context.strokeStyle = color;
+              context.lineWidth = 2;
+              context.beginPath();
+              context.moveTo(Number(ratio) * width, 0);
+              context.lineTo(Number(ratio) * width, height);
+              context.stroke();
+            });
+          }
+          canvas.dataset.waveformViewStart = String(viewStart);
+          canvas.dataset.waveformViewEnd = String(viewEnd);
+          if (canvas.dataset.castWaveformBound === "true") return;
+          canvas.dataset.castWaveformBound = "true";
+          let activeMarker = null;
+          const updateMarker = (event, final = false) => {
+            if (!activeMarker) return;
+            const rect = canvas.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (Number(event.clientX) - rect.left) / Math.max(1, rect.width)));
+            const from = Number(canvas.dataset.waveformViewStart) || 0;
+            const to = Number(canvas.dataset.waveformViewEnd) || duration;
+            const input = activeMarker === "start" ? startInput : endInput;
+            if (!input) return;
+            input.value = String(from + (ratio * Math.max(0, to - from)));
+            input.dispatchEvent(new Event(final ? "change" : "input", { bubbles: true }));
+          };
+          canvas.addEventListener("pointerdown", (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (Number(event.clientX) - rect.left) / Math.max(1, rect.width)));
+            const from = Number(canvas.dataset.waveformViewStart) || 0;
+            const to = Number(canvas.dataset.waveformViewEnd) || duration;
+            const time = from + (ratio * Math.max(0, to - from));
+            activeMarker = Math.abs(time - Number(startInput?.value)) <= Math.abs(time - Number(endInput?.value)) ? "start" : "end";
+            canvas.setPointerCapture?.(event.pointerId);
+            updateMarker(event);
+          });
+          canvas.addEventListener("pointermove", (event) => updateMarker(event));
+          const finish = (event) => {
+            if (!activeMarker) return;
+            updateMarker(event, true);
+            activeMarker = null;
+            canvas.releasePointerCapture?.(event.pointerId);
+          };
+          canvas.addEventListener("pointerup", finish);
+          canvas.addEventListener("pointercancel", finish);
+        }
+
+        function queueMirroredSamplerCanvasRender(panel, dialog) {
+          const render = () => renderMirroredSamplerCanvases(panel, dialog);
+          if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(render);
+          else setTimeout(render, 0);
+        }
+
         function applyMirroredDialogPosition(panel, dialog, exactEffectDialog = false) {
           const geometry = dialog?.geometry;
           if (geometry?.coordinateSpace === "viewport_css_pixels") {
@@ -6924,6 +7063,15 @@
           "actionResult",
           "actionRoute",
           "active",
+          "envelopeAttack",
+          "envelopeDecay",
+          "envelopeSustain",
+          "envelopeRelease",
+          "waveformDuration",
+          "waveformEnd",
+          "waveformStart",
+          "waveformViewEnd",
+          "waveformViewStart",
         ]);
         function normalizeMirroredDialogStructuralClassName(value) {
           return normalizeMirroredDialogClassName(value)
@@ -7058,9 +7206,10 @@
             samplePadLayout: dialog.samplePadLayout
               ? { ...dialog.samplePadLayout, sampleNameText: undefined }
               : null,
-            samplePadDomManifest: dialog.kind === "samplePadSettings"
+            samplePadDomManifest: ["samplePadSettings", "sampleEditor"].includes(dialog.kind)
               ? getMirroredDialogManifestLayout(dialog.samplePadDomManifest)
               : dialog.samplePadDomManifest,
+            sampleEditorVisual: dialog.sampleEditorVisual,
           })));
         }
 
@@ -7074,16 +7223,17 @@
             if (!panel) return false;
             const exactEffectDialog = panel.matches(
               ".effect-params-dialog, .audition-params-dialog",
-            );
+            ) && dialog.kind !== "sampleEditor";
             const exactSamplePadDialog = panel.matches(".pad-settings-dialog");
-            applyMirroredDialogPosition(panel, dialog, exactEffectDialog);
+            const exactSampleEditorDialog = dialog.kind === "sampleEditor" && panel.matches(".sample-editor-dialog");
+            applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
             panel.className = [
               "gui-dialog-mirror",
-              exactEffectDialog || exactSamplePadDialog ? "" : "mxs-dialog",
+              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "" : "mxs-dialog",
               normalizeMirroredDialogClassName(dialog.shellClassName),
               `gui-dialog-${dialog.kind || "generic"}`,
             ].filter(Boolean).join(" ");
-            if (!exactEffectDialog && !exactSamplePadDialog) {
+            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog) {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
@@ -7206,6 +7356,7 @@
                 actionElement.setAttribute("aria-pressed", String(action.ariaPressed));
               }
             });
+            queueMirroredSamplerCanvasRender(panel, dialog);
           }
           root.hidden = dialogs.length === 0;
           root.setAttribute("aria-hidden", dialogs.length === 0 ? "true" : "false");
@@ -7438,16 +7589,20 @@
           list.forEach((dialog) => {
             const shellClassName = normalizeClassName(dialog.shellClassName);
             const exactEffectDialog = dialog.dialogLayoutVersion >= 1 &&
+              dialog.kind !== "sampleEditor" &&
               /(?:^|\s)(?:effect-params-dialog|audition-params-dialog)(?:\s|$)/.test(shellClassName);
             const exactSamplePadDialog = dialog.dialogLayoutVersion >= 3 &&
               dialog.kind === "samplePadSettings" &&
               dialog.samplePadLayout;
+            const exactSampleEditorDialog = dialog.dialogLayoutVersion >= 4 &&
+              dialog.kind === "sampleEditor" &&
+              dialog.samplePadDomManifest;
             const panel = document.createElement(
-              exactEffectDialog || exactSamplePadDialog ? "dialog" : "section",
+              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "dialog" : "section",
             );
             panel.className = [
               "gui-dialog-mirror",
-              exactEffectDialog || exactSamplePadDialog ? "" : "mxs-dialog",
+              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "" : "mxs-dialog",
               shellClassName,
               `gui-dialog-${dialog.kind || "generic"}`,
             ].filter(Boolean).join(" ");
@@ -7457,8 +7612,8 @@
             panel.dataset.dialogId = dialog.id || "";
             panel.dataset.dialogKind = dialog.kind || "generic";
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
-            applyMirroredDialogPosition(panel, dialog, exactEffectDialog);
-            if (!exactEffectDialog && !exactSamplePadDialog) {
+            applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
+            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog) {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
@@ -7497,7 +7652,7 @@
               return button;
             };
 
-            const samplePadManifest = exactSamplePadDialog
+            const samplePadManifest = exactSamplePadDialog || exactSampleEditorDialog
               ? dialog.samplePadDomManifest
               : null;
             if (
@@ -7508,6 +7663,7 @@
             ) {
               const allowedTags = new Set([
                 "button",
+                "canvas",
                 "div",
                 "input",
                 "label",
@@ -7604,6 +7760,7 @@
               panel.dataset.dialogDomSchema = samplePadManifest.schema;
               panel.dataset.dialogDomNodes = String(hydratedNodeCount);
               appendMirroredPanel(panel, dialog.modal === true);
+              queueMirroredSamplerCanvasRender(panel, dialog);
               return;
             }
 
@@ -8782,11 +8939,13 @@
                 _lastSamplerCache = samplerStr;
                 s.sampler.forEach((p, i) => {
                   const btnId = "sample-" + (i + 1);
-                  const cls = p.active
-                    ? "sample-btn active"
-                    : p.loaded
-                      ? "sample-btn loaded"
-                      : "sample-btn";
+                  const cls = [
+                    "sample-btn",
+                    p.loaded ? "loaded" : "",
+                    p.active ? "active" : "",
+                    p.active && p.repeat?.enabled ? "repeating" : "",
+                    p.reverse ? "reverse" : "",
+                  ].filter(Boolean).join(" ");
                   updateClass(btnId, cls);
                   if (p.loaded && p.name) {
                     updateText(btnId, p.name.substring(0, 6));
