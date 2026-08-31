@@ -1,0 +1,27 @@
+/* Font Awesome Free 6.7.2 SVG subset, self-hosted under CC BY 4.0. */
+.fa-brands,
+.fa-solid,
+.fas {
+  --mxs-icon: none;
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  background-color: currentColor;
+  -webkit-mask-image: var(--mxs-icon);
+  mask-image: var(--mxs-icon);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.fa-chromecast { --mxs-icon: url("../icons/chromecast.svg"); }
+.fa-tv { --mxs-icon: url("../icons/tv.svg"); }
+.fa-volume-xmark { --mxs-icon: url("../icons/volume-xmark.svg"); }
+.fa-scissors { --mxs-icon: url("../icons/scissors.svg"); }
+.fa-play { --mxs-icon: url("../icons/play.svg"); }
+.fa-download { --mxs-icon: url("../icons/download.svg"); }
+.fa-chevron-right { --mxs-icon: url("../icons/chevron-right.svg"); }

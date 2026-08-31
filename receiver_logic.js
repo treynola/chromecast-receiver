@@ -12,6 +12,11 @@
         } catch (e) {}
 
       (function () {
+        function redactBridgeUrl(value) {
+          return String(value || "")
+            .replace(/([?&]token=)[^&]+/i, "$1<redacted>");
+        }
+
         class CastAudioOwnerArbiter {
           constructor() {
             this.owner = "none";
@@ -3329,7 +3334,9 @@
               writeCastDebug("info", "Intercepting LOAD request");
               emitCafTelemetry("LOAD", {
                 contentId: request?.media?.contentId || null,
-                contentUrl: request?.media?.contentUrl || null,
+                contentUrl: request?.media?.contentUrl
+                  ? redactBridgeUrl(request.media.contentUrl)
+                  : null,
                 source: request?.media?.customData?.source || null,
               });
               if (!request || !request.media) {
@@ -3367,7 +3374,7 @@
                 if (trackMetadata) {
                   request.media.customData.trackMetadata = trackMetadata;
                 }
-                writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + streamUrl);
+                writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + redactBridgeUrl(streamUrl));
               } else {
                 const contentId = request && request.media ? request.media.contentId : "unknown";
                 writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
@@ -4345,10 +4352,10 @@
           const byteRate = sampleRate * blockAlign;
           const subChunk2Size = numSamples * blockAlign;
           const chunkSize = 36 + subChunk2Size;
-          
+
           const buffer = new ArrayBuffer(44 + subChunk2Size);
           const view = new DataView(buffer);
-          
+
           // RIFF identifier
           view.setUint32(0, 0x52494646, false); // "RIFF"
           view.setUint32(4, chunkSize, true);
@@ -4363,14 +4370,14 @@
           view.setUint16(34, 16, true);
           view.setUint32(36, 0x64617461, false); // "data"
           view.setUint32(40, subChunk2Size, true);
-          
+
           // [v13.9.504] Write alternating 1 and -1 to render an inaudible dither signal (-90.3 dBFS)
           // to bypass Chromium background tab silence optimization.
           for (let i = 0; i < numSamples; i++) {
             const val = (i % 2 === 0) ? 1 : -1;
             view.setInt16(44 + i * 2, val, true);
           }
-          
+
           const blob = new Blob([buffer], { type: 'audio/wav' });
           return URL.createObjectURL(blob);
         }
@@ -4424,7 +4431,7 @@
           playbackModeLastSentGeneration = -1;
           stopCafNativeCompanion();
           stopHtmlAudioNativeCompanion();
-          
+
           const htmlAudio = document.getElementById("native-stream-audio");
           const cafAudio = document.getElementById("cast-media-element");
           [htmlAudio, cafAudio].forEach(function resetNativeElement(element) {
@@ -4595,9 +4602,9 @@
             playbackModeLastSentReady = null;
             playbackModeLastSentGeneration = -1;
           }
-          
+
           destroyAudioWorklet();
-          
+
           clearLowLatencyStartupWatchdog();
           if (reason && hadBinaryPlayout && !duplicateReset) {
             relayLogToStudio("🛑 Receiver: Binary playout reset (" + reason + ").");
@@ -4960,7 +4967,7 @@
             });
             relayLogToStudio("🧭 Receiver: Native playback preferred; PCM bridge stays idle until fallback is required.");
 
-            writeCastDebug("info", "Calling PlayerManager.load for " + streamUrl);
+            writeCastDebug("info", "Calling PlayerManager.load for " + redactBridgeUrl(streamUrl));
             const result = pm.load(loadRequestData);
             if (result && typeof result.then === "function") {
               result
@@ -5037,7 +5044,12 @@
           }
 
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const streamUrl = "http://" + ip + ":" + targetPort + "/stream.wav?cb=" + Date.now();
+          const streamToken = currentBridgeToken ||
+            (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{")
+              ? window.SECURITY_TOKEN
+              : "");
+          const streamUrl = "http://" + ip + ":" + targetPort +
+            "/stream.wav?token=" + encodeURIComponent(streamToken) + "&cb=" + Date.now();
           if ((nativeStreamActive || nativeStreamStarting) && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
             return true;
           }
@@ -6296,7 +6308,7 @@
           // Check video
           const video = root.querySelector("video");
           if (video) return video;
-          
+
           // Check audio (except audio-unlocker)
           const audios = root.querySelectorAll("audio");
           for (const a of audios) {
@@ -6304,7 +6316,7 @@
               return a;
             }
           }
-          
+
           // Traverse Shadow DOMs
           const all = root.querySelectorAll("*");
           for (const el of all) {
@@ -6320,7 +6332,7 @@
           try {
             // Check for statically declared Cast media element first
             let castMediaElement = document.getElementById("cast-media-element");
-            
+
             // Fallback: use recursive shadow root traverser
             if (!castMediaElement) {
               castMediaElement = findMediaElement(document);
@@ -6521,7 +6533,12 @@
                 (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{")
                   ? window.SERVER_PORT
                   : "8080");
-              const url = "http://" + targetIp + ":" + port + "/log?m=" + encodeURIComponent(msg);
+              const logToken = currentBridgeToken ||
+                (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{")
+                  ? window.SECURITY_TOKEN
+                  : "");
+              const url = "http://" + targetIp + ":" + port + "/log?m=" +
+                encodeURIComponent(msg) + "&token=" + encodeURIComponent(logToken);
               try {
                 if (navigator.sendBeacon) {
                   sent = navigator.sendBeacon(url);
@@ -9169,6 +9186,7 @@
         let currentBridgeIp = null;
         let currentBridgePort = null;
         let currentBridgeToken = null;
+        let currentBridgeNetworkEpoch = 0;
         let binaryWS = null;
         let wsConnectTimeout = null;
         let handshakeRetryInterval = null;
@@ -9222,8 +9240,13 @@
                 (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{")
                   ? window.SERVER_PORT
                   : "8080");
+              const logToken = currentBridgeToken ||
+                (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{")
+                  ? window.SECURITY_TOKEN
+                  : "");
               const url = "http://" + targetIp + ":" + targetPort + "/log?m=" +
-                encodeURIComponent(JSON.stringify(payload));
+                encodeURIComponent(JSON.stringify(payload)) + "&token=" +
+                encodeURIComponent(logToken);
               try {
                 if (navigator.sendBeacon) {
                   sent = navigator.sendBeacon(url);
@@ -9343,6 +9366,31 @@
           wsConnectTimeout = setTimeout(() => {
             connectBinaryBridge(ip, customPort, customToken);
           }, delayMs);
+        }
+
+        function acceptBridgeNetworkEpoch(value, source) {
+          const nextEpoch = Number(value);
+          const legacyEpoch = value === undefined || value === null || nextEpoch === 0;
+          if (legacyEpoch && currentBridgeNetworkEpoch === 0) return true;
+          if (!Number.isSafeInteger(nextEpoch) || nextEpoch <= 0) {
+            relayLogToStudio(
+              `⚠️ Receiver: Rejected BRIDGE_CONFIG with invalid network epoch from ${source || "unknown"}.`,
+            );
+            return false;
+          }
+          if (currentBridgeNetworkEpoch > 0 && nextEpoch < currentBridgeNetworkEpoch) {
+            relayLogToStudio(
+              `⚠️ Receiver: Rejected stale BRIDGE_CONFIG epoch ${nextEpoch}; current epoch is ${currentBridgeNetworkEpoch}.`,
+            );
+            return false;
+          }
+          if (nextEpoch > currentBridgeNetworkEpoch) {
+            relayLogToStudio(
+              `🔄 Receiver: Bridge network epoch ${currentBridgeNetworkEpoch} → ${nextEpoch}.`,
+            );
+            currentBridgeNetworkEpoch = nextEpoch;
+          }
+          return true;
         }
 
         function markReceiverPlayoutPathReady() {
@@ -9989,7 +10037,7 @@
 
           const url = `ws://${ip}:${targetPort}/?role=receiver&token=${encodeURIComponent(targetToken)}`;
           try {
-            relayLogToStudio(`📡 Receiver: Attempting to connect to ${url}`);
+            relayLogToStudio(`📡 Receiver: Attempting to connect to ${redactBridgeUrl(url)}`);
             binaryWS = new WebSocket(url);
             binaryWS.binaryType = "arraybuffer";
           } catch (err) {
@@ -10019,13 +10067,13 @@
             resetGuiRevisionGate("bridge_open");
             guiSessionNonce = null;
             console.log("✅ Binary Bridge Connected");
-            markReceiverBoot("bridge_connected", { url: url });
+            markReceiverBoot("bridge_connected", { url: redactBridgeUrl(url) });
             sendReceiverBootDiagnostic("bridge_connected", {
               generation,
               readyState: binaryWS.readyState,
-              url: String(url).replace(/([?&]token=)[^&]+/i, "$1<redacted>"),
+              url: redactBridgeUrl(url),
             });
-            relayLogToStudio(`✅ Receiver: WebSocket Connected to ${url}`);
+            relayLogToStudio(`✅ Receiver: WebSocket Connected to ${redactBridgeUrl(url)}`);
             if (window._receiverUiRevealed) {
               sendAuthenticatedGuiReady(window._receiverBootStage || "gui_revealed");
             }
@@ -10182,7 +10230,7 @@
             // [v13.9.504] PRIORITY: Binary audio data gets the fastest path
             const isArrayBuffer = event.data instanceof ArrayBuffer || (event.data && typeof event.data.byteLength === "number");
             const isBlob = event.data instanceof Blob || (event.data && typeof event.data.size === "number" && typeof event.data.slice === "function");
-            
+
             if (isArrayBuffer) {
               if (
                 playbackPaused ||
@@ -10311,11 +10359,15 @@
                     hasPcmProtocol: !!d.pcmProtocol,
                     hasGuiSessionNonce: typeof d.guiSessionNonce === "string",
                     hasEndpoint: !!(d.ip && d.port && d.token),
+                    networkEpoch: Number(d.networkEpoch) || 0,
                   });
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
                     return;
                   }
                   if (d.pcmProtocol && !acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
+                    return;
+                  }
+                  if (!acceptBridgeNetworkEpoch(d.networkEpoch, "websocket")) {
                     return;
                   }
                   if (typeof d.guiSessionNonce !== "string" || d.guiSessionNonce.length < 8 || d.guiSessionNonce.length > 128) {
@@ -10497,6 +10549,7 @@
                 hasPcmProtocol: !!d.pcmProtocol,
                 hasGuiSessionNonce: typeof d.guiSessionNonce === "string",
                 hasEndpoint: !!(d.ip && d.port && d.token),
+                networkEpoch: Number(d.networkEpoch) || 0,
               });
               if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) {
                 // Connect only to report the rejection through the authoritative
@@ -10508,6 +10561,9 @@
                 d.pcmProtocol &&
                 !acceptPcmV2ProtocolConfig(d.pcmProtocol, "cast_control")
               ) {
+                return;
+              }
+              if (!acceptBridgeNetworkEpoch(d.networkEpoch, "cast_control")) {
                 return;
               }
               if (typeof d.guiSessionNonce !== "string" || d.guiSessionNonce.length < 8 || d.guiSessionNonce.length > 128) {
@@ -10604,7 +10660,7 @@
                   buildIdentityAccepted = false;
                   window._buildIdentityAccepted = false;
                   playoutPathLogged = false;
-                  window._binaryActive = false; 
+                  window._binaryActive = false;
                   window._lastBinaryTime = 0;
                   window._playbackMode = "unknown";
                   stopNativeStreamPlayout("sender_disconnected");
@@ -10694,7 +10750,7 @@
             if (audioCtx) {
               const now = Date.now();
               const isWorkletStalled = workletNode && (!window._lastWorkletDiagTime || (now - window._lastWorkletDiagTime > 4000));
-              
+
               if (audioCtx.state === "suspended" || isWorkletStalled) {
                 if (isWorkletStalled && workletNode) {
                   relayLogToStudio("⚠️ Receiver: Worklet process() stalled/not started. Attempting resume...");
@@ -10774,4 +10830,4 @@
         };
 
       })();
-    
+

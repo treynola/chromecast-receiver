@@ -851,7 +851,7 @@ button[id^="t-rev-"].playing-reverse {
   font-weight: normal !important;
   text-transform: none;
   box-sizing: border-box;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 12px;
@@ -876,7 +876,7 @@ button[id^="t-rev-"].playing-reverse {
   background-color: var(--red);
   color: var(--gold);
   border-color: var(--gold);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
 }
 
 .input-source:focus,
@@ -889,7 +889,7 @@ button[id^="t-rev-"].playing-reverse {
   color: var(--dark-red);
   border-color: var(--gold);
   outline: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
 }
 
 select option {
@@ -3443,10 +3443,10 @@ select option {
   /* Match value size */
 }
 
-/* Separator for Loop Start/End? 
+/* Separator for Loop Start/End?
    Since they are flex items, we can add a border to the first one?
    But we don't have a dedicated separator element.
-   We can add border-right to the first child container. 
+   We can add border-right to the first child container.
 */
 /* 3-Line Loop Control Layout */
 .loop-controls.active {
@@ -4221,7 +4221,7 @@ body.receiver-mode .unlock-button {
   text-transform: uppercase;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
-body.receiver-mode .unlock-button:hover, 
+body.receiver-mode .unlock-button:hover,
 body.receiver-mode .unlock-button:focus {
   background: #fff;
   border-color: #fff;
@@ -4314,7 +4314,7 @@ body.receiver-mode .unlock-button:focus {
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
   align-items: center !important;
-  gap: 4px !important; 
+  gap: 4px !important;
   width: 100% !important;
   min-height: 25px !important; /* QA: +5px height for input gain area */
   overflow: visible !important;
