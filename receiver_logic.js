@@ -1,7 +1,9 @@
 
 
       window.SERVER_PORT = "{{SERVER_PORT}}";
-      window.SECURITY_TOKEN = "{{SECURITY_TOKEN}}";
+      window.RECEIVER_TOKEN = "{{RECEIVER_TOKEN}}";
+      window.STREAM_TOKEN = "{{STREAM_TOKEN}}";
+      window.LOG_TOKEN = "{{LOG_TOKEN}}";
 
         // [v13.9.509] Do not redirect during Cast bootstrap. A launch-time
         // self-redirect can leave a custom receiver on a blank page before
@@ -5044,9 +5046,9 @@
           }
 
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const streamToken = currentBridgeToken ||
-            (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{")
-              ? window.SECURITY_TOKEN
+          const streamToken = currentBridgeStreamToken ||
+            (window.STREAM_TOKEN && !window.STREAM_TOKEN.startsWith("{{")
+              ? window.STREAM_TOKEN
               : "");
           const streamUrl = "http://" + ip + ":" + targetPort +
             "/stream.wav?token=" + encodeURIComponent(streamToken) + "&cb=" + Date.now();
@@ -5161,6 +5163,8 @@
           currentBridgeIp = null;
           currentBridgePort = null;
           currentBridgeToken = null;
+          currentBridgeStreamToken = null;
+          currentBridgeLogToken = null;
         }
 
         function queueBinaryFrame(packet) {
@@ -6533,9 +6537,9 @@
                 (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{")
                   ? window.SERVER_PORT
                   : "8080");
-              const logToken = currentBridgeToken ||
-                (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{")
-                  ? window.SECURITY_TOKEN
+              const logToken = currentBridgeLogToken ||
+                (window.LOG_TOKEN && !window.LOG_TOKEN.startsWith("{{")
+                  ? window.LOG_TOKEN
                   : "");
               const url = "http://" + targetIp + ":" + port + "/log?m=" +
                 encodeURIComponent(msg) + "&token=" + encodeURIComponent(logToken);
@@ -9186,6 +9190,8 @@
         let currentBridgeIp = null;
         let currentBridgePort = null;
         let currentBridgeToken = null;
+        let currentBridgeStreamToken = null;
+        let currentBridgeLogToken = null;
         let currentBridgeNetworkEpoch = 0;
         let binaryWS = null;
         let wsConnectTimeout = null;
@@ -9197,6 +9203,44 @@
         const CAST_SESSION_HEARTBEAT_PROTOCOL_VERSION = 1;
         let lastCastSessionHeartbeatAt = 0;
         let lastCastSessionHeartbeatSequence = 0;
+
+        function isValidBridgeCredential(value) {
+          return typeof value === "string" &&
+            value.length >= 20 &&
+            value.length <= 256 &&
+            !value.startsWith("{{");
+        }
+
+        function injectedBridgeCredential(name) {
+          const value = window[name];
+          return isValidBridgeCredential(value) ? value : "";
+        }
+
+        function acceptBridgeCredentials(data, source) {
+          const receiverToken = data && isValidBridgeCredential(data.token)
+            ? data.token
+            : "";
+          if (!receiverToken) {
+            relayLogToStudio(
+              "⚠️ Receiver: Rejected BRIDGE_CONFIG with an invalid receiver credential from " +
+                (source || "unknown") + ".",
+            );
+            return false;
+          }
+          // Compatibility fallback is intentionally limited to descriptors
+          // produced by an older Studio runtime. Current descriptors always
+          // carry independent stream and log capabilities.
+          const streamToken = isValidBridgeCredential(data.streamToken)
+            ? data.streamToken
+            : receiverToken;
+          const logToken = isValidBridgeCredential(data.logToken)
+            ? data.logToken
+            : receiverToken;
+          currentBridgeToken = receiverToken;
+          currentBridgeStreamToken = streamToken;
+          currentBridgeLogToken = logToken;
+          return true;
+        }
 
         function sendReceiverBootDiagnostic(stage, details) {
           if (!stage || receiverBootDiagnosticCount >= 32) return false;
@@ -9240,9 +9284,9 @@
                 (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{")
                   ? window.SERVER_PORT
                   : "8080");
-              const logToken = currentBridgeToken ||
-                (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{")
-                  ? window.SECURITY_TOKEN
+              const logToken = currentBridgeLogToken ||
+                (window.LOG_TOKEN && !window.LOG_TOKEN.startsWith("{{")
+                  ? window.LOG_TOKEN
                   : "");
               const url = "http://" + targetIp + ":" + targetPort + "/log?m=" +
                 encodeURIComponent(JSON.stringify(payload)) + "&token=" +
@@ -10006,7 +10050,18 @@
           suppressBinaryReconnect = false;
           clearBinaryReconnectTimer();
           const targetPort = customPort || (window.SERVER_PORT && !window.SERVER_PORT.startsWith("{{") ? window.SERVER_PORT : "8080");
-          const targetToken = customToken || (window.SECURITY_TOKEN && !window.SECURITY_TOKEN.startsWith("{{") ? window.SECURITY_TOKEN : "");
+          const targetToken = customToken || currentBridgeToken ||
+            injectedBridgeCredential("RECEIVER_TOKEN");
+          if (!isValidBridgeCredential(targetToken)) {
+            relayLogToStudio("⚠️ Receiver: Binary bridge connection deferred; receiver credential unavailable.");
+            return;
+          }
+          if (!currentBridgeStreamToken) {
+            currentBridgeStreamToken = injectedBridgeCredential("STREAM_TOKEN") || targetToken;
+          }
+          if (!currentBridgeLogToken) {
+            currentBridgeLogToken = injectedBridgeCredential("LOG_TOKEN") || targetToken;
+          }
           if (
             binaryWS &&
             (binaryWS.readyState === WebSocket.OPEN || binaryWS.readyState === WebSocket.CONNECTING) &&
@@ -10370,6 +10425,9 @@
                   if (!acceptBridgeNetworkEpoch(d.networkEpoch, "websocket")) {
                     return;
                   }
+                  if (!acceptBridgeCredentials(d, "websocket")) {
+                    return;
+                  }
                   if (typeof d.guiSessionNonce !== "string" || d.guiSessionNonce.length < 8 || d.guiSessionNonce.length > 128) {
                     relayLogToStudio("⚠️ Receiver: BRIDGE_CONFIG missing a valid GUI session nonce.");
                     return;
@@ -10551,6 +10609,9 @@
                 hasEndpoint: !!(d.ip && d.port && d.token),
                 networkEpoch: Number(d.networkEpoch) || 0,
               });
+              if (!acceptBridgeCredentials(d, "cast_control")) {
+                return;
+              }
               if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) {
                 // Connect only to report the rejection through the authoritative
                 // sender/backend path; no handshake or audio startup is allowed.
@@ -10830,4 +10891,3 @@
         };
 
       })();
-
