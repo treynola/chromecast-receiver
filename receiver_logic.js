@@ -8687,6 +8687,17 @@
               },
             };
           }
+          if (patch.qa && typeof patch.qa === "object") {
+            const qaRevision = Number(patch.qa.revision);
+            nextState.qa = {
+              ...(nextState.qa || {}),
+              visible: Boolean(patch.qa.visible),
+              text: String(patch.qa.text || "").slice(0, 4000),
+              revision: Number.isSafeInteger(qaRevision) && qaRevision >= 0
+                ? qaRevision
+                : Number(nextState.qa?.revision) || 0,
+            };
+          }
           if (Array.isArray(patch.tracks) && Array.isArray(nextState.tracks)) {
             nextState.tracks = nextState.tracks.map((previousTrack, index) => {
               const trackPatch = patch.tracks.find((candidate) => {
@@ -9878,7 +9889,7 @@
           if (rawGuiType === "GUI_SNAPSHOT") {
             d = { ...d, type: "GUI_STATE_UPDATE" };
           } else if (rawGuiType === "GUI_PATCH") {
-            if (d.patchType === "live_state") {
+            if (d.patchType === "live_state" || d.patchType === "volume_state") {
               d = { ...d, type: "GUI_STATE_PATCH" };
             } else {
               d = {

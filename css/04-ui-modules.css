@@ -561,7 +561,7 @@ input[type="range"]::-webkit-slider-thumb {
 .rev-btn {
   background-color: var(--gold);
   color: var(--green);
-  border: 1px solid var(--green);
+  border: 1px solid #00ff00 !important;
   border-radius: 4px !important;
   height: 24px !important;
   box-sizing: border-box !important;
@@ -599,7 +599,7 @@ button[id^="t-rev-"].reverse-failed {
 .rev-btn.playing-reverse {
   background-color: var(--gold) !important;
   color: var(--green) !important;
-  border: 1px solid var(--green) !important;
+  border: 1px solid #00ff00 !important;
   border-radius: 4px !important;
   animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
@@ -737,7 +737,7 @@ button[id^="t-rev-"].reverse-failed {
 button[id^="t-rev-"] {
   background-color: var(--gold);
   color: var(--green);
-  border: 1px solid var(--green);
+  border: 1px solid #00ff00 !important;
   border-radius: 4px !important;
   height: 24px !important;
   font-weight: 720;
@@ -816,7 +816,7 @@ button[id^="t-rev-"].playing-reverse {
   0% {
     background-color: var(--gold);
     color: var(--green);
-    border-color: var(--green);
+    border-color: #00ff00;
   }
   50% {
     background-color: var(--green);
@@ -826,7 +826,7 @@ button[id^="t-rev-"].playing-reverse {
   100% {
     background-color: var(--gold);
     color: var(--green);
-    border-color: var(--green);
+    border-color: #00ff00;
   }
 }
 
@@ -4149,7 +4149,7 @@ body.receiver-mode .track-buttons button[id^="t-rec-"] {
 body.receiver-mode .track-buttons button[id^="t-rev-"] {
   background-color: var(--gold) !important;
   color: var(--green) !important;
-  border: 1px solid var(--green) !important;
+  border: 1px solid #00ff00 !important;
 }
 body.receiver-mode .bridge-connected-pulse {
   animation: pulse-dot 2s infinite !important;

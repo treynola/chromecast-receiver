@@ -198,7 +198,7 @@
 .track-buttons button[data-action="reverse"] {
   background-color: var(--gold);
   color: var(--green);
-  border: 1px solid var(--green);
+  border: 1px solid #00ff00 !important;
   border-radius: 4px !important;
   transition: all 0.2s;
 }
