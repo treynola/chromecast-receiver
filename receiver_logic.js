@@ -3558,8 +3558,25 @@
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
 
+                // Physical Chromecast firmware can report the transition to
+                // PLAYING only through the documented MEDIA_STATUS event and
+                // omit the convenience PLAYING event entirely. Treat both as
+                // the same native readiness proof so the prewarm mute is
+                // released instead of timing out into PCM while CAF is already
+                // playing the live stream.
+                const nativePlayingConfirmed =
+                  eventType === events.PLAYING ||
+                  (
+                    eventType === events.MEDIA_STATUS &&
+                    playerState === (
+                      messages.PlayerState && messages.PlayerState.PLAYING
+                        ? messages.PlayerState.PLAYING
+                        : "PLAYING"
+                    )
+                  );
+
                 if (
-                  eventType === events.PLAYING &&
+                  nativePlayingConfirmed &&
                   nativeStreamStarting &&
                   nativeStreamUrl
                 ) {
