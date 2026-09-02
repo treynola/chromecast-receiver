@@ -516,6 +516,14 @@ input[type="range"]::-webkit-slider-thumb {
   box-shadow: 0 0 5px var(--red);
 }
 
+.track-rec-button.mc-pa-live {
+  background-color: #ff3838 !important;
+  color: #ffffff !important;
+  border: 1px solid #ffffff !important;
+  box-shadow: 0 0 10px #ff3838, inset 0 0 6px rgba(255, 255, 255, 0.4) !important;
+  animation: text-blink 0.35s infinite !important;
+}
+
 /* [V13.8.66] Master REC Dimension Alignment */
 #master-record-button {
   width: 60px !important;
