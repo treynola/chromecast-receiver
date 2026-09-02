@@ -2719,6 +2719,12 @@
         }
 
         function bindReceiverGuiInteractions() {
+          const hydrateEffectSelect = (event) => {
+            const target = event.target?.closest?.("select.effect-type-select");
+            if (target) hydrateEffectOptionsSelect(target);
+          };
+          document.addEventListener("pointerdown", hydrateEffectSelect);
+          document.addEventListener("focusin", hydrateEffectSelect);
           document.addEventListener("click", (event) => {
             const target = event.target && event.target.closest
               ? event.target.closest('button, label[data-dialog-id][data-action-index]')
@@ -6841,24 +6847,94 @@
           updateStyleLeft(id, value);
         }
 
+        let effectOptionsCatalog = ["none"];
+        let effectOptionsCatalogSignature = JSON.stringify(effectOptionsCatalog);
+        const effectOptionsArrayCache = new WeakMap();
+
+        function createEffectOption(value) {
+          const normalized = String(value);
+          const item = document.createElement("option");
+          item.value = normalized;
+          item.textContent = normalized === "none" ? "None" : normalized;
+          return item;
+        }
+
+        function rememberEffectOptions(options) {
+          if (!Array.isArray(options) || !options.length) return effectOptionsCatalogSignature;
+          let cached = effectOptionsArrayCache.get(options);
+          if (!cached) {
+            const normalized = options.map((option) => String(option));
+            cached = {
+              normalized,
+              signature: JSON.stringify(normalized),
+            };
+            effectOptionsArrayCache.set(options, cached);
+          }
+          if (cached.signature !== effectOptionsCatalogSignature) {
+            effectOptionsCatalog = cached.normalized;
+            effectOptionsCatalogSignature = cached.signature;
+          }
+          return cached.signature;
+        }
+
+        function hydrateEffectOptionsSelect(select) {
+          if (!select || !select.matches("select.effect-type-select")) return false;
+          const cacheKey = "effect-options:" + select.id;
+          if (
+            select.dataset.effectOptionsHydrated === "true" &&
+            valCache[cacheKey] === effectOptionsCatalogSignature
+          ) {
+            return false;
+          }
+          const selected = String(select.dataset.effectOptionsSelected || select.value || "none");
+          const fragment = document.createDocumentFragment();
+          let includesSelected = false;
+          effectOptionsCatalog.forEach((option) => {
+            const item = createEffectOption(option);
+            if (item.value === selected) includesSelected = true;
+            fragment.appendChild(item);
+          });
+          if (!includesSelected) fragment.appendChild(createEffectOption(selected));
+          select.replaceChildren(fragment);
+          select.value = selected;
+          select.dataset.effectOptionsHydrated = "true";
+          valCache[cacheKey] = effectOptionsCatalogSignature;
+          return true;
+        }
+
         function updateEffectOptions(id, options, selected) {
           const select = getEl(id);
           if (!select || !Array.isArray(options) || !options.length) return;
-          const signature = JSON.stringify(options);
+          const signature = rememberEffectOptions(options);
           const cacheKey = "effect-options:" + id;
-          if (valCache[cacheKey] !== signature) {
-            select.replaceChildren();
-            options.forEach((option) => {
-              const item = document.createElement("option");
-              item.value = String(option);
-              item.textContent = String(option) === "none" ? "None" : String(option);
-              select.appendChild(item);
-            });
+          const selectedValue = String(selected ?? "none");
+          const catalogChanged = valCache[cacheKey] !== signature;
+          if (catalogChanged) {
+            // The mirrored select is interactive, but constructing every effect
+            // option for every Track delayed the first GUI ACK. Render the exact
+            // selection immediately and hydrate the full catalog on interaction.
+            select.replaceChildren(createEffectOption(selectedValue));
+            select.dataset.effectOptionsHydrated = "false";
             valCache[cacheKey] = signature;
+          } else if (
+            select.dataset.effectOptionsHydrated !== "true" &&
+            select.value !== selectedValue
+          ) {
+            select.replaceChildren(createEffectOption(selectedValue));
           }
-          if (selected !== undefined && selected !== null && select.value !== String(selected)) {
-            select.value = String(selected);
-          }
+          select.dataset.effectOptionsSelected = selectedValue;
+          if (select.value !== selectedValue) select.value = selectedValue;
+        }
+
+        function summarizeEffectOptionRendering() {
+          const selects = Array.from(document.querySelectorAll("select.effect-type-select"));
+          return {
+            catalogCount: effectOptionsCatalog.length,
+            selectCount: selects.length,
+            deferredSelectCount: selects.filter(
+              (select) => select.dataset.effectOptionsHydrated !== "true",
+            ).length,
+          };
         }
 
         let lastDialogMirrorState = "";
@@ -6869,6 +6945,22 @@
           renderTimeMs: 0,
           dialogCount: 0,
           domNodeCount: 0,
+        };
+        let lastGuiRenderPhaseStats = {
+          throttled: false,
+          buildMs: 0,
+          preludeMs: 0,
+          masterMs: 0,
+          dialogsMs: 0,
+          samplerMs: 0,
+          tracksMs: 0,
+          qaMs: 0,
+          totalMs: 0,
+          effectOptions: {
+            catalogCount: 0,
+            selectCount: 0,
+            deferredSelectCount: 0,
+          },
         };
         const RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX = 10;
         function normalizeMirroredDialogClassName(value, fallback = "") {
@@ -8883,11 +8975,17 @@
 
         function renderState(s, force = false, guiRevision = -1) {
           if (!s) return false;
+          const phaseClock = () =>
+            typeof performance !== "undefined" && typeof performance.now === "function"
+              ? performance.now()
+              : Date.now();
+          const phaseStartedAt = phaseClock();
           const stateTrackCount = Math.max(
             1,
             Math.floor(Number(s.trackCount) || s.tracks?.length || mirroredTrackCount || 4),
           );
           if (stateTrackCount !== mirroredTrackCount) buildGUI(stateTrackCount);
+          const buildFinishedAt = phaseClock();
           // Cursor updates are isolated from the full GUI render budget so
           // PCM playout can keep the TV pointer responsive while the regular
           // GUI render remains throttled. Ordering is guarded by cursor.revision.
@@ -8901,8 +8999,21 @@
           // DOM throttle so a burst of GUI snapshots cannot leave the canvas
           // one or more revisions behind while controls remain throttled.
           scheduleWaveformRender(s, force, guiRevision);
+          const preludeFinishedAt = phaseClock();
           if (!force && now - lastRenderTime < renderThrottleMs) {
             guiRenderThrottleSkips += 1;
+            lastGuiRenderPhaseStats = {
+              throttled: true,
+              buildMs: Math.max(0, buildFinishedAt - phaseStartedAt),
+              preludeMs: Math.max(0, preludeFinishedAt - buildFinishedAt),
+              masterMs: 0,
+              dialogsMs: 0,
+              samplerMs: 0,
+              tracksMs: 0,
+              qaMs: 0,
+              totalMs: Math.max(0, phaseClock() - phaseStartedAt),
+              effectOptions: summarizeEffectOptionRendering(),
+            };
             return "throttled";
           }
           lastRenderTime = now;
@@ -8980,8 +9091,10 @@
                 (s.master.lfo2 && s.master.lfo2.time) ?? 1.8,
               );
             }
+            const masterFinishedAt = phaseClock();
             renderDialogRegistry(s.dialogRegistry);
             renderDialogMirrors(s.dialogs);
+            const dialogsFinishedAt = phaseClock();
             if (s.sampler) {
               const samplerStr = JSON.stringify(s.sampler);
               if (_lastSamplerCache !== samplerStr) {
@@ -9026,6 +9139,7 @@
                 });
               }
             }
+            const samplerFinishedAt = phaseClock();
             if (s.tracks)
               s.tracks.forEach((t, i) => {
                 const trackName = t.fileName || "Ready";
@@ -9182,6 +9296,7 @@
                   }
                 }
               });
+            const tracksFinishedAt = phaseClock();
             if (s.qa) {
               const qaRoot = getEl("qa-overlay-root");
               if (qaRoot) {
@@ -9208,7 +9323,25 @@
                 }
               }
             }
+            const qaFinishedAt = phaseClock();
+            lastGuiRenderPhaseStats = {
+              throttled: false,
+              buildMs: Math.max(0, buildFinishedAt - phaseStartedAt),
+              preludeMs: Math.max(0, preludeFinishedAt - buildFinishedAt),
+              masterMs: Math.max(0, masterFinishedAt - preludeFinishedAt),
+              dialogsMs: Math.max(0, dialogsFinishedAt - masterFinishedAt),
+              samplerMs: Math.max(0, samplerFinishedAt - dialogsFinishedAt),
+              tracksMs: Math.max(0, tracksFinishedAt - samplerFinishedAt),
+              qaMs: Math.max(0, qaFinishedAt - tracksFinishedAt),
+              totalMs: Math.max(0, qaFinishedAt - phaseStartedAt),
+              effectOptions: summarizeEffectOptionRendering(),
+            };
           } catch (e) {
+            lastGuiRenderPhaseStats = {
+              ...lastGuiRenderPhaseStats,
+              failed: true,
+              totalMs: Math.max(0, phaseClock() - phaseStartedAt),
+            };
             console.error("❌ Receiver Render Error:", e);
             return false;
           }
@@ -9730,6 +9863,7 @@
                 dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
                 dialogCount: lastDialogRenderStats.dialogCount,
                 dialogDomNodes: lastDialogRenderStats.domNodeCount,
+                renderPhases: lastGuiRenderPhaseStats,
                 ...lfoVisualTelemetry,
                 ...buttonVisualTelemetry,
                 ...samplerLayoutTelemetry,
