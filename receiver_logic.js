@@ -209,6 +209,7 @@
         const NATIVE_STARTUP_FADE_MS = 12;
         const NATIVE_STARTUP_TRIM_RETRY_MS = 25;
         const NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS = 1000;
+        const NATIVE_LATENCY_REPORT_INTERVAL_MS = 1000;
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
@@ -286,6 +287,12 @@
         var guiLastAckRevision = -1;
         var guiLastRenderTimeMs = 0;
         var guiLastPayloadBytes = 0;
+        const GUI_CHANNEL_TELEMETRY_INTERVAL_MS = 5000;
+        const GUI_WAVEFORM_PROOF_INTERVAL_MS = 30000;
+        var guiChannelTelemetryTimer = null;
+        var guiChannelTelemetryEventCounts = {};
+        var guiChannelTelemetryLastDetails = {};
+        var guiLastWaveformProofAt = 0;
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
         var pcmRuntimeHighWatermarkDiagnostics = 0;
         var pcmRuntimeNativeFallbacks = 0;
@@ -1201,7 +1208,7 @@
           }
         }
 
-        function emitGuiChannelTelemetry(event, details = {}) {
+        function sendGuiChannelTelemetry(event, details = {}) {
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
           const payload = {
             type: "GUI_CHANNEL_TELEMETRY",
@@ -1229,6 +1236,45 @@
           } catch (_error) {
             return false;
           }
+        }
+
+        function flushGuiChannelTelemetry() {
+          if (guiChannelTelemetryTimer) {
+            clearTimeout(guiChannelTelemetryTimer);
+            guiChannelTelemetryTimer = null;
+          }
+          const eventCounts = guiChannelTelemetryEventCounts;
+          const details = guiChannelTelemetryLastDetails;
+          guiChannelTelemetryEventCounts = {};
+          guiChannelTelemetryLastDetails = {};
+          if (!Object.keys(eventCounts).length) return false;
+          return sendGuiChannelTelemetry("summary", {
+            intervalMs: GUI_CHANNEL_TELEMETRY_INTERVAL_MS,
+            eventCounts,
+            ...details,
+          });
+        }
+
+        function emitGuiChannelTelemetry(event, details = {}) {
+          const compactDetails = { ...details };
+          delete compactDetails.surfaces;
+          guiChannelTelemetryEventCounts[event] =
+            (guiChannelTelemetryEventCounts[event] || 0) + 1;
+          guiChannelTelemetryLastDetails = {
+            ...guiChannelTelemetryLastDetails,
+            ...compactDetails,
+            lastEvent: event,
+          };
+          if (event === "rejected" || event === "action_result") {
+            return flushGuiChannelTelemetry();
+          }
+          if (!guiChannelTelemetryTimer) {
+            guiChannelTelemetryTimer = setTimeout(
+              flushGuiChannelTelemetry,
+              GUI_CHANNEL_TELEMETRY_INTERVAL_MS,
+            );
+          }
+          return true;
         }
 
         function emitGuiChannelError(reason, details = {}) {
@@ -1994,6 +2040,10 @@
           emitReceiverTelemetry("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN && window._handshakeAcked) {
             try {
+              const waveformProofDue =
+                lastWaveformRenderStats.missing > 0 ||
+                Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
+              if (waveformProofDue) guiLastWaveformProofAt = Date.now();
               binaryWS.send(JSON.stringify({
                 type: "AUDIO_PATH_CAPABILITY",
                 pcm: { ...result },
@@ -2504,6 +2554,7 @@
           };
           resetSmoothLfoVisuals();
           resetMirroredWaveformVisuals();
+          resetMirroredTimelineState();
           if (reason) {
             writeCastDebug("debug", "GUI revision gate reset (" + reason + ").");
           }
@@ -2790,7 +2841,16 @@
             clearInterval(window._nativeLatencyIntervalId);
           }
           window._nativeLatencyIntervalId = setInterval(() => {
-            if (!nativeStreamActive && window._playbackMode !== "native") {
+            // Prewarm and paused media can have a large progressive-WAV tail,
+            // but neither path is audible. Reporting either one as receiver
+            // latency seeds the sender with a delay that never reached the TV
+            // speakers. Only active, audible native playout is a valid sync
+            // sample.
+            if (
+              !nativeStreamActive ||
+              nativeStreamPaused ||
+              window._playbackMode !== "native"
+            ) {
               return;
             }
             const htmlAudio = document.getElementById("native-stream-audio");
@@ -2834,6 +2894,12 @@
               reportedLiveEdge - reportedBufferedStart,
             );
             const progressNow = Date.now();
+            const outputAudible =
+              activeAudio.muted !== true &&
+              Number(activeAudio.volume) > 0.001;
+            if (!Number.isFinite(latency) || latency < 0 || !outputAudible) {
+              return;
+            }
             if (
               Number.isFinite(lastNativePlayoutProofTime) &&
               reportedPlayhead + 0.05 < lastNativePlayoutProofTime
@@ -2843,10 +2909,6 @@
             const playoutAdvanced =
               !Number.isFinite(lastNativePlayoutProofTime) ||
               reportedPlayhead - lastNativePlayoutProofTime >= 0.05;
-            const outputAudible =
-              !nativeStreamPaused &&
-              activeAudio.muted !== true &&
-              Number(activeAudio.volume) > 0.001;
             if (
               outputAudible &&
               playoutAdvanced &&
@@ -2885,7 +2947,7 @@
                   latency: latency,
                   syncComponents: {
                     source: "native_media_buffer",
-                    pathOwner: nativeStreamActive ? "native_caf" : "native_starting",
+                    pathOwner: "native_caf",
                     playbackMode: window._playbackMode || "unknown",
                     liveEdgeSeconds: reportedLiveEdge,
                     playheadSeconds: reportedPlayhead,
@@ -2899,7 +2961,7 @@
                 }),
               );
             }
-          }, 500);
+          }, NATIVE_LATENCY_REPORT_INTERVAL_MS);
         }
 
         function clearPlaybackStartSignal() {
@@ -4540,8 +4602,78 @@
           return true;
         }
 
+        function trimNativeStreamAtResumeBoundary(reason) {
+          const activeAudio = [
+            document.getElementById("cast-media-element"),
+            document.getElementById("native-stream-audio"),
+          ].find(function findBufferedNativeElement(element) {
+            return !!(
+              element &&
+              element.readyState >= 3 &&
+              element.buffered &&
+              element.buffered.length > 0
+            );
+          });
+          if (!activeAudio) return false;
+
+          // Resume is the only steady-session boundary where a live-edge trim
+          // is safe: Pause has already muted the native element, and unmute has
+          // not happened yet. Never use this helper from the audible monitor.
+          const mutedForResume =
+            activeAudio.muted === true || Number(activeAudio.volume) <= 0.001;
+          if (!mutedForResume) return false;
+
+          try {
+            const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
+            const playhead = activeAudio.currentTime;
+            const latencyBefore = liveEdge - playhead;
+            if (
+              !Number.isFinite(latencyBefore) ||
+              latencyBefore <= NATIVE_STARTUP_TRIM_THRESHOLD_SEC
+            ) {
+              return false;
+            }
+            const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+            const trimTarget = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
+            if (trimTarget <= playhead + 0.25) return false;
+
+            activeAudio.currentTime = trimTarget;
+            const latencyAfter = Math.max(0, liveEdge - trimTarget);
+            relayLogToStudio(
+              "✂️ Receiver: Ordered native Resume trimmed muted buffer from " +
+                latencyBefore.toFixed(3) +
+                "s to " +
+                latencyAfter.toFixed(3) +
+                "s before unmute (" +
+                (reason || "playback_start") +
+                ").",
+            );
+            logReceiverStartupTiming("native_resume_trim_at_play", {
+              nativeAttemptId: nativeStartupAttemptId,
+              latencyBeforeSec: latencyBefore,
+              latencyAfterSec: latencyAfter,
+              reason: reason || "playback_start",
+            });
+            emitCafTelemetry("CAF_RESUME_LIVE_EDGE_TRIM", {
+              mediaElementId: activeAudio.id || "native-media",
+              latencyBeforeSec: latencyBefore,
+              latencyAfterSec: latencyAfter,
+              reason: reason || "playback_start",
+            });
+            return true;
+          } catch (error) {
+            emitCafTelemetry("CAF_RESUME_LIVE_EDGE_TRIM_FAILED", {
+              mediaElementId: activeAudio.id || "native-media",
+              reason: reason || "playback_start",
+              error: String(error && error.message ? error.message : error),
+            });
+            return false;
+          }
+        }
+
         function resumeNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive || !nativeStreamPaused) return false;
+          trimNativeStreamAtResumeBoundary(reason || "playback_start");
           nativeStreamPaused = false;
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
@@ -4878,6 +5010,16 @@
                   if (nativeStreamActive && window._playbackMode === "native") {
                     relayLogToStudio(
                       "⏭️ Receiver: Ignored HTML companion play rejection after CAF native takeover.",
+                    );
+                    return;
+                  }
+                  if (
+                    e &&
+                    (e.name === "AbortError" ||
+                      (e.message && e.message.indexOf("interrupted by a call to pause") !== -1))
+                  ) {
+                    relayLogToStudio(
+                      "⏸️ Receiver: HTML audio play interrupted by pause or mode transition; retaining stream state.",
                     );
                     return;
                   }
@@ -5760,7 +5902,7 @@
             t.dataset.trackIndex = String(i);
             t.innerHTML = `
                         <div class="track-header">TRACK ${i + 1}</div>
-                        <div class="track-time-display" id="t-time-${i}">00:00:00</div>
+                        <div class="track-time-display" id="t-time-${i}">00:00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
                         <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external">L</div><div class="waveform-label-external">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
                         <div class="control-group track-input-group"><div class="track-input-layout"><label>Input</label><select id="t-input-${i}" class="input-source app-select" data-action="select-input"><option value="mic" selected>Microphone</option><option value="file">Import File</option><option value="directory">Import Directory</option><option value="mc-pa">MC PA Mode</option><option value="system">System Loopback</option></select></div></div>
@@ -8412,7 +8554,9 @@
                 ].forEach(([id, waveform]) => {
                   renderSurface(id, waveform, `track-${i + 1}`, t.waveform.source);
                 });
-                updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
+                if (!t.timeline) {
+                  updateMirroredPlayhead("t-playhead-" + i, t.waveform.playhead);
+                }
               });
             }
             lastWaveformRenderStats = {
@@ -8489,6 +8633,246 @@
         const _lastFxCache = [];
         let _lastSamplerCache = "";
         let lastMirroredState = null;
+        const MIRRORED_TIMELINE_FRAME_INTERVAL_MS = 1000 / 30;
+        const MIRRORED_TIMELINE_DISCONTINUITY_SEC = 0.75;
+        const MIRRORED_TIMELINE_MAX_SOFT_CORRECTION_SEC = 0.05;
+        let mirroredTimelineState = {
+          captureSequence: -1,
+          master: null,
+          tracks: [],
+        };
+        let mirroredTimelineFrameHandle = null;
+        let mirroredTimelineFrameUsesTimeout = false;
+        let lastMirroredTimelinePaintMs = 0;
+
+        function formatMirroredClockTimecode(seconds) {
+          const totalCentiseconds = Math.max(
+            0,
+            Math.round((Number(seconds) || 0) * 100),
+          );
+          const centiseconds = totalCentiseconds % 100;
+          const totalSeconds = Math.floor(totalCentiseconds / 100);
+          const secs = totalSeconds % 60;
+          const totalMinutes = Math.floor(totalSeconds / 60);
+          const mins = totalMinutes % 60;
+          const hours = Math.floor(totalMinutes / 60);
+          const pad = (value) => String(value).padStart(2, "0");
+          return `${pad(hours)}:${pad(mins)}:${pad(secs)}:${pad(centiseconds)}`;
+        }
+
+        function getMirroredTimelineNow() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
+
+        function clampMirroredTimelinePosition(value, timeline) {
+          const duration = Math.max(0, Number(timeline?.durationSeconds) || 0);
+          const position = Math.max(0, Number(value) || 0);
+          if (!(duration > 0)) return position;
+          if (timeline?.loopEnabled === true) {
+            const start = Math.max(
+              0,
+              Math.min(duration, Number(timeline.loopStartSeconds) || 0),
+            );
+            const end = Math.max(
+              start,
+              Math.min(duration, Number(timeline.loopEndSeconds) || duration),
+            );
+            const span = end - start;
+            if (span > 0) {
+              return start + ((((position - start) % span) + span) % span);
+            }
+          }
+          if (timeline?.positionBounded === false) return position;
+          return Math.max(0, Math.min(duration, position));
+        }
+
+        function calculateMirroredTimelinePosition(anchor, nowMs) {
+          if (!anchor?.timeline) return 0;
+          const timeline = anchor.timeline;
+          const elapsedSeconds = timeline.running === true
+            ? Math.max(0, Number(nowMs) - Number(anchor.receivedAtMs || nowMs)) / 1000
+            : 0;
+          const direction = Number(timeline.direction) < 0 ? -1 : 1;
+          const rate = Math.max(0.01, Number(timeline.playbackRate) || 1);
+          return clampMirroredTimelinePosition(
+            Number(anchor.positionSeconds) + elapsedSeconds * rate * direction,
+            timeline,
+          );
+        }
+
+        function shortestMirroredTimelineDelta(from, to, timeline) {
+          let delta = Number(to) - Number(from);
+          if (timeline?.loopEnabled !== true) return delta;
+          const start = Math.max(0, Number(timeline.loopStartSeconds) || 0);
+          const end = Math.max(start, Number(timeline.loopEndSeconds) || 0);
+          const span = end - start;
+          if (!(span > 0)) return delta;
+          if (delta > span / 2) delta -= span;
+          if (delta < -span / 2) delta += span;
+          return delta;
+        }
+
+        function createMirroredTimelineAnchor(previous, rawTimeline, nowMs) {
+          if (!rawTimeline || typeof rawTimeline !== "object") return null;
+          const durationSeconds = Math.max(0, Number(rawTimeline.durationSeconds) || 0);
+          const timeline = {
+            ...rawTimeline,
+            positionSeconds: Math.max(0, Number(rawTimeline.positionSeconds) || 0),
+            durationSeconds,
+            playbackRate: Math.max(0.01, Number(rawTimeline.playbackRate) || 1),
+            direction: Number(rawTimeline.direction) < 0 ? -1 : 1,
+            running: rawTimeline.running === true,
+            loopEnabled: rawTimeline.loopEnabled === true,
+          };
+          const authoritative = clampMirroredTimelinePosition(
+            timeline.positionSeconds,
+            timeline,
+          );
+          let anchoredPosition = authoritative;
+          if (previous?.timeline) {
+            const predicted = calculateMirroredTimelinePosition(previous, nowMs);
+            const sameMotion =
+              previous.timeline.running === timeline.running &&
+              Number(previous.timeline.direction) === Number(timeline.direction) &&
+              Math.abs(
+                Number(previous.timeline.playbackRate || 1) - Number(timeline.playbackRate || 1),
+              ) < 0.0001 &&
+              previous.timeline.loopEnabled === timeline.loopEnabled;
+            const delta = shortestMirroredTimelineDelta(predicted, authoritative, timeline);
+            if (
+              sameMotion &&
+              timeline.running === true &&
+              Math.abs(delta) <= MIRRORED_TIMELINE_DISCONTINUITY_SEC
+            ) {
+              anchoredPosition = clampMirroredTimelinePosition(
+                predicted + Math.max(
+                  -MIRRORED_TIMELINE_MAX_SOFT_CORRECTION_SEC,
+                  Math.min(MIRRORED_TIMELINE_MAX_SOFT_CORRECTION_SEC, delta),
+                ),
+                timeline,
+              );
+            }
+          }
+          return {
+            timeline,
+            positionSeconds: timeline.running === true ? anchoredPosition : authoritative,
+            receivedAtMs: nowMs,
+          };
+        }
+
+        function scheduleMirroredTimelineFrame() {
+          if (mirroredTimelineFrameHandle !== null) return;
+          if (typeof window.requestAnimationFrame === "function") {
+            mirroredTimelineFrameUsesTimeout = false;
+            mirroredTimelineFrameHandle = window.requestAnimationFrame(
+              paintMirroredTimelineFrame,
+            );
+          } else {
+            mirroredTimelineFrameUsesTimeout = true;
+            mirroredTimelineFrameHandle = window.setTimeout(
+              () => paintMirroredTimelineFrame(getMirroredTimelineNow()),
+              MIRRORED_TIMELINE_FRAME_INTERVAL_MS,
+            );
+          }
+        }
+
+        function paintMirroredTimelineFrame(frameTime) {
+          mirroredTimelineFrameHandle = null;
+          const nowMs = Number.isFinite(Number(frameTime))
+            ? Number(frameTime)
+            : getMirroredTimelineNow();
+          if (
+            lastMirroredTimelinePaintMs > 0 &&
+            nowMs - lastMirroredTimelinePaintMs < MIRRORED_TIMELINE_FRAME_INTERVAL_MS
+          ) {
+            scheduleMirroredTimelineFrame();
+            return;
+          }
+          lastMirroredTimelinePaintMs = nowMs;
+          let hasRunningTimeline = false;
+          const masterAnchor = mirroredTimelineState.master;
+          if (masterAnchor?.timeline) {
+            const masterPosition = calculateMirroredTimelinePosition(masterAnchor, nowMs);
+            updateText("recording-time-display", formatMirroredClockTimecode(masterPosition));
+            const masterDuration = Math.max(
+              0,
+              Number(masterAnchor.timeline.durationSeconds) || 0,
+            );
+            const masterPlayhead = masterAnchor.timeline.isRecording === true && masterDuration > 0
+              ? ((masterPosition % masterDuration) + masterDuration) % masterDuration / masterDuration
+              : 0;
+            updateMirroredPlayhead("master-play-marker", masterPlayhead);
+            updateStyleLeft("master-loop-start-marker", "0%");
+            updateStyleLeft("master-loop-end-marker", "100%");
+            hasRunningTimeline =
+              hasRunningTimeline || masterAnchor.timeline.running === true;
+          }
+          mirroredTimelineState.tracks.forEach((anchor, index) => {
+            if (!anchor?.timeline) return;
+            const position = calculateMirroredTimelinePosition(anchor, nowMs);
+            updateText("t-time-" + index, formatMirroredClockTimecode(position));
+            const duration = Math.max(0, Number(anchor.timeline.durationSeconds) || 0);
+            updateMirroredPlayhead(
+              "t-playhead-" + index,
+              duration > 0 ? position / duration : 0,
+            );
+            hasRunningTimeline = hasRunningTimeline || anchor.timeline.running === true;
+          });
+          if (hasRunningTimeline) scheduleMirroredTimelineFrame();
+        }
+
+        function updateMirroredTimelineState(state) {
+          if (!state || typeof state !== "object") return false;
+          const rawMaster = state.transport?.master || state.master?.timeline;
+          const rawTracks = Array.isArray(state.tracks)
+            ? state.tracks.map((track) => track?.timeline || null)
+            : [];
+          if (!rawMaster && !rawTracks.some(Boolean)) return false;
+          const captureSequence = Number(state.transport?.captureSequence);
+          if (
+            Number.isSafeInteger(captureSequence) &&
+            captureSequence >= 0 &&
+            captureSequence < mirroredTimelineState.captureSequence
+          ) {
+            return true;
+          }
+          const nowMs = getMirroredTimelineNow();
+          mirroredTimelineState = {
+            captureSequence: Number.isSafeInteger(captureSequence)
+              ? captureSequence
+              : mirroredTimelineState.captureSequence,
+            master: createMirroredTimelineAnchor(
+              mirroredTimelineState.master,
+              rawMaster,
+              nowMs,
+            ),
+            tracks: rawTracks.map((timeline, index) =>
+              createMirroredTimelineAnchor(
+                mirroredTimelineState.tracks[index],
+                timeline,
+                nowMs,
+              ),
+            ),
+          };
+          paintMirroredTimelineFrame(nowMs);
+          return true;
+        }
+
+        function resetMirroredTimelineState() {
+          if (mirroredTimelineFrameHandle !== null) {
+            if (mirroredTimelineFrameUsesTimeout) {
+              window.clearTimeout(mirroredTimelineFrameHandle);
+            } else if (typeof window.cancelAnimationFrame === "function") {
+              window.cancelAnimationFrame(mirroredTimelineFrameHandle);
+            }
+          }
+          mirroredTimelineFrameHandle = null;
+          lastMirroredTimelinePaintMs = 0;
+          mirroredTimelineState = { captureSequence: -1, master: null, tracks: [] };
+        }
+
         const LFO_VISUAL_FRAME_INTERVAL_MS = 1000 / 30;
         const LFO_VISUAL_PHASE_CORRECTION_MS = 180;
         const LFO_VISUAL_TWO_PI = Math.PI * 2;
@@ -8999,6 +9383,7 @@
           // DOM throttle so a burst of GUI snapshots cannot leave the canvas
           // one or more revisions behind while controls remain throttled.
           scheduleWaveformRender(s, force, guiRevision);
+          const hasMirroredTimeline = updateMirroredTimelineState(s);
           const preludeFinishedAt = phaseClock();
           if (!force && now - lastRenderTime < renderThrottleMs) {
             guiRenderThrottleSkips += 1;
@@ -9018,11 +9403,8 @@
           }
           lastRenderTime = now;
           try {
-            if (s.transport) {
+            if (!hasMirroredTimeline && s.transport?.position) {
               updateText("recording-time-display", s.transport.position);
-              for (var i = 0; i < stateTrackCount; i++) {
-                updateText("t-time-" + i, s.transport.position);
-              }
             }
             if (s.master) {
               syncSmoothLfoVisuals(s.master);
@@ -9858,7 +10240,9 @@
                 waveformDrawn: lastWaveformRenderStats.drawn,
                 waveformMissing: lastWaveformRenderStats.missing,
                 waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
-                waveformSurfaces: lastWaveformRenderStats.surfaces,
+                ...(waveformProofDue
+                  ? { waveformSurfaces: lastWaveformRenderStats.surfaces }
+                  : {}),
                 dialogRenderMode: lastDialogRenderStats.mode,
                 dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
                 dialogCount: lastDialogRenderStats.dialogCount,
