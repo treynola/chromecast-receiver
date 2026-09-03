@@ -6936,8 +6936,8 @@
           const barColor = peak > 0.95
             ? "#ff4444"
             : peak > 0.70
-              ? "#ffcc00"
-              : "#e0e8eb";
+              ? "#ff8800"
+              : "#ffcc00";
 
           context.fillStyle = barColor;
 
