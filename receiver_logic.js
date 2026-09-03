@@ -198,10 +198,10 @@
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         var pcmStartupRetryTimerId = null;
-        // CAF normally reaches PLAYING in well under one second after the
-        // ordered Play boundary. Keep the native fallback bounded so a
+        // CAF normally reaches PLAYING within a few seconds after the
+        // ordered Play boundary over LAN. Keep the native fallback bounded so a
         // decoder that never becomes audible cannot hold the session silent.
-        const NATIVE_STARTUP_TIMEOUT_MS = 2000;
+        const NATIVE_STARTUP_TIMEOUT_MS = 5000;
         const CAF_NATIVE_RESUME_PROBE_TIMEOUT_MS = 2500;
         const CAF_NATIVE_RESUME_RELOAD_TIMEOUT_MS = 5000;
         const CAF_NATIVE_RESUME_PROBE_INTERVAL_MS = 250;
@@ -10800,6 +10800,8 @@
             } else if (nativeStreamStarting) {
               notifyPlaybackMode("native", "socket_reconnected_starting", false);
               notifyPlayoutSelecting("native_reconnect_starting", "socket_reconnected");
+            } else if (workletNode && workletReady && window._binaryActive) {
+              notifyPlaybackMode("pcm_fallback", "socket_reconnected");
             } else if (
               receiverPlayoutPreference === "pcm_fallback" &&
               !window._pcmDegraded
@@ -10811,8 +10813,6 @@
               // briefly become audible before that preparation runs.
               notifyPlaybackMode("native", "socket_reconnected", false);
               notifyPlayoutSelecting("native_preparation", "socket_reconnected");
-            } else if (workletNode && workletReady && window._binaryActive) {
-              notifyPlaybackMode("pcm_fallback", "socket_reconnected");
             }
           };
           binaryWS.onmessage = (event) => {
@@ -10997,7 +10997,14 @@
                     // the authenticated bridge advertises its LAN endpoint.
                     // The stream remains muted until the ordered Play command;
                     // PCM stays closed while native owns preparation.
-                    if (receiverPlayoutPreference === "pcm_fallback") {
+                    // Do not disrupt active PCM fallback playout on periodic bridge refresh.
+                    if (
+                      receiverPlayoutPreference === "pcm_fallback" &&
+                      !workletReady &&
+                      !window._binaryActive &&
+                      !pcmPathOwnsAudio() &&
+                      activeAudioPathOwner !== "pcm_v2"
+                    ) {
                       prepareNativePcmHandoff("websocket_open");
                     }
                   }

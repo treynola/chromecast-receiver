@@ -3770,7 +3770,7 @@ select option {
   position: absolute;
   top: -6px !important;
   bottom: 0;
-  width: 2px !important;
+  width: 1px !important;
   background-color: var(--red, #ff0000) !important;
   pointer-events: auto;
   cursor: ew-resize;
@@ -3783,7 +3783,7 @@ select option {
   position: absolute;
   top: 0;
   left: -4px;
-  width: 10px;
+  width: 9px;
   height: 6px;
   background-color: var(--red, #ff0000);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
