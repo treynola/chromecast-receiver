@@ -3790,6 +3790,7 @@ select option {
 
 .play-marker::before {
   content: "";
+  display: block;
   position: absolute;
   bottom: 0;
   left: -4px;
@@ -3797,7 +3798,7 @@ select option {
   height: 6px;
   background-color: var(--red, #ff0000);
   clip-path: polygon(50% 0, 0 100%, 100% 100%);
-  border-radius: 1px;
+  z-index: 10;
 }
 
 #master-play-marker {
