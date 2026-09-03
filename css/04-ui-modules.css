@@ -124,7 +124,7 @@
 .waveform-label-external-top,
 .waveform-label-external {
   font-size: 0.6em !important;
-  color: var(--red) !important;
+  color: var(--gold) !important;
   font-weight: bold !important;
 }
 
@@ -2006,7 +2006,7 @@ select option {
 }
 
 .waveform-label-external {
-  color: var(--red);
+  color: var(--gold);
   font-weight: bold;
   text-transform: uppercase;
   font-family: "Courier New", Courier, monospace;
@@ -3788,6 +3788,10 @@ select option {
   background-color: var(--red, #ff0000);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   border-radius: 1px;
+}
+
+#master-play-marker {
+  display: none !important;
 }
 
 /* --- [V13.9.497] RECEIVER MODE OVERRIDES --- */
