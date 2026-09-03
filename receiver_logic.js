@@ -6916,69 +6916,62 @@
           // snapshot can arrive during shell construction; that first paint
           // must remain retryable instead of becoming a permanent cache hit.
           if (cacheResult) valCache[cacheKey] = signature;
+          context.imageSmoothingEnabled = false;
+
+          // 1. Hardware LCD background & zero-crossing centerline
           context.clearRect(0, 0, width, height);
+          context.fillStyle = "#132227";
+          context.fillRect(0, 0, width, height);
+
+          const centerY = Math.floor(height / 2);
+          context.fillStyle = "#223a43";
+          context.fillRect(0, centerY, width, 1);
+
           if (!active || !hasData || (!waveform.points.length && !waveform.line?.length)) {
-            context.beginPath();
-            context.strokeStyle = "rgba(68, 68, 68, 0.5)";
-            context.lineWidth = 1;
-            context.moveTo(0, height / 2);
-            context.lineTo(width, height / 2);
-            context.stroke();
             return true;
           }
+
+          // 2. Discrete Lofi MPC Vertical Column Bars
           const visualGain = calculateMirroredWaveformVisualGain(peak);
-          const strokeColor = paintMode === "decoded_envelope"
-            ? "rgba(212, 175, 55, 0.9)"
-            : peak > 0.95
-              ? "#ff4444"
-              : peak > 0.7
-                ? "#ffcc00"
-                : "#d4af37";
-          context.strokeStyle = strokeColor;
-          context.lineWidth = paintMode === "decoded_envelope" ? 1 : 1.5;
-          if (paintMode === "live_line" && Array.isArray(waveform.line) && waveform.line.length) {
-            const coordinates = waveform.line.map((sample, index) => ({
-              x: (index / Math.max(1, waveform.line.length - 1)) * width,
-              y: ((Math.max(-1, Math.min(1, (Number(sample) || 0) * visualGain)) + 1) / 2) * height,
-            }));
-            context.beginPath();
-            context.moveTo(0, height / 2);
-            coordinates.forEach(({ x, y }) => context.lineTo(x, y));
-            context.lineTo(width, height / 2);
-            if (typeof context.closePath === "function") context.closePath();
-            const gradient = typeof context.createLinearGradient === "function"
-              ? context.createLinearGradient(0, 0, 0, height)
-              : null;
-            if (gradient) {
-              gradient.addColorStop(0, "rgba(212, 175, 55, 0)");
-              gradient.addColorStop(0.5, "rgba(212, 175, 55, 0.15)");
-              gradient.addColorStop(1, "rgba(212, 175, 55, 0)");
-              context.fillStyle = gradient;
-            } else {
-              context.fillStyle = "rgba(212, 175, 55, 0.12)";
+          const barColor = peak > 0.95
+            ? "#ff4444"
+            : peak > 0.70
+              ? "#ffcc00"
+              : "#e0e8eb";
+
+          context.fillStyle = barColor;
+
+          const pointCount = (waveform.points && waveform.points.length) || (waveform.line && waveform.line.length) || 0;
+          if (pointCount > 0) {
+            const stepX = width / pointCount;
+            const colWidth = Math.max(1, Math.floor(stepX));
+
+            for (let i = 0; i < pointCount; i++) {
+              let minVal = 0;
+              let maxVal = 0;
+              if (waveform.points && waveform.points[i]) {
+                minVal = (Number(waveform.points[i][0]) || 0) * visualGain;
+                maxVal = (Number(waveform.points[i][1]) || 0) * visualGain;
+              } else if (waveform.line && waveform.line[i] !== undefined) {
+                const v = Math.abs(Number(waveform.line[i]) || 0) * visualGain;
+                minVal = -v;
+                maxVal = v;
+              }
+
+              const clampedMin = Math.max(-1, Math.min(1, minVal));
+              const clampedMax = Math.max(-1, Math.min(1, maxVal));
+
+              const yTop = Math.floor(((1 - clampedMax) * height) / 2);
+              const yBottom = Math.ceil(((1 - clampedMin) * height) / 2);
+              const barHeight = Math.max(1, yBottom - yTop);
+              const x = Math.floor(i * stepX);
+
+              context.fillRect(x, yTop, colWidth, barHeight);
             }
-            context.fill();
-            context.beginPath();
-            coordinates.forEach(({ x, y }, index) => {
-              if (index === 0) context.moveTo(x, y);
-              else context.lineTo(x, y);
-            });
-            context.stroke();
-          } else {
-            context.beginPath();
-            waveform.points.forEach((point, index) => {
-              const x = (index / Math.max(1, waveform.points.length - 1)) * width;
-              const min = Math.max(-1, Math.min(1, (Number(point?.[0]) || 0) * visualGain));
-              const max = Math.max(-1, Math.min(1, (Number(point?.[1]) || 0) * visualGain));
-              const yTop = ((1 - max) * height) / 2;
-              const yBottom = ((1 - min) * height) / 2;
-              context.moveTo(x, yTop);
-              context.lineTo(x, yBottom);
-            });
-            context.stroke();
           }
-          if (peak > 0.98 && paintMode !== "decoded_envelope") {
-            context.fillStyle = "rgba(255, 0, 0, 0.3)";
+
+          if (peak > 0.98) {
+            context.fillStyle = "rgba(255, 68, 68, 0.25)";
             context.fillRect(0, 0, width, height);
           }
           return true;

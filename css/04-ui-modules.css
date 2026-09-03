@@ -136,24 +136,30 @@
   justify-content: center !important;
   gap: 4px !important;
   position: relative !important;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
 }
 
 .waveform-canvas {
   width: 100% !important;
   height: 26px !important;
-  background: #000 !important;
+  background: #132227 !important;
   display: block !important;
-  border: 1px solid var(--gold) !important;
-  border-radius: 4px !important;
+  border: 1px solid #233b43 !important;
+  border-radius: 2px !important;
   box-sizing: border-box !important;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .waveform-canvas[data-waveform-state="pending"] {
-  border-color: var(--mid-gray) !important;
+  border-color: #1b2e35 !important;
   opacity: 0.72;
 }
 
 .waveform-canvas[data-waveform-state="ready"] {
+  border-color: #233b43 !important;
   opacity: 1;
 }
 
@@ -3762,12 +3768,25 @@ select option {
 
 .play-marker {
   position: absolute;
-  top: -5px !important;
+  top: -6px !important;
   bottom: 0;
-  width: 1.5px !important;
+  width: 2px !important;
   background-color: var(--green) !important;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: ew-resize;
   z-index: 9 !important;
+}
+
+.play-marker::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 10px;
+  height: 6px;
+  background-color: var(--green);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  border-radius: 1px;
 }
 
 /* --- [V13.9.497] RECEIVER MODE OVERRIDES --- */
