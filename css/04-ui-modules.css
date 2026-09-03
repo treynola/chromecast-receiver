@@ -128,6 +128,12 @@
   font-weight: bold !important;
 }
 
+.waveform-labels .waveform-label-external:last-child,
+.waveform-labels > div:last-child,
+.waveform-label-r {
+  color: var(--green, #00ff00) !important;
+}
+
 .waveform-canvas-container {
   display: flex !important;
   flex-direction: column !important;
@@ -2013,6 +2019,10 @@ select option {
   font-size: 0.8em;
   width: 15px;
   text-align: center;
+}
+
+.waveform-label-r {
+  color: var(--green, #00ff00) !important;
 }
 
 
