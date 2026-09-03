@@ -3771,10 +3771,11 @@ select option {
   top: -6px !important;
   bottom: 0;
   width: 2px !important;
-  background-color: var(--green) !important;
+  background-color: var(--red, #ff0000) !important;
   pointer-events: auto;
   cursor: ew-resize;
   z-index: 9 !important;
+  box-shadow: 0 0 3px rgba(255, 0, 0, 0.8);
 }
 
 .play-marker::before {
@@ -3784,7 +3785,7 @@ select option {
   left: -4px;
   width: 10px;
   height: 6px;
-  background-color: var(--green);
+  background-color: var(--red, #ff0000);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
   border-radius: 1px;
 }
