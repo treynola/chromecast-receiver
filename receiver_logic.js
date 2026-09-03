@@ -6931,15 +6931,18 @@
             return true;
           }
 
-          // 2. Discrete Lofi MPC Vertical Column Bars
+          // 2. Discrete Lofi MPC Vertical Column Bars with Green -> Yellow -> Red Dynamic Palette
           const visualGain = calculateMirroredWaveformVisualGain(peak);
-          const barColor = peak > 0.95
-            ? "#ff4444"
-            : peak > 0.70
-              ? "#ff8800"
-              : "#ffcc00";
+          const grad = context.createLinearGradient(0, 0, 0, height);
+          grad.addColorStop(0.00, "#ff3333"); // Top peak red
+          grad.addColorStop(0.08, "#ffea00"); // High yellow
+          grad.addColorStop(0.20, "#00e676"); // Safe green
+          grad.addColorStop(0.50, "#00e676"); // Centerline green
+          grad.addColorStop(0.80, "#00e676"); // Safe green
+          grad.addColorStop(0.92, "#ffea00"); // High yellow
+          grad.addColorStop(1.00, "#ff3333"); // Bottom peak red
 
-          context.fillStyle = barColor;
+          context.fillStyle = grad;
 
           const pointCount = (waveform.points && waveform.points.length) || (waveform.line && waveform.line.length) || 0;
           if (pointCount > 0) {
@@ -6968,11 +6971,6 @@
 
               context.fillRect(x, yTop, colWidth, barHeight);
             }
-          }
-
-          if (peak > 0.98) {
-            context.fillStyle = "rgba(255, 68, 68, 0.25)";
-            context.fillRect(0, 0, width, height);
           }
           return true;
         }
