@@ -131,7 +131,7 @@
 .waveform-labels .waveform-label-external:last-child,
 .waveform-labels > div:last-child,
 .waveform-label-r {
-  color: var(--green, #00ff00) !important;
+  color: var(--gold) !important;
 }
 
 .waveform-canvas-container {
@@ -2022,7 +2022,7 @@ select option {
 }
 
 .waveform-label-r {
-  color: var(--green, #00ff00) !important;
+  color: var(--gold) !important;
 }
 
 
@@ -3778,8 +3778,8 @@ select option {
 
 .play-marker {
   position: absolute;
-  top: -6px !important;
-  bottom: 0;
+  top: 0 !important;
+  bottom: 0 !important;
   width: 1px !important;
   background-color: var(--red, #ff0000) !important;
   pointer-events: auto;
@@ -3791,12 +3791,12 @@ select option {
 .play-marker::before {
   content: "";
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: -4px;
   width: 9px;
   height: 6px;
   background-color: var(--red, #ff0000);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
   border-radius: 1px;
 }
 
