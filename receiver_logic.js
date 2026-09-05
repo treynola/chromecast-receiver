@@ -280,6 +280,7 @@
         var guiDeferredCount = 0;
         var guiRenderedCount = 0;
         var guiAckCount = 0;
+        var guiLastAckErrorAt = 0;
         var guiRenderThrottleSkips = 0;
         var guiLastReceivedRevision = -1;
         var guiLastDeferredRevision = -1;
@@ -2040,10 +2041,6 @@
           emitReceiverTelemetry("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN && window._handshakeAcked) {
             try {
-              const waveformProofDue =
-                lastWaveformRenderStats.missing > 0 ||
-                Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
-              if (waveformProofDue) guiLastWaveformProofAt = Date.now();
               binaryWS.send(JSON.stringify({
                 type: "AUDIO_PATH_CAPABILITY",
                 pcm: { ...result },
@@ -10144,6 +10141,15 @@
           return summary;
         }
 
+        function reportGuiAckError(stage, error) {
+          const now = Date.now();
+          if (guiLastAckErrorAt && now - guiLastAckErrorAt < 5000) return;
+          guiLastAckErrorAt = now;
+          writeCastDebug("warn", "GUI_ACK_FAILED " + JSON.stringify({
+            stage, message: String(error?.message || error).slice(0, 200),
+          }));
+        }
+
         function handleGuiStateUpdateCommand(state, envelope, ackType = "snapshot") {
           if (!acceptGuiRevision(envelope)) {
             rejectGuiChannelMessage("stale_revision", {
@@ -10207,9 +10213,33 @@
           lastMirroredState = normalizedState;
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
-              const lfoVisualTelemetry = summarizeLfoVisualState(normalizedState);
-              const buttonVisualTelemetry = summarizeMirroredButtonVisualState(normalizedState);
-              const samplerLayoutTelemetry = summarizeSamplerVisualLayout();
+              let visualTelemetry = {};
+              try {
+                const waveformProofDue =
+                  lastWaveformRenderStats.missing > 0 ||
+                  Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
+                visualTelemetry = {
+                  waveformExpected: lastWaveformRenderStats.expected,
+                  waveformDrawn: lastWaveformRenderStats.drawn,
+                  waveformMissing: lastWaveformRenderStats.missing,
+                  waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
+                  ...(waveformProofDue ? { waveformSurfaces: lastWaveformRenderStats.surfaces } : {}),
+                  dialogRenderMode: lastDialogRenderStats.mode,
+                  dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
+                  dialogCount: lastDialogRenderStats.dialogCount,
+                  dialogDomNodes: lastDialogRenderStats.domNodeCount,
+                  renderPhases: lastGuiRenderPhaseStats,
+                  ...summarizeLfoVisualState(normalizedState),
+                  ...summarizeMirroredButtonVisualState(normalizedState),
+                  ...summarizeSamplerVisualLayout(),
+                };
+                // Validate optional evidence independently of the minimal ACK.
+                JSON.stringify(visualTelemetry);
+                if (waveformProofDue) guiLastWaveformProofAt = Date.now();
+              } catch (error) {
+                visualTelemetry = {};
+                reportGuiAckError("optional_telemetry", error);
+              }
               binaryWS.send(JSON.stringify({
                 type: "GUI_ACK",
                 transport: "gui",
@@ -10227,21 +10257,7 @@
                 renderResult,
                 renderTimeMs,
                 payloadBytes,
-                waveformExpected: lastWaveformRenderStats.expected,
-                waveformDrawn: lastWaveformRenderStats.drawn,
-                waveformMissing: lastWaveformRenderStats.missing,
-                waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
-                ...(waveformProofDue
-                  ? { waveformSurfaces: lastWaveformRenderStats.surfaces }
-                  : {}),
-                dialogRenderMode: lastDialogRenderStats.mode,
-                dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
-                dialogCount: lastDialogRenderStats.dialogCount,
-                dialogDomNodes: lastDialogRenderStats.domNodeCount,
-                renderPhases: lastGuiRenderPhaseStats,
-                ...lfoVisualTelemetry,
-                ...buttonVisualTelemetry,
-                ...samplerLayoutTelemetry,
+                ...visualTelemetry,
               }));
               guiAckCount += 1;
               guiLastAckRevision = revision;
@@ -10250,10 +10266,12 @@
                 renderResult,
                 renderTimeMs,
                 payloadBytes,
-                waveformDrawn: lastWaveformRenderStats.drawn,
-                waveformMissing: lastWaveformRenderStats.missing,
+                waveformDrawn: visualTelemetry.waveformDrawn ?? null,
+                waveformMissing: visualTelemetry.waveformMissing ?? null,
               });
-            } catch (e) {}
+            } catch (error) {
+              reportGuiAckError("send", error);
+            }
           }
         }
 
