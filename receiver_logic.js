@@ -2259,10 +2259,10 @@
           if (workletNode || workletInitPromise || audioInitializing) {
             return true;
           }
-          // Native CAF owns the receiver while its prewarm attempt is in
-          // flight. Keep PCM as a cold fallback; initializing the full
-          // AudioContext/worklet here would otherwise publish pcm_fallback
-          // before native readiness is known.
+          // PCM is the primary live-sync path. Preload its AudioWorklet while
+          // stopped so ordered PLAY can claim ownership without paying the
+          // module-load cost. Native CAF remains fallback-only and must never
+          // win ownership merely because PCM is still initializing.
           if (nativeStreamActive || nativeStreamStarting) {
             return false;
           }
@@ -6376,7 +6376,7 @@
                     !nativeStreamActive &&
                     !nativeStreamStarting &&
                     window._playbackMode !== "native";
-                  if (pcmMayOwnAudio) {
+                  if (pcmMayOwnAudio && lastPlaybackStartSignalAt) {
                     const pcmClaimed =
                       activeAudioPathOwner === "pcm_v2" ||
                       setActiveAudioPathOwner("pcm_v2", "worklet_ready");
@@ -6389,9 +6389,13 @@
                         "⛔ Receiver: PCM worklet became ready without audio ownership; pending frames remain gated.",
                       );
                     }
+                  } else if (pcmMayOwnAudio) {
+                    relayLogToStudio(
+                      "✅ Receiver: PCM worklet ready as standby; waiting for ordered PLAYBACK_START to claim ownership.",
+                    );
                   } else {
                     relayLogToStudio(
-                      "✅ Receiver: PCM worklet ready as standby; native playout retains ownership.",
+                      "✅ Receiver: PCM worklet ready while native playout retains ownership.",
                     );
                   }
                 }
@@ -11023,7 +11027,7 @@
                       !pcmPathOwnsAudio() &&
                       activeAudioPathOwner !== "pcm_v2"
                     ) {
-                      prepareNativePcmHandoff("websocket_open");
+                      preloadPcmWorklet("websocket_open");
                     }
                   }
                 } else {
@@ -11072,6 +11076,9 @@
             );
             const preserveLiveNative =
               reconnectPlaybackActive && nativeStreamActive;
+            const preserveNativeReplay =
+              reconnectPlaybackActive &&
+              (nativeStreamActive || nativeStreamStarting);
             if (preserveLiveNative) {
               // The native progressive-WAV request is independent from the
               // control WebSocket. Keep its CAF media clock and audible item
@@ -11088,11 +11095,11 @@
                 "websocket_closed",
                 undefined,
                 false,
-                reconnectPlaybackActive,
+                preserveNativeReplay,
                 reconnectPlaybackActive,
               );
             }
-            if (reconnectPlaybackActive && !preserveLiveNative) {
+            if (reconnectPlaybackActive && !preserveNativeReplay) {
               relayLogToStudio(
                 "🔁 Receiver: Active PLAYBACK_START intent retained across bridge reconnect; awaiting ordered replay.",
               );
