@@ -2266,7 +2266,11 @@
           if (nativeStreamActive || nativeStreamStarting) {
             return false;
           }
-          const initPromise = initAudio(false, false);
+          // A socket may still carry a non-ready native selection label from
+          // an older generation even though no native node owns output. The
+          // preload is standby-only, so preserve that label while allowing
+          // AudioContext/worklet initialization to finish before Play.
+          const initPromise = initAudio(false, true);
           if (!initPromise) {
             return false;
           }
@@ -6373,6 +6377,7 @@
                   pcmRuntimeNativeFallbacks = 0;
                   clearLowLatencyStartupWatchdog();
                   const pcmMayOwnAudio =
+                    !playbackPaused &&
                     !nativeStreamActive &&
                     !nativeStreamStarting &&
                     window._playbackMode !== "native";
@@ -6389,7 +6394,11 @@
                         "⛔ Receiver: PCM worklet became ready without audio ownership; pending frames remain gated.",
                       );
                     }
-                  } else if (pcmMayOwnAudio) {
+                  } else if (
+                    !nativeStreamActive &&
+                    !nativeStreamStarting &&
+                    window._playbackMode !== "native"
+                  ) {
                     relayLogToStudio(
                       "✅ Receiver: PCM worklet ready as standby; waiting for ordered PLAYBACK_START to claim ownership.",
                     );
@@ -10828,13 +10837,11 @@
               receiverPlayoutPreference === "pcm_fallback" &&
               !window._pcmDegraded
             ) {
-              // A reconnect can retain a standby worklet from the prior
-              // generation. Its existence is not an ownership decision: the
-              // authenticated BRIDGE_CONFIG path still starts native-first
-              // preparation. Publish native selecting here so PCM cannot
-              // briefly become audible before that preparation runs.
-              notifyPlaybackMode("native", "socket_reconnected", false);
-              notifyPlayoutSelecting("native_preparation", "socket_reconnected");
+              // No path owns output yet. Keep the receiver explicitly in an
+              // ownerless selecting state while authenticated bridge config
+              // preloads PCM. Advertising native here makes the PCM preload
+              // guard reject its own standby initialization.
+              notifyPlayoutSelecting("pcm_preload", "socket_reconnected");
             }
           };
           binaryWS.onmessage = (event) => {
@@ -10954,16 +10961,14 @@
                     } catch (e) {}
                   }
 
-                  // Native prewarm is started from the bridge-open/config path
-                  // below. HANDSHAKE_ACK only authenticates the PCM fallback
-                  // boundary; restarting native here adds avoidable startup
-                  // latency and can race the first ordered PLAYBACK_START.
+                  // HANDSHAKE_ACK authenticates the stopped-state PCM preload.
+                  // Native CAF remains recovery-only after a real PCM failure.
                   if (
                     receiverPlayoutPreference === "pcm_fallback" &&
                     !nativeStreamStarting &&
                     !nativeStreamActive
                   ) {
-                    preloadPcmWorklet("native_preparation_unavailable");
+                    preloadPcmWorklet("handshake_ack");
                   }
                 } else if (d.type === "BRIDGE_CONFIG") {
                   sendReceiverBootDiagnostic("bridge_config_received", {
@@ -11015,10 +11020,9 @@
                   }
                   if (d.ip) {
                     markReceiverPlayoutPathReady();
-                    // Begin the native CAF progressive-WAV prewarm as soon as
-                    // the authenticated bridge advertises its LAN endpoint.
-                    // The stream remains muted until the ordered Play command;
-                    // PCM stays closed while native owns preparation.
+                    // Preload the primary PCM worklet as soon as the
+                    // authenticated bridge advertises its LAN endpoint. It
+                    // remains ownerless until ordered Play claims the path.
                     // Do not disrupt active PCM fallback playout on periodic bridge refresh.
                     if (
                       receiverPlayoutPreference === "pcm_fallback" &&
