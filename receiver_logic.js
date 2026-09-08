@@ -205,6 +205,9 @@
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
         const WORKLET_CAPABILITY_CACHE_KEY = "mxs_audio_worklet_capability_v1";
+        const PCM_RUNTIME_QUALIFICATION_KEY = "mxs_pcm_runtime_qualified_v1";
+        const PCM_RUNTIME_QUALIFICATION_WINDOWS_REQUIRED = 4;
+        const PCM_RUNTIME_MIN_WALL_HZ = 44000;
         // Bump this only when the receiver changes its AudioWorklet loading
         // compatibility strategy. A proven production AbortError is a device
         // capability result, not a source-build result, and must survive normal
@@ -337,6 +340,8 @@
         var receiverBootDiagnosticCount = 0;
         var receiverHandshakeTelemetryReady = false;
         var receiverBridgeConfigReady = false;
+        var receiverBridgeConfigRevision = null;
+        var receiverHandshakeCommitSignature = null;
         var pcmAudioPriorityActive = false;
         var deferredGuiState = null;
         var deferredGuiRevision = -1;
@@ -380,6 +385,58 @@
           // Send a second readiness edge so the sender can replay its latest
           // GUI snapshot after HANDSHAKE_ACK and BRIDGE_CONFIG are both live.
           sendAuthenticatedGuiReady("bridge_authenticated");
+          sendReceiverHandshakeCommit("bridge_authenticated");
+        }
+
+        // HANDSHAKE_ACK is the backend's authenticated response. This
+        // receiver-applied edge is the sender's release boundary: both the
+        // ACK and the current BRIDGE_CONFIG must be live on this socket before
+        // queued playback or post-handshake work can be released.
+        function sendReceiverHandshakeCommit(reason) {
+          if (
+            !binaryWS ||
+            binaryWS.readyState !== WebSocket.OPEN ||
+            !window._handshakeAcked ||
+            !receiverBridgeConfigReady ||
+            !buildIdentityAccepted ||
+            typeof guiSessionNonce !== "string" ||
+            guiSessionNonce.length < 8
+          ) {
+            return false;
+          }
+          const signature = [
+            guiSessionNonce,
+            playbackModeSocketGeneration,
+            workletLifecycleGeneration,
+          ].join(":");
+          if (receiverHandshakeCommitSignature === signature) {
+            return true;
+          }
+          try {
+            binaryWS.send(JSON.stringify({
+              type: "RECEIVER_HANDSHAKE_COMMITTED",
+              handshakeCommitVersion: 1,
+              guiSessionNonce,
+              socketGeneration: playbackModeSocketGeneration,
+              lifecycleGeneration: workletLifecycleGeneration,
+              config: {
+                sampleRate: window._hwRate || window._studioRate || 48000,
+                bitDepth: 16,
+              },
+              buildIdentity: window.MXS_BUILD_IDENTITY,
+              reason: reason || "bridge_authenticated",
+            }));
+            receiverHandshakeCommitSignature = signature;
+            relayLogToStudio(
+              "🤝 Receiver: Handshake committed after authenticated ACK + BRIDGE_CONFIG" +
+                (reason ? " (" + reason + ")" : "") + ".",
+            );
+            selectPlaybackRoute("handshake_commit");
+            return true;
+          } catch (e) {
+            relayLogToStudio("⚠️ Receiver: Handshake commit send failed: " + e.message);
+            return false;
+          }
         }
 
         function sendAuthenticatedGuiReady(bootStage) {
@@ -765,14 +822,24 @@
         let flushingPendingStudioLogs = false;
         let hardwareTelemetryRetryId = null;
         let hardwareTelemetryRetryCount = 0;
-        let receiverPlayoutPreference = "pcm_fallback";
+        // Native is the conservative first-session route. PCM becomes
+        // eligible only after this receiver has demonstrated sustained
+        // runtime timing, not merely that AudioWorklet.addModule succeeded.
+        let receiverPlayoutPreference = "native";
         // Keep one route authoritative for each ordered Play. This prevents
         // a failed native recovery from bouncing back to PCM after PCM has
         // already declared its queue unsustainable.
         let playbackRouteDecision = null;
+        // A route being selected/ready is not proof that speakers are receiving
+        // audio. Keep an exactly-once audible edge for the current ordered Play
+        // revision; the sender uses this edge to leave its starting state.
+        let receiverPlayoutAudibleSignature = null;
+        let pcmRenderedFramesAtPlaybackStart = 0;
+        let lastPcmDiagRenderedFrames = 0;
         let nativeFallbackLockedForPlayback = false;
         let nativeStartupTimeoutObserved = false;
         let lowLatencyStartupRetryCount = 0;
+        let pcmRuntimeQualificationWindows = 0;
         let activeAudioPathOwner = "none";
         window._activeAudioPathOwner = "none";
         window._receiverPlayoutPreference = receiverPlayoutPreference;
@@ -1026,11 +1093,26 @@
           // A prior explicit AudioWorklet capability/runtime failure is a
           // device-level result (including legacy CAF receivers). Persist it
           // so reconnects do not repeat PCM startup churn.
-          return window._pcmDegraded ? "native" : "pcm_fallback";
+          if (window._pcmDegraded) return "native";
+          try {
+            return localStorage.getItem(PCM_RUNTIME_QUALIFICATION_KEY) === "true"
+              ? "pcm_fallback"
+              : "native";
+          } catch (e) {
+            return "native";
+          }
         }
 
         function setReceiverPlayoutPreference(mode, reason) {
           if (!mode || receiverPlayoutPreference === mode) {
+            return;
+          }
+          if (playbackRouteDecision && playbackRouteDecision !== mode) {
+            emitReceiverTelemetry(
+              "⏭️ Receiver: Ignored route preference change after route selection " +
+                playbackRouteDecision + " -> " + mode +
+                (reason ? " (" + reason + ")" : "") + ".",
+            );
             return;
           }
           receiverPlayoutPreference = mode;
@@ -1832,6 +1914,7 @@
             playbackModeLastSentGeneration === playbackModeSocketGeneration;
           const previousMode = window._playbackMode;
           if (previousMode !== mode) {
+            receiverPlayoutAudibleSignature = null;
             resetPcmContinuityForMode(mode, reason || "playback_mode");
           }
           window._playbackMode = mode;
@@ -1894,6 +1977,54 @@
               lifecycleGeneration: workletLifecycleGeneration,
             }));
           } catch (e) {}
+        }
+
+        function notifyPlayoutAudible(mode, reason, proof = {}) {
+          if (
+            !lastPlaybackStartSignalAt ||
+            !binaryWS ||
+            binaryWS.readyState !== WebSocket.OPEN ||
+            !window._handshakeAcked ||
+            !receiverBridgeConfigReady
+          ) {
+            return false;
+          }
+          const selectedMode = mode || window._playbackMode || "unknown";
+          if (selectedMode === "unknown") return false;
+          const signature = [
+            selectedMode,
+            lastPlaybackEpoch,
+            lastPlaybackRevision,
+            playbackModeSocketGeneration,
+            workletLifecycleGeneration,
+          ].join(":");
+          if (receiverPlayoutAudibleSignature === signature) return false;
+          const readiness = {
+            type: "PLAYOUT_STATE",
+            state: "audible",
+            audible: true,
+            mode: selectedMode,
+            ready: true,
+            reason: reason || "audible_proof",
+            audioPathOwner: activeAudioPathOwner,
+            audioPathOwnerGeneration: castAudioOwnerArbiter.snapshot().generation,
+            socketGeneration: playbackModeSocketGeneration,
+            lifecycleGeneration: workletLifecycleGeneration,
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: lastPlaybackRevision,
+            proof: proof && typeof proof === "object" ? proof : {},
+          };
+          try {
+            binaryWS.send(JSON.stringify(readiness));
+            receiverPlayoutAudibleSignature = signature;
+            relayLogToStudio(
+              "🔊 Receiver: Audibility proven for " + selectedMode +
+                (reason ? " (" + reason + ")" : "."),
+            );
+            return true;
+          } catch (e) {
+            return false;
+          }
         }
 
         function flushPendingPlayoutState() {
@@ -2042,6 +2173,12 @@
           workletCapabilityResult = result;
           window._workletCapabilityResult = result;
           cacheWorkletCapability(result);
+          if (result && result.supported === false) {
+            pcmRuntimeQualificationWindows = 0;
+            try {
+              localStorage.removeItem(PCM_RUNTIME_QUALIFICATION_KEY);
+            } catch (e) {}
+          }
           emitReceiverTelemetry("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN && window._handshakeAcked) {
             try {
@@ -2162,10 +2299,12 @@
           // Set retry count to max so the catch block immediately falls back to native
           lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
           window._pcmDegraded = true;
+          pcmRuntimeQualificationWindows = 0;
           playbackRouteDecision = "native";
           nativeFallbackLockedForPlayback = true;
           try {
             localStorage.setItem("mxs_pcm_degraded", "true");
+            localStorage.removeItem(PCM_RUNTIME_QUALIFICATION_KEY);
           } catch (e) {}
           return !nativeStreamActive && !nativeStreamStarting;
         }
@@ -2386,9 +2525,10 @@
 
         function markPlaybackStartSignal() {
           lastPcmQueueResetAt = 0;
+          receiverPlayoutAudibleSignature = null;
+          pcmRenderedFramesAtPlaybackStart = lastPcmDiagRenderedFrames;
           if (!lastPlaybackStartSignalAt) {
-            playbackRouteDecision = receiverPlayoutPreference;
-            nativeFallbackLockedForPlayback = receiverPlayoutPreference === "native";
+            selectPlaybackRoute("playback_start");
             nativeStartupTimeoutObserved = false;
           }
           // Give each ordered Play one guarded native recovery attempt. A
@@ -2404,6 +2544,58 @@
             nativeStreamActive,
             prewarmBeforePlayback: nativeStreamPrewarmBeforePlayback,
           });
+        }
+
+        function selectPlaybackRoute(reason) {
+          if (playbackRouteDecision) return playbackRouteDecision;
+          const selectedRoute =
+            receiverPlayoutPreference === "pcm_fallback" && !window._pcmDegraded
+              ? "pcm_fallback"
+              : "native";
+          playbackRouteDecision = selectedRoute;
+          nativeFallbackLockedForPlayback = selectedRoute === "native";
+          notifyPlayoutSelecting("route_selected", reason || "route_selection");
+          relayLogToStudio(
+            "🧭 Receiver: Playback route selected before Play: " + selectedRoute +
+              (reason ? " (" + reason + ")" : "."),
+          );
+          if (selectedRoute === "native") {
+            // Keep CAF muted while stopped; ordered PLAYBACK_START only
+            // releases the already-prepared native item.
+            maybeStartNativeStream("route_prepare_native", true, false, true);
+          } else {
+            preloadPcmWorklet("route_prepare_pcm");
+          }
+          return selectedRoute;
+        }
+
+        function notePcmRuntimeQualification(diag) {
+          if (!diag || window._pcmDegraded || window._playbackMode !== "pcm_fallback") {
+            return;
+          }
+          const measuredHz = Number(diag.measuredHz || diag.wallHz || 0);
+          const healthy =
+            diag.targetAcquired === true &&
+            diag.qualityRunFailed !== true &&
+            Number(diag.underruns || 0) === 0 &&
+            Number(diag.emergencyFailures || 0) === 0 &&
+            measuredHz >= PCM_RUNTIME_MIN_WALL_HZ;
+          if (!healthy) {
+            pcmRuntimeQualificationWindows = 0;
+            return;
+          }
+          pcmRuntimeQualificationWindows += 1;
+          if (pcmRuntimeQualificationWindows < PCM_RUNTIME_QUALIFICATION_WINDOWS_REQUIRED) {
+            return;
+          }
+          try {
+            localStorage.setItem(PCM_RUNTIME_QUALIFICATION_KEY, "true");
+          } catch (e) {}
+          if (pcmRuntimeQualificationWindows === PCM_RUNTIME_QUALIFICATION_WINDOWS_REQUIRED) {
+            relayLogToStudio(
+              "✅ Receiver: PCM runtime qualification stored after sustained healthy timing.",
+            );
+          }
         }
 
         function clearPlaybackRecoveryRetry() {
@@ -2926,6 +3118,18 @@
               playoutAdvanced &&
               progressNow - lastNativePlayoutProofAt >= 1000
             ) {
+              notifyPlayoutAudible("native", "native_progress", {
+                mediaElementId: activeAudio.id || "native-media",
+                currentTime: reportedPlayhead,
+                previousTime: lastNativePlayoutProofTime,
+                advancedSeconds: Number.isFinite(lastNativePlayoutProofTime)
+                  ? Math.max(0, reportedPlayhead - lastNativePlayoutProofTime)
+                  : null,
+                readyState: activeAudio.readyState,
+                muted: activeAudio.muted === true,
+                volume: Number(activeAudio.volume),
+                nativeAttemptId: nativeStartupAttemptId,
+              });
               noteNativeResumeProgress(reportedPlayhead, {
                 mediaElementId: activeAudio.id || "native-media",
                 currentTime: reportedPlayhead,
@@ -2982,6 +3186,7 @@
 
         function clearPlaybackStartSignal() {
           lastPlaybackStartSignalAt = 0;
+          receiverPlayoutAudibleSignature = null;
         }
 
         function clearNativeStartupTrimRetry() {
@@ -3808,8 +4013,10 @@
           window._pcmDegraded = true;
           playbackRouteDecision = "native";
           nativeFallbackLockedForPlayback = true;
+          pcmRuntimeQualificationWindows = 0;
           try {
             localStorage.setItem("mxs_pcm_degraded", "true");
+            localStorage.removeItem(PCM_RUNTIME_QUALIFICATION_KEY);
           } catch (e) {}
           setReceiverPlayoutPreference("native", reason || "pcm_startup_degraded");
           notifyPlayoutSelecting("native_stream", reason || "pcm_startup_degraded");
@@ -3864,6 +4071,10 @@
           clearLowLatencyStartupWatchdog();
           playbackRouteDecision = "native";
           nativeFallbackLockedForPlayback = true;
+          pcmRuntimeQualificationWindows = 0;
+          try {
+            localStorage.removeItem(PCM_RUNTIME_QUALIFICATION_KEY);
+          } catch (e) {}
           setReceiverPlayoutPreference("native", reason || "pcm_runtime_unsustainable");
           resetBinaryPlayoutState("native_runtime_fallback");
           setActiveAudioPathOwner("none", reason || "pcm_runtime_unsustainable");
@@ -6263,6 +6474,8 @@
                 },
               },
             );
+            lastPcmDiagRenderedFrames = 0;
+            pcmRenderedFramesAtPlaybackStart = 0;
             workletInitializationCount += 1;
             workletNode.onprocessorerror = (e) => {
               console.error("❌ Receiver: workletNode processor error:", e);
@@ -6278,6 +6491,34 @@
             workletNode.port.onmessage = (e) => {
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
+                const renderedFrames = Number(e.data.renderedFrames);
+                const renderedFramesDelta = Number.isFinite(renderedFrames)
+                  ? Math.max(0, renderedFrames - lastPcmDiagRenderedFrames)
+                  : 0;
+                if (Number.isFinite(renderedFrames)) {
+                  lastPcmDiagRenderedFrames = renderedFrames;
+                }
+                if (
+                  lastPlaybackStartSignalAt &&
+                  window._playbackMode === "pcm_fallback" &&
+                  activeAudioPathOwner === "pcm_v2" &&
+                  workletReady &&
+                  e.data.targetAcquired === true &&
+                  renderedFrames > pcmRenderedFramesAtPlaybackStart &&
+                  renderedFramesDelta > 0
+                ) {
+                  notifyPlayoutAudible("pcm_fallback", "pcm_render_progress", {
+                    renderedFramesDelta,
+                    renderedFrames,
+                    outputFrames: Number(e.data.outputFrames) || 0,
+                    targetAcquired: true,
+                    targetWallMs: Number(e.data.targetWallMs) || null,
+                    targetWithinToleranceSamples: Number(e.data.targetWithinToleranceSamples) || 0,
+                    peak: Number(e.data.peak) || 0,
+                    lifecycleGeneration: workletLifecycleGeneration,
+                  });
+                }
+                notePcmRuntimeQualification(e.data);
                 monitorPcmRuntimeHealth(e.data);
 
                 if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
@@ -10035,6 +10276,27 @@
           guiSessionNonce = nonce;
           const sessionChanged = previousNonce !== guiSessionNonce;
           const newRate = config.config ? config.config.sampleRate : null;
+          const configRevision = typeof config.bridgeConfigRevision === "string" && config.bridgeConfigRevision.length > 0
+            ? config.bridgeConfigRevision
+            : [
+                guiSessionNonce,
+                config.credentialGeneration || 0,
+                config.networkEpoch || 0,
+                newRate || window._studioRate || 48000,
+                config.pcmProtocol?.sessionId || "legacy",
+              ].join(":");
+          const duplicateConfig = !sessionChanged && receiverBridgeConfigRevision === configRevision;
+          receiverBridgeConfigRevision = configRevision;
+          if (duplicateConfig) {
+            configReceived = true;
+            receiverBridgeConfigReady = true;
+            maybeEnableReceiverHandshakeTelemetry();
+            sendReceiverHandshakeCommit(source || "duplicate_bridge_config");
+            relayLogToStudio(
+              "⏭️ Receiver: Duplicate BRIDGE_CONFIG revision ignored after readiness was preserved.",
+            );
+            return false;
+          }
           configReceived = true;
           receiverBridgeConfigReady = true;
           if (newRate && window._studioRate !== newRate) {
@@ -10051,6 +10313,7 @@
           if (options?.markPathReady !== false && config.ip) {
             markReceiverPlayoutPathReady();
           }
+          sendReceiverHandshakeCommit(source || "bridge_config");
           return sessionChanged;
         }
 
@@ -10255,7 +10518,22 @@
           const renderStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
             : Date.now();
-          const renderResult = renderState(normalizedState, false, revision);
+          const shouldDeferGuiState =
+            pcmAudioPriorityActive && ackType !== "interaction";
+          let renderResult;
+          if (shouldDeferGuiState) {
+            // GUI state is latest-value data. Accept and acknowledge the
+            // revision immediately, but keep expensive DOM/dialog/sampler/
+            // waveform work off the PCM critical window. The release edge in
+            // setPcmAudioPriority renders only the newest deferred state.
+            deferredGuiState = normalizedState;
+            deferredGuiRevision = revision;
+            guiDeferredCount += 1;
+            guiLastDeferredRevision = revision;
+            renderResult = "deferred";
+          } else {
+            renderResult = renderState(normalizedState, false, revision);
+          }
           const renderFinishedAt = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
             : Date.now();
@@ -10293,6 +10571,8 @@
             guiRenderedCount += 1;
             guiLastRenderedRevision = revision;
             emitGuiChannelTelemetry("rendered", { revision, renderTimeMs, payloadBytes });
+          } else if (renderResult === "deferred") {
+            emitGuiChannelTelemetry("deferred", { revision, payloadBytes });
           }
           guiLastRenderTimeMs = renderTimeMs;
           guiLastPayloadBytes = payloadBytes;
@@ -10301,30 +10581,34 @@
             try {
               let visualTelemetry = {};
               try {
-                const waveformProofDue =
-                  lastWaveformRenderStats.missing > 0 ||
-                  Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
-                visualTelemetry = {
-                  waveformExpected: lastWaveformRenderStats.expected,
-                  waveformDrawn: lastWaveformRenderStats.drawn,
-                  waveformMissing: lastWaveformRenderStats.missing,
-                  waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
-                  ...(waveformProofDue ? { waveformSurfaces: lastWaveformRenderStats.surfaces } : {}),
-                  dialogRenderMode: lastDialogRenderStats.mode,
-                  dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
-                  dialogCount: lastDialogRenderStats.dialogCount,
-                  dialogDomNodes: lastDialogRenderStats.domNodeCount,
-                  renderPhases: lastGuiRenderPhaseStats,
-                  ...summarizeLfoVisualState(normalizedState),
-                  ...summarizeMirroredButtonVisualState(normalizedState),
-                  ...summarizeSamplerVisualLayout(),
-                };
-                // Validate optional evidence independently of the minimal ACK.
-                JSON.stringify(visualTelemetry);
-                if (waveformProofDue) guiLastWaveformProofAt = Date.now();
+                if (renderResult !== "deferred") {
+                  const waveformProofDue =
+                    lastWaveformRenderStats.missing > 0 ||
+                    Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
+                  visualTelemetry = {
+                    waveformExpected: lastWaveformRenderStats.expected,
+                    waveformDrawn: lastWaveformRenderStats.drawn,
+                    waveformMissing: lastWaveformRenderStats.missing,
+                    waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
+                    ...(waveformProofDue ? { waveformSurfaces: lastWaveformRenderStats.surfaces } : {}),
+                    dialogRenderMode: lastDialogRenderStats.mode,
+                    dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
+                    dialogCount: lastDialogRenderStats.dialogCount,
+                    dialogDomNodes: lastDialogRenderStats.domNodeCount,
+                    renderPhases: lastGuiRenderPhaseStats,
+                    ...summarizeLfoVisualState(normalizedState),
+                    ...summarizeMirroredButtonVisualState(normalizedState),
+                    ...summarizeSamplerVisualLayout(),
+                  };
+                  // Validate optional evidence independently of the minimal ACK.
+                  JSON.stringify(visualTelemetry);
+                  if (waveformProofDue) guiLastWaveformProofAt = Date.now();
+                }
               } catch (error) {
                 visualTelemetry = {};
-                reportGuiAckError("optional_telemetry", error);
+                if (renderResult !== "deferred") {
+                  reportGuiAckError("optional_telemetry", error);
+                }
               }
               binaryWS.send(JSON.stringify({
                 type: "GUI_ACK",
@@ -10792,6 +11076,9 @@
             pendingBuildIdentityRejection = null;
             receiverHandshakeTelemetryReady = false;
             receiverBridgeConfigReady = false;
+            receiverBridgeConfigRevision = null;
+            receiverHandshakeCommitSignature = null;
+            receiverPlayoutAudibleSignature = null;
             deferredReceiverTelemetry = [];
             pendingPlaybackMode = null;
             pendingPlayoutSelection = null;
@@ -11015,6 +11302,7 @@
                   }
                   markReceiverBoot("handshake_ack", { sampleRate: ackRate, bitDepth: ackBitDepth });
                   maybeEnableReceiverHandshakeTelemetry();
+                  sendReceiverHandshakeCommit("handshake_ack");
                   flushPendingPlayoutState();
                   logReceiverHardwareTelemetry(getCastReceiverContext());
 
@@ -11120,6 +11408,7 @@
             window._buildIdentityAccepted = false;
             receiverHandshakeTelemetryReady = false;
             receiverBridgeConfigReady = false;
+            receiverPlayoutAudibleSignature = null;
             clearLowLatencyStartupWatchdog();
             window._binaryActive = false;
             configReceived = false;
