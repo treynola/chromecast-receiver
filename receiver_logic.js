@@ -5,14 +5,6 @@
       window.STREAM_TOKEN = "{{STREAM_TOKEN}}";
       window.LOG_TOKEN = "{{LOG_TOKEN}}";
 
-        // [v13.9.509] Do not redirect during Cast bootstrap. A launch-time
-        // self-redirect can leave a custom receiver on a blank page before
-        // CAF initializes. Asset URLs are versioned, and explicit receiver
-        // reloads add their own cache-buster after the app is running.
-        try {
-          localStorage.removeItem("mxs_pcm_degraded");
-        } catch (e) {}
-
       (function () {
         function redactBridgeUrl(value) {
           return String(value || "")
@@ -154,12 +146,11 @@
         var buildIdentityRejected = false;
         var pendingBuildIdentityRejection = null;
         const BUILD_IDENTITY_RELOAD_SESSION_KEY = "mxs_build_identity_reload_attempt";
-        // The identity-reload marker is deliberately not a session cache:
-        // it must survive the cache-busted reload so a persistent mismatch
-        // remains one-shot instead of becoming an infinite reload loop.
-        const RECEIVER_SESSION_CACHE_KEYS = [
-          "mxs_pcm_degraded",
-        ];
+        // Capability/runtime route results are deliberately durable per
+        // receiver. Do not clear mxs_pcm_degraded during a bridge reconnect:
+        // it is what prevents a known legacy AudioWorklet failure from
+        // repeating the PCM→native startup churn on every Cast session.
+        const RECEIVER_SESSION_CACHE_KEYS = [];
         window._buildIdentityAccepted = false;
         // Keep at most about one second of packets while the worklet or its
         // nominal target is not ready. Normal startup publishes the target
@@ -407,6 +398,7 @@
               transport: "gui",
               guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
               guiSessionNonce,
+              socketGeneration: playbackModeSocketGeneration,
               guiRevision: lastGuiRevision,
               latestSnapshotReplay: true,
               bootStage: stage,
@@ -774,6 +766,12 @@
         let hardwareTelemetryRetryId = null;
         let hardwareTelemetryRetryCount = 0;
         let receiverPlayoutPreference = "pcm_fallback";
+        // Keep one route authoritative for each ordered Play. This prevents
+        // a failed native recovery from bouncing back to PCM after PCM has
+        // already declared its queue unsustainable.
+        let playbackRouteDecision = null;
+        let nativeFallbackLockedForPlayback = false;
+        let nativeStartupTimeoutObserved = false;
         let lowLatencyStartupRetryCount = 0;
         let activeAudioPathOwner = "none";
         window._activeAudioPathOwner = "none";
@@ -1025,7 +1023,10 @@
         }
 
         function determineReceiverPlayoutPreference(context, telemetry) {
-          return "pcm_fallback";
+          // A prior explicit AudioWorklet capability/runtime failure is a
+          // device-level result (including legacy CAF receivers). Persist it
+          // so reconnects do not repeat PCM startup churn.
+          return window._pcmDegraded ? "native" : "pcm_fallback";
         }
 
         function setReceiverPlayoutPreference(mode, reason) {
@@ -1033,6 +1034,9 @@
             return;
           }
           receiverPlayoutPreference = mode;
+          if (lastPlaybackStartSignalAt && !playbackRouteDecision) {
+            playbackRouteDecision = mode;
+          }
           window._receiverPlayoutPreference = mode;
           emitReceiverTelemetry(
             "📟 Receiver: Playback preference set to " +
@@ -2158,6 +2162,8 @@
           // Set retry count to max so the catch block immediately falls back to native
           lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
           window._pcmDegraded = true;
+          playbackRouteDecision = "native";
+          nativeFallbackLockedForPlayback = true;
           try {
             localStorage.setItem("mxs_pcm_degraded", "true");
           } catch (e) {}
@@ -2380,6 +2386,11 @@
 
         function markPlaybackStartSignal() {
           lastPcmQueueResetAt = 0;
+          if (!lastPlaybackStartSignalAt) {
+            playbackRouteDecision = receiverPlayoutPreference;
+            nativeFallbackLockedForPlayback = receiverPlayoutPreference === "native";
+            nativeStartupTimeoutObserved = false;
+          }
           // Give each ordered Play one guarded native recovery attempt. A
           // second failure must settle instead of creating a restart loop.
           nativeFailureRetryAttempted = false;
@@ -2957,6 +2968,10 @@
                     bufferedDurationSeconds: reportedBufferedDuration,
                     mediaReadyState: activeAudio.readyState,
                     mediaNetworkState: activeAudio.networkState,
+                    outputAudible,
+                    playoutAdvanced,
+                    playbackEpoch: lastPlaybackEpoch,
+                    playbackRevision: lastPlaybackRevision,
                     startupAttemptId: nativeStartupAttemptId,
                   },
                 }),
@@ -3791,6 +3806,8 @@
           clearLowLatencyStartupWatchdog();
           lowLatencyStartupRetryCount = PCM_STARTUP_MAX_RETRIES_BEFORE_NATIVE;
           window._pcmDegraded = true;
+          playbackRouteDecision = "native";
+          nativeFallbackLockedForPlayback = true;
           try {
             localStorage.setItem("mxs_pcm_degraded", "true");
           } catch (e) {}
@@ -3845,6 +3862,8 @@
             return false;
           }
           clearLowLatencyStartupWatchdog();
+          playbackRouteDecision = "native";
+          nativeFallbackLockedForPlayback = true;
           setReceiverPlayoutPreference("native", reason || "pcm_runtime_unsustainable");
           resetBinaryPlayoutState("native_runtime_fallback");
           setActiveAudioPathOwner("none", reason || "pcm_runtime_unsustainable");
@@ -4194,6 +4213,23 @@
                 "native_stream",
                 "native_extended_startup_pcm_unavailable",
               );
+              return;
+            }
+            if (nativeFallbackLockedForPlayback) {
+              // PCM has already crossed its runtime/startup failure boundary
+              // for this Play. Keep CAF authoritative and do not tear it down
+              // just to restart the same failing PCM route, which caused the
+              // observed native→PCM→native churn and audible lag.
+              if (!nativeStartupTimeoutObserved) {
+                nativeStartupTimeoutObserved = true;
+                relayLogToStudio(
+                  "⏳ Receiver: Native startup remains authoritative after the PCM route failed; retaining the current CAF attempt.",
+                );
+                notifyPlayoutSelecting(
+                  "native_stream",
+                  "native_extended_startup_pcm_route_locked",
+                );
+              }
               return;
             }
             logReceiverStartupTiming("native_startup_timeout", {
@@ -9981,6 +10017,43 @@
           return true;
         }
 
+        // Apply the shared, authenticated portion of BRIDGE_CONFIG exactly
+        // once per session/signature. Both the Cast namespace and the bridge
+        // WebSocket can mirror this message; repeating it must not clear GUI
+        // readiness or manufacture another receiver generation.
+        function applyReceiverBridgeConfig(data, source, options) {
+          const config = data && typeof data === "object" ? data : {};
+          const nonce = config.guiSessionNonce;
+          if (typeof nonce !== "string" || nonce.length < 8 || nonce.length > 128) {
+            relayLogToStudio(
+              "⚠️ Receiver: " + (source || "unknown") +
+                " BRIDGE_CONFIG missing a valid GUI session nonce.",
+            );
+            return false;
+          }
+          const previousNonce = guiSessionNonce;
+          guiSessionNonce = nonce;
+          const sessionChanged = previousNonce !== guiSessionNonce;
+          const newRate = config.config ? config.config.sampleRate : null;
+          configReceived = true;
+          receiverBridgeConfigReady = true;
+          if (newRate && window._studioRate !== newRate) {
+            window._studioRate = newRate;
+            relayLogToStudio(
+              "🔄 Receiver: Studio rate updated via signaling to " + newRate + "Hz",
+            );
+          }
+          maybeEnableReceiverHandshakeTelemetry();
+          flushPendingPlayoutState();
+          if (options?.announceGuiReady !== false) {
+            sendAuthenticatedGuiReady("bridge_config");
+          }
+          if (options?.markPathReady !== false && config.ip) {
+            markReceiverPlayoutPathReady();
+          }
+          return sessionChanged;
+        }
+
         function markReceiverPlayoutPathReady() {
           if (window._receiverShutdownInProgress) return;
           if (!playoutPathLogged) {
@@ -10706,7 +10779,6 @@
             window._nativeStreamBypassLogged = false;
             try {
               if (window._isFreshSession) {
-                localStorage.removeItem("mxs_pcm_degraded");
                 window._isFreshSession = false;
               }
               window._pcmDegraded = localStorage.getItem("mxs_pcm_degraded") === "true";
@@ -10996,27 +11068,13 @@
                     relayLogToStudio("⚠️ Receiver: BRIDGE_CONFIG missing a valid GUI session nonce.");
                     return;
                   }
-                  guiSessionNonce = d.guiSessionNonce;
-                  lastGuiReadyNonce = null;
-                  sendAuthenticatedGuiReady("bridge_config");
-                  receiverBridgeConfigReady = true;
-                  maybeEnableReceiverHandshakeTelemetry();
-                  flushPendingPlayoutState();
-                  if (d.config && d.config.sampleRate) {
-                    const newStudioRate = d.config.sampleRate;
-                    configReceived = true;
-
-                    // Proactive fallback: If we haven't received HANDSHAKE_ACK yet, resend HANDSHAKE
-                    if (!window._handshakeAcked && typeof window._sendHandshake === "function") {
-                      window._sendHandshake();
-                    }
-
-                    if (window._studioRate !== newStudioRate) {
-                      window._studioRate = newStudioRate;
-                      relayLogToStudio(
-                        `🔄 Receiver: Studio rate updated to ${newStudioRate}Hz`,
-                      );
-                    }
+                  applyReceiverBridgeConfig(d, "websocket", {
+                    announceGuiReady: true,
+                    markPathReady: false,
+                  });
+                  // Proactive fallback: If we haven't received HANDSHAKE_ACK yet, resend HANDSHAKE.
+                  if (!window._handshakeAcked && typeof window._sendHandshake === "function") {
+                    window._sendHandshake();
                   }
                   if (d.ip) {
                     markReceiverPlayoutPathReady();
@@ -11204,15 +11262,9 @@
                 relayLogToStudio("⚠️ Receiver: Cast BRIDGE_CONFIG missing a valid GUI session nonce.");
                 return;
               }
-              guiSessionNonce = d.guiSessionNonce;
-              const newRate = d.config ? d.config.sampleRate : null;
-              configReceived = true;
-              if (newRate && window._studioRate !== newRate) {
-                window._studioRate = newRate;
-                relayLogToStudio(
-                  `🔄 Receiver: Studio rate updated via signaling to ${newRate}Hz`,
-                );
-              }
+              applyReceiverBridgeConfig(d, "cast_control", {
+                announceGuiReady: false,
+              });
               if (d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
                 markReceiverPlayoutPathReady();

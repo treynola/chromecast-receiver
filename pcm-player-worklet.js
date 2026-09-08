@@ -675,8 +675,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           this._lastDiagRawQueuedFrames !== null
         ) {
           queueDeltaFrames = rawQueuedFrames - this._lastDiagRawQueuedFrames;
-          queueGrowthFramesPerSecond =
-            (queueDeltaFrames * 1000) / callbackWallMs * 1000;
+              queueGrowthFramesPerSecond =
+                (queueDeltaFrames * 1000) / callbackWallMs;
         }
         this._lastDiagAudioClockTime =
           typeof currentTime === "number" && Number.isFinite(currentTime)
