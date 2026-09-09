@@ -1418,23 +1418,24 @@ select option {
   margin-bottom: 0;
   background: #2a2a2a;
   border: 1px solid #444;
-  border-radius: 6px;
-  padding: 4px 6px;
+  border-radius: 4px;
+  padding: 2px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 1px;
   box-sizing: border-box;
 }
 
 .effect-control-group .effect-param-title {
   width: 100%;
   text-align: center;
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 
 .effect-control-group .effect-param-title label {
-  font-size: 0.85em;
+  font-size: 0.78em;
+  line-height: 1.05;
   color: var(--gold);
   font-weight: bold;
   text-transform: uppercase;
@@ -1443,7 +1444,10 @@ select option {
 
 .effect-control-group .slider-wrapper {
   width: 100%;
-  padding: 2px 0;
+  min-height: 14px;
+  padding: 0;
+  display: flex;
+  align-items: center;
 }
 
 .effect-control-group .effect-param-slider {
@@ -1455,7 +1459,9 @@ select option {
 .effect-control-group .effect-param-value {
   width: 100%;
   text-align: center;
-  margin-top: 2px;
+  min-height: 11px;
+  margin-top: 0;
+  line-height: 1;
 }
 
 .effect-control-group .param-value {
@@ -1464,7 +1470,8 @@ select option {
   left: auto;
   top: auto;
   font-family: monospace;
-  font-size: 0.9em;
+  font-size: 0.78em;
+  line-height: 1;
   color: var(--green);
   font-weight: bold;
   pointer-events: none;
@@ -2299,16 +2306,16 @@ select option {
   border: 1px solid var(--green);
   border-radius: 12px;
   padding: 0;
-  width: 490px; /* Increased by 36% from 360px */
+  width: 430px;
   box-shadow:
     0 0 0 2px var(--gold),
     0 0 0 4px var(--red),
     0 8px 32px rgba(0, 0, 0, 0.9);
-  margin: 10px;
-  max-width: 95vw;
+  margin: 4px;
+  max-width: calc(100vw - 58px);
   height: auto;
-  max-height: 85vh;
-  min-height: 100px;
+  max-height: 82vh;
+  min-height: 72px;
   /* Small base for empty state */
   overflow: visible;
   display: none;
@@ -2320,6 +2327,11 @@ select option {
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   display: flex;
+}
+
+.effect-params-dialog.is-stack-front,
+.audition-params-dialog.is-stack-front {
+  z-index: 2201;
 }
 
 .effect-params-dialog:focus,
@@ -2348,7 +2360,7 @@ select option {
   padding: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  max-height: 70vh;
+  max-height: 72vh;
   scrollbar-width: thin;
   scrollbar-color: var(--gold) var(--off-black);
 }
@@ -2373,8 +2385,8 @@ select option {
 .effect-params-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
-  gap: 8px !important;
-  padding: 8px !important;
+  gap: 4px !important;
+  padding: 4px !important;
   width: 100% !important;
   box-sizing: border-box !important;
   justify-items: stretch !important;
@@ -2457,7 +2469,8 @@ select option {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  padding: 13px 30px 10px 12px;
+  gap: 4px;
+  padding: 6px 27px 5px 6px;
   background: #222;
   border-bottom: 1px solid #444;
   border-radius: 11px 11px 0 0;
@@ -2499,6 +2512,122 @@ select option {
 .dialog-header-top--center {
   justify-content: center;
   align-items: center;
+}
+
+.effect-dialog-title-row {
+  display: grid;
+  grid-template-columns: minmax(68px, 1fr) minmax(0, 215px) minmax(68px, 1fr);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.effect-dialog-title-row .dialog-effect-type {
+  justify-self: start;
+  min-width: 0;
+  color: var(--gold);
+  opacity: 0.8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.effect-dialog-title-viewport {
+  justify-self: stretch;
+  min-width: 0;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.effect-dialog-title-text {
+  display: inline-block !important;
+  max-width: none !important;
+  padding: 0 !important;
+  white-space: nowrap !important;
+  will-change: transform;
+}
+
+.effect-dialog-title-viewport.is-overflowing {
+  text-align: left;
+}
+
+.effect-dialog-title-viewport.is-overflowing .effect-dialog-title-text {
+  animation: effect-dialog-title-scroll var(--effect-title-duration, 20s) ease-in-out infinite;
+}
+
+.effect-dialog-title-balance {
+  min-width: 0;
+}
+
+@keyframes effect-dialog-title-scroll {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(calc(-1 * var(--effect-title-travel, 0px))); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .effect-dialog-title-viewport.is-overflowing .effect-dialog-title-text {
+    animation: none;
+    text-overflow: ellipsis;
+    max-width: 100% !important;
+    overflow: hidden;
+  }
+}
+
+.effect-dialog-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  min-width: 0;
+  width: 100%;
+}
+
+.dialog-track-switcher {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.dialog-track-label {
+  color: var(--gold);
+  font-size: 10px !important;
+  letter-spacing: 0.35px !important;
+  margin-right: 1px;
+}
+
+.dialog-track-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  color: #777;
+  font: bold 11px/1 "Courier New", Courier, monospace;
+  cursor: default;
+}
+
+.dialog-track-button.is-populated:not(:disabled) {
+  border-color: var(--gold);
+  background: var(--green);
+  color: var(--gold);
+  cursor: pointer;
+}
+
+.dialog-track-button.is-selected:not(:disabled) {
+  border-color: var(--gold);
+  background: var(--red);
+  color: var(--gold);
+  box-shadow: 0 0 5px var(--red);
+}
+
+.dialog-track-button:disabled {
+  opacity: 0.45;
 }
 
 .dialog-header-title--stacked {
@@ -5216,14 +5345,14 @@ dialog.input-prompt-dialog {
 /* --- VERTICAL SLOT TABS SIDEBAR --- */
 .vertical-slot-tabs {
   position: absolute;
-  top: 15px;
-  left: calc(100% + 8px);
+  top: 4px;
+  left: calc(100% + 4px);
   right: auto;
-  width: 46px;
+  width: 34px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   z-index: 2147483647;
   overflow: visible;
   visibility: visible !important;
@@ -5234,7 +5363,7 @@ dialog.input-prompt-dialog {
   display: flex !important;
   visibility: visible !important;
   opacity: 1 !important;
-  margin: 3px auto;
+  margin: 0 auto;
 }
 
 .audition-panel {
@@ -5263,7 +5392,7 @@ dialog.input-prompt-dialog {
 }
 
 .vertical-tab-slot {
-  margin-bottom: 5px;
+  margin-bottom: 0;
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
@@ -5299,10 +5428,11 @@ dialog.input-prompt-dialog {
 /* --- Effect Dialog Action Buttons --- */
 .dialog-header-actions-bar {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
-  margin-top: 10px;
-  width: 100%;
+  margin-top: 0;
+  width: auto;
+  min-width: 0;
 }
 
 .dialog-header-action-btn {
@@ -5310,8 +5440,8 @@ dialog.input-prompt-dialog {
   color: #ccc;
   border: 1px solid #555;
   border-radius: 4px;
-  padding: 4px 10px;
-  font-size: 11px;
+  padding: 3px 7px;
+  font-size: 10px;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.2s ease;

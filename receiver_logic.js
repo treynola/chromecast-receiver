@@ -5202,9 +5202,10 @@
           clearPcmStartupRetryTimer();
 
           // Pause is reversible for native CAF playout. Keep the loaded
-          // progressive-WAV item and its live clock warm, but mute the output;
-          // STOP remains the destructive boundary that clears the stream and
-          // prevents an old buffered tail from surviving a later session.
+          // progressive-WAV item and its live clock warm, but mute the output.
+          // Ordered Stop separately clears playback intent and position while
+          // retaining only a muted, live-edge-trimmed CAF item for fast replay;
+          // Cast-session shutdown remains the destructive media boundary.
           if (pauseNativeStreamPlayout(reason || "playback_pause", true)) {
             relayLogToStudio(
               "⏸️ Receiver: Playback paused; native CAF media item preserved.",
@@ -7676,6 +7677,23 @@
           else setTimeout(render, 0);
         }
 
+        function queueMirroredEffectTitleMarquee(panel, senderOverflowing = false) {
+          const render = () => {
+            const viewport = panel?.querySelector?.(".effect-dialog-title-viewport");
+            const title = viewport?.querySelector?.(".effect-dialog-title-text");
+            if (!viewport || !title) return;
+            const overflow = Math.max(0, title.scrollWidth - viewport.clientWidth);
+            viewport.classList.toggle("is-overflowing", senderOverflowing || overflow > 1);
+            viewport.style.setProperty("--effect-title-travel", `${overflow}px`);
+            viewport.style.setProperty(
+              "--effect-title-duration",
+              `${Math.max(14, Math.min(36, overflow / 10 + 14)).toFixed(1)}s`,
+            );
+          };
+          if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(render);
+          else setTimeout(render, 0);
+        }
+
         function applyMirroredDialogPosition(panel, dialog, exactEffectDialog = false) {
           const geometry = dialog?.geometry;
           if (geometry?.coordinateSpace === "viewport_css_pixels") {
@@ -7736,6 +7754,10 @@
           "control-error",
           "cast-interaction-pending",
           "cast-interaction-confirmed",
+          "is-overflowing",
+          "is-populated",
+          "is-selected",
+          "is-stack-front",
         ]);
         const MIRRORED_DIALOG_DYNAMIC_DATA_KEYS = new Set([
           "actionResult",
@@ -7852,6 +7874,7 @@
                   ...dialog.header,
                   title: undefined,
                   status: undefined,
+                  titleOverflowing: undefined,
                   titleLines: (dialog.header.titleLines || []).map((line) => ({
                     ...line,
                     text: undefined,
@@ -7925,9 +7948,9 @@
                 sampleName.textContent = String(dialog.samplePadLayout.sampleNameText);
               }
             } else if (dialog.header) {
-              const titleLines = Array.from(
-                panel.querySelectorAll(".dialog-title-top,.dialog-title-bottom"),
-              );
+              const titleLines = Array.from(panel.querySelectorAll(
+                ".dialog-effect-type,.effect-dialog-title-text,.dialog-title-top,.dialog-title-bottom",
+              ));
               (dialog.header.titleLines || []).forEach((line, index) => {
                 if (titleLines[index] && line?.text !== undefined) {
                   titleLines[index].textContent = String(line.text);
@@ -7936,6 +7959,14 @@
               if (titleLines.length === 0 && dialog.header.title !== undefined) {
                 const title = panel.querySelector("h1,h2,h3,.dialog-title,.dialog-header-title");
                 if (title) title.textContent = String(dialog.header.title);
+              }
+              const titleViewport = panel.querySelector(".effect-dialog-title-viewport");
+              if (titleViewport) {
+                titleViewport.classList.toggle(
+                  "is-overflowing",
+                  dialog.header.titleOverflowing === true,
+                );
+                queueMirroredEffectTitleMarquee(panel, dialog.header.titleOverflowing === true);
               }
               const status = panel.querySelector(
                 ".dialog-header-status,[data-sample-editor-status]",
@@ -8612,20 +8643,55 @@
             });
             const headerTop = document.createElement("div");
             headerTop.className = normalizeClassName(headerState.topClassName, "dialog-header-top");
-            const heading = document.createElement("span");
-            heading.className = normalizeClassName(headerState.titleClassName, "dialog-header-title");
             const titleLines = Array.isArray(headerState.titleLines) ? headerState.titleLines : [];
-            if (titleLines.length) {
-              titleLines.forEach((line) => {
-                const titleLine = document.createElement("span");
-                titleLine.className = normalizeClassName(line.className);
-                titleLine.textContent = line.text || "";
-                heading.appendChild(titleLine);
-              });
+            const compactTrackHeader = exactEffectDialog &&
+              dialog.dialogLayoutVersion >= 5 &&
+              titleLines.some((line) => /(?:^|\s)dialog-effect-type(?:\s|$)/.test(line.className || ""));
+            if (compactTrackHeader) {
+              const effectTypeState = titleLines.find((line) =>
+                /(?:^|\s)dialog-effect-type(?:\s|$)/.test(line.className || ""),
+              );
+              const effectTitleState = titleLines.find((line) =>
+                /(?:^|\s)effect-dialog-title-text(?:\s|$)/.test(line.className || ""),
+              );
+              const effectType = document.createElement("span");
+              effectType.className = normalizeClassName(effectTypeState?.className, "dialog-effect-type");
+              effectType.textContent = effectTypeState?.text || "Effect:";
+              const titleViewport = document.createElement("span");
+              titleViewport.className = normalizeClassName(
+                headerState.titleViewportClassName,
+                "effect-dialog-title-viewport",
+              );
+              titleViewport.classList.toggle("is-overflowing", headerState.titleOverflowing === true);
+              const heading = document.createElement("span");
+              heading.className = normalizeClassName(
+                effectTitleState?.className || headerState.titleClassName,
+                "dialog-header-title dialog-title-bottom effect-dialog-title-text",
+              );
+              heading.textContent = effectTitleState?.text || headerState.title || dialog.title || "MXS-004";
+              titleViewport.appendChild(heading);
+              const balance = document.createElement("span");
+              balance.className = normalizeClassName(
+                headerState.titleBalanceClassName,
+                "effect-dialog-title-balance",
+              );
+              balance.setAttribute("aria-hidden", "true");
+              headerTop.append(effectType, titleViewport, balance);
             } else {
-              heading.textContent = headerState.title || dialog.title || "MXS-004";
+              const heading = document.createElement("span");
+              heading.className = normalizeClassName(headerState.titleClassName, "dialog-header-title");
+              if (titleLines.length) {
+                titleLines.forEach((line) => {
+                  const titleLine = document.createElement("span");
+                  titleLine.className = normalizeClassName(line.className);
+                  titleLine.textContent = line.text || "";
+                  heading.appendChild(titleLine);
+                });
+              } else {
+                heading.textContent = headerState.title || dialog.title || "MXS-004";
+              }
+              headerTop.appendChild(heading);
             }
-            headerTop.appendChild(heading);
             header.appendChild(headerTop);
             if (headerState.status) {
               const status = document.createElement("span");
@@ -8634,7 +8700,46 @@
               header.appendChild(status);
             }
             const headerActions = actions.filter((action) => actionPlacement(action) === "headerActions");
-            if (headerActions.length) {
+            const trackSwitcherActions = actions.filter((action) => actionPlacement(action) === "trackSwitcher");
+            if (compactTrackHeader && (trackSwitcherActions.length || headerActions.length)) {
+              const toolbar = document.createElement("div");
+              toolbar.className = normalizeClassName(
+                headerState.toolbarClassName,
+                "effect-dialog-toolbar-row",
+              );
+              if (trackSwitcherActions.length) {
+                const trackSwitcher = document.createElement("div");
+                trackSwitcher.className = normalizeClassName(
+                  headerState.trackSwitcherClassName,
+                  "dialog-track-switcher",
+                );
+                trackSwitcher.setAttribute("role", "group");
+                trackSwitcher.setAttribute("aria-label", "Open track effect dialogs");
+                const trackLabel = document.createElement("span");
+                trackLabel.className = normalizeClassName(
+                  headerState.trackLabelClassName,
+                  "dialog-track-label",
+                );
+                trackLabel.textContent = headerState.trackLabelText || "Track:";
+                trackSwitcher.appendChild(trackLabel);
+                trackSwitcherActions.forEach((action) => {
+                  trackSwitcher.appendChild(renderAction(action, action.actionIndex));
+                });
+                toolbar.appendChild(trackSwitcher);
+              }
+              if (headerActions.length) {
+                const actionsBar = document.createElement("div");
+                actionsBar.className = normalizeClassName(
+                  headerState.actionsClassName,
+                  "dialog-header-actions-bar",
+                );
+                headerActions.forEach((action) => {
+                  actionsBar.appendChild(renderAction(action, action.actionIndex));
+                });
+                toolbar.appendChild(actionsBar);
+              }
+              header.appendChild(toolbar);
+            } else if (headerActions.length) {
               const actionsBar = document.createElement("div");
               actionsBar.className = normalizeClassName(
                 headerState.actionsClassName,
@@ -8782,6 +8887,9 @@
             });
             if (footer.childElementCount) panel.appendChild(footer);
             appendMirroredPanel(panel, false);
+            if (compactTrackHeader) {
+              queueMirroredEffectTitleMarquee(panel, headerState.titleOverflowing === true);
+            }
           });
           restoreMirroredDialogInteractionState(root, preservedInteractionState);
           finishDialogRender("rebuild");
