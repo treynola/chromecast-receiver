@@ -186,6 +186,12 @@
         var nativeStartupTrimState = "idle";
         var nativeStartupTrimRetryTimerId = null;
         var nativeStartupTrimRetryStartedAt = 0;
+        // A seekable live edge is required before a prewarmed native stream
+        // can become audible. If the first prewarm cannot be trimmed, allow
+        // one fresh stream attempt for this ordered Play before settling on
+        // the explicit PCM fallback. Without this guard a stale prewarm can
+        // be released repeatedly and make Stop -> Play appear to repair audio.
+        var nativeStartupTrimRecoveryAttempted = false;
         var nativeStartupWatchdogId = null;
         var lowLatencyStartupWatchdogId = null;
         var pcmStartupRetryTimerId = null;
@@ -197,7 +203,6 @@
         const CAF_NATIVE_RESUME_RELOAD_TIMEOUT_MS = 5000;
         const CAF_NATIVE_RESUME_PROBE_INTERVAL_MS = 250;
         const CAF_NATIVE_RESUME_PROGRESS_EPSILON_SEC = 0.05;
-        const NATIVE_STARTUP_FADE_MS = 12;
         const NATIVE_STARTUP_TRIM_RETRY_MS = 25;
         const NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS = 1000;
         const NATIVE_LATENCY_SAMPLE_INTERVAL_MS = 200;
@@ -2566,6 +2571,7 @@
           // Give each ordered Play one guarded native recovery attempt. A
           // second failure must settle instead of creating a restart loop.
           nativeFailureRetryAttempted = false;
+          nativeStartupTrimRecoveryAttempted = false;
           playbackRecoveryRetryAttempted = false;
           // Every ordered PLAYBACK_START reopens the short stale-inactive-state
           // grace window. This matters for rapid stop/play and reconnect replay.
@@ -3205,8 +3211,16 @@
             const playoutAdvanced =
               !Number.isFinite(lastNativePlayoutProofTime) ||
               reportedPlayhead - lastNativePlayoutProofTime >= 0.05;
+            // A ready, unmuted media element at time=0 is not proof that the
+            // receiver has rendered real audio. Require a post-boundary clock
+            // advance before announcing audibility so a silent prewarm cannot
+            // unlock sender sync or UI state.
+            const startupPlaybackAdvanced =
+              Number.isFinite(samplePlayheadAdvance) &&
+              samplePlayheadAdvance >= 0.05;
             if (
               outputAudible &&
+              startupPlaybackAdvanced &&
               playoutAdvanced &&
               progressNow - lastNativePlayoutProofAt >= 1000
             ) {
@@ -3217,6 +3231,7 @@
                 advancedSeconds: Number.isFinite(lastNativePlayoutProofTime)
                   ? Math.max(0, reportedPlayhead - lastNativePlayoutProofTime)
                   : null,
+                startupAdvanceSeconds: samplePlayheadAdvance,
                 readyState: activeAudio.readyState,
                 muted: activeAudio.muted === true,
                 volume: Number(activeAudio.volume),
@@ -3424,20 +3439,66 @@
             });
           }
           if (Date.now() - nativeStartupTrimRetryStartedAt >= NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS) {
+            clearNativeStartupTrimRetry();
+            if (!nativeStartupTrimRecoveryAttempted) {
+              nativeStartupTrimRecoveryAttempted = true;
+              nativeStartupTrimPending = false;
+              nativeStartupTrimState = "restart_requested";
+              emitCafTelemetry("CAF_NATIVE_STARTUP_RELOAD", {
+                playbackEpoch: lastPlaybackEpoch,
+                playbackRevision: lastPlaybackRevision,
+                nativeAttemptId: nativeStartupAttemptId,
+                timeoutMs: NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS,
+                reason: "native_startup_trim_unseekable",
+              });
+              relayLogToStudio(
+                "⚠️ Receiver: Native live-edge trim was not seekable within " +
+                  NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS +
+                  "ms; replacing the stale prewarm stream before unmute.",
+              );
+              logReceiverStartupTiming("native_startup_trim_timeout", {
+                nativeAttemptId: nativeStartupAttemptId,
+                timeoutMs: NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS,
+                action: "fresh_native_stream",
+              });
+              // Keep the ordered Play intent active while discarding the
+              // unseekable progressive-WAV tail. The fresh stream is opened
+              // after the Play boundary, so its bounded preroll cannot hide
+              // real PCM behind seconds of stale prewarm silence.
+              stopNativeStreamPlayout("native_startup_trim_unseekable", true);
+              const restarted = maybeStartNativeStream(
+                "native_startup_trim_restart",
+                false,
+                false,
+                false,
+                true,
+              );
+              if (restarted) {
+                relayLogToStudio(
+                  "🔄 Receiver: Fresh native stream requested after unseekable prewarm trim.",
+                );
+                return true;
+              }
+              relayLogToStudio(
+                "⚠️ Receiver: Fresh native stream could not start after trim failure; opening PCM fallback.",
+              );
+              return startPcmFallbackAfterNativeFailure(
+                "native_startup_trim_restart_unavailable",
+              );
+            }
             nativeStartupTrimPending = false;
             nativeStartupTrimState = "timeout";
             relayLogToStudio(
-              "⚠️ Receiver: Native live-edge trim was not seekable within " +
-                NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS +
-                "ms; releasing the bounded prewarm fallback.",
+              "⚠️ Receiver: Native startup trim recovery was already attempted; opening PCM fallback.",
             );
             logReceiverStartupTiming("native_startup_trim_timeout", {
               nativeAttemptId: nativeStartupAttemptId,
               timeoutMs: NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS,
+              action: "pcm_fallback",
             });
-            clearNativeStartupTrimRetry();
-            activateNativeStream(modeReason, logMessage, attemptId);
-            return true;
+            return startPcmFallbackAfterNativeFailure(
+              "native_startup_trim_recovery_exhausted",
+            );
           }
           if (nativeStartupTrimRetryTimerId) {
             return true;
@@ -4656,41 +4717,24 @@
             try {
               const targetVolume = element._mxsVolumeBeforePrewarm === undefined
                 ? 1
-                : element._mxsVolumeBeforePrewarm;
+                : Math.max(0, Math.min(1, Number(element._mxsVolumeBeforePrewarm)));
               rememberNativeAudibleVolume(element, targetVolume);
+              // Set the requested gain while the element is still muted, then
+              // release mute in the same task. Fading from volume=0 made CAF
+              // publish a transient ~0.0575 level and allowed the first real
+              // PCM to be perceived as silence on physical receivers.
+              element.volume = Number.isFinite(targetVolume) ? targetVolume : 1;
               element.muted = false;
-              element.volume = 0;
               delete element._mxsVolumeBeforePrewarm;
               delete element._mxsPrewarmMuted;
-              const fadeStartedAt = typeof performance !== "undefined" && performance.now
-                ? performance.now()
-                : Date.now();
-              const fadeIn = function () {
-                const now = typeof performance !== "undefined" && performance.now
-                  ? performance.now()
-                  : Date.now();
-                const progress = Math.min(
-                  1,
-                  Math.max(0, (now - fadeStartedAt) / NATIVE_STARTUP_FADE_MS),
-                );
-                try {
-                  element.volume = targetVolume * progress;
-                } catch (e) {
-                  return;
-                }
-                if (progress < 1) {
-                  element._mxsPrewarmFadeTimerId = setTimeout(fadeIn, 4);
-                } else {
-                  delete element._mxsPrewarmFadeTimerId;
-                }
-              };
-              fadeIn();
             } catch (e) {}
           });
           logReceiverStartupTiming("native_prewarm_unmuted", {
             nativeAttemptId: nativeStartupAttemptId,
             playbackRequested: !!lastPlaybackStartSignalAt,
             prewarmReady: nativeStreamPrewarmReady,
+            volumeRestoreMode: "atomic",
+            fadeMs: 0,
           });
         }
 
@@ -6634,7 +6678,8 @@
                   workletReady &&
                   e.data.targetAcquired === true &&
                   renderedFrames > pcmRenderedFramesAtPlaybackStart &&
-                  renderedFramesDelta > 0
+                  renderedFramesDelta > 0 &&
+                  Number(e.data.peak) > 0.0001
                 ) {
                   notifyPlayoutAudible("pcm_fallback", "pcm_render_progress", {
                     renderedFramesDelta,
@@ -10948,7 +10993,10 @@
           noteOrderedPlaybackAction("PLAYBACK_STOP");
           desiredPlaybackState = "stopped";
           clearPlaybackRecoveryRetry();
-          stopAllPlayout(d.reason || "playback_stop", undefined, false, true);
+          // STOP is a destructive boundary. Retaining a muted progressive
+          // native item here lets the next Play inherit an unseekable/stale
+          // live tail; Pause remains the reversible warm-stream operation.
+          stopAllPlayout(d.reason || "playback_stop", undefined, false, false);
           acknowledgePlaybackRevision(d, "playback_stop");
         }
 
