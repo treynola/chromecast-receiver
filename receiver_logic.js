@@ -200,7 +200,10 @@
         const NATIVE_STARTUP_FADE_MS = 12;
         const NATIVE_STARTUP_TRIM_RETRY_MS = 25;
         const NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS = 1000;
+        const NATIVE_LATENCY_SAMPLE_INTERVAL_MS = 200;
         const NATIVE_LATENCY_REPORT_INTERVAL_MS = 1000;
+        const NATIVE_LATENCY_ROLLING_WINDOW_MS = 1600;
+        const NATIVE_LATENCY_MIN_REPORT_SAMPLES = 3;
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
@@ -261,6 +264,7 @@
         var allowSamePlaybackRevisionReplay = false;
         var lastOrderedPlaybackAction = "";
         var lastOrderedPlaybackAt = 0;
+        var desiredPlaybackState = "idle";
         const PLAYER_MANAGER_ORDER_GUARD_MS = 5000;
         var lastGuiRevision = -1;
         var guiSessionNonce = null;
@@ -343,6 +347,9 @@
         var receiverBridgeConfigRevision = null;
         var receiverHandshakeCommitSignature = null;
         var pcmAudioPriorityActive = false;
+        var playbackControlGuiHoldUntil = 0;
+        var playbackControlGuiHoldTimerId = null;
+        const PLAYBACK_CONTROL_GUI_HOLD_MS = 300;
         var deferredGuiState = null;
         var deferredGuiRevision = -1;
         var deferredReceiverTelemetry = [];
@@ -407,7 +414,7 @@
           const signature = [
             guiSessionNonce,
             playbackModeSocketGeneration,
-            workletLifecycleGeneration,
+            receiverBridgeConfigRevision ?? "unknown",
           ].join(":");
           if (receiverHandshakeCommitSignature === signature) {
             return true;
@@ -415,10 +422,11 @@
           try {
             binaryWS.send(JSON.stringify({
               type: "RECEIVER_HANDSHAKE_COMMITTED",
-              handshakeCommitVersion: 1,
+              handshakeCommitVersion: 2,
               guiSessionNonce,
               socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
+              bridgeConfigRevision: receiverBridgeConfigRevision,
               config: {
                 sampleRate: window._hwRate || window._studioRate || 48000,
                 bitDepth: 16,
@@ -883,6 +891,53 @@
           return true;
         }
 
+        function flushDeferredGuiState(reason) {
+          if (
+            pcmAudioPriorityActive ||
+            Date.now() < playbackControlGuiHoldUntil ||
+            !deferredGuiState
+          ) {
+            return false;
+          }
+          const state = deferredGuiState;
+          const revision = deferredGuiRevision;
+          deferredGuiState = null;
+          deferredGuiRevision = -1;
+          if (renderState(state, true)) {
+            guiRenderedCount += 1;
+            guiLastRenderedRevision = revision;
+          }
+          lastMirroredState = state;
+          relayLogToStudio(
+            "🎛️ Deferred GUI telemetry " + JSON.stringify({
+              reason: reason || "priority_released",
+              received: guiReceivedCount,
+              deferred: guiDeferredCount,
+              rendered: guiRenderedCount,
+              acknowledged: guiAckCount,
+              lastReceivedRevision: guiLastReceivedRevision,
+              lastDeferredRevision: guiLastDeferredRevision,
+              lastRenderedRevision: guiLastRenderedRevision,
+              lastAckRevision: guiLastAckRevision,
+            }),
+          );
+          return true;
+        }
+
+        function holdPlaybackControlGuiPriority(reason) {
+          playbackControlGuiHoldUntil = Math.max(
+            playbackControlGuiHoldUntil,
+            Date.now() + PLAYBACK_CONTROL_GUI_HOLD_MS,
+          );
+          if (playbackControlGuiHoldTimerId) {
+            clearTimeout(playbackControlGuiHoldTimerId);
+          }
+          playbackControlGuiHoldTimerId = setTimeout(() => {
+            playbackControlGuiHoldTimerId = null;
+            flushDeferredGuiState(reason || "playback_control_released");
+          }, PLAYBACK_CONTROL_GUI_HOLD_MS);
+        }
+
         function setPcmAudioPriority(active, reason) {
           const nextActive = active === true;
           if (pcmAudioPriorityActive === nextActive) {
@@ -898,30 +953,7 @@
             );
             return;
           }
-          if (deferredGuiState) {
-            const state = deferredGuiState;
-            const revision = deferredGuiRevision;
-            deferredGuiState = null;
-            deferredGuiRevision = -1;
-            if (renderState(state, true)) {
-              guiRenderedCount += 1;
-              guiLastRenderedRevision = revision;
-            }
-            lastMirroredState = state;
-            relayLogToStudio(
-              "🎛️ PCM GUI telemetry " + JSON.stringify({
-                reason: "pcm_priority_released",
-                received: guiReceivedCount,
-                deferred: guiDeferredCount,
-                rendered: guiRenderedCount,
-                acknowledged: guiAckCount,
-                lastReceivedRevision: guiLastReceivedRevision,
-                lastDeferredRevision: guiLastDeferredRevision,
-                lastRenderedRevision: guiLastRenderedRevision,
-                lastAckRevision: guiLastAckRevision,
-              }),
-            );
-          }
+          flushDeferredGuiState("pcm_priority_released");
           relayLogToStudio(
             "🎛️ Receiver PCM audio priority released" +
               (reason ? " (" + reason + ")" : "") + ".",
@@ -3026,6 +3058,9 @@
           const playbackRevision = Number.isSafeInteger(messageRevision)
             ? messageRevision
             : lastPlaybackRevision;
+          const appliedAtEpochMs = Date.now();
+          const receivedAtEpochMs = Number(message && message._receiverReceivedAtEpochMs);
+          const issuedAtEpochMs = Number(message && message.issuedAtEpochMs);
           // GUI snapshots do not use playback ACKs. Only playback commands
           // reach this function, keeping ACK traffic off the GUI path.
           try {
@@ -3035,6 +3070,18 @@
                 action: ackAction,
                 playbackEpoch,
                 playbackRevision,
+                desiredPlaybackState,
+                receivedAtEpochMs: Number.isFinite(receivedAtEpochMs)
+                  ? receivedAtEpochMs
+                  : null,
+                appliedAtEpochMs,
+                receiverQueueMs: Number.isFinite(receivedAtEpochMs)
+                  ? Math.max(0, appliedAtEpochMs - receivedAtEpochMs)
+                  : null,
+                senderToReceiverWallMs:
+                  Number.isFinite(receivedAtEpochMs) && Number.isFinite(issuedAtEpochMs)
+                    ? receivedAtEpochMs - issuedAtEpochMs
+                    : null,
               }),
             );
           } catch (e) {}
@@ -3044,6 +3091,12 @@
           if (window._nativeLatencyIntervalId) {
             clearInterval(window._nativeLatencyIntervalId);
           }
+          let latencySamples = [];
+          let measurementKey = "";
+          let lastSamplePlayhead = null;
+          let lastSampleAt = 0;
+          let lastReportAt = 0;
+          let continuousAudibleStartedAt = 0;
           window._nativeLatencyIntervalId = setInterval(() => {
             // Prewarm and paused media can have a large progressive-WAV tail,
             // but neither path is audible. Reporting either one as receiver
@@ -3078,32 +3131,71 @@
               return;
             }
 
-            const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
-            const playhead = activeAudio.currentTime;
+            const reportedLiveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
+            const reportedPlayhead = activeAudio.currentTime;
+            const reportedBufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+            const progressNow = Date.now();
+            const nextMeasurementKey = [
+              lastPlaybackEpoch,
+              lastPlaybackRevision,
+              nativeStartupAttemptId,
+              activeAudio.id || "native-media",
+            ].join(":");
+            if (measurementKey !== nextMeasurementKey) {
+              measurementKey = nextMeasurementKey;
+              latencySamples = [];
+              lastSamplePlayhead = null;
+              lastSampleAt = 0;
+              lastReportAt = 0;
+              continuousAudibleStartedAt = progressNow;
+            }
             // Report the observed transport buffer only. Seeking the live media
             // element to chase a moving latency target creates an audible jump,
             // breaks source-frame continuity, and makes the sender's local delay
             // chase the receiver. Native playback remains at playbackRate 1.0;
-            // the sender applies only bounded, stable alignment updates.
-            let latency = liveEdge - playhead;
+            // the sender applies only bounded alignment updates. Sample faster
+            // than the reporting cadence so progressive-media refill edges are
+            // summarized rather than mistaken for presentation-clock jumps.
+            const rawLatency = reportedLiveEdge - reportedPlayhead;
 
             // This is telemetry only. The one permitted startup trim is made
             // at the ordered Play boundary while the prewarm output is muted;
             // never seek here during audible playback.
-            const reportedLiveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
-            const reportedPlayhead = activeAudio.currentTime;
-            const reportedBufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
             const reportedBufferedDuration = Math.max(
               0,
               reportedLiveEdge - reportedBufferedStart,
             );
-            const progressNow = Date.now();
             const outputAudible =
               activeAudio.muted !== true &&
               Number(activeAudio.volume) > 0.001;
-            if (!Number.isFinite(latency) || latency < 0 || !outputAudible) {
+            if (!Number.isFinite(rawLatency) || rawLatency < 0 || !outputAudible) {
+              continuousAudibleStartedAt = 0;
               return;
             }
+            const samplePlayheadAdvance = Number.isFinite(lastSamplePlayhead)
+              ? reportedPlayhead - lastSamplePlayhead
+              : null;
+            const sampleWallIntervalMs = lastSampleAt > 0
+              ? progressNow - lastSampleAt
+              : null;
+            if (Number.isFinite(samplePlayheadAdvance) && samplePlayheadAdvance < 0.01) {
+              continuousAudibleStartedAt = 0;
+              return;
+            }
+            if (continuousAudibleStartedAt <= 0) {
+              continuousAudibleStartedAt = progressNow;
+            }
+            lastSamplePlayhead = reportedPlayhead;
+            lastSampleAt = progressNow;
+            latencySamples.push({
+              at: progressNow,
+              latency: rawLatency,
+              liveEdge: reportedLiveEdge,
+              playhead: reportedPlayhead,
+            });
+            latencySamples = latencySamples.filter(
+              (sample) => progressNow - sample.at <= NATIVE_LATENCY_ROLLING_WINDOW_MS,
+            );
             if (
               Number.isFinite(lastNativePlayoutProofTime) &&
               reportedPlayhead + 0.05 < lastNativePlayoutProofTime
@@ -3156,15 +3248,51 @@
               lastNativePlayoutProofTime = reportedPlayhead;
             }
 
+            if (
+              progressNow - lastReportAt < NATIVE_LATENCY_REPORT_INTERVAL_MS ||
+              latencySamples.length < NATIVE_LATENCY_MIN_REPORT_SAMPLES
+            ) {
+              return;
+            }
+            const sortedLatencies = latencySamples
+              .map((sample) => sample.latency)
+              .sort((a, b) => a - b);
+            const medianLatency = sortedLatencies[Math.floor(sortedLatencies.length / 2)];
+            const deviations = sortedLatencies
+              .map((sample) => Math.abs(sample - medianLatency))
+              .sort((a, b) => a - b);
+            const medianAbsoluteDeviation = deviations[Math.floor(deviations.length / 2)];
+            const rawMinLatency = sortedLatencies[0];
+            const rawMaxLatency = sortedLatencies[sortedLatencies.length - 1];
+            const rawSpan = rawMaxLatency - rawMinLatency;
+            lastReportAt = progressNow;
+
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               binaryWS.send(
                 JSON.stringify({
                   type: "NATIVE_LATENCY_REPORT",
-                  latency: latency,
+                  latency: medianLatency,
                   syncComponents: {
                     source: "native_media_buffer",
                     pathOwner: "native_caf",
                     playbackMode: window._playbackMode || "unknown",
+                    estimator: "rolling_median_v1",
+                    measurementConfidence:
+                      rawSpan <= 0.35 && medianAbsoluteDeviation <= 0.18
+                        ? "bootstrap_coherent"
+                        : "rolling_noisy",
+                    reportAtEpochMs: progressNow,
+                    sampleAgeMs: Math.max(0, progressNow - latencySamples[latencySamples.length - 1].at),
+                    sampleCount: latencySamples.length,
+                    sampleWindowMs: progressNow - latencySamples[0].at,
+                    rawLatencySeconds: rawLatency,
+                    rawMinLatencySeconds: rawMinLatency,
+                    rawMaxLatencySeconds: rawMaxLatency,
+                    rawSpanSeconds: rawSpan,
+                    medianAbsoluteDeviationSeconds: medianAbsoluteDeviation,
+                    continuousAudibleMs: Math.max(0, progressNow - continuousAudibleStartedAt),
+                    samplePlayheadAdvanceSeconds: samplePlayheadAdvance,
+                    sampleWallIntervalMs,
                     liveEdgeSeconds: reportedLiveEdge,
                     playheadSeconds: reportedPlayhead,
                     bufferedStartSeconds: reportedBufferedStart,
@@ -3181,7 +3309,7 @@
                 }),
               );
             }
-          }, NATIVE_LATENCY_REPORT_INTERVAL_MS);
+          }, NATIVE_LATENCY_SAMPLE_INTERVAL_MS);
         }
 
         function clearPlaybackStartSignal() {
@@ -8124,7 +8252,15 @@
             }
             applyDataset(value, control.data);
             if (tagName === "select") {
-              (control.options || []).forEach((option) => {
+              const controlOptions = control.optionCatalogRef === "effectOptions"
+                ? effectOptionsCatalog.map((option) => ({
+                    value: option,
+                    label: option === "none" ? "None" : option,
+                    selected: String(option) === String(control.value ?? "none"),
+                    disabled: false,
+                  }))
+                : (control.options || []);
+              controlOptions.forEach((option) => {
                 const item = document.createElement("option");
                 item.value = String(option.value ?? "");
                 item.textContent = option.label || item.value;
@@ -9637,6 +9773,7 @@
 
         function renderState(s, force = false, guiRevision = -1) {
           if (!s) return false;
+          rememberEffectOptions(s.effectOptions);
           const phaseClock = () =>
             typeof performance !== "undefined" && typeof performance.now === "function"
               ? performance.now()
@@ -10338,6 +10475,7 @@
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_START");
+          desiredPlaybackState = "playing";
           markPlaybackStartSignal();
           playbackPaused = false;
           setPcmAudioPriority(
@@ -10519,7 +10657,8 @@
             ? performance.now()
             : Date.now();
           const shouldDeferGuiState =
-            pcmAudioPriorityActive && ackType !== "interaction";
+            (pcmAudioPriorityActive || Date.now() < playbackControlGuiHoldUntil) &&
+            ackType !== "interaction";
           let renderResult;
           if (shouldDeferGuiState) {
             // GUI state is latest-value data. Accept and acknowledge the
@@ -10699,6 +10838,7 @@
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_STOP");
+          desiredPlaybackState = "stopped";
           clearPlaybackRecoveryRetry();
           stopAllPlayout(d.reason || "playback_stop", undefined, false, true);
           acknowledgePlaybackRevision(d, "playback_stop");
@@ -10709,6 +10849,7 @@
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_PAUSE");
+          desiredPlaybackState = "paused";
           clearPlaybackRecoveryRetry();
           clearNativeOrderedResumeRecovery("playback_pause");
           pauseAllPlayout(d.reason || "playback_pause");
@@ -10765,6 +10906,13 @@
         }
 
         function handleReceiverCommand(d, source) {
+          if (
+            d &&
+            (d.type === "PLAYBACK_START" || d.type === "PLAYBACK_PAUSE" || d.type === "PLAYBACK_STOP") &&
+            !Number.isFinite(Number(d._receiverReceivedAtEpochMs))
+          ) {
+            d._receiverReceivedAtEpochMs = Date.now();
+          }
           if (d && d.type === "GUI_ACTION_RESULT") {
             if (
               d.transport !== "gui" ||
@@ -10867,6 +11015,9 @@
                 " before authenticated HANDSHAKE_ACK/config readiness.",
             );
             return true;
+          }
+          if (requiresAuthenticatedAudio && d.type !== "PCM_RELAY") {
+            holdPlaybackControlGuiPriority(d.type.toLowerCase());
           }
           switch (d.type) {
             case "RECEIVER_SHUTDOWN":
