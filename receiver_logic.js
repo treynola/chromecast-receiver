@@ -9685,17 +9685,32 @@
           if (!state || typeof state !== "object") {
             return null;
           }
-          try {
-            return JSON.parse(JSON.stringify(state));
-          } catch (e) {
-            const copy = { ...state };
-            if (Array.isArray(state.tracks)) {
-              copy.tracks = state.tracks.map((track) =>
-                track && typeof track === "object" ? { ...track } : track,
-              );
-            }
-            return copy;
+          // Live GUI patches are merged immediately before the render gate.
+          // A JSON deep clone here copied every dialog control and waveform on
+          // every meter tick, turning latest-value traffic into a long main
+          // thread task. Merge code below replaces each touched nested object;
+          // shallow-copy the containers that immediate-playback and patch
+          // paths mutate, while leaving immutable baseline data shared.
+          const copy = { ...state };
+          if (state.master && typeof state.master === "object") {
+            copy.master = { ...state.master };
           }
+          if (Array.isArray(state.tracks)) {
+            copy.tracks = state.tracks.map((track) =>
+              track && typeof track === "object" ? { ...track } : track,
+            );
+          }
+          if (Array.isArray(state.sampler)) {
+            copy.sampler = state.sampler.map((pad) =>
+              pad && typeof pad === "object" ? { ...pad } : pad,
+            );
+          }
+          if (Array.isArray(state.dialogs)) {
+            copy.dialogs = state.dialogs.map((dialog) =>
+              dialog && typeof dialog === "object" ? { ...dialog } : dialog,
+            );
+          }
+          return copy;
         }
 
         function mergeGuiLivePatch(patch) {
