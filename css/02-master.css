@@ -104,7 +104,7 @@
   flex-direction: row !important;
   gap: 3px !important;
   width: 98% !important;
-  margin: 8px auto 16px auto !important;
+  margin: 6px auto !important;
   position: relative !important;
   z-index: 10 !important;
   padding: 0 2px !important;

@@ -56,9 +56,11 @@
   align-items: center !important;
   justify-content: space-between !important;
   gap: 5px !important;
-  padding-top: 5px !important;
-  border-top: 1px solid var(--mid-gray) !important;
-  margin-top: 5px !important;
+  padding: 1px 0 !important;
+  border: none !important;
+  border-top: none !important;
+  margin: 0 !important;
+  background: transparent !important;
 }
 
 #tracks-container,
@@ -353,9 +355,11 @@
   align-items: center !important;
   justify-content: space-between !important;
   gap: 5px !important;
-  padding-top: 5px !important;
-  border-top: 1px solid var(--mid-gray) !important;
-  margin-top: 5px !important;
+  padding: 1px 0 !important;
+  border: none !important;
+  border-top: none !important;
+  margin: 0 !important;
+  background: transparent !important;
 }
 
 .track-bottom-layout label {

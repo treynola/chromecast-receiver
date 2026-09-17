@@ -2241,8 +2241,8 @@ select option {
   flex-direction: column;
   gap: 0px;
   border-bottom: 1px solid var(--mid-gray);
-  padding-bottom: 5px;
-  margin-bottom: 5px;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
 }
 
 .main-controls .knob-container {
@@ -2692,12 +2692,12 @@ select option {
 .track-bpm-module {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   background: #181818;
   border: 1px solid var(--mid-gray);
   border-radius: 4px;
-  padding: 3px 5px;
-  margin-top: 2px;
+  padding: 2px 4px;
+  margin-top: -3px !important;
   margin-bottom: 2px;
   box-sizing: border-box;
   width: 100%;
