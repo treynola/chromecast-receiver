@@ -18,7 +18,7 @@
     "open-sample-pad-effect",
     "open-sample-station",
   ]);
-  const targetIdPattern = /^(t-(rec|stop|play|rev|slice)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain|ls|le)-sl-\d+|t-input-\d+|t-effect-select-\d+|t-fx-(left|right)-\d+|t-fx-chk-\d+-\d+|t-lfo[12]-chk-\d+-(pitch|vol|pan|treble|mid_freq|mid_gain|bass)|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|record-as-select|import-files-button|show-docs-button|sample-station-button|settings-button|sample-\d+)$/;
+  const targetIdPattern = /^(t-(rec|stop|play|rev|slice|sync-all)-\d+|t-(pitch|vol|pan|treble|mid_freq|mid_gain|bass|gain|ls|le)-sl-\d+|t-input-\d+|t-effect-select-\d+|t-bpm-counter-\d+|t-bpm-sync-\d+-to-\d+|t-fx-(left|right)-\d+|t-fx-chk-\d+-\d+|t-lfo[12]-chk-\d+-(pitch|vol|pan|treble|mid_freq|mid_gain|bass)|master-record-button|lfo-toggle|lfo2-toggle|master-volume|loop-length|lfo-time|lfo2-time|record-as-select|import-files-button|show-docs-button|sample-station-button|settings-button|sample-\d+)$/;
   const commandNameSet = new Set(commandNames);
   const registryActionIdSet = new Set(registryActionIds);
 

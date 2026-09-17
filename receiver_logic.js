@@ -6077,7 +6077,7 @@
           }
         }
         const KNOB_CONFIGS = [
-          { l: "Pitch", p: "pitch", min: -100, max: 100, val: 0, u: "%", s: 1 },
+          { l: "Pitch", p: "pitch", min: -100, max: 100, val: 0, u: "%", s: 0.1 },
           { l: "Volume", p: "vol", min: -48, max: 6, val: 0, u: "dB", s: 0.1 },
           { l: "Pan", p: "pan", min: -1, max: 1, val: 0, u: "", s: 0.05 },
           { l: "Treble", p: "treble", min: -12, max: 12, val: 0, u: "dB", s: 0.1 },
@@ -6316,7 +6316,20 @@
             );
           }
           for (var i = 0; i < normalizedTrackCount; i++) {
-            if (document.getElementById("track-" + i)) continue;
+            var existingTrack = document.getElementById("track-" + i);
+            if (existingTrack) {
+              if (!existingTrack.querySelector(".track-bpm-module")) {
+                const bpmModule = document.createElement("div");
+                bpmModule.className = "track-bpm-module";
+                bpmModule.dataset.trackIndex = String(i);
+                bpmModule.id = `t-bpm-module-${i}`;
+                bpmModule.innerHTML = `<div class="track-bpm-line1"><span class="track-bpm-title">BPM:</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div>`;
+                const mainControls = existingTrack.querySelector(".main-controls");
+                if (mainControls) existingTrack.insertBefore(bpmModule, mainControls);
+                else existingTrack.appendChild(bpmModule);
+              }
+              continue;
+            }
             var t = document.createElement("div");
             t.className = "track";
             t.id = "track-" + i;
@@ -6332,6 +6345,7 @@
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
+                        <div class="track-bpm-module" data-track-index="${i}" id="t-bpm-module-${i}"><div class="track-bpm-line1"><span class="track-bpm-title">BPM:</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div></div>
                         <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group" data-param-label="${cfg.p}"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}" data-value-for="${cfg.p}">${Number(cfg.val).toFixed(1)}${cfg.u}</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" title="Click to assign ${cfg.l} LFO 1. Double-click to reverse." aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" title="Click to assign ${cfg.l} LFO 2. Double-click to reverse." aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" data-param="${cfg.p}" min="${cfg.min}" max="${cfg.max}" step="${cfg.s}" value="${cfg.val}" title="Increment: ${cfg.s}"><span class="preset-marker min-preset-marker" id="t-min-marker-${i}-${cfg.p}" data-min-marker-for="${cfg.p}"></span><span class="preset-marker max-preset-marker" id="t-max-marker-${i}-${cfg.p}" data-max-marker-for="${cfg.p}"></span></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
@@ -7970,7 +7984,7 @@
             const exactEffectDialog = panel.matches(
               ".effect-params-dialog, .audition-params-dialog",
             ) && dialog.kind !== "sampleEditor";
-            const exactSamplePadDialog = panel.matches(".pad-settings-dialog");
+            const exactSamplePadDialog = dialog.kind === "samplePadSettings" && panel.matches(".pad-settings-dialog");
             const exactSampleEditorDialog = dialog.kind === "sampleEditor" && panel.matches(".sample-editor-dialog");
             applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
             panel.className = [
@@ -7991,6 +8005,23 @@
               }
               if (sampleName && dialog.samplePadLayout?.sampleNameText !== undefined) {
                 sampleName.textContent = String(dialog.samplePadLayout.sampleNameText);
+              }
+              const bpmSetting = (dialog.samplePadLayout?.settings || []).find((s) => s.kind === "bpmModule");
+              if (bpmSetting) {
+                const bpmModuleEl = panel.querySelector(".pad-bpm-module");
+                if (bpmModuleEl) {
+                  const baseBadge = bpmModuleEl.querySelector(".pad-bpm-base-badge");
+                  if (baseBadge && bpmSetting.baseBpmText) {
+                    baseBadge.textContent = bpmSetting.baseBpmText;
+                  }
+                  (bpmSetting.syncButtons || []).forEach((sBtn) => {
+                    const btn = bpmModuleEl.querySelector(`.pad-bpm-sync-btn[data-track="${sBtn.track}"]`);
+                    if (btn) {
+                      btn.classList.toggle("is-selected", Boolean(sBtn.selected));
+                      btn.classList.toggle("is-populated", Boolean(sBtn.populated));
+                    }
+                  });
+                }
               }
             } else if (dialog.header) {
               const titleLines = Array.from(panel.querySelectorAll(
@@ -8414,7 +8445,7 @@
               return button;
             };
 
-            const samplePadManifest = exactSamplePadDialog || exactSampleEditorDialog
+            const samplePadManifest = exactSampleEditorDialog
               ? dialog.samplePadDomManifest
               : null;
             if (
@@ -8427,25 +8458,16 @@
                 "button",
                 "canvas",
                 "div",
+                "i",
                 "input",
                 "label",
                 "option",
                 "output",
+                "p",
                 "select",
                 "span",
+                "strong",
                 "textarea",
-              ]);
-              const allowedAttributes = new Set([
-                "aria-current",
-                "aria-expanded",
-                "aria-hidden",
-                "aria-label",
-                "aria-labelledby",
-                "aria-live",
-                "aria-pressed",
-                "for",
-                "role",
-                "title",
               ]);
               let hydratedNodeCount = 0;
               const hydrateNode = (node, depth = 0) => {
@@ -8464,9 +8486,32 @@
                   element.id = String(attributes.id);
                 }
                 Object.entries(attributes).forEach(([name, value]) => {
-                  if (!allowedAttributes.has(name) || value === undefined || value === null) return;
-                  element.setAttribute(name, String(value).slice(0, 256));
+                  if (value === undefined || value === null) return;
+                  if (
+                    name.startsWith("data-") ||
+                    name.startsWith("aria-") ||
+                    [
+                      "type", "min", "max", "step", "value", "placeholder", "inputmode",
+                      "name", "disabled", "checked", "selected", "width", "height",
+                      "for", "role", "title"
+                    ].includes(name)
+                  ) {
+                    element.setAttribute(name, String(value).slice(0, 256));
+                  }
                 });
+                if (tagName === "input") {
+                  if (attributes.type) element.type = String(attributes.type);
+                  if (attributes.min !== undefined) element.min = String(attributes.min);
+                  if (attributes.max !== undefined) element.max = String(attributes.max);
+                  if (attributes.step !== undefined) element.step = String(attributes.step);
+                  if (attributes.value !== undefined) element.value = String(attributes.value);
+                  if (attributes.checked !== undefined) element.checked = Boolean(attributes.checked);
+                }
+                if (tagName === "option") {
+                  if (attributes.value !== undefined) element.value = String(attributes.value);
+                  if (attributes.selected) element.selected = true;
+                  if (attributes.disabled) element.disabled = true;
+                }
                 applyDataset(element, node.data);
 
                 const controlIndex = Number(node.controlIndex);
@@ -8507,7 +8552,7 @@
                   }
                 }
 
-                if (tagName !== "select" && tagName !== "input") {
+                if (tagName !== "input") {
                   (node.children || []).forEach((child) => {
                     const hydrated = hydrateNode(child, depth + 1);
                     if (hydrated) element.appendChild(hydrated);
@@ -8554,10 +8599,23 @@
               const headerState = dialog.header || {};
               const header = document.createElement("div");
               header.className = normalizeClassName(headerState.className, "dialog-header");
+              if (layout.closeActionIndex !== undefined && layout.closeActionIndex >= 0) {
+                const closeRow = document.createElement("div");
+                closeRow.className = normalizeClassName(
+                  layout.closeRowClassName,
+                  "effect-dialog-close-row pad-dialog-close-row",
+                );
+                const typeBadge = document.createElement("span");
+                typeBadge.className = "dialog-effect-type pad-dialog-type-badge";
+                typeBadge.textContent = layout.dialogEffectType || "SAMPLE PAD:";
+                closeRow.appendChild(typeBadge);
+                appendActionByIndex(closeRow, layout.closeActionIndex);
+                header.appendChild(closeRow);
+              }
               const headerTop = document.createElement("div");
               headerTop.className = normalizeClassName(
                 layout.headerTopClassName || headerState.topClassName,
-                "dialog-header-top pad-dialog-title-row",
+                "dialog-header-top pad-dialog-title-row effect-dialog-title-row",
               );
               const navGroup = document.createElement("div");
               navGroup.className = normalizeClassName(
@@ -8568,7 +8626,7 @@
               const heading = document.createElement("span");
               heading.className = normalizeClassName(
                 headerState.titleClassName,
-                "dialog-title",
+                "dialog-title effect-dialog-title-text",
               );
               if (layout.titleId) heading.id = String(layout.titleId);
               const padTitle = document.createElement("span");
@@ -8581,7 +8639,9 @@
               navGroup.appendChild(heading);
               appendActionByIndex(navGroup, layout.nextActionIndex);
               headerTop.appendChild(navGroup);
-              appendActionByIndex(headerTop, layout.closeActionIndex);
+              if (header.children.length === 0) {
+                appendActionByIndex(headerTop, layout.closeActionIndex);
+              }
               header.appendChild(headerTop);
               panel.appendChild(header);
 
@@ -8615,6 +8675,82 @@
                 "pad-settings-strip",
               );
               (layout.settings || []).forEach((item) => {
+                if (item.kind === "bpmModule") {
+                  const bpmField = document.createElement("div");
+                  bpmField.className = normalizeClassName(item.className, "pad-setting-field pad-bpm-module");
+                  const line1 = document.createElement("div");
+                  line1.className = "pad-bpm-line1";
+                  const title = document.createElement("div");
+                  title.className = "pad-bpm-title";
+                  title.textContent = "BPM";
+                  const baseBadge = document.createElement("span");
+                  baseBadge.className = "pad-bpm-base-badge";
+                  baseBadge.textContent = item.baseBpmText || "Base: 120.0";
+                  const counterContainer = document.createElement("div");
+                  counterContainer.className = "pad-bpm-counter-container";
+                  const counterCtrl = controlByIndex(item.counterControlIndex);
+                  if (counterCtrl) {
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    applyControlState(input, counterCtrl, dialog, item.counterControlIndex);
+                    input.className = normalizeClassName(counterCtrl.className, "pad-bpm-counter");
+                    counterContainer.appendChild(input);
+                  }
+                  appendActionByIndex(counterContainer, item.halfActionIndex);
+                  appendActionByIndex(counterContainer, item.doubleActionIndex);
+                  line1.append(title, baseBadge, counterContainer);
+
+                  const line2 = document.createElement("div");
+                  line2.className = "pad-bpm-line2";
+                  const syncAllLabel = document.createElement("label");
+                  syncAllLabel.className = "pad-bpm-sync-all-label";
+                  const syncAllCtrl = controlByIndex(item.syncAllControlIndex);
+                  if (syncAllCtrl) {
+                    const syncAllChk = document.createElement("input");
+                    syncAllChk.type = "checkbox";
+                    applyControlState(syncAllChk, syncAllCtrl, dialog, item.syncAllControlIndex);
+                    syncAllChk.className = normalizeClassName(syncAllCtrl.className, "pad-bpm-sync-all-chk");
+                    syncAllLabel.appendChild(syncAllChk);
+                  }
+                  const syncAllText = document.createElement("span");
+                  syncAllText.className = "pad-bpm-sync-all-text";
+                  syncAllText.textContent = "SYNC ALL";
+                  syncAllLabel.appendChild(syncAllText);
+
+                  const syncWithGroup = document.createElement("div");
+                  syncWithGroup.className = "pad-bpm-sync-with-group";
+                  const syncWithLabel = document.createElement("span");
+                  syncWithLabel.className = "pad-bpm-sync-with-label";
+                  syncWithLabel.textContent = "SYNC";
+                  const syncButtons = document.createElement("div");
+                  syncButtons.className = "pad-bpm-sync-buttons";
+                  (item.syncButtons || []).forEach((sBtn) => {
+                    const btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = normalizeClassName(sBtn.className, "pad-bpm-sync-btn");
+                    btn.textContent = String(sBtn.track || "");
+                    btn.dataset.track = String(sBtn.track || "");
+                    if (sBtn.selected) btn.classList.add("is-selected");
+                    if (sBtn.populated) btn.classList.add("is-populated");
+                    if (sBtn.actionIndex >= 0) {
+                      const action = actionByIndex(sBtn.actionIndex);
+                      if (action) {
+                        btn.dataset.dialogId = dialog.id || "";
+                        btn.dataset.actionIndex = String(sBtn.actionIndex);
+                        btn.dataset.actionId = action.actionId || `button-${sBtn.actionIndex}`;
+                        applyDataset(btn, action.data);
+                        if (action.title) btn.title = String(action.title);
+                        if (action.ariaLabel) btn.setAttribute("aria-label", action.ariaLabel);
+                      }
+                    }
+                    syncButtons.appendChild(btn);
+                  });
+                  syncWithGroup.append(syncWithLabel, syncButtons);
+                  line2.append(syncAllLabel, syncWithGroup);
+                  bpmField.append(line1, line2);
+                  settingsStrip.appendChild(bpmField);
+                  return;
+                }
                 const isAction = item.kind === "action";
                 const field = document.createElement(isAction ? "div" : "label");
                 field.className = normalizeClassName(
@@ -8683,9 +8819,6 @@
             const headerState = dialog.header || {};
             const header = document.createElement("div");
             header.className = normalizeClassName(headerState.className, "dialog-header");
-            actions.forEach((action, actionIndex) => {
-              if (actionPlacement(action) === "header") header.appendChild(renderAction(action, actionIndex));
-            });
             const headerTop = document.createElement("div");
             headerTop.className = normalizeClassName(headerState.topClassName, "dialog-header-top");
             const titleLines = Array.isArray(headerState.titleLines) ? headerState.titleLines : [];
@@ -8721,8 +8854,18 @@
                 "effect-dialog-title-balance",
               );
               balance.setAttribute("aria-hidden", "true");
-              headerTop.append(effectType, titleViewport, balance);
+              const closeRow = document.createElement("div");
+              closeRow.className = "effect-dialog-close-row";
+              closeRow.appendChild(effectType);
+              actions.forEach((action, actionIndex) => {
+                if (actionPlacement(action) === "header") closeRow.appendChild(renderAction(action, actionIndex));
+              });
+              header.appendChild(closeRow);
+              headerTop.append(titleViewport, balance);
             } else {
+              actions.forEach((action, actionIndex) => {
+                if (actionPlacement(action) === "header") header.appendChild(renderAction(action, actionIndex));
+              });
               const heading = document.createElement("span");
               heading.className = normalizeClassName(headerState.titleClassName, "dialog-header-title");
               if (titleLines.length) {
@@ -10065,7 +10208,12 @@
               if (_lastSamplerCache !== samplerStr) {
                 _lastSamplerCache = samplerStr;
                 s.sampler.forEach((p, i) => {
-                  const btnId = "sample-" + (i + 1);
+                  if (i >= RECEIVER_SAMPLER_PAD_COUNT) return;
+                  const numericPadId = Number(p?.id);
+                  const padId = Number.isInteger(numericPadId) && numericPadId >= 1 && numericPadId <= RECEIVER_SAMPLER_PAD_COUNT
+                    ? numericPadId
+                    : i + 1;
+                  const btnId = "sample-" + padId;
                   const cls = [
                     "sample-btn",
                     p.loaded ? "loaded" : "",
@@ -10075,17 +10223,27 @@
                   ].filter(Boolean).join(" ");
                   updateClass(btnId, cls);
                   if (p.loaded && p.name) {
-                    updateText(btnId, p.name.substring(0, 6));
+                    updateText(btnId, String(p.name || "").substring(0, 3).toUpperCase());
+                  } else if (p.loaded) {
+                    updateText(btnId, "SMP");
+                  } else {
+                    updateText(btnId, String(padId));
                   }
                   const pad = getEl(btnId);
                   if (pad) {
-                    pad.dataset.padId = String(p.id || i + 1);
+                    pad.dataset.padId = String(padId);
                     pad.dataset.padSelected = p.selected ? "true" : "false";
                     pad.dataset.padName = String(p.name || "");
                     pad.dataset.padMode = String(p.mode || "oneshot");
                     pad.dataset.padLoaded = p.loaded ? "true" : "false";
                     pad.dataset.padMuted = p.muted ? "true" : "false";
                     pad.dataset.padReverse = p.reverse ? "true" : "false";
+                    if (Number.isFinite(p.tune)) pad.dataset.padTune = String(p.tune);
+                    if (Number.isFinite(p.baseBpm)) pad.dataset.padBaseBpm = String(p.baseBpm);
+                    if (Number.isFinite(p.effectiveBpm)) pad.dataset.padEffectiveBpm = String(p.effectiveBpm);
+                    if (p.syncAll !== undefined) pad.dataset.padSyncAll = p.syncAll ? "true" : "false";
+                    if (p.syncTrack !== undefined && p.syncTrack !== null) pad.dataset.padSyncTrack = String(p.syncTrack);
+                    else delete pad.dataset.padSyncTrack;
                     pad.classList.toggle("selected", Boolean(p.selected));
                     const padColor = typeof p.color === "string" && /^#[0-9a-f]{6}$/i.test(p.color)
                       ? p.color
@@ -10096,8 +10254,9 @@
                       : p.selected
                         ? "0 0 0 2px var(--yellow, #ffcc00)"
                         : "";
+                    const bpmInfo = Number.isFinite(p.effectiveBpm) ? ` [${p.effectiveBpm.toFixed(1)} BPM]` : "";
                     pad.title = p.loaded && p.name
-                      ? `${p.name} — double-click for settings`
+                      ? `${p.name}${bpmInfo} — double-click for settings`
                       : `Pad ${p.id || i + 1} — double-click for settings`;
                     pad.setAttribute("aria-label", pad.title);
                   }
@@ -10137,6 +10296,33 @@
                 updateEffectOptions(`t-effect-select-${i}`, s.effectOptions, t.effectSelection);
                 updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
                 updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
+                const bpmVal = Number.isFinite(Number(t.effectiveBpm ?? t.bpm))
+                  ? Number(t.effectiveBpm ?? t.bpm).toFixed(1)
+                  : "120.0";
+                const counterInput = getEl(`t-bpm-counter-${i}`);
+                if (counterInput && counterInput.value !== bpmVal) {
+                  counterInput.value = bpmVal;
+                }
+                const syncAllChk = getEl(`t-sync-all-${i}`);
+                if (syncAllChk && syncAllChk.checked !== Boolean(t.syncAll)) {
+                  syncAllChk.checked = Boolean(t.syncAll);
+                }
+                const syncButtons = Array.isArray(t.syncButtons) ? t.syncButtons : [];
+                for (let targetIndex = 0; targetIndex < 4; targetIndex++) {
+                  if (targetIndex === i) continue;
+                  const btn = getEl(`t-bpm-sync-${i}-to-${targetIndex}`);
+                  if (btn) {
+                    const btnState = syncButtons.find((b) => Number(b.targetIndex) === targetIndex);
+                    const isSelected = btnState
+                      ? Boolean(btnState.selected)
+                      : (t.syncWith !== null && t.syncWith !== undefined && Number(t.syncWith) === targetIndex);
+                    btn.classList.toggle("is-selected", isSelected);
+                    btn.setAttribute("aria-pressed", String(isSelected));
+                    if (btnState && btnState.populated !== undefined) {
+                      btn.classList.toggle("is-populated", Boolean(btnState.populated));
+                    }
+                  }
+                }
                 if (t.params) {
                   const paramsStr = JSON.stringify(t.params);
                   const paramDisplaysStr = JSON.stringify(t.paramDisplays || {});

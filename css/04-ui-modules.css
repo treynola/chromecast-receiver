@@ -1419,7 +1419,7 @@ select option {
   background: #2a2a2a;
   border: 1px solid #444;
   border-radius: 4px;
-  padding: 2px 4px;
+  padding: 2px 3px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1430,12 +1430,13 @@ select option {
 .effect-control-group .effect-param-title {
   width: 100%;
   text-align: center;
+  padding-top: 2px;
   margin-bottom: 0;
 }
 
 .effect-control-group .effect-param-title label {
-  font-size: 0.78em;
-  line-height: 1.05;
+  font-size: 0.76em;
+  line-height: 1;
   color: var(--gold);
   font-weight: bold;
   text-transform: uppercase;
@@ -1444,7 +1445,7 @@ select option {
 
 .effect-control-group .slider-wrapper {
   width: 100%;
-  min-height: 14px;
+  min-height: 13px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -1459,7 +1460,7 @@ select option {
 .effect-control-group .effect-param-value {
   width: 100%;
   text-align: center;
-  min-height: 11px;
+  min-height: 10px;
   margin-top: 0;
   line-height: 1;
 }
@@ -1470,7 +1471,7 @@ select option {
   left: auto;
   top: auto;
   font-family: monospace;
-  font-size: 0.78em;
+  font-size: 0.72em;
   line-height: 1;
   color: var(--green);
   font-weight: bold;
@@ -1569,7 +1570,7 @@ select option {
   font-weight: 720;
   display: inline-flex;
   cursor: pointer;
-  z-index: 10001;
+  z-index: 2;
   pointer-events: auto;
   align-items: center;
   justify-content: center;
@@ -2306,7 +2307,7 @@ select option {
   border: 1px solid var(--green);
   border-radius: 12px;
   padding: 0;
-  width: 430px;
+  width: 410px;
   box-shadow:
     0 0 0 2px var(--gold),
     0 0 0 4px var(--red),
@@ -2334,6 +2335,25 @@ select option {
   z-index: 2201;
 }
 
+/* Only the front track dialog remains visible and interactive. Inactive
+   dialogs remain mounted with their track state intact, but are closed and
+   hidden so native dialog layers cannot accumulate during track switching. */
+.effect-params-dialog.is-stack-hidden,
+.audition-params-dialog.is-stack-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+.effect-params-dialog.is-stack-front,
+.audition-params-dialog.is-stack-front {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .effect-params-dialog:focus,
 .effect-params-dialog:focus-visible,
 .audition-params-dialog:focus,
@@ -2357,7 +2377,7 @@ select option {
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 0;
+  padding: 5px 0 5px;
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 72vh;
@@ -2385,8 +2405,8 @@ select option {
 .effect-params-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
-  gap: 4px !important;
-  padding: 4px !important;
+  gap: 3px !important;
+  padding: 3px 3px 0 !important;
   width: 100% !important;
   box-sizing: border-box !important;
   justify-items: stretch !important;
@@ -2469,8 +2489,8 @@ select option {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  gap: 4px;
-  padding: 6px 27px 5px 6px;
+  gap: 5px;
+  padding: 5px 6px;
   background: #222;
   border-bottom: 1px solid #444;
   border-radius: 11px 11px 0 0;
@@ -2515,26 +2535,52 @@ select option {
 }
 
 .effect-dialog-title-row {
-  display: grid;
-  grid-template-columns: minmax(68px, 1fr) minmax(0, 215px) minmax(68px, 1fr);
+  display: flex;
   align-items: center;
+  justify-content: center;
   width: 100%;
   min-width: 0;
+  margin-top: -5px;
+  margin-bottom: 2px;
 }
 
-.effect-dialog-title-row .dialog-effect-type {
-  justify-self: start;
+.effect-dialog-close-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 18px;
+}
+
+.effect-dialog-close-row .dialog-effect-type {
+  flex: 0 0 auto;
   min-width: 0;
   color: var(--gold);
   opacity: 0.8;
+  font-size: 13px !important;
+  letter-spacing: 0.5px !important;
+  font-weight: bold;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-left: 10px;
+}
+
+.dialog-effect-type {
+  color: var(--gold);
+  font-size: 13px !important;
+  font-weight: bold;
+  letter-spacing: 0.5px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 10px;
 }
 
 .effect-dialog-title-viewport {
-  justify-self: stretch;
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-align: center;
   white-space: nowrap;
@@ -2557,7 +2603,10 @@ select option {
 }
 
 .effect-dialog-title-balance {
+  display: none;
+  width: 0;
   min-width: 0;
+  height: 0;
 }
 
 @keyframes effect-dialog-title-scroll {
@@ -2578,9 +2627,13 @@ select option {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
   width: 100%;
+}
+
+.effect-dialog-close-row .close-dialog-btn {
+  position: static;
 }
 
 .dialog-track-switcher {
@@ -2592,9 +2645,11 @@ select option {
 
 .dialog-track-label {
   color: var(--gold);
-  font-size: 10px !important;
-  letter-spacing: 0.35px !important;
+  font-size: 13px !important;
+  font-weight: bold;
+  letter-spacing: 0.5px !important;
   margin-right: 1px;
+  padding-left: 10px;
 }
 
 .dialog-track-button {
@@ -2614,20 +2669,394 @@ select option {
 
 .dialog-track-button.is-populated:not(:disabled) {
   border-color: var(--gold);
-  background: var(--green);
+  background: #222;
   color: var(--gold);
   cursor: pointer;
 }
 
 .dialog-track-button.is-selected:not(:disabled) {
-  border-color: var(--gold);
-  background: var(--red);
-  color: var(--gold);
-  box-shadow: 0 0 5px var(--red);
+  border-color: var(--green);
+  background: #182218;
+  color: var(--green);
+  box-shadow: 0 0 5px var(--green);
 }
 
 .dialog-track-button:disabled {
-  opacity: 0.45;
+  opacity: 0.35;
+  border-color: #444;
+  color: #555;
+}
+
+/* TRACK BPM & MULTI-TRACK TEMPO SYNCHRONIZATION */
+
+.track-bpm-module {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #181818;
+  border: 1px solid var(--mid-gray);
+  border-radius: 4px;
+  padding: 3px 5px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.track-bpm-line1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.track-bpm-title {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  color: var(--gold);
+  font-weight: normal;
+  font-size: 1.15em;
+  line-height: 20px;
+  letter-spacing: 0.5px;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.track-bpm-counter-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding-left: 6px;
+}
+
+.track-bpm-counter {
+  font: bold 12px/1 "Courier New", Courier, monospace;
+  color: var(--green);
+  background: #101010;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 2px 4px;
+  text-align: center;
+  width: 58px;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+
+.track-bpm-counter:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 4px rgba(250, 215, 142, 0.3);
+}
+
+.track-bpm-line2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.track-bpm-sync-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.track-bpm-sync-all-chk {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--mid-gray, #555) !important;
+  width: 12px !important;
+  height: 12px !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
+  z-index: 5 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.track-bpm-sync-all-chk:checked {
+  background-color: var(--green) !important;
+}
+
+.track-bpm-sync-all-chk:checked::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  left: 3px !important;
+  top: 1px !important;
+  width: 3px !important;
+  height: 6px !important;
+  border: solid var(--gold) !important;
+  border-width: 0 2px 2px 0 !important;
+  transform: rotate(45deg) !important;
+}
+
+.track-bpm-sync-all-text {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+}
+
+.track-bpm-sync-with-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.track-bpm-sync-with-label {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+  margin-right: 1px;
+}
+
+.track-bpm-sync-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.track-bpm-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  color: #777;
+  font: bold 11px/1 "Courier New", Courier, monospace;
+  cursor: pointer;
+}
+
+.track-bpm-sync-btn.is-populated:not(:disabled) {
+  border-color: var(--gold);
+  background: #222;
+  color: var(--gold);
+}
+
+.track-bpm-sync-btn.is-selected:not(:disabled) {
+  border-color: var(--green);
+  background: #182218;
+  color: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
+
+/* SAMPLER PAD BPM MODULE */
+
+.pad-bpm-module {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #181818;
+  border: 1px solid var(--mid-gray);
+  border-radius: 4px;
+  padding: 3px 5px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.pad-bpm-line1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.pad-bpm-title {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  color: var(--gold);
+  font-weight: normal;
+  font-size: 1.15em;
+  line-height: 20px;
+  letter-spacing: 0.5px;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.pad-bpm-base-badge {
+  font: normal 10px/1 "Courier New", Courier, monospace;
+  color: var(--gold);
+  opacity: 0.8;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.pad-bpm-counter-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding-left: 6px;
+}
+
+.pad-bpm-counter {
+  font: bold 12px/1 "Courier New", Courier, monospace;
+  color: var(--green);
+  background: #101010;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 2px 4px;
+  text-align: center;
+  width: 58px;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+
+.pad-bpm-counter:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 4px rgba(250, 215, 142, 0.3);
+}
+
+.pad-bpm-multiplier-btn {
+  font: 700 9px/1 monospace;
+  color: #ccc;
+  background: #181818;
+  border: 1px solid #444;
+  border-radius: 2px;
+  padding: 2px 4px;
+  margin-left: 3px;
+  cursor: pointer;
+  height: 18px;
+  line-height: 12px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pad-bpm-multiplier-btn:hover {
+  color: #fff;
+  border-color: var(--gold);
+  background: #252525;
+}
+
+.pad-bpm-multiplier-btn:active {
+  transform: translateY(1px);
+  background: #111;
+}
+
+.pad-bpm-line2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.pad-bpm-sync-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pad-bpm-sync-all-chk {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--mid-gray, #555) !important;
+  width: 12px !important;
+  height: 12px !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
+  z-index: 5 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.pad-bpm-sync-all-chk:checked {
+  background-color: var(--green) !important;
+}
+
+.pad-bpm-sync-all-chk:checked::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  left: 3px !important;
+  top: 1px !important;
+  width: 3px !important;
+  height: 6px !important;
+  border: solid var(--gold) !important;
+  border-width: 0 2px 2px 0 !important;
+  transform: rotate(45deg) !important;
+}
+
+.pad-bpm-sync-all-text {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+}
+
+.pad-bpm-sync-with-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pad-bpm-sync-with-label {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+  margin-right: 1px;
+}
+
+.pad-bpm-sync-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pad-bpm-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  color: #777;
+  font: bold 11px/1 "Courier New", Courier, monospace;
+  cursor: pointer;
+}
+
+.pad-bpm-sync-btn.is-populated:not(:disabled) {
+  border-color: var(--gold);
+  background: #222;
+  color: var(--gold);
+}
+
+.pad-bpm-sync-btn.is-selected:not(:disabled) {
+  border-color: var(--green);
+  background: #182218;
+  color: var(--green);
+  box-shadow: 0 0 5px var(--green);
 }
 
 .dialog-header-title--stacked {
@@ -2761,6 +3190,18 @@ select option {
 
 .effect-params-dialog[data-slot-index="6"] {
   z-index: 506;
+}
+
+/* Track dialog stacking is owned by the live dialog stack, not by the
+   historical per-slot z-index values above. */
+.effect-params-dialog.is-stack-front,
+.audition-params-dialog.is-stack-front {
+  z-index: 2201 !important;
+}
+
+.effect-params-dialog.is-stack-hidden,
+.audition-params-dialog.is-stack-hidden {
+  z-index: 2000 !important;
 }
 
 /* Sample Editor — intentionally layered on the Effects dialog shell. */
@@ -3377,9 +3818,10 @@ select option {
   flex-direction: column;
   align-items: center;
 
-  /* Let the sample station consume the remaining Master Column space. */
+  /* Let the sample station consume available space without overflowing Master Column. */
   flex: 1 1 0 !important;
   min-height: 0 !important;
+  overflow: hidden !important;
 
   /* Dark Grey Background */
   background-color: #222222 !important;
@@ -3391,6 +3833,7 @@ select option {
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
 .sample-center-container .center-header {
   font-size: 1.2em;
+  margin-bottom: 2px !important;
 }
 
 .sample-grid {
@@ -3404,8 +3847,9 @@ select option {
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
   align-self: stretch;
-  margin-top: 5px;
+  margin-top: 2px !important;
 }
 
 /* Update: Media Button Height Match (Add to existing list or override) */
@@ -3428,7 +3872,8 @@ select option {
   box-shadow: var(--sampler-pad-border-shadow);
 
   font-family: "Cousine", monospace !important;
-  font-size: 1.2em !important;
+  font-size: 1.1em !important;
+  line-height: 1 !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
 
@@ -3449,6 +3894,7 @@ select option {
   z-index: 5;
   justify-self: center;
   align-self: center;
+  text-transform: uppercase;
 }
 
 /* Hover Effects */
@@ -4260,7 +4706,7 @@ body.receiver-mode .sample-grid {
   grid-auto-columns: minmax(0, 1fr) !important;
   row-gap: 2px !important;
   column-gap: 4px !important;
-  margin-top: 5px !important;
+  margin-top: 2px !important;
 }
 body.receiver-mode .sample-btn {
   width: calc(100% - 8px) !important;
@@ -4268,8 +4714,10 @@ body.receiver-mode .sample-btn {
   min-height: 0 !important;
   aspect-ratio: auto !important;
   font-family: "Cousine", monospace !important;
-  font-size: 1.2em !important;
+  font-size: 1.1em !important;
+  line-height: 1 !important;
   font-weight: 720 !important;
+  letter-spacing: 0.5px !important;
   border-radius: 12px !important;
   border-width: 2px !important;
   display: flex !important;
@@ -5345,7 +5793,7 @@ dialog.input-prompt-dialog {
 /* --- VERTICAL SLOT TABS SIDEBAR --- */
 .vertical-slot-tabs {
   position: absolute;
-  top: 4px;
+  top: 0;
   left: calc(100% + 4px);
   right: auto;
   width: 34px;
@@ -5357,6 +5805,13 @@ dialog.input-prompt-dialog {
   overflow: visible;
   visibility: visible !important;
   opacity: 1 !important;
+}
+
+.effect-params-dialog.is-stack-hidden .vertical-slot-tabs,
+.audition-params-dialog.is-stack-hidden .vertical-slot-tabs {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .vertical-slot-tabs .vertical-tab-arrow {
@@ -5387,23 +5842,28 @@ dialog.input-prompt-dialog {
 /* Custom interactive hover adjustments for vertical sidebar labels */
 .vertical-slot-tabs .fx-chain-slot-label:hover {
   border-color: var(--green) !important;
-  padding-left: 4px !important;
+  transform: translateX(3px);
   transition: all 0.15s ease-in-out;
 }
 
 .vertical-tab-slot {
   margin-bottom: 0;
   width: 30px;
-  height: 30px;
+  height: 26px;
   flex: 0 0 auto;
 }
 
 .vertical-tab-slot .fx-chain-slot-label {
   width: 30px;
-  height: 30px !important;
-  line-height: 30px !important;
+  height: 26px !important;
+  line-height: 26px !important;
   padding: 0;
   margin: 0;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: 700;
+  font-size: 15px !important;
+  letter-spacing: -0.7px;
+  text-align: center;
   box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
 }
 
@@ -5428,7 +5888,9 @@ dialog.input-prompt-dialog {
 /* --- Effect Dialog Action Buttons --- */
 .dialog-header-actions-bar {
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
+  align-items: center;
+  flex: 1 1 auto;
   gap: 8px;
   margin-top: 0;
   width: auto;
@@ -5503,6 +5965,34 @@ dialog.input-prompt-dialog {
   display: flex !important;
 }
 
+.pad-fx-editor-dialog {
+  position: fixed !important;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  width: 440px !important;
+  max-width: 95vw !important;
+  max-height: 82vh !important;
+  z-index: 2600 !important;
+  background: var(--off-black, #121212) !important;
+  border: 1px solid var(--green) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9) !important;
+  color: #fff;
+  display: none;
+  flex-direction: column;
+  overflow: hidden !important;
+  outline: none !important;
+}
+
+.pad-fx-editor-dialog[open] {
+  display: flex !important;
+}
+
 .pad-settings-dialog .dialog-header {
   cursor: move !important;
   user-select: none !important;
@@ -5528,6 +6018,14 @@ dialog.input-prompt-dialog {
   background: var(--off-black) !important;
 }
 
+.pad-dialog-close-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 18px;
+}
+
 .pad-dialog-title-row {
   align-items: center;
 }
@@ -5538,7 +6036,16 @@ dialog.input-prompt-dialog {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding-right: 22px;
+}
+
+.pad-dialog-nav-group .effect-dialog-title-viewport,
+.pad-dialog-nav-group .pad-dialog-title-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .pad-dialog-nav-group .dialog-title {
@@ -5658,9 +6165,9 @@ dialog.input-prompt-dialog {
 
 /* Same visual and interaction contract as the live Track PLAY button. */
 .pad-control-btn.track-play-contract {
-  background-color: var(--green) !important;
+  background-color: #222 !important;
   color: var(--gold) !important;
-  border: 1px solid var(--gold) !important;
+  border: 1px solid #444 !important;
   border-radius: 4px !important;
   font-family: monospace;
   font-size: 0.9em;
@@ -5670,12 +6177,16 @@ dialog.input-prompt-dialog {
 }
 
 .pad-control-btn.track-play-contract:hover:not(:disabled) {
-  filter: brightness(1.2);
-  box-shadow: 0 0 5px rgba(250, 215, 142, 0.3);
+  background-color: #2d2d2d !important;
+  border-color: var(--gold) !important;
+  color: #fff !important;
+  box-shadow: 0 0 6px rgba(250, 215, 142, 0.25);
 }
 
 .pad-control-btn.track-play-contract:active:not(:disabled) {
   transform: translateY(1px);
+  background-color: #1a1a1a !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .pad-control-btn.track-play-contract:disabled {
@@ -5686,8 +6197,9 @@ dialog.input-prompt-dialog {
 
 .pad-control-btn.track-play-contract.playing {
   background-color: var(--green) !important;
-  color: var(--gold) !important;
+  color: var(--off-black) !important;
   border-color: var(--gold) !important;
+  box-shadow: 0 0 8px var(--green);
 }
 
 .pad-control-btn.track-play-contract.active,

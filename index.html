@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-a83da7fb192d"></script>
+    <script src="build_identity.js?v=13.9.509-26bf7ab1125d"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MXS-004 Studio Mirror v13.9.509</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-b69629ae2a25" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-b69629ae2a25" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-b69629ae2a25" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-b69629ae2a25" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-7d6d79ef2114" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-7d6d79ef2114" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-7d6d79ef2114" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-7d6d79ef2114" />
     <link rel="stylesheet" href="css/icons.css?v=13.9.509" />
   </head>
   <body class="app-loading receiver-mode">
@@ -196,6 +196,7 @@
           </div>
           <div
             class="master-item sample-center-container"
+            id="sample-station"
           >
             <div
               class="track-header center-header"
@@ -203,8 +204,32 @@
               Sample Station
             </div>
             <div
-              class="sample-grid" id="sample-grid"
-            ></div>
+              class="sample-grid"
+              id="sample-grid"
+              data-sampler-columns="5"
+              data-sampler-rows="4"
+            >
+              <button type="button" class="sample-btn" id="sample-1" data-sample="1" aria-label="Sample Pad 1">1</button>
+              <button type="button" class="sample-btn" id="sample-2" data-sample="2" aria-label="Sample Pad 2">2</button>
+              <button type="button" class="sample-btn" id="sample-3" data-sample="3" aria-label="Sample Pad 3">3</button>
+              <button type="button" class="sample-btn" id="sample-4" data-sample="4" aria-label="Sample Pad 4">4</button>
+              <button type="button" class="sample-btn" id="sample-5" data-sample="5" aria-label="Sample Pad 5">5</button>
+              <button type="button" class="sample-btn" id="sample-6" data-sample="6" aria-label="Sample Pad 6">6</button>
+              <button type="button" class="sample-btn" id="sample-7" data-sample="7" aria-label="Sample Pad 7">7</button>
+              <button type="button" class="sample-btn" id="sample-8" data-sample="8" aria-label="Sample Pad 8">8</button>
+              <button type="button" class="sample-btn" id="sample-9" data-sample="9" aria-label="Sample Pad 9">9</button>
+              <button type="button" class="sample-btn" id="sample-10" data-sample="10" aria-label="Sample Pad 10">10</button>
+              <button type="button" class="sample-btn" id="sample-11" data-sample="11" aria-label="Sample Pad 11">11</button>
+              <button type="button" class="sample-btn" id="sample-12" data-sample="12" aria-label="Sample Pad 12">12</button>
+              <button type="button" class="sample-btn" id="sample-13" data-sample="13" aria-label="Sample Pad 13">13</button>
+              <button type="button" class="sample-btn" id="sample-14" data-sample="14" aria-label="Sample Pad 14">14</button>
+              <button type="button" class="sample-btn" id="sample-15" data-sample="15" aria-label="Sample Pad 15">15</button>
+              <button type="button" class="sample-btn" id="sample-16" data-sample="16" aria-label="Sample Pad 16">16</button>
+              <button type="button" class="sample-btn" id="sample-17" data-sample="17" aria-label="Sample Pad 17">17</button>
+              <button type="button" class="sample-btn" id="sample-18" data-sample="18" aria-label="Sample Pad 18">18</button>
+              <button type="button" class="sample-btn" id="sample-19" data-sample="19" aria-label="Sample Pad 19">19</button>
+              <button type="button" class="sample-btn" id="sample-20" data-sample="20" aria-label="Sample Pad 20">20</button>
+            </div>
           </div>
           <div
             class="master-bottom-buttons"
@@ -271,8 +296,8 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-4a016013a779"></script>
-    <script src="cast-gui-action-catalog.js?v=13.9.509-4a016013a779"></script>
-    <script src="receiver_logic.js?v=13.9.509-4a016013a779"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-6fcbab68f6e3"></script>
+    <script src="cast-gui-action-catalog.js?v=13.9.509-6fcbab68f6e3"></script>
+    <script src="receiver_logic.js?v=13.9.509-6fcbab68f6e3"></script>
   </body>
 </html>
