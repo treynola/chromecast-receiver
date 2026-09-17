@@ -4573,10 +4573,10 @@ body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
 body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open] {
   animation: none;
   /* Sender geometry is the transformed visual border box. Anchor the receiver
-     at that exact box origin, then apply the app's resting scale from the
-     top-left so native <dialog> centering/margins cannot shift it again. */
+     at that exact box origin, then apply the app's resting scale multiplied by
+     the dynamic viewport scale so the mirror scales down exactly like the app. */
   margin: 0;
-  transform: scale(var(--effect-dialog-resting-scale));
+  transform: scale(calc(var(--effect-dialog-resting-scale) * var(--scale, 1)));
   transform-origin: 0 0;
   opacity: 1;
 }
