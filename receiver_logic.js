@@ -3350,8 +3350,8 @@
           ].find(function findPreparedNativeElement(element) {
             return !!(
               element &&
-              !element.paused &&
-              element.readyState >= 3 &&
+              (!element.paused || element.readyState >= 2) &&
+              element.readyState >= 2 &&
               element.buffered &&
               element.buffered.length > 0
             );
@@ -4034,6 +4034,41 @@
                 emitCafTelemetry(eventType, cafTelemetryDetails);
                 if (eventType === events.ERROR || eventType === events.PLAYING || eventType === events.PAUSE) {
                   relayLogToStudio("📺 Receiver: " + msg);
+                }
+                if (
+                  eventType === events.PAUSE &&
+                  lastPlaybackStartSignalAt &&
+                  !playbackPaused &&
+                  nativeStreamActive
+                ) {
+                  relayLogToStudio(
+                    "⚠️ Receiver: Spontaneous CAF pause during active playback; auto-resuming native playout.",
+                  );
+                  setTimeout(function () {
+                    if (
+                      lastPlaybackStartSignalAt &&
+                      !playbackPaused &&
+                      nativeStreamActive
+                    ) {
+                      const pm = getCastPlayerManager();
+                      if (pm && typeof pm.play === "function") {
+                        try {
+                          pm.play();
+                        } catch (e) {}
+                      }
+                      const cafAudio = document.getElementById("cast-media-element");
+                      if (
+                        cafAudio &&
+                        cafAudio.paused &&
+                        typeof cafAudio.play === "function"
+                      ) {
+                        try {
+                          const p = cafAudio.play();
+                          if (p && typeof p.catch === "function") p.catch(() => {});
+                        } catch (e) {}
+                      }
+                    }
+                  }, 150);
                 }
 
                 // Physical Chromecast firmware can report the transition to
