@@ -6371,6 +6371,7 @@
             t.dataset.trackIndex = String(i);
             t.innerHTML = `
                         <div class="track-header">TRACK ${i + 1}</div>
+                        <div class="track-playlist-nav" id="t-playlist-nav-${i}" style="display: none;"><button id="t-pl-prev-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-prev" data-action="playlist-prev" data-track-index="${i}">&lt;</button><div class="track-playlist-info" id="t-pl-info-${i}"><span class="track-playlist-counter" id="t-pl-counter-${i}">1/1</span></div><button id="t-pl-next-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-next" data-action="playlist-next" data-track-index="${i}">&gt;</button></div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
                         <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external waveform-label-l">L</div><div class="waveform-label-external waveform-label-r">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
@@ -10359,6 +10360,18 @@
                     if (btnState && btnState.populated !== undefined) {
                       btn.classList.toggle("is-populated", Boolean(btnState.populated));
                     }
+                  }
+                }
+                const plNav = getEl(`t-playlist-nav-${i}`);
+                if (plNav) {
+                  if (t.playlist?.active && t.playlist.totalItems >= 2) {
+                    plNav.style.display = "flex";
+                    const counter = getEl(`t-pl-counter-${i}`);
+                    if (counter) {
+                      counter.textContent = `${(t.playlist.currentIndex || 0) + 1}/${t.playlist.totalItems}`;
+                    }
+                  } else {
+                    plNav.style.display = "none";
                   }
                 }
                 if (t.params) {
