@@ -4549,7 +4549,7 @@ body.receiver-mode #gui-dialog-mirror-root {
 body.receiver-mode #gui-dialog-mirror-root[hidden] {
   display: none !important;
 }
-body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog) {
+body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.gui-dialog-mediaSessions) {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -4566,12 +4566,15 @@ body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-p
 }
 body.receiver-mode .gui-dialog-mirror.effect-params-dialog,
 body.receiver-mode .gui-dialog-mirror.audition-params-dialog,
+body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions,
 body.receiver-mode .gui-dialog-mirror.pad-settings-dialog {
   pointer-events: auto;
 }
 body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
-body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open] {
+body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open],
+body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions {
   animation: none;
+  display: flex !important;
   /* Sender geometry is the transformed visual border box. Anchor the receiver
      at that exact box origin, then apply the app's resting scale multiplied by
      the dynamic viewport scale so the mirror scales down exactly like the app. */
@@ -5693,6 +5696,9 @@ dialog.input-prompt-dialog {
   position: sticky;
   top: 0;
   z-index: 10;
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .mxs-dialog .dialog-header-top {

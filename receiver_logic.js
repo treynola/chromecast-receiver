@@ -8001,7 +8001,7 @@
             samplePadLayout: dialog.samplePadLayout
               ? { ...dialog.samplePadLayout, sampleNameText: undefined }
               : null,
-            samplePadDomManifest: ["samplePadSettings", "sampleEditor"].includes(dialog.kind)
+            samplePadDomManifest: ["samplePadSettings", "sampleEditor", "mediaSessions"].includes(dialog.kind)
               ? getMirroredDialogManifestLayout(dialog.samplePadDomManifest)
               : dialog.samplePadDomManifest,
             sampleEditorVisual: dialog.sampleEditorVisual,
@@ -8028,7 +8028,7 @@
               normalizeMirroredDialogClassName(dialog.shellClassName),
               `gui-dialog-${dialog.kind || "generic"}`,
             ].filter(Boolean).join(" ");
-            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog) {
+            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog && dialog.kind !== "mediaSessions") {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
@@ -8425,6 +8425,9 @@
             const exactSampleEditorDialog = dialog.dialogLayoutVersion >= 4 &&
               dialog.kind === "sampleEditor" &&
               dialog.samplePadDomManifest;
+            const exactMediaSessionsDialog = dialog.dialogLayoutVersion >= 4 &&
+              dialog.kind === "mediaSessions" &&
+              dialog.samplePadDomManifest;
             const panel = document.createElement(
               exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "dialog" : "section",
             );
@@ -8441,7 +8444,7 @@
             panel.dataset.dialogKind = dialog.kind || "generic";
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
             applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
-            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog) {
+            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog && dialog.kind !== "mediaSessions") {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
@@ -8480,7 +8483,7 @@
               return button;
             };
 
-            const samplePadManifest = exactSampleEditorDialog
+            const samplePadManifest = exactSampleEditorDialog || exactMediaSessionsDialog
               ? dialog.samplePadDomManifest
               : null;
             if (
