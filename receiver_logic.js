@@ -6370,7 +6370,7 @@
             t.id = "track-" + i;
             t.dataset.trackIndex = String(i);
             t.innerHTML = `
-                        <div class="track-header">TRACK ${i + 1}</div>
+                        <button type="button" class="track-header track-header-btn" id="t-header-btn-${i}" data-action="open-track-playlist" data-track-index="${i}" title="Open Track ${i + 1} Playlist">TRACK ${i + 1}</button>
                         <div class="track-playlist-nav" id="t-playlist-nav-${i}" style="display: none;"><button id="t-pl-prev-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-prev" data-action="playlist-prev" data-track-index="${i}">&lt;</button><div class="track-playlist-info" id="t-pl-info-${i}"><span class="track-playlist-counter" id="t-pl-counter-${i}">1/1</span></div><button id="t-pl-next-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-next" data-action="playlist-next" data-track-index="${i}">&gt;</button></div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>

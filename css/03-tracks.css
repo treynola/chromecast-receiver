@@ -102,6 +102,24 @@
   flex-shrink: 0;
 }
 
+button.track-header,
+.track-header-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  transition: color 0.15s ease, filter 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button.track-header:hover,
+.track-header-btn:hover {
+  filter: brightness(1.25);
+  color: #fff;
+}
+
 .track-buttons {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

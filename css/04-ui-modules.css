@@ -3862,6 +3862,25 @@ select option {
   font-weight: 800;
 }
 
+.media-dialog-track-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #202020;
+  border: 1px solid #383838;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.media-dialog-track-switcher .dialog-track-label {
+  font-size: 11px !important;
+  font-weight: 700;
+  padding-left: 0;
+  margin-right: 2px;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+}
+
 .media-dialog-view-container {
   display: flex;
   flex-direction: column;
