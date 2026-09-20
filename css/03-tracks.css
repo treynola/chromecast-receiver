@@ -83,13 +83,13 @@
 
 .track-header {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
-  font-size: 1.2em;
+  font-size: 1.12em;
   color: var(--gold);
-  margin-bottom: 4px;
+  margin-bottom: 1px;
   text-align: center;
-  height: 26px;
-  min-height: 26px;
-  line-height: 18px;
+  height: 30px;
+  min-height: 30px;
+  line-height: 16px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
