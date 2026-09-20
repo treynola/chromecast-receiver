@@ -1136,9 +1136,9 @@ select option {
 }
 
 .recording-item-arrow {
-  background-color: var(--dark-green-transparent);
+  background-color: var(--green);
   color: var(--gold);
-  border: none;
+  border: 1px solid var(--gold);
   border-radius: 4px;
   transition:
     background-color 0.2s ease,
@@ -1558,9 +1558,9 @@ select option {
 }
 
 .fx-chain-arrow {
-  background-color: var(--gold);
-  color: var(--red);
-  border: 1px solid var(--red);
+  background-color: var(--green);
+  color: var(--gold);
+  border: 1px solid var(--gold);
   border-radius: 4px;
   padding: 0 4px;
   transition: filter 0.2s ease;
@@ -1585,7 +1585,7 @@ select option {
 }
 
 .fx-chain-arrow:hover {
-  filter: brightness(1.4);
+  filter: brightness(1.2);
 }
 
 .vertical-tab-arrow {
@@ -4011,6 +4011,11 @@ select option {
   color: #000;
 }
 
+.playlist-action-btn.btn-import-files,
+.playlist-action-btn.btn-import-folder {
+  letter-spacing: 0.3px;
+}
+
 .playlist-action-btn.btn-clear {
   border-color: var(--red);
   color: var(--red);
@@ -4268,31 +4273,56 @@ select option {
 
 /* --- Track Column Playlist Navigation Arrows --- */
 .track-playlist-nav {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  right: 6px;
+  height: 28px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  width: 100%;
+  justify-content: space-between;
   box-sizing: border-box;
-  padding: 1px 4px;
-  margin: 1px 0 2px 0;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .track-playlist-nav[style*="display: none"] {
   display: none !important;
 }
 
-.track-playlist-arrow {
-  flex-shrink: 0;
-  user-select: none;
-  -webkit-user-select: none;
+.track-playlist-prev {
+  margin-right: auto;
+  pointer-events: auto;
+  margin-top: 1px;
 }
 
 .track-playlist-info {
-  font-size: 0.72em;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0px;
+  text-align: center;
+  pointer-events: none;
+  font-size: 0.70em;
   font-weight: 700;
   color: var(--gold);
   font-family: monospace;
   letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.track-playlist-next {
+  margin-left: auto;
+  pointer-events: auto;
+  margin-top: 1px;
+}
+
+.track-playlist-arrow {
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* --- 420 Sample Center --- */

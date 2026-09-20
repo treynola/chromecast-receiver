@@ -306,6 +306,21 @@ input[type="range"]:focus {
   transition: none !important;
 }
 
+/* Prevent incomplete first paint of the master column while track columns are loading */
+body.app-loading:not(.receiver-mode) .container,
+body.app-loading:not(.receiver-mode) #studio-root {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body:not(.app-loading):not(.receiver-mode) .container,
+body:not(.app-loading):not(.receiver-mode) #studio-root {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
 .header {
   display: flex;
   justify-content: space-between;

@@ -209,6 +209,7 @@
         const NATIVE_LATENCY_REPORT_INTERVAL_MS = 1000;
         const NATIVE_LATENCY_ROLLING_WINDOW_MS = 1600;
         const NATIVE_LATENCY_MIN_REPORT_SAMPLES = 3;
+        const CAF_TELEMETRY_MEDIA_EVENT_THROTTLE_MS = 250;
         const PCM_STARTUP_HARD_TIMEOUT_MS = 10000;
         const WORKLET_CAPABILITY_TIMEOUT_MS = 1000;
         const WORKLET_PRODUCTION_TIMEOUT_MS = 1500;
@@ -1422,7 +1423,9 @@
         function emitCafTelemetry(event, details = {}) {
           if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
           const now = Date.now();
-          const throttleMs = event === "MEDIA_STATUS" || event === "BUFFERING" ? 250 : 0;
+          const throttleMs = event === "MEDIA_STATUS" || event === "BUFFERING"
+            ? CAF_TELEMETRY_MEDIA_EVENT_THROTTLE_MS
+            : 0;
           if (throttleMs && now - Number(cafTelemetryLastSentAt[event] || 0) < throttleMs) return false;
           cafTelemetryLastSentAt[event] = now;
           const payload = {
@@ -3163,10 +3166,6 @@
             // than the reporting cadence so progressive-media refill edges are
             // summarized rather than mistaken for presentation-clock jumps.
             const rawLatency = reportedLiveEdge - reportedPlayhead;
-
-            // This is telemetry only. The one permitted startup trim is made
-            // at the ordered Play boundary while the prewarm output is muted;
-            // never seek here during audible playback.
             const reportedBufferedDuration = Math.max(
               0,
               reportedLiveEdge - reportedBufferedStart,
@@ -3344,10 +3343,7 @@
           if (!nativeStartupTrimPending || !lastPlaybackStartSignalAt) {
             return false;
           }
-          const activeAudio = [
-            document.getElementById("cast-media-element"),
-            document.getElementById("native-stream-audio"),
-          ].find(function findPreparedNativeElement(element) {
+          const activeAudio = getNativeStreamElements().find(function findPreparedNativeElement(element) {
             return !!(
               element &&
               (!element.paused || element.readyState >= 2) &&
@@ -3533,10 +3529,7 @@
 
         function requestNativeMediaElementPlay(reason) {
           let requested = false;
-          [
-            document.getElementById("cast-media-element"),
-            document.getElementById("native-stream-audio"),
-          ].forEach(function requestElementPlay(element) {
+          getNativeStreamElements().forEach(function requestElementPlay(element) {
             if (!element || typeof element.play !== "function" || element.paused !== true) {
               return;
             }
@@ -4442,6 +4435,13 @@
           return attemptId === nativeStartupAttemptId;
         }
 
+        function getNativeStreamElements() {
+          return [
+            document.getElementById("cast-media-element"),
+            document.getElementById("native-stream-audio"),
+          ].filter(Boolean);
+        }
+
         function stopHtmlAudioNativeCompanion() {
           const nativeAudio = document.getElementById("native-stream-audio");
           if (!nativeAudio) return;
@@ -4742,10 +4742,7 @@
         }
 
         function releaseNativeStreamPrewarmMute() {
-          [
-            document.getElementById("cast-media-element"),
-            document.getElementById("native-stream-audio"),
-          ].forEach(function (element) {
+          getNativeStreamElements().forEach(function (element) {
             if (!element || !element._mxsPrewarmMuted) {
               return;
             }
@@ -5011,7 +5008,7 @@
           }
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
-          [cafAudio, htmlAudio].forEach(function muteReplayNativeElement(element) {
+          getNativeStreamElements().forEach(function muteReplayNativeElement(element) {
             if (!element) return;
             try {
               if (element._mxsVolumeBeforePause === undefined) {
@@ -5039,7 +5036,7 @@
           nativeStreamPaused = true;
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
-          [cafAudio, htmlAudio].forEach(function muteNativeElement(element) {
+          getNativeStreamElements().forEach(function muteNativeElement(element) {
             if (!element) return;
             try {
               if (element._mxsVolumeBeforePause === undefined) {
@@ -5058,10 +5055,7 @@
         }
 
         function trimNativeStreamAtResumeBoundary(reason) {
-          const activeAudio = [
-            document.getElementById("cast-media-element"),
-            document.getElementById("native-stream-audio"),
-          ].find(function findBufferedNativeElement(element) {
+          const activeAudio = getNativeStreamElements().find(function findBufferedNativeElement(element) {
             return !!(
               element &&
               element.readyState >= 3 &&
@@ -5132,7 +5126,7 @@
           nativeStreamPaused = false;
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
-          [cafAudio, htmlAudio].forEach(function unmuteNativeElement(element) {
+          getNativeStreamElements().forEach(function unmuteNativeElement(element) {
             if (!element) return;
             try {
               const targetVolume = getNativeResumeVolume(element);
@@ -5148,7 +5142,7 @@
           // short click/stutter on rapid Pause -> Play. Only honor an actual
           // CAF-applied pause when the media element reports itself paused.
           if (cafRequestAlreadyApplied === true) {
-            [cafAudio, htmlAudio].forEach(function resumePausedNativeElement(element) {
+            getNativeStreamElements().forEach(function resumePausedNativeElement(element) {
               if (!element || element.paused !== true || typeof element.play !== "function") return;
               try {
                 const result = element.play();
@@ -7109,6 +7103,18 @@
 
         let lastHighFreqLogTime = 0;
         function relayLogToStudio(msg) {
+          // Receiver diagnostics can originate from Cast payloads and browser
+          // exceptions. Normalize and bound them before DOM, console, queue,
+          // or LAN transport use so malformed values cannot throw here or
+          // amplify memory/network work during a reconnect storm.
+          if (typeof msg !== "string") {
+            try {
+              msg = JSON.stringify(msg);
+            } catch (_error) {
+              msg = String(msg || "");
+            }
+          }
+          msg = String(msg || "").slice(0, 2048);
           const isHighFreq =
             msg.indexOf("Latency Catch-up") !== -1 ||
             msg.indexOf("Callback Rate") !== -1 ||
@@ -10034,26 +10040,40 @@
                   : previousControl?.options,
               };
             };
+            const dialogPatchMap = new Map();
+            for (let i = 0; i < patch.dialogStates.length; i++) {
+              const candidate = patch.dialogStates[i];
+              if (candidate && candidate.id) {
+                dialogPatchMap.set(String(candidate.id), candidate);
+              }
+            }
             nextState.dialogs = nextState.dialogs.map((previousDialog) => {
-              const dialogPatch = patch.dialogStates.find(
-                (candidate) =>
-                  candidate && String(candidate.id || "") === String(previousDialog?.id || ""),
-              );
+              const dialogPatch = dialogPatchMap.get(String(previousDialog?.id || ""));
               if (!dialogPatch) return previousDialog;
+              const controlPatchMap = new Map();
+              if (Array.isArray(dialogPatch.controls)) {
+                for (let i = 0; i < dialogPatch.controls.length; i++) {
+                  const candidate = dialogPatch.controls[i];
+                  const idx = Number(candidate?.controlIndex ?? i);
+                  controlPatchMap.set(idx, candidate);
+                }
+              }
+              const actionPatchMap = new Map();
+              if (Array.isArray(dialogPatch.actions)) {
+                for (let i = 0; i < dialogPatch.actions.length; i++) {
+                  const candidate = dialogPatch.actions[i];
+                  const idx = Number(candidate?.actionIndex ?? i);
+                  actionPatchMap.set(idx, candidate);
+                }
+              }
               const controls = (previousDialog.controls || []).map((previousControl, index) => {
-                const controlPatch = (dialogPatch.controls || []).find(
-                  (candidate, candidateIndex) =>
-                    Number(candidate?.controlIndex ?? candidateIndex) ===
-                    Number(previousControl?.controlIndex ?? index),
-                );
+                const idx = Number(previousControl?.controlIndex ?? index);
+                const controlPatch = controlPatchMap.get(idx);
                 return mergeControl(previousControl, controlPatch);
               });
               const actions = (previousDialog.actions || []).map((previousAction, index) => {
-                const actionPatch = (dialogPatch.actions || []).find(
-                  (candidate, candidateIndex) =>
-                    Number(candidate?.actionIndex ?? candidateIndex) ===
-                    Number(previousAction?.actionIndex ?? index),
-                );
+                const idx = Number(previousAction?.actionIndex ?? index);
+                const actionPatch = actionPatchMap.get(idx);
                 return actionPatch ? { ...previousAction, ...actionPatch } : previousAction;
               });
               const effectSlotTabs = previousDialog.effectSlotTabs && dialogPatch.effectSlotTabs
@@ -12110,10 +12130,10 @@
                 relayLogToStudio("⚠️ Receiver: Cast BRIDGE_CONFIG missing a valid GUI session nonce.");
                 return;
               }
-              applyReceiverBridgeConfig(d, "cast_control", {
+              const applied = applyReceiverBridgeConfig(d, "cast_control", {
                 announceGuiReady: false,
               });
-              if (d.ip) {
+              if (applied && d.ip) {
                 connectBinaryBridge(d.ip, d.port, d.token);
                 markReceiverPlayoutPathReady();
               }
