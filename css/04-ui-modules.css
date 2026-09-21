@@ -4277,7 +4277,7 @@ select option {
   top: 4px;
   left: 6px;
   right: 6px;
-  height: 30px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4302,7 +4302,11 @@ select option {
   position: absolute;
   left: 0;
   right: 0;
-  top: 18px;
+  top: 16px;
+  bottom: 0px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   pointer-events: none;
   font-size: 0.68em;
@@ -4310,8 +4314,12 @@ select option {
   color: var(--gold);
   font-family: monospace;
   letter-spacing: 0.5px;
-  line-height: 10px;
-  height: 10px;
+  line-height: 1;
+}
+
+.track-playlist-counter {
+  line-height: 1;
+  pointer-events: none;
 }
 
 .track-playlist-next {
