@@ -4860,25 +4860,40 @@
           }, 3000);
         }
 
+        const MAX_RECEIVER_PAYLOAD_BYTES = 256 * 1024;
+        function safeReceiverJsonParse(text) {
+          if (typeof text !== "string" || text.length > MAX_RECEIVER_PAYLOAD_BYTES) {
+            return null;
+          }
+          try {
+            return JSON.parse(text, (key, value) => {
+              if (key === "__proto__" || key === "constructor" || key === "prototype") {
+                return undefined;
+              }
+              return value;
+            });
+          } catch (_e) {
+            return null;
+          }
+        }
+
         function parseCastPayload(raw) {
           if (!raw) {
             return null;
           }
           if (typeof raw === "string") {
-            try {
-              return JSON.parse(raw);
-            } catch (e) {
-              relayLogToStudio("⚠️ Receiver: Ignored malformed Cast message JSON.");
-              return null;
+            const parsed = safeReceiverJsonParse(raw);
+            if (!parsed) {
+              relayLogToStudio("⚠️ Receiver: Ignored malformed or oversized Cast message JSON.");
             }
+            return parsed;
           }
           if (raw && typeof raw.data === "string") {
-            try {
-              return JSON.parse(raw.data);
-            } catch (e) {
-              relayLogToStudio("⚠️ Receiver: Ignored malformed nested Cast message JSON.");
-              return null;
+            const parsed = safeReceiverJsonParse(raw.data);
+            if (!parsed) {
+              relayLogToStudio("⚠️ Receiver: Ignored malformed or oversized nested Cast message JSON.");
             }
+            return parsed;
           }
           return raw;
         }
@@ -11856,8 +11871,12 @@
               reader.readAsArrayBuffer(event.data);
               return;
             } else if (typeof event.data === "string") {
+              if (event.data.length > 256 * 1024) {
+                relayLogToStudio("⚠️ Receiver: WebSocket text payload exceeded 256KB limit.");
+                return;
+              }
               try {
-                const d = JSON.parse(event.data);
+                const d = JSON.parse(event.data, (k, v) => (k === "__proto__" || k === "constructor" || k === "prototype") ? undefined : v);
                 if (d.type === "HANDSHAKE_ACK") {
                   if (!acceptBuildIdentity(d.buildIdentity, "handshake_ack")) {
                     return;

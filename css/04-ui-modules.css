@@ -2482,13 +2482,13 @@ select option {
 .audition-params-dialog .effect-param-slider:focus,
 .audition-params-dialog .effect-param-slider:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
   scroll-margin-block: 12px;
 }
 
 .effect-params-dialog[data-keyboard-mode="navigation"] .effect-param-slider:focus-visible,
 .audition-params-dialog[data-keyboard-mode="navigation"] .effect-param-slider:focus-visible {
-  box-shadow: 0 0 0 2px var(--gold), 0 0 0 4px rgba(255, 196, 0, 0.28);
+  box-shadow: 0 0 0 1px var(--gold), 0 0 0 2px rgba(255, 196, 0, 0.28);
 }
 
 .effect-params-dialog .dialog-header,
