@@ -11871,12 +11871,14 @@
               reader.readAsArrayBuffer(event.data);
               return;
             } else if (typeof event.data === "string") {
-              if (event.data.length > 256 * 1024) {
-                relayLogToStudio("⚠️ Receiver: WebSocket text payload exceeded 256KB limit.");
+              const d = safeReceiverJsonParse(event.data);
+              if (!d || typeof d !== "object") {
+                if (typeof event.data === "string" && event.data.length > 256 * 1024) {
+                  relayLogToStudio("⚠️ Receiver: WebSocket text payload exceeded 256KB limit.");
+                }
                 return;
               }
               try {
-                const d = JSON.parse(event.data, (k, v) => (k === "__proto__" || k === "constructor" || k === "prototype") ? undefined : v);
                 if (d.type === "HANDSHAKE_ACK") {
                   if (!acceptBuildIdentity(d.buildIdentity, "handshake_ack")) {
                     return;
