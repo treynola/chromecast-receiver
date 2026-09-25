@@ -7816,6 +7816,13 @@
             ? `calc(${top} - ${RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX}px)`
             : top;
         }
+        function applyMirroredDialogLayoutSize(panel, dialog) {
+          if (dialog?.kind !== "mediaSessions") return;
+          const widthPx = Number(dialog.layoutSize?.widthPx);
+          if (!Number.isFinite(widthPx) || widthPx <= 0) return;
+          panel.style.width = `${Math.min(4096, widthPx)}px`;
+          panel.style.maxWidth = "95vw";
+        }
         function renderDialogRegistry(registry) {
           const root = getEl("gui-dialog-registry-root");
           if (!root) return;
@@ -7912,6 +7919,7 @@
             version: manifest.version,
             nodeCount: manifest.nodeCount,
             truncated: manifest.truncated,
+            omittedDirectChildren: manifest.omittedDirectChildren || 0,
             children: (manifest.children || []).map((node) => normalizeNode(node)).filter(Boolean),
           };
         }
@@ -8012,6 +8020,7 @@
             const exactSamplePadDialog = dialog.kind === "samplePadSettings" && panel.matches(".pad-settings-dialog");
             const exactSampleEditorDialog = dialog.kind === "sampleEditor" && panel.matches(".sample-editor-dialog");
             applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
+            applyMirroredDialogLayoutSize(panel, dialog);
             panel.className = [
               "gui-dialog-mirror",
               exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "" : "mxs-dialog",
@@ -8434,6 +8443,7 @@
             panel.dataset.dialogKind = dialog.kind || "generic";
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
             applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
+            applyMirroredDialogLayoutSize(panel, dialog);
             if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog && dialog.kind !== "mediaSessions") {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
@@ -8476,10 +8486,16 @@
             const samplePadManifest = exactSampleEditorDialog || exactMediaSessionsDialog
               ? dialog.samplePadDomManifest
               : null;
+            if (samplePadManifest) {
+              panel.dataset.dialogDomTruncated = String(samplePadManifest.truncated === true);
+              panel.dataset.dialogDomOmittedChildren = String(
+                Math.max(0, Number(samplePadManifest.omittedDirectChildren) || 0),
+              );
+            }
             if (
               samplePadManifest?.schema === "mxs-004.cast-dialog-dom.v1" &&
               samplePadManifest.version === 1 &&
-              samplePadManifest.truncated !== true &&
+              (samplePadManifest.truncated !== true || exactMediaSessionsDialog) &&
               Array.isArray(samplePadManifest.children)
             ) {
               const allowedTags = new Set([
