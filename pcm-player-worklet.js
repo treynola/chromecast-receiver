@@ -63,6 +63,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._crossfadeKind = null;
     this._crossfadeFramesRemaining = 0;
     this._crossfadeFramesTotal = 0;
+    this._crossfadeResult = [0, 0, false];
     this._crossfadeFromL = 0;
     this._crossfadeFromR = 0;
     this._lastOutputL = 0;
@@ -472,8 +473,12 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
   _applyCrossfade(sampleL, sampleR) {
     const kind = this._crossfadeKind;
+    const result = this._crossfadeResult;
     if (!kind || this._crossfadeFramesRemaining <= 0) {
-      return [sampleL, sampleR, false];
+      result[0] = sampleL;
+      result[1] = sampleR;
+      result[2] = false;
+      return result;
     }
     const progress =
       (this._crossfadeFramesTotal - this._crossfadeFramesRemaining + 1) /
@@ -492,7 +497,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._crossfadeFramesRendered++;
     const finished = this._crossfadeFramesRemaining === 0;
     if (finished) this._finishCrossfade(kind);
-    return [outputL, outputR, finished && kind === "underrun_fade_out"];
+    result[0] = outputL;
+    result[1] = outputR;
+    result[2] = finished && kind === "underrun_fade_out";
+    return result;
   }
 
   process(inputs, outputs) {
