@@ -18,22 +18,6 @@
   font-style: normal;
 }
 
-@font-face {
-  font-family: "Cousine";
-  src: url("../fonts/Cousine-Regular.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Cousine";
-  src: url("../fonts/Cousine-Bold.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
 :root {
   --red: #ff0000;
   --gold: #fad78e;
@@ -47,7 +31,6 @@
   --text-color: #f0f0f0;
   --dark-green-transparent: rgba(0, 100, 0, 0.5);
   --dark-red: #8b0000;
-  --effect-dialog-resting-scale: 0.84;
 }
 
 html {
@@ -78,7 +61,8 @@ body {
   overflow: hidden;
   cursor: default;
   position: relative;
-  transition: none !important;
+  /* [V13.6.6] Gold Standard Fade-in */
+  transition: opacity 0.72s ease-in-out !important;
 }
 
 /* [V13.5.2] App-wide text selection prevention */
@@ -286,8 +270,7 @@ input[type="range"]:focus {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) scale(var(--scale, 1));
-  transform-origin: center;
+  transform: translate(-50%, -50%);
   margin: 0 !important;
   border: 1px solid var(--green);
   box-shadow:
@@ -300,25 +283,10 @@ input[type="range"]:focus {
 }
 
 .app-loading {
-  opacity: 1 !important;
-  pointer-events: auto;
+  opacity: 0;
+  pointer-events: none;
   background-color: #000000 !important; /* Total blackout at launch */
-  transition: none !important;
-}
-
-/* Prevent incomplete first paint of the master column while track columns are loading */
-body.app-loading:not(.receiver-mode) .container,
-body.app-loading:not(.receiver-mode) #studio-root {
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-body:not(.app-loading):not(.receiver-mode) .container,
-body:not(.app-loading):not(.receiver-mode) #studio-root {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
+  transition: opacity 0.72s cubic-bezier(0.4, 0, 0.2, 1); /* Gold Standard Fade */
 }
 
 .header {
@@ -335,8 +303,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
 
 .header h1 {
   font-family: "Mexcellent 3D", sans-serif;
-  font-size: 1.6em;
-  font-weight: normal;
+  font-size: 1.1em;
   margin: 0;
   color: var(--gold);
   letter-spacing: 1px;
@@ -344,7 +311,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
 
 .header h2 {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
-  font-size: 0.85em !important;
+  font-size: 0.75em !important;
   margin: 0;
   color: var(--green);
   letter-spacing: 0.5px;
@@ -365,7 +332,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
   background: transparent;
   border: none;
   color: var(--gold);
-  font-size: 1.3em;
+  font-size: 1.2em;
   cursor: pointer;
   padding: 2px 5px;
   transition: color 0.2s ease;
@@ -374,52 +341,6 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
 #cast-btn:hover {
   color: var(--red);
   filter: drop-shadow(0 0 5px var(--gold));
-}
-
-#cast-btn.cast-connecting,
-#cast-btn.cast-active,
-#cast-btn.cast-recovering,
-#cast-btn.cast-stopping {
-  cursor: default;
-}
-
-#cast-btn.cast-connecting {
-  color: var(--gold);
-  filter: drop-shadow(0 0 5px var(--gold));
-}
-
-#cast-btn.cast-active {
-  color: #35d04f;
-  filter: drop-shadow(0 0 6px #35d04f);
-  animation: cast-icon-active-pulse 1.8s ease-in-out infinite;
-}
-
-#cast-btn.cast-recovering {
-  color: var(--gold);
-  filter: drop-shadow(0 0 7px var(--red));
-}
-
-#cast-btn.cast-stopping {
-  color: var(--red);
-  filter: drop-shadow(0 0 7px var(--red));
-  cursor: wait;
-}
-
-#cast-btn.cast-connecting:hover,
-#cast-btn.cast-active:hover,
-#cast-btn.cast-recovering:hover,
-#cast-btn.cast-stopping:hover {
-  color: inherit;
-}
-
-@keyframes cast-icon-active-pulse {
-  0%,
-  100% {
-    opacity: 0.82;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 .main-content {
@@ -433,3 +354,4 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
   min-height: 0;
   overflow: hidden;
 }
+

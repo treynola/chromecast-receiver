@@ -1,18 +1,21 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-512f4ddcc23d"></script>
+    <script src="head_init.js"></script>
     <meta charset="UTF-8" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>MXS-004 Studio Mirror v13.9.509</title>
-    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-bd4207ad4af3" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-bd4207ad4af3" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-bd4207ad4af3" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-bd4207ad4af3" />
-    <link rel="stylesheet" href="css/icons.css?v=13.9.509" />
+    <title>MXS-004 Studio Mirror v13.9.504</title>
+    <script src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.504" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.504" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.504" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.504" />
   </head>
   <body class="app-loading receiver-mode">
     <div class="container" id="studio-root">
@@ -29,14 +32,14 @@
           <h2
             class="header-subtitle"
           >
-            Mix N Studio 004 :: v13.9.509
+            Mix N Studio 004 :: v13.9.504
           </h2>
         </div>
       </div>
       <div class="main-content" id="main-grid">
         <!-- Column 1: MASTER -->
         <div class="master-column" id="master-column">
-          <div class="track-header">Master Recording</div>
+          <div class="track-header">Master Recording:</div>
           <div id="recording-time-display" class="track-time-display">
             00:00:00
           </div>
@@ -64,10 +67,10 @@
           <div class="master-item master-waveform-item">
             <div class="waveform-box master-waveform-box">
               <div class="waveform-labels">
-                <div class="waveform-label-external-top waveform-label-l">
+                <div class="waveform-label-external-top">
                   L
                 </div>
-                <div class="waveform-label-external waveform-label-r">R</div>
+                <div class="waveform-label-external">R</div>
               </div>
               <div
                 id="master-waveform-container"
@@ -76,19 +79,15 @@
                 <canvas
                   id="master-waveform-L"
                   class="waveform-canvas"
-                  data-waveform-surface="master-left"
                   width="242"
                   height="24"
                 ></canvas
                 ><canvas
                   id="master-waveform-R"
                   class="waveform-canvas"
-                  data-waveform-surface="master-right"
                   width="242"
                   height="24"
                 ></canvas>
-                <div class="loop-marker loop-start-marker" id="master-loop-start-marker"></div>
-                <div class="loop-marker loop-end-marker" id="master-loop-end-marker"></div>
               </div>
             </div>
           </div>
@@ -119,7 +118,7 @@
                 <button id="master-record-button" class="rec-btn" style="background-color: var(--red); color: white;">REC</button>
               </div>
               <div class="master-rec-col-right">
-                <select id="record-as-select" class="app-select">
+                <select id="record-as-select">
                   <option value="master">Stereo (WAV)</option>
                 </select>
               </div>
@@ -130,17 +129,21 @@
           >
             <div class="lfo-column">
               <div class="master-item lfo-button-item">
-                <button id="lfo-toggle" data-action="toggle-lfo-1" class="lfo-toggle-btn">
+                <button id="lfo-toggle" class="lfo-toggle-btn">
                   LFO 1
                 </button>
               </div>
               <div class="master-item lfo-meter-item">
                 <div class="meter-container lfo-meter">
-                  <div id="lfo-meter-bar" class="meter-bar"></div>
+                  <div
+                    id="lfo-meter-bar"
+                    class="meter-bar"
+                    
+                  ></div>
                 </div>
               </div>
-              <div class="master-item lfo-sweep-control">
-                <label for="lfo-time" class="master-label sweep-label"
+              <div class="master-item lfo-sweep-control lfo-sweep-control-no-margin">
+                <label class="master-label sweep-label"
                   >Sweep 1</label
                 ><input
                   type="range"
@@ -149,7 +152,6 @@
                   max="20"
                   step="0.1"
                   value="1.8"
-                  title="Increment: 0.1"
                 /><span
                   id="lfo-time-value"
                   class="master-value sweep-value"
@@ -164,7 +166,6 @@
               <div class="master-item lfo-button-item">
                 <button
                   id="lfo2-toggle"
-                  data-action="toggle-lfo-2"
                   class="lfo-toggle-btn"
                 >
                   LFO 2
@@ -172,11 +173,15 @@
               </div>
               <div class="master-item lfo-meter-item">
                 <div class="meter-container lfo-meter">
-                  <div id="lfo2-meter-bar" class="meter-bar"></div>
+                  <div
+                    id="lfo2-meter-bar"
+                    class="meter-bar"
+                    
+                  ></div>
                 </div>
               </div>
-              <div class="master-item lfo-sweep-control">
-                <label for="lfo2-time" class="master-label sweep-label"
+              <div class="master-item lfo-sweep-control lfo-sweep-control-no-margin">
+                <label class="master-label sweep-label"
                   >Sweep 2</label
                 ><input
                   type="range"
@@ -185,7 +190,6 @@
                   max="20"
                   step="0.1"
                   value="1.8"
-                  title="Increment: 0.1"
                 /><span
                   id="lfo2-time-value"
                   class="master-value sweep-value"
@@ -196,7 +200,6 @@
           </div>
           <div
             class="master-item sample-center-container"
-            id="sample-station"
           >
             <div
               class="track-header center-header"
@@ -204,32 +207,8 @@
               Sample Station
             </div>
             <div
-              class="sample-grid"
-              id="sample-grid"
-              data-sampler-columns="5"
-              data-sampler-rows="4"
-            >
-              <button type="button" class="sample-btn" id="sample-1" data-sample="1" aria-label="Sample Pad 1">1</button>
-              <button type="button" class="sample-btn" id="sample-2" data-sample="2" aria-label="Sample Pad 2">2</button>
-              <button type="button" class="sample-btn" id="sample-3" data-sample="3" aria-label="Sample Pad 3">3</button>
-              <button type="button" class="sample-btn" id="sample-4" data-sample="4" aria-label="Sample Pad 4">4</button>
-              <button type="button" class="sample-btn" id="sample-5" data-sample="5" aria-label="Sample Pad 5">5</button>
-              <button type="button" class="sample-btn" id="sample-6" data-sample="6" aria-label="Sample Pad 6">6</button>
-              <button type="button" class="sample-btn" id="sample-7" data-sample="7" aria-label="Sample Pad 7">7</button>
-              <button type="button" class="sample-btn" id="sample-8" data-sample="8" aria-label="Sample Pad 8">8</button>
-              <button type="button" class="sample-btn" id="sample-9" data-sample="9" aria-label="Sample Pad 9">9</button>
-              <button type="button" class="sample-btn" id="sample-10" data-sample="10" aria-label="Sample Pad 10">10</button>
-              <button type="button" class="sample-btn" id="sample-11" data-sample="11" aria-label="Sample Pad 11">11</button>
-              <button type="button" class="sample-btn" id="sample-12" data-sample="12" aria-label="Sample Pad 12">12</button>
-              <button type="button" class="sample-btn" id="sample-13" data-sample="13" aria-label="Sample Pad 13">13</button>
-              <button type="button" class="sample-btn" id="sample-14" data-sample="14" aria-label="Sample Pad 14">14</button>
-              <button type="button" class="sample-btn" id="sample-15" data-sample="15" aria-label="Sample Pad 15">15</button>
-              <button type="button" class="sample-btn" id="sample-16" data-sample="16" aria-label="Sample Pad 16">16</button>
-              <button type="button" class="sample-btn" id="sample-17" data-sample="17" aria-label="Sample Pad 17">17</button>
-              <button type="button" class="sample-btn" id="sample-18" data-sample="18" aria-label="Sample Pad 18">18</button>
-              <button type="button" class="sample-btn" id="sample-19" data-sample="19" aria-label="Sample Pad 19">19</button>
-              <button type="button" class="sample-btn" id="sample-20" data-sample="20" aria-label="Sample Pad 20">20</button>
-            </div>
+              class="sample-grid" id="sample-grid"
+            ></div>
           </div>
           <div
             class="master-bottom-buttons"
@@ -239,8 +218,22 @@
             ><button id="sample-station-button">MEDIA</button
             ><button id="settings-button">SETTINGS</button>
           </div>
+          <div class="meter-container master-meter-container">
+            <div
+              id="master-meter-bar"
+              class="meter-bar"
+              
+            ></div>
+          </div>
+          <!-- [v13.8.150] Invisible Shield to catch gestures for Audio Unlock -->
+          <div
+            id="bridge-diag-text"
+            class="bridge-diag-text"
+          >
+            BUF: -- | STALLS: -- | WS: DISCONNECTED
+          </div>
           <!-- [v13.9.462] FIX: castMediaElement class removed — Cast SDK was hijacking this
-               element and fighting the custom PCM AudioWorklet pipeline for audio output. -->
+               element and fighting the custom AudioContext/WebRTC pipeline for audio output. -->
           <audio
             id="audio-unlocker"
             crossorigin="anonymous"
@@ -249,35 +242,33 @@
             loop
             class="audio-unlocker"
           ></audio>
-          <!-- Dedicated Cast SDK Media Element to prevent Shadow DOM nesting and enable early AudioContext routing -->
-          <audio
-            id="cast-media-element"
-            class="castMediaElement"
-            crossorigin="anonymous"
-            playsinline
-            autoplay
-          ></audio>
-          <audio
-            id="native-stream-audio"
-            crossorigin="anonymous"
-            playsinline
-            autoplay
-          ></audio>
-        </div>
-      </div>
-    </div>
-    <!-- Independent receiver diagnostics; never participates in the studio flex layout. -->
-    <div id="tv-console" class="tv-console" aria-live="polite">
-      <div class="buffer-status tv-console-status">
-        <div class="bridge-status-row">
           <div
-            id="bridge-status-dot"
-            class="bridge-status-dot"
-          ></div>
-          BRIDGE
+            id="tv-console"
+            class="tv-console"
+          >
+            <div id="tv-console-inner"></div>
+          </div>
+          <div
+            class="buffer-status"
+          >
+            <div class="bridge-status-row">
+              <div
+                id="bridge-status-dot"
+                class="bridge-status-dot"
+              ></div>
+              BRIDGE:
+              <div
+                class="meter-container buffer-health-meter"
+              >
+                <div
+                  id="buffer-health-bar"
+                  class="buffer-health-bar"
+                ></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div id="tv-console-inner"></div>
     </div>
     <!-- [v13.9.433] Premium Glassmorphic Audio Unlock Overlay -->
     <div id="audio-unlock-overlay">
@@ -294,10 +285,6 @@
       </div>
     </div>
 
-    <div id="qa-overlay-root" aria-live="polite"></div>
-
-    <script src="pcm-v2-protocol.js?v=13.9.509-5c2a91989721"></script>
-    <script src="cast-gui-action-catalog.js?v=13.9.509-5c2a91989721"></script>
-    <script src="receiver_logic.js?v=13.9.509-5c2a91989721"></script>
+    <script src="receiver_logic.js?v=13.9.465"></script>
   </body>
 </html>
