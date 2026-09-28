@@ -225,10 +225,15 @@
         // A fresh native stream must not replay the buffered tail of a prior
         // idle session. Correct an oversized live buffer once at startup;
         // steady-state playback remains at rate 1.0 with no clock chasing.
-        const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.25;
+        const NATIVE_STARTUP_TRIM_THRESHOLD_SEC = 1.75;
         // Keep a fresh native stream close to the live edge. A larger startup
         // target creates a conspicuous first-play pause before file audio.
         const NATIVE_STARTUP_TARGET_SEC = 0.08;
+        // Chromium's media pipeline underruns and enters an unrecoverable
+        // BUFFERING stall if sought closer than ~750ms to the live stream
+        // edge. Bound the effective startup trim target so CAF retains enough
+        // decode buffer to play out without stalling.
+        const NATIVE_SAFE_DECODE_BUFFER_SEC = 0.85;
         // A Chromecast can abort AudioWorklet module/context startup even when
         // the source fetch is valid. Preload owns the normal path; this bounded
         // fallback is only a safety net for a genuinely hung or failed load.
@@ -3382,7 +3387,8 @@
               return true;
             }
             const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
-            const trimTarget = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
+            const effectiveTargetSec = Math.max(NATIVE_STARTUP_TARGET_SEC, NATIVE_SAFE_DECODE_BUFFER_SEC);
+            const trimTarget = Math.max(bufferedStart, liveEdge - effectiveTargetSec);
             if (trimTarget <= playhead + 0.25) {
               nativeStartupTrimPending = false;
               nativeStartupTrimState = "not_needed";
@@ -5098,7 +5104,8 @@
               return false;
             }
             const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
-            const trimTarget = Math.max(bufferedStart, liveEdge - NATIVE_STARTUP_TARGET_SEC);
+            const effectiveTargetSec = Math.max(NATIVE_STARTUP_TARGET_SEC, NATIVE_SAFE_DECODE_BUFFER_SEC);
+            const trimTarget = Math.max(bufferedStart, liveEdge - effectiveTargetSec);
             if (trimTarget <= playhead + 0.25) return false;
 
             activeAudio.currentTime = trimTarget;
