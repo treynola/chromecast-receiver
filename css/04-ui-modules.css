@@ -1,3 +1,4 @@
+/* Receiver build: pruned 31 Studio-only modal/session CSS blocks. */
 /* 04-ui-modules.css - All specific UI modules, modals, and dialogs */
 
 
@@ -123,8 +124,14 @@
 .waveform-label-external-top,
 .waveform-label-external {
   font-size: 0.6em !important;
-  color: var(--red) !important;
+  color: var(--gold) !important;
   font-weight: bold !important;
+}
+
+.waveform-labels .waveform-label-external:last-child,
+.waveform-labels > div:last-child,
+.waveform-label-r {
+  color: var(--gold) !important;
 }
 
 .waveform-canvas-container {
@@ -135,16 +142,31 @@
   justify-content: center !important;
   gap: 4px !important;
   position: relative !important;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
 }
 
 .waveform-canvas {
   width: 100% !important;
   height: 26px !important;
-  background: #000 !important;
+  background: #132227 !important;
   display: block !important;
-  border: 1px solid var(--gold) !important;
-  border-radius: 4px !important;
+  border: 1px solid #233b43 !important;
+  border-radius: 2px !important;
   box-sizing: border-box !important;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.waveform-canvas[data-waveform-state="pending"] {
+  border-color: #1b2e35 !important;
+  opacity: 0.72;
+}
+
+.waveform-canvas[data-waveform-state="ready"] {
+  border-color: #233b43 !important;
+  opacity: 1;
 }
 
 
@@ -187,47 +209,6 @@
 /* Ensure images don't break layout */
 img {
   max-width: 100%;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================
-   NEW 5-COLUMN LAYOUT (Master + 4 Tracks)
-   ============================================ */
-
-
-/* QA: Align Master Recording with tracks */
-
-/* QA Fix: Nudge Master Time Display down without moving Waveform */
-
-/* Equal-height master items */
-
-
-
-
-
-/* Visible line spacer to match track column dividers */
-
-/* Invisible spacer for spacing only */
-
-/* Tighter spacing for bottom section items */
-
-/* Hide old master-controls if any remain */
-
-/* Hide duplicate buttons in recordings-section (now in master column) */
-.sessions-header #import-files-button,
-.sessions-header #show-docs-button {
-  display: none;
 }
 
 
@@ -309,7 +290,7 @@ img {
 #loop-length-value,
 #lfo-time-value,
 #lfo2-time-value {
-  color: var(--gold);
+  color: var(--gold) !important;
   font-size: 0.7em;
   font-weight: 720;
 }
@@ -387,12 +368,12 @@ img {
   width: 12px !important;
   height: 12px !important;
   border: 1px solid var(--gold) !important;
-  border-radius: 2px !important;
+  border-radius: 4px !important;
   cursor: pointer !important;
   position: relative !important;
   flex-shrink: 0 !important;
   display: inline-block !important;
-  z-index: 10 !important;
+  z-index: 5 !important;
   margin-left: 2px !important;
   opacity: 1 !important;
   visibility: visible !important;
@@ -422,6 +403,7 @@ img {
 
 .lfo-assign.reversed:checked {
   background-color: var(--red) !important;
+  border-color: var(--red) !important;
 }
 
 .param-value {
@@ -516,6 +498,44 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* [V13.6.5] Unified Master & Track Control Buttons */
 
+/* Shared REC component used by the Master Column and every Track. */
+.track-rec-button {
+  height: 24px !important;
+  font-size: 0.75em !important;
+  padding: 2px 4px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-family: "Cousine", monospace !important;
+  font-weight: 720 !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+}
+
+.track-rec-button:hover {
+  filter: brightness(1.2);
+}
+
+.track-rec-button.recording {
+  animation: text-blink 0.5s infinite;
+  background-color: var(--red) !important;
+  color: white !important;
+  box-shadow: 0 0 5px var(--red);
+}
+
+.track-rec-button.mc-pa-live {
+  background-color: #ff3838 !important;
+  color: #ffffff !important;
+  border: 1px solid #ffffff !important;
+  box-shadow: 0 0 10px #ff3838, inset 0 0 6px rgba(255, 255, 255, 0.4) !important;
+  animation: text-blink 0.35s infinite !important;
+}
+
 /* [V13.8.66] Master REC Dimension Alignment */
 #master-record-button {
   width: 60px !important;
@@ -533,12 +553,14 @@ input[type="range"]::-webkit-slider-thumb {
 .rec-btn {
   color: var(--red) !important;
   border-color: var(--dark-red) !important;
+  border-radius: 4px !important;
 }
 
 .rec-btn.recording {
   background-color: var(--red) !important;
   color: white !important;
   box-shadow: 0 0 5px var(--red);
+  border-radius: 4px !important;
 }
 
 .play-btn {
@@ -557,7 +579,49 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .rev-btn {
-  color: cyan !important;
+  background-color: var(--gold);
+  color: var(--green);
+  border: 1px solid #00ff00 !important;
+  border-radius: 4px !important;
+  height: 24px !important;
+  box-sizing: border-box !important;
+}
+
+.rev-btn:hover {
+  background-color: var(--gold) !important;
+  filter: brightness(1.2) !important;
+}
+
+.track-buttons button[data-action="reverse"].reverse-preparing,
+.rev-btn.reverse-preparing,
+button[id^="t-rev-"].reverse-preparing {
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+  animation: reverse-prepare-pulse 0.9s infinite alternate ease-in-out !important;
+  cursor: progress;
+}
+
+.track-buttons button[data-action="reverse"].reverse-failed,
+.rev-btn.reverse-failed,
+button[id^="t-rev-"].reverse-failed {
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  animation: none !important;
+}
+
+@keyframes reverse-prepare-pulse {
+  from { filter: brightness(0.8); }
+  to { filter: brightness(1.35); }
+}
+
+.rev-btn.reversed,
+.rev-btn.active,
+.rev-btn.playing-reverse {
+  background-color: var(--gold) !important;
+  color: var(--green) !important;
+  border: 1px solid #00ff00 !important;
+  border-radius: 4px !important;
+  animation: rev-blink-green-kelly 0.5s infinite alternate !important;
 }
 
 /* FX Chain Container Styles */
@@ -598,7 +662,12 @@ input[type="range"]::-webkit-slider-thumb {
   color: var(--gold);
   background: #333;
 }
-
+.fx-chain-slot-label.audition-tab { background: #444; }
+.fx-chain-slot-label.audition-tab.selected {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: #333;
+}
 .fx-chain-checkbox:checked + .fx-chain-slot-label {
   background: var(--green);
   color: white;
@@ -651,7 +720,6 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .track-buttons button:hover,
-#lfo-toggle:hover,
 #master-record-button:hover,
 #show-docs-button:hover {
   filter: brightness(1.2);
@@ -671,45 +739,90 @@ input[type="range"]::-webkit-slider-thumb {
   background-color: var(--green);
   color: var(--gold);
   border: 1px solid var(--gold);
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="record"],
+.track-rec-button,
 #master-record-button {
   background-color: var(--red) !important;
   color: var(--gold) !important;
   border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
 }
 
 
 .track-buttons button[data-action="reverse"],
-#lfo-toggle,
-#lfo2-toggle {
+.rev-btn,
+button[id^="t-rev-"] {
   background-color: var(--gold);
   color: var(--green);
-  border: 1px solid var(--green);
+  border: 1px solid #00ff00 !important;
+  border-radius: 4px !important;
+  height: 24px !important;
   font-weight: 720;
+  box-sizing: border-box !important;
+}
+
+.track-buttons button[data-action="stop"]:hover,
+.track-buttons button[data-action="reverse"]:hover,
+.rev-btn:hover,
+button[id^="t-rev-"]:hover {
+  background-color: var(--gold) !important;
+  filter: brightness(1.2) !important;
+}
+
+#lfo-toggle,
+#lfo2-toggle,
+.lfo-toggle-btn {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  font-weight: 720;
+  box-sizing: border-box !important;
+}
+
+#lfo-toggle:hover,
+#lfo2-toggle:hover,
+.lfo-toggle-btn:hover,
+#lfo-toggle.sweeping:hover,
+#lfo2-toggle.sweeping:hover,
+.lfo-toggle-btn.sweeping:hover,
+.lfo-toggle-btn.active:hover {
+  background-color: var(--green) !important;
+  border: 1px solid var(--gold) !important;
+  color: var(--gold) !important;
+  box-shadow: none !important;
+  filter: none !important;
+  outline: none !important;
 }
 
 .track-buttons button[data-action="reverse"].reversed,
-#lfo-toggle.sweeping,
-#lfo2-toggle.sweeping {
-  background-color: var(--gold);
-  color: var(--dark-green);
-  border: 1px solid var(--green);
+.rev-btn.reversed,
+.rev-btn.active,
+button[id^="t-rev-"].reversed,
+button[id^="t-rev-"].active,
+.track-buttons button[data-action="reverse"].playing-reverse,
+.rev-btn.playing-reverse,
+button[id^="t-rev-"].playing-reverse {
+  border-radius: 4px !important;
+  animation: rev-blink-green-kelly 0.6s infinite ease-in-out !important;
 }
 
-.track-buttons button[data-action="reverse"].reversed.blinking,
-#lfo-toggle.sweeping.blinking,
-#lfo2-toggle.sweeping.blinking {
-  background-color: var(--green);
-  color: var(--gold);
-  border-color: var(--gold);
-  animation: rev-blink-final 0.5s infinite;
+#lfo-toggle.sweeping,
+#lfo2-toggle.sweeping,
+.lfo-toggle-btn.sweeping,
+.lfo-toggle-btn.active {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
 }
 
 .track-buttons button.recording,
 #master-record-button.recording,
-.track-buttons button.playing.blinking {
+.track-buttons button:not([data-action="reverse"]):not(.rev-btn).playing.blinking {
   animation: text-blink 0.5s infinite;
 }
 
@@ -719,17 +832,30 @@ input[type="range"]::-webkit-slider-thumb {
   }
 }
 
-@keyframes rev-blink-final {
+@keyframes rev-blink-green-kelly {
+  0% {
+    background-color: var(--gold);
+    color: var(--green);
+    border-color: #00ff00;
+  }
   50% {
-    color: var(--dark-green);
-    border-color: var(--dark-gold);
+    background-color: var(--green);
+    color: var(--gold);
+    border-color: var(--gold);
+  }
+  100% {
+    background-color: var(--gold);
+    color: var(--green);
+    border-color: #00ff00;
   }
 }
 
 .input-source,
 .effect-type-select,
+.pad-settings-dialog .pad-setting-select,
 #record-as-select,
-.recording-action-select {
+.recording-action-select,
+.app-select {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
@@ -739,11 +865,13 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 5px;
   padding: 0 25px 0 8px;
   height: 24px;
-  /* Reduced height by 20% */
   line-height: 24px;
-  /* Explicitly set line-height for vertical centering */
+  font-family: sans-serif !important;
+  font-size: 0.72em !important;
+  font-weight: normal !important;
+  text-transform: none;
   box-sizing: border-box;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 12px;
@@ -758,29 +886,30 @@ input[type="range"]::-webkit-slider-thumb {
 #record-as-select {
   margin: 0;
   flex: 2 !important;
-  font-family: "Cousine", monospace !important;
-  font-size: 0.72em !important;
 }
 
 .input-source:hover,
 .effect-type-select:hover,
+.pad-settings-dialog .pad-setting-select:hover,
 #record-as-select:hover,
 .recording-action-select:hover {
   background-color: var(--red);
   color: var(--gold);
   border-color: var(--gold);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
 }
 
 .input-source:focus,
 .effect-type-select:focus,
+.pad-settings-dialog .pad-setting-select:focus,
+.pad-settings-dialog .pad-setting-select:focus-visible,
 #record-as-select:focus,
 .recording-action-select:focus {
   background-color: var(--gold);
   color: var(--dark-red);
   border-color: var(--gold);
   outline: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3Csvg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
 }
 
 select option {
@@ -932,13 +1061,6 @@ select option {
   background-color: var(--red);
 }
 
-.sessions-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* Add a small gap between the title and the button */
-}
-
 #recordings-section {
   margin-top: 5px;
   padding: 15px;
@@ -1014,9 +1136,9 @@ select option {
 }
 
 .recording-item-arrow {
-  background-color: var(--dark-green-transparent);
+  background-color: var(--green);
   color: var(--gold);
-  border: none;
+  border: 1px solid var(--gold);
   border-radius: 4px;
   transition:
     background-color 0.2s ease,
@@ -1296,23 +1418,25 @@ select option {
   margin-bottom: 0;
   background: #2a2a2a;
   border: 1px solid #444;
-  border-radius: 6px;
-  padding: 4px 6px;
+  border-radius: 4px;
+  padding: 2px 3px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 1px;
   box-sizing: border-box;
 }
 
 .effect-control-group .effect-param-title {
   width: 100%;
   text-align: center;
-  margin-bottom: 2px;
+  padding-top: 2px;
+  margin-bottom: 0;
 }
 
 .effect-control-group .effect-param-title label {
-  font-size: 0.85em;
+  font-size: 0.76em;
+  line-height: 1;
   color: var(--gold);
   font-weight: bold;
   text-transform: uppercase;
@@ -1321,7 +1445,10 @@ select option {
 
 .effect-control-group .slider-wrapper {
   width: 100%;
-  padding: 2px 0;
+  min-height: 13px;
+  padding: 0;
+  display: flex;
+  align-items: center;
 }
 
 .effect-control-group .effect-param-slider {
@@ -1333,7 +1460,9 @@ select option {
 .effect-control-group .effect-param-value {
   width: 100%;
   text-align: center;
-  margin-top: 2px;
+  min-height: 10px;
+  margin-top: 0;
+  line-height: 1;
 }
 
 .effect-control-group .param-value {
@@ -1342,7 +1471,8 @@ select option {
   left: auto;
   top: auto;
   font-family: monospace;
-  font-size: 0.9em;
+  font-size: 0.72em;
+  line-height: 1;
   color: var(--green);
   font-weight: bold;
   pointer-events: none;
@@ -1355,12 +1485,16 @@ select option {
 }
 
 .fx-chain-title {
-  color: var(--green);
-  font-weight: bold;
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  color: var(--gold);
+  font-weight: normal;
   text-align: center;
   width: 100%;
-  font-size: 0.8em;
-  margin-bottom: 5px;
+  font-size: 1.2em;
+  line-height: 24px;
+  padding: 5px 0 0;
+  box-sizing: border-box;
+  margin-bottom: 8px;
 }
 
 .fx-chain-controls {
@@ -1419,10 +1553,14 @@ select option {
   border: 1px solid var(--gold);
 }
 
+.fx-chain-slot-label.audition-target {
+  box-shadow: 0 0 0 2px var(--gold), 0 0 8px var(--gold);
+}
+
 .fx-chain-arrow {
-  background-color: var(--gold);
-  color: var(--red);
-  border: 1px solid var(--red);
+  background-color: var(--green);
+  color: var(--gold);
+  border: 1px solid var(--gold);
   border-radius: 4px;
   padding: 0 4px;
   transition: filter 0.2s ease;
@@ -1431,12 +1569,42 @@ select option {
   font-family: "Courier New", Courier, monospace;
   font-weight: 720;
   display: inline-flex;
+  cursor: pointer;
+  z-index: 2;
+  pointer-events: auto;
   align-items: center;
   justify-content: center;
 }
 
-.fx-chain-arrow {
+.fx-chain-arrow.disabled,
+.fx-chain-arrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+
+.fx-chain-arrow:hover {
   filter: brightness(1.2);
+}
+
+.vertical-tab-arrow {
+  margin: 2px auto;
+  display: inline-flex !important;
+  z-index: 2147483647;
+}
+
+.vertical-tab-arrow-glyph {
+  display: inline-block;
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+
+/* Ensure the rotated glyph does not inherit oversized legacy tab styling. */
+.vertical-tab-arrow-glyph {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 /* --- Dialog Styling --- */
@@ -1447,14 +1615,14 @@ select option {
   }
 
   to {
-    transform: scale(0.84);
+    transform: scale(var(--effect-dialog-resting-scale));
     opacity: 1;
   }
 }
 
 @keyframes dialog-close {
   from {
-    transform: scale(0.84);
+    transform: scale(var(--effect-dialog-resting-scale));
     opacity: 1;
   }
 
@@ -1463,9 +1631,6 @@ select option {
     opacity: 0;
   }
 }
-
-#docs-dialog,
-#qa-dialog,
 .effect-params-dialog,
 .audition-params-dialog {
   background-color: transparent;
@@ -1478,71 +1643,13 @@ select option {
   transform: scale(0.12);
   opacity: 0;
 }
-
-#docs-dialog[open],
-#qa-dialog[open],
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   animation: dialog-open 1.44s ease-in-out forwards;
 }
-
-/* Ensure backdrop is consistent */
-#docs-dialog::backdrop,
-#qa-dialog::backdrop,
 .effect-params-dialog::backdrop,
 .audition-params-dialog::backdrop {
   background: rgba(0, 0, 0, 0.7);
-}
-
-
-#docs-dialog pre {
-  background-color: var(--green);
-  color: var(--gold);
-  font-family: "Courier New", Courier, monospace;
-  font-size: 1.1em;
-  line-height: 1.2;
-  white-space: pre-wrap;
-  word-break: break-word;
-  padding: 15px;
-  margin: 0;
-  margin-top: 30px;
-  text-align: left;
-  font-weight: bold;
-}
-
-#docs-dialog pre .red {
-  color: var(--red);
-}
-
-#docs-dialog pre .gold {
-  color: var(--red);
-}
-
-#docs-dialog pre .green {
-  color: var(--red);
-}
-
-#docs-dialog pre .light {
-  color: var(--gold);
-}
-
-#docs-dialog .section-header {
-  display: block;
-  font-weight: bold;
-  margin: 0.5em 0 0.2em 0;
-}
-
-#docs-dialog div {
-  margin: 0;
-  padding: 0;
-}
-
-#docs-dialog .indented {
-  padding-left: 15px;
-}
-
-#docs-dialog div > span {
-  display: block;
 }
 
 #close-docs-button,
@@ -1702,67 +1809,6 @@ select option {
   }
 }
 
-#audio-files-modal {
-  background-color: transparent;
-  border: none;
-  padding: 0;
-  overflow: visible;
-  width: 50vw;
-  height: 92vh;
-  max-width: 1200px;
-  transform: scale(0.12);
-  opacity: 0;
-}
-
-#audio-files-modal[open] {
-  animation: dialog-open 1.44s ease-in-out forwards;
-}
-
-#audio-files-modal.closing {
-  animation: dialog-close 0.72s ease-in-out forwards;
-}
-
-#audio-files-modal::backdrop {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-.audio-files-modal-content {
-  position: relative;
-  background-color: #000;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  overflow-y: auto;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 3px var(--green),
-    0 0 0 6px var(--gold),
-    0 0 0 9px var(--red);
-}
-
-.audio-files-modal-content h2 {
-  color: var(--gold);
-  text-align: center;
-}
-
-.audio-files-modal-content button {
-  background-color: var(--green);
-  color: var(--gold);
-  margin-right: 10px;
-  border: 1px solid var(--gold);
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: "Courier New", Courier, monospace;
-  font-weight: bold;
-  transition: filter 0.2s ease;
-}
-
-.audio-files-modal-content button:hover {
-  filter: brightness(1.2);
-}
-
 #audio-files-list {
   list-style: none;
   padding: 0;
@@ -1795,156 +1841,6 @@ select option {
   color: var(--gold);
   font-size: 0.85em;
   border-bottom: 1px solid var(--mid-gray);
-}
-
-#close-audio-files-modal {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  z-index: 100;
-  background: var(--gold);
-  color: var(--red);
-  border: 3px solid var(--green);
-  border-radius: 6px;
-  font-weight: bold;
-  font-size: 1.1em;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  line-height: 1;
-  font-family: "Courier New", Courier, monospace;
-}
-
-/* --- Load to Track Modal Styling --- */
-#load-to-track-modal {
-  background-color: transparent;
-  border: none;
-  padding: 0;
-  overflow: visible;
-  width: 400px;
-  height: 300px;
-  transform: scale(0.12);
-  opacity: 0;
-}
-
-#load-to-track-modal[open] {
-  animation: dialog-open 1.44s ease-in-out forwards;
-}
-
-#load-to-track-modal.closing {
-  animation: dialog-close 0.72s ease-in-out forwards;
-}
-
-#load-to-track-modal::backdrop {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-.load-to-track-modal-content {
-  position: relative;
-  background-color: #000;
-  width: 100%;
-  height: 100%;
-  box-sizing: border-box;
-  overflow-y: auto;
-  padding: 25px;
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 3px var(--green),
-    0 0 0 6px var(--gold),
-    0 0 0 9px var(--red);
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  align-items: center;
-}
-
-#load-to-track-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-#load-to-track-list li button {
-  width: 100%;
-  background-color: var(--dark-green-transparent);
-  color: var(--gold);
-  border: 1px solid var(--gold);
-  border-radius: 5px;
-  padding: 10px;
-  cursor: pointer;
-  font-weight: bold;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease,
-    border-color 0.2s ease;
-}
-
-#load-to-track-list li button:hover {
-  background-color: var(--red);
-  color: var(--gold);
-  border-color: var(--gold);
-}
-
-#load-to-track-list li button:focus {
-  background-color: var(--gold);
-  color: var(--dark-red);
-  border-color: var(--gold);
-  outline: none;
-}
-
-#close-load-to-track-modal {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  z-index: 100;
-  background: var(--gold);
-  color: var(--red);
-  border: 3px solid var(--green);
-  border-radius: 6px;
-  font-weight: bold;
-  font-size: 1.1em;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  line-height: 1;
-}
-
-#close-load-to-track-modal:hover {
-  filter: brightness(1.2);
-}
-
-#close-audio-files-modal {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  z-index: 100;
-  background: var(--gold);
-  color: var(--red);
-  border: 3px solid var(--green);
-  border-radius: 6px;
-  font-weight: bold;
-  font-size: 1.1em;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  line-height: 1;
-  font-family: "Courier New", Courier, monospace;
 }
 
 /* --- Load to Track Modal Styling --- */
@@ -2124,13 +2020,17 @@ select option {
 }
 
 .waveform-label-external {
-  color: var(--red);
+  color: var(--gold);
   font-weight: bold;
   text-transform: uppercase;
   font-family: "Courier New", Courier, monospace;
   font-size: 0.8em;
   width: 15px;
   text-align: center;
+}
+
+.waveform-label-r {
+  color: var(--gold) !important;
 }
 
 
@@ -2341,8 +2241,8 @@ select option {
   flex-direction: column;
   gap: 0px;
   border-bottom: 1px solid var(--mid-gray);
-  padding-bottom: 5px;
-  margin-bottom: 5px;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
 }
 
 .main-controls .knob-container {
@@ -2407,25 +2307,58 @@ select option {
   border: 1px solid var(--green);
   border-radius: 12px;
   padding: 0;
-  width: 490px; /* Increased by 36% from 360px */
+  width: 410px;
   box-shadow:
     0 0 0 2px var(--gold),
     0 0 0 4px var(--red),
     0 8px 32px rgba(0, 0, 0, 0.9);
-  margin: 10px;
-  max-width: 95vw;
+  margin: 4px;
+  max-width: calc(100vw - 58px);
   height: auto;
-  max-height: 85vh;
-  min-height: 100px;
+  max-height: 82vh;
+  min-height: 72px;
   /* Small base for empty state */
-  overflow: hidden;
+  overflow: visible;
   display: none;
   flex-direction: column;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   display: flex;
+}
+
+.effect-params-dialog.is-stack-front,
+.audition-params-dialog.is-stack-front {
+  z-index: 2201;
+}
+
+/* Only the front track dialog remains visible and interactive. Inactive
+   dialogs remain mounted with their track state intact, but are closed and
+   hidden so native dialog layers cannot accumulate during track switching. */
+.effect-params-dialog.is-stack-hidden,
+.audition-params-dialog.is-stack-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+.effect-params-dialog.is-stack-front,
+.audition-params-dialog.is-stack-front {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.effect-params-dialog:focus,
+.effect-params-dialog:focus-visible,
+.audition-params-dialog:focus,
+.audition-params-dialog:focus-visible {
+  outline: none;
 }
 
 .effect-params-dialog::backdrop,
@@ -2440,35 +2373,135 @@ select option {
 .audition-dialog-content {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 0;
+  padding: 5px 0 5px;
   overflow-y: auto;
-  max-height: 70vh;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  max-height: 72vh;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) var(--off-black);
+}
+
+.effect-params-dialog .dialog-content::-webkit-scrollbar,
+.audition-params-dialog .dialog-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.effect-params-dialog .dialog-content::-webkit-scrollbar-track,
+.audition-params-dialog .dialog-content::-webkit-scrollbar-track {
+  background: var(--off-black);
+}
+
+.effect-params-dialog .dialog-content::-webkit-scrollbar-thumb,
+.audition-params-dialog .dialog-content::-webkit-scrollbar-thumb {
+  background: var(--gold);
+  border-radius: 3px;
 }
 
 /* .effect-params-grid is the INNER grid - this is the ONLY grid container */
 .effect-params-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
-  gap: 8px !important;
-  padding: 8px !important;
+  gap: 3px !important;
+  padding: 3px 3px 0 !important;
   width: 100% !important;
   box-sizing: border-box !important;
   justify-items: stretch !important;
   align-items: start !important;
 }
 
+@media (max-width: 900px) {
+  .effect-params-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .effect-params-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.effect-params-dialog .effect-param-slider,
+.audition-params-dialog .effect-param-slider {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  margin: 0;
+  cursor: pointer;
+  background: var(--mid-gray);
+  border-radius: 5px;
+  outline: none;
+  accent-color: var(--gold);
+}
+
+.effect-params-dialog .effect-param-slider::-webkit-slider-runnable-track,
+.audition-params-dialog .effect-param-slider::-webkit-slider-runnable-track {
+  height: 5px;
+  background: var(--mid-gray);
+  border-radius: 5px;
+}
+
+.effect-params-dialog .effect-param-slider::-webkit-slider-thumb,
+.audition-params-dialog .effect-param-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4.5px;
+  background: var(--gold);
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.effect-params-dialog .effect-param-slider::-moz-range-track,
+.audition-params-dialog .effect-param-slider::-moz-range-track {
+  height: 5px;
+  background: var(--mid-gray);
+  border-radius: 5px;
+}
+
+.effect-params-dialog .effect-param-slider::-moz-range-thumb,
+.audition-params-dialog .effect-param-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--gold);
+  border-radius: 50%;
+  border: 2px solid var(--dark-gray);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.effect-params-dialog .effect-param-slider:focus,
+.effect-params-dialog .effect-param-slider:focus-visible,
+.audition-params-dialog .effect-param-slider:focus,
+.audition-params-dialog .effect-param-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--gold);
+  scroll-margin-block: 12px;
+}
+
+.effect-params-dialog[data-keyboard-mode="navigation"] .effect-param-slider:focus-visible,
+.audition-params-dialog[data-keyboard-mode="navigation"] .effect-param-slider:focus-visible {
+  box-shadow: 0 0 0 1px var(--gold), 0 0 0 2px rgba(255, 196, 0, 0.28);
+}
+
 .effect-params-dialog .dialog-header,
 .audition-params-dialog .dialog-header {
   display: flex;
   flex-direction: column;
-  padding: 10px 12px;
+  flex: 0 0 auto;
+  gap: 5px;
+  padding: 5px 6px;
   background: #222;
   border-bottom: 1px solid #444;
   border-radius: 11px 11px 0 0;
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 10;
   cursor: move;
 }
@@ -2476,8 +2509,19 @@ select option {
 .dialog-header-top {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   width: 100%;
+}
+
+.dialog-header-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: bold;
+  color: var(--gold);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  padding-right: 10px;
 }
 
 .dialog-header span {
@@ -2492,29 +2536,638 @@ select option {
   margin-left: 8px;
 }
 
+.dialog-header-top--center {
+  justify-content: center;
+  align-items: center;
+}
+
+.effect-dialog-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  margin-top: -5px;
+  margin-bottom: 2px;
+}
+
+.effect-dialog-close-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 18px;
+}
+
+.effect-dialog-close-row .dialog-effect-type {
+  flex: 0 0 auto;
+  min-width: 0;
+  color: var(--gold);
+  opacity: 0.8;
+  font-size: 13px !important;
+  letter-spacing: 0.5px !important;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 10px;
+}
+
+.dialog-effect-type {
+  color: var(--gold);
+  font-size: 13px !important;
+  font-weight: bold;
+  letter-spacing: 0.5px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 10px;
+}
+
+.effect-dialog-title-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.effect-dialog-title-text {
+  display: inline-block !important;
+  max-width: none !important;
+  padding: 0 !important;
+  white-space: nowrap !important;
+  will-change: transform;
+}
+
+.effect-dialog-title-viewport.is-overflowing {
+  text-align: left;
+}
+
+.effect-dialog-title-viewport.is-overflowing .effect-dialog-title-text {
+  animation: effect-dialog-title-scroll var(--effect-title-duration, 20s) ease-in-out infinite;
+}
+
+.effect-dialog-title-balance {
+  display: none;
+  width: 0;
+  min-width: 0;
+  height: 0;
+}
+
+@keyframes effect-dialog-title-scroll {
+  0%, 12% { transform: translateX(0); }
+  88%, 100% { transform: translateX(calc(-1 * var(--effect-title-travel, 0px))); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .effect-dialog-title-viewport.is-overflowing .effect-dialog-title-text {
+    animation: none;
+    text-overflow: ellipsis;
+    max-width: 100% !important;
+    overflow: hidden;
+  }
+}
+
+.effect-dialog-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.effect-dialog-close-row .close-dialog-btn {
+  position: static;
+}
+
+.dialog-track-switcher {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.dialog-track-label {
+  color: var(--gold);
+  font-size: 13px !important;
+  font-weight: bold;
+  letter-spacing: 0.5px !important;
+  margin-right: 1px;
+  padding-left: 10px;
+}
+
+.dialog-track-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  color: #777;
+  font: bold 11px/1 "Courier New", Courier, monospace;
+  cursor: default;
+}
+
+.dialog-track-button.is-populated:not(:disabled) {
+  border-color: var(--gold);
+  background: #222;
+  color: var(--gold);
+  cursor: pointer;
+}
+
+.dialog-track-button.is-selected:not(:disabled) {
+  border-color: var(--green);
+  background: #182218;
+  color: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
+
+.dialog-track-button:disabled {
+  opacity: 0.35;
+  border-color: #444;
+  color: #555;
+}
+
+/* TRACK BPM & MULTI-TRACK TEMPO SYNCHRONIZATION */
+
+.track-bpm-module {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #181818;
+  border: 1px solid var(--mid-gray);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin-top: -3px !important;
+  margin-bottom: 2px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.track-bpm-line1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.track-bpm-title {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  color: var(--gold);
+  font-weight: normal;
+  font-size: 1.15em;
+  line-height: 20px;
+  letter-spacing: 0.5px;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.track-bpm-counter-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding-left: 6px;
+}
+
+.track-bpm-counter {
+  font: bold 12px/1 "Courier New", Courier, monospace;
+  color: var(--green);
+  background: #101010;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 2px 4px;
+  text-align: center;
+  width: 58px;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+
+.track-bpm-counter:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 4px rgba(250, 215, 142, 0.3);
+}
+
+.track-bpm-line2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.track-bpm-sync-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.track-bpm-sync-all-chk {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--mid-gray, #555) !important;
+  width: 12px !important;
+  height: 12px !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
+  z-index: 5 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.track-bpm-sync-all-chk:checked {
+  background-color: var(--green) !important;
+}
+
+.track-bpm-sync-all-chk:checked::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  left: 3px !important;
+  top: 1px !important;
+  width: 3px !important;
+  height: 6px !important;
+  border: solid var(--gold) !important;
+  border-width: 0 2px 2px 0 !important;
+  transform: rotate(45deg) !important;
+}
+
+.track-bpm-sync-all-text {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+}
+
+.track-bpm-sync-with-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.track-bpm-sync-with-label {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+  margin-right: 1px;
+}
+
+.track-bpm-sync-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.track-bpm-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  color: #777;
+  font: bold 11px/1 "Courier New", Courier, monospace;
+  cursor: pointer;
+}
+
+.track-bpm-sync-btn.is-populated:not(:disabled) {
+  border-color: var(--gold);
+  background: #222;
+  color: var(--gold);
+}
+
+.track-bpm-sync-btn.is-selected:not(:disabled) {
+  border-color: var(--green);
+  background: #182218;
+  color: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
+
+/* SAMPLER PAD BPM MODULE */
+
+.pad-bpm-module {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: #181818;
+  border: 1px solid var(--mid-gray);
+  border-radius: 4px;
+  padding: 3px 5px;
+  margin-top: 2px;
+  margin-bottom: 2px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.pad-bpm-line1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.pad-bpm-title {
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  color: var(--gold);
+  font-weight: normal;
+  font-size: 1.15em;
+  line-height: 20px;
+  letter-spacing: 0.5px;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.pad-bpm-base-badge {
+  font: normal 10px/1 "Courier New", Courier, monospace;
+  color: var(--gold);
+  opacity: 0.8;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.pad-bpm-counter-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding-left: 6px;
+}
+
+.pad-bpm-counter {
+  font: bold 12px/1 "Courier New", Courier, monospace;
+  color: var(--green);
+  background: #101010;
+  border: 1px solid #333;
+  border-radius: 3px;
+  padding: 2px 4px;
+  text-align: center;
+  width: 58px;
+  box-sizing: border-box;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+
+.pad-bpm-counter:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 4px rgba(250, 215, 142, 0.3);
+}
+
+.pad-bpm-multiplier-btn {
+  font: 700 9px/1 monospace;
+  color: #ccc;
+  background: #181818;
+  border: 1px solid #444;
+  border-radius: 2px;
+  padding: 2px 4px;
+  margin-left: 3px;
+  cursor: pointer;
+  height: 18px;
+  line-height: 12px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pad-bpm-multiplier-btn:hover {
+  color: #fff;
+  border-color: var(--gold);
+  background: #252525;
+}
+
+.pad-bpm-multiplier-btn:active {
+  transform: translateY(1px);
+  background: #111;
+}
+
+.pad-bpm-line2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 20px;
+}
+
+.pad-bpm-sync-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pad-bpm-sync-all-chk {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--mid-gray, #555) !important;
+  width: 12px !important;
+  height: 12px !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+  display: inline-block !important;
+  z-index: 5 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.pad-bpm-sync-all-chk:checked {
+  background-color: var(--green) !important;
+}
+
+.pad-bpm-sync-all-chk:checked::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  left: 3px !important;
+  top: 1px !important;
+  width: 3px !important;
+  height: 6px !important;
+  border: solid var(--gold) !important;
+  border-width: 0 2px 2px 0 !important;
+  transform: rotate(45deg) !important;
+}
+
+.pad-bpm-sync-all-text {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+}
+
+.pad-bpm-sync-with-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pad-bpm-sync-with-label {
+  color: var(--gold);
+  font: bold 9.5px/1 "Courier New", Courier, monospace;
+  letter-spacing: 0.5px;
+  margin-right: 1px;
+}
+
+.pad-bpm-sync-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pad-bpm-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #555;
+  border-radius: 3px;
+  background: #222;
+  color: #777;
+  font: bold 11px/1 "Courier New", Courier, monospace;
+  cursor: pointer;
+}
+
+.pad-bpm-sync-btn.is-populated:not(:disabled) {
+  border-color: var(--gold);
+  background: #222;
+  color: var(--gold);
+}
+
+.pad-bpm-sync-btn.is-selected:not(:disabled) {
+  border-color: var(--green);
+  background: #182218;
+  color: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
+
+.dialog-header-title--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: none;
+  padding-right: 0;
+  text-align: center;
+  align-items: center;
+}
+
+.dialog-header-title--slot {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  padding-right: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.effect-params-dialog .dialog-header .dialog-title-top,
+.audition-params-dialog .dialog-header .dialog-title-top {
+  display: block;
+  font-size: 1.1em;
+  color: var(--gold);
+  opacity: 0.8;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.effect-params-dialog .dialog-header .dialog-title-bottom,
+.audition-params-dialog .dialog-header .dialog-title-bottom {
+  display: block;
+  font-size: 1.15em;
+  color: var(--green);
+  text-transform: uppercase;
+}
+
+.effect-params-dialog .dialog-header .dialog-title-bottom--effect,
+.audition-params-dialog .dialog-header .dialog-title-bottom--effect {
+  font-size: 1.1em;
+}
+
+.dialog-header-status--audition {
+  text-align: center;
+  margin-left: 0;
+  margin-top: 4px;
+  width: 100%;
+}
+
 .effect-params-dialog .dialog-header span,
 .audition-params-dialog .dialog-header span {
   font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
+}
+
+.effect-params-dialog .dialog-header-title,
+.audition-params-dialog .dialog-header-title {
+  max-width: calc(100% - 34px);
+}
+
+.effect-params-dialog .dialog-header-title.dialog-header-title--stacked,
+.audition-params-dialog .dialog-header-title.dialog-header-title--stacked,
+.effect-params-dialog .dialog-header-title.dialog-header-title--slot,
+.audition-params-dialog .dialog-header-title.dialog-header-title--slot {
+  max-width: none;
 }
 
 .close-dialog-btn {
+  position: absolute;
+  top: 4px;
+  right: 7px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  border: none;
+  border: 2px solid var(--green);
+  border-radius: 3px;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 1.4em;
-  /* Larger X */
-  padding: 0 8px;
+  font-size: 13px;
   line-height: 1;
-  width: auto;
-  /* Reset from merge error */
+  padding: 0;
+  margin: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  text-transform: lowercase !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.close-dialog-btn:focus,
+.close-dialog-btn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Ensure z-index stacking for 7 slots - increased to stay above other UI */
@@ -2544,6 +3197,168 @@ select option {
 
 .effect-params-dialog[data-slot-index="6"] {
   z-index: 506;
+}
+
+/* Track dialog stacking is owned by the live dialog stack, not by the
+   historical per-slot z-index values above. */
+.effect-params-dialog.is-stack-front,
+.audition-params-dialog.is-stack-front {
+  z-index: 2201 !important;
+}
+
+.effect-params-dialog.is-stack-hidden,
+.audition-params-dialog.is-stack-hidden {
+  z-index: 2000 !important;
+}
+
+/* Sample Editor — intentionally layered on the Effects dialog shell. */
+.sample-editor-dialog .sample-editor-grid {
+  grid-template-columns: repeat(3, 1fr) !important;
+  align-items: stretch !important;
+}
+
+.sample-editor-dialog .sample-editor-asset-card,
+.sample-editor-dialog .sample-editor-waveform-card,
+.sample-editor-dialog .sample-editor-field,
+.sample-editor-dialog .sample-editor-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.sample-editor-dialog .sample-editor-waveform-card {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.sample-editor-waveform-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sample-editor-waveform-header label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-size: 0.78em;
+}
+
+.sample-editor-waveform-header select {
+  min-width: 72px;
+}
+
+.sampler-waveform-canvas,
+.sampler-envelope-canvas {
+  display: block;
+  width: 100%;
+  background: #111;
+  border: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.sampler-waveform-canvas {
+  height: 128px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.sampler-envelope-canvas {
+  height: 88px;
+}
+
+.sample-editor-dialog .sample-editor-label,
+.sample-editor-dialog .sample-editor-field > span {
+  color: var(--gold);
+  font-family: inherit;
+  font-size: 0.8em;
+}
+
+.sample-editor-dialog .sample-editor-asset-card strong,
+.sample-editor-dialog .sample-editor-asset-card > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sample-editor-dialog .sample-editor-field input,
+.sample-editor-dialog .sample-editor-field select {
+  width: 100%;
+  min-height: 24px;
+  box-sizing: border-box;
+  background: var(--off-black);
+  border: 1px solid var(--green);
+  color: var(--gold);
+  font: inherit;
+}
+
+.sample-editor-dialog .sample-editor-check {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.sample-editor-dialog .sample-editor-check input {
+  width: auto;
+  min-height: auto;
+}
+
+.sample-editor-dialog .sample-editor-actions {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sample-editor-dialog .sample-editor-actions button {
+  min-height: 24px;
+}
+
+/* Reuse the TrackView Loop Start / Loop End control geometry in the editor. */
+.sample-editor-dialog .sample-editor-loop-controls {
+  grid-column: 1 / -1;
+  display: block;
+  min-width: 0;
+  padding: 8px;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  box-sizing: border-box;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-grid-layout {
+  padding: 0;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-line-1 > div {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-line-1 > div:last-child {
+  justify-content: space-between;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .loop-line-2 input[type="range"] {
+  width: auto;
+  min-height: 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+
+.sample-editor-dialog .sample-editor-loop-controls .param-value {
+  font-family: monospace;
+  color: var(--gold);
 }
 
 /* Audition Params Panel */
@@ -2814,7 +3629,11 @@ select option {
   background: transparent;
   border: none;
   padding: 0;
-  margin: auto;
+  position: fixed;
+  top: 25vh;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
   overflow: visible;
   color: white;
 }
@@ -2915,21 +3734,6 @@ select option {
   box-sizing: border-box;
 }
 
-.sessions-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #444;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-}
-
-.sessions-header h2 {
-  margin: 0;
-  font-size: 1.2rem;
-  color: var(--gold);
-}
-
 /* --- MEDIA DIALOG STYLES --- */
 .media-item {
   display: flex;
@@ -3007,43 +3811,580 @@ select option {
 #media-dialog-content {
   display: flex;
   flex-direction: column;
-  padding: 15px;
+  padding: 0;
   min-height: 200px;
+}
+
+#media-sessions-dialog {
+  width: 540px !important;
+  max-width: 95vw !important;
+}
+
+.media-dialog-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #181818;
+  border-bottom: 1px solid #333;
+  overflow-x: auto;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.media-dialog-tab {
+  background: #252525;
+  color: #aaa;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 5px 9px;
+  font-size: 0.72em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.media-dialog-tab:hover {
+  background: #333;
+  color: #fff;
+  border-color: var(--gold);
+}
+
+.media-dialog-tab.active {
+  background: #1e281e;
+  color: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 6px rgba(0, 255, 102, 0.25);
+}
+
+.media-dialog-tab .tab-badge {
+  background: var(--gold);
+  color: #000;
+  font-size: 0.85em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-weight: 800;
+}
+
+.media-dialog-track-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #202020;
+  border: 1px solid #383838;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.media-dialog-track-switcher .dialog-track-label {
+  font-size: 11px !important;
+  font-weight: 700;
+  padding-left: 0;
+  margin-right: 2px;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+}
+
+.media-dialog-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.media-actions .media-add-playlist-btn:hover {
+  background-color: var(--green);
+  color: #000;
+}
+
+/* --- Playlist Header & Mode Bar --- */
+.playlist-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.playlist-title-input {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  color: var(--gold);
+  font-size: 0.9em;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.playlist-title-input:focus {
+  border-color: var(--gold);
+  outline: none;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+.playlist-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.playlist-mode-label {
+  font-size: 0.7em;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+}
+
+.playlist-mode-btn {
+  background: #2a2a2a;
+  color: #aaa;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.68em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.playlist-mode-btn:hover {
+  color: #fff;
+  border-color: #666;
+}
+
+.playlist-mode-btn.active {
+  background: #1a2f1a;
+  color: var(--green);
+  border-color: var(--green);
+  box-shadow: 0 0 5px rgba(0, 255, 102, 0.3);
+}
+
+.playlist-mode-hint {
+  font-size: 0.65em;
+  color: #777;
+  margin-left: auto;
+  font-style: italic;
+}
+
+/* --- Playlist Actions Bar --- */
+.playlist-actions-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.playlist-action-btn {
+  background: #2a2a2a;
+  color: #ccc;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.68em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.playlist-action-btn:hover {
+  background: #383838;
+  color: #fff;
+  border-color: var(--gold);
+}
+
+.playlist-action-btn.btn-add {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.playlist-action-btn.btn-add:hover {
+  background: var(--green);
+  color: #000;
+}
+
+.playlist-action-btn.btn-import-files,
+.playlist-action-btn.btn-import-folder {
+  letter-spacing: 0.3px;
+}
+
+.playlist-action-btn.btn-clear {
+  border-color: var(--red);
+  color: var(--red);
+  margin-left: auto;
+}
+
+.playlist-action-btn.btn-clear:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* --- Playlist Items List --- */
+.playlist-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #222;
+  border: 1px solid #383838;
+  border-radius: 5px;
+  transition: all 0.15s;
+  box-sizing: border-box;
+}
+
+.playlist-item:hover {
+  background: #282828;
+  border-color: #555;
+}
+
+.playlist-item.is-active {
+  border-color: var(--green);
+  background: #1a261a;
+}
+
+.playlist-item-order {
+  font-size: 0.72em;
+  font-weight: 800;
+  color: var(--gold);
+  min-width: 22px;
+  font-family: monospace;
+}
+
+.playlist-item-name {
+  flex: 1;
+  font-size: 0.82em;
+  color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.playlist-item-badge {
+  font-size: 0.6em;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.playlist-item-badge.badge-active {
+  background: var(--green);
+  color: #000;
+}
+
+.playlist-item-btn {
+  background: #333;
+  border: 1px solid #555;
+  color: #ccc;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-size: 0.65em;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.playlist-item-btn:hover {
+  background: #444;
+  color: #fff;
+  border-color: var(--gold);
+}
+
+.playlist-item-btn.btn-remove:hover {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.playlist-item-btn.btn-cue {
+  color: var(--gold);
+  border-color: #554400;
+}
+
+.playlist-item-btn.btn-cue:hover {
+  background: var(--gold);
+  color: #000;
+}
+
+/* --- Media Picker Popover & Multi-Select --- */
+.media-picker-popover {
+  min-width: 290px;
+  max-width: 360px;
+  padding: 0 !important;
+  background: #181818 !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+.media-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #242424;
+  border-bottom: 1px solid #383838;
+  font-size: 0.75em;
+  font-family: monospace;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.media-picker-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.media-picker-checkbox,
+.media-picker-item-checkbox {
+  cursor: pointer;
+  accent-color: var(--green);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.media-picker-label {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+}
+
+.media-picker-count {
+  font-size: 0.85em;
+  color: #888;
+}
+
+.media-picker-bulk-add-btn {
+  background: var(--green);
+  color: #000;
+  border: 1px solid #000;
+  border-radius: 3px;
+  padding: 3px 8px;
+  font-size: 0.9em;
+  font-weight: 700;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.media-picker-bulk-add-btn:hover:not(:disabled) {
+  filter: brightness(1.15);
+  box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+}
+
+.media-picker-bulk-add-btn:disabled {
+  background: #333;
+  color: #666;
+  border-color: #444;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.media-picker-list {
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.media-picker-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid #282828;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.media-picker-item:last-child {
+  border-bottom: none;
+}
+
+.media-picker-item:hover {
+  background: #252525;
+}
+
+.media-picker-item.selected {
+  background: rgba(0, 255, 136, 0.08);
+}
+
+.media-picker-item-checkbox {
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.media-picker-item-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.8em;
+  color: #eee;
+  font-family: monospace;
+}
+
+.media-picker-quick-add-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 2px;
+  color: var(--gold);
+  width: 22px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-left: 8px;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.media-picker-quick-add-btn:hover {
+  background: var(--gold);
+  color: #000;
+  border-color: var(--gold);
+}
+
+/* --- Track Column Playlist Navigation Arrows --- */
+.track-playlist-nav {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  height: 60px;
+  display: flex;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.track-playlist-nav[style*="display: none"] {
+  display: none !important;
+}
+
+.track-playlist-prev {
+  position: absolute;
+  left: 4px;
+  top: 37px;
+  margin: 0;
+  pointer-events: auto;
+}
+
+.track-playlist-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 22px;
+  height: 10px;
+  line-height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+  font-size: 0.68em;
+  font-weight: 700;
+  color: var(--gold);
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.track-playlist-counter {
+  line-height: 1;
+  pointer-events: none;
+}
+
+.track-playlist-next {
+  position: absolute;
+  right: 4px;
+  top: 37px;
+  margin: 0;
+  pointer-events: auto;
+}
+
+.track-playlist-arrow {
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* --- 420 Sample Center --- */
 .sample-center-container {
-  width: 90%;
-  /* Reduced from 95% to prevent side clipping */
+  width: 100%;
+  /* Full width for 5‑column layout */
   box-sizing: border-box;
-  /* Ensure padding/border doesn't add to width */
-  margin: 4px auto 4px auto;
-  /* Reduced from 15px/10px for tighter GUI density */
+  margin: 2px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
 
-  /* Override master-item flex:1 constraints */
-  flex: 0 0 auto !important;
-  height: auto !important;
-  min-height: auto !important;
+  /* Let the sample station consume available space without overflowing Master Column. */
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 
   /* Dark Grey Background */
   background-color: #222222 !important;
-  border: 1px solid var(--green) !important;
+  border: none !important;
   border-radius: 10px;
-  padding: 10px;
+  padding: 4px;
 }
 
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
+.sample-center-container .center-header {
+  font-size: 1.2em;
+  margin-bottom: 2px !important;
+}
 
 .sample-grid {
   display: grid;
-  /* 4 columns */
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: row;
+  grid-auto-columns: minmax(0, 1fr);
+  row-gap: 2px;
+  column-gap: 4px;
   width: 100%;
-  margin-top: 5px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  align-self: stretch;
+  margin-top: 2px !important;
 }
 
 /* Update: Media Button Height Match (Add to existing list or override) */
@@ -3057,60 +4398,113 @@ select option {
 
 /* Sample Center Updates */
 .sample-btn {
-  /* Normal State: Lighter Grey BG (was #1a1a1a), Green Text/Border */
-  /* Normal State: Match REV Button Scheme */
-  background-color: var(--gold) !important;
+  --sampler-pad-color: var(--gold);
+  --sampler-pad-border-shadow: 0 0 0 2px var(--gold), 0 0 0 4px var(--red);
+  /* Normal State: Updated color scheme */
+  background-color: var(--off-black) !important;
   color: var(--green) !important;
-  border: 4px solid var(--green) !important;
+  border: 2px solid var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow);
 
   font-family: "Cousine", monospace !important;
-  font-size: 1.2em !important;
+  font-size: 1.1em !important;
+  line-height: 1 !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
 
-  /* Reduced Size Further */
-  aspect-ratio: 1;
+  width: calc(100% - 8px);
+  height: calc(100% - 12px);
+  min-height: 0;
+  aspect-ratio: auto;
+  box-sizing: border-box;
   padding: 1px;
   cursor: pointer;
   border-radius: 12px;
-  transition: all 0.1s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   text-shadow: none;
-  /* Removed shadow */
   position: relative;
   z-index: 5;
+  justify-self: center;
+  align-self: center;
+  text-transform: uppercase;
 }
 
 /* Hover Effects */
 .sample-btn:hover {
-  /* Hover State: Greenish BG, Gold Text/Border */
-  background-color: var(--dark-green-transparent);
-  border-color: var(--gold);
-  color: var(--gold);
-  box-shadow: 0 0 8px var(--gold);
+  background-color: var(--dark-gray) !important;
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 10px var(--green);
   text-shadow: none;
 }
 
 .sample-btn:active {
-  background-color: var(--gold);
+  background-color: var(--gold) !important;
   color: var(--green) !important;
-  /* Green text on press */
-  font-weight: normal;
-  /* Normal weight on press */
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--gold);
+  border-color: var(--green) !important;
 }
 
 .sample-btn.active {
-  background-color: var(--gold) !important;
-  color: var(--red) !important;
-  /* Visual pop on trigger */
-  box-shadow: 0 0 15px var(--red);
+  background-color: var(--off-black) !important;
+  color: var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--green);
+  border-color: var(--green) !important;
+}
+
+.sample-btn.trigger-error {
+  border-color: var(--red) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--red) !important;
+}
+
+.sample-btn.import-error {
+  border-color: var(--red) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 14px var(--red) !important;
+}
+
+.sample-btn.drag-source {
+  opacity: 0.58;
+}
+
+.sampler-status-message {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 12000;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 9px 14px;
+  color: var(--white);
+  background: var(--off-black);
+  border: 1px solid var(--gold);
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.6);
+  font-family: "Cousine", monospace;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.sampler-status-message[data-tone="error"] { border-color: var(--red); }
+.sampler-status-message[data-tone="success"] { border-color: var(--green); }
+
+.sample-btn.repeating {
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--sampler-pad-color), inset 0 0 8px var(--sampler-pad-color);
+}
+
+.sample-btn.reverse::after {
+  content: "↶";
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 0.7em;
+  color: var(--sampler-pad-color);
 }
 
 .sample-btn.loaded {
-  background-color: var(--gold) !important;
-  color: var(--dark-green) !important;
+  background-color: var(--off-black) !important;
+  color: var(--green) !important;
   border-color: var(--green) !important;
   font-size: 0.85em !important; /* Scale down for 3-letter labels */
   font-weight: 900 !important;
@@ -3183,10 +4577,10 @@ select option {
   /* Match value size */
 }
 
-/* Separator for Loop Start/End? 
+/* Separator for Loop Start/End?
    Since they are flex items, we can add a border to the first one?
    But we don't have a dedicated separator element.
-   We can add border-right to the first child container. 
+   We can add border-right to the first child container.
 */
 /* 3-Line Loop Control Layout */
 .loop-controls.active {
@@ -3494,52 +4888,381 @@ select option {
 
 .play-marker {
   position: absolute;
-  top: -5px !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 1px !important;
+  background-color: var(--red, #ff0000) !important;
+  pointer-events: auto;
+  cursor: ew-resize;
+  z-index: 9 !important;
+  box-shadow: 0 0 3px rgba(255, 0, 0, 0.8);
+}
+
+.play-marker::before {
+  content: "";
+  display: block;
+  position: absolute;
   bottom: 0;
-  width: 1.5px !important;
-  background-color: var(--green) !important;
-  pointer-events: none;
-  z-index: 12 !important;
+  left: -4px;
+  width: 9px;
+  height: 6px;
+  background-color: var(--red, #ff0000);
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
+  z-index: 10;
+}
+
+#master-play-marker {
+  display: none !important;
 }
 
 /* --- [V13.9.497] RECEIVER MODE OVERRIDES --- */
 body.receiver-mode {
   background: #000 !important;
+  transition: none !important;
+}
+body.receiver-mode.app-loading {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transition: none !important;
+}
+/*
+ * Keep the receiver canvas black until its four dynamic track columns have
+ * been created. `visibility` preserves a full layout pass while preventing
+ * the static master column from becoming an incomplete first paint.
+ */
+body.receiver-mode.app-loading #studio-root {
+  /* Cobalt can paint visibility-hidden descendants in separate layout passes.
+     Keep the receiver tree out of layout until the whole tree is ready. */
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
+body.receiver-mode:not(.app-loading) #studio-root {
+  display: flex !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  transition: none !important;
 }
 body.receiver-mode #cursor-mirror {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  background: rgba(255, 0, 0, 0.9);
-  border-radius: 50%;
+  width: 22px;
+  height: 28px;
+  background: #fff;
+  clip-path: polygon(0 0, 0 100%, 27% 72%, 48% 100%, 62% 92%, 42% 65%, 78% 65%);
   pointer-events: none;
   z-index: 10000;
-  border: 2px solid white;
   display: none;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
   left: 0;
   top: 0;
-  transform-origin: center;
+  transform-origin: 0 0;
+}
+body.receiver-mode #cursor-mirror.is-visible {
+  display: block;
+}
+body.receiver-mode #cursor-mirror.is-clicking {
+  filter: drop-shadow(0 0 5px rgba(255, 204, 0, 0.95));
+}
+body.receiver-mode #cursor-mirror::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: #000;
+  clip-path: polygon(0 0, 0 100%, 27% 72%, 48% 100%, 62% 92%, 42% 65%, 78% 65%);
 }
 body.receiver-mode cast-media-player {
   display: none;
 }
+/*
+ * Independent receiver diagnostics. Keep this out of the studio layout so
+ * log growth cannot resize or push the Sample Station. The QA mirror remains
+ * the higher diagnostic layer when both surfaces are visible.
+ */
+#tv-console {
+  position: fixed !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  left: auto !important;
+  top: auto !important;
+  width: min(400px, calc(100vw - 24px));
+  height: min(200px, calc(100vh - 24px));
+  max-height: min(200px, calc(100vh - 24px));
+  box-sizing: border-box;
+  padding: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.78);
+  color: #aaa;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-family: "Cousine", monospace;
+  font-size: 0.7em;
+  line-height: 1.25;
+  z-index: 2147483000 !important;
+  margin: 0 !important;
+  pointer-events: none;
+  isolation: isolate;
+  contain: layout paint style;
+  display: flex;
+  flex-direction: column;
+}
+#tv-console .tv-console-status {
+  flex: 0 0 auto;
+  min-height: 14px;
+  margin: 0 0 6px !important;
+  color: #aaa;
+}
+#tv-console .bridge-status-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+#tv-console-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+body.receiver-mode.app-loading #tv-console {
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+body.receiver-mode:not(.app-loading) #tv-console {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+#qa-overlay-root {
+  position: fixed !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  left: auto !important;
+  top: auto !important;
+  width: min(420px, calc(100vw - 24px));
+  max-height: min(70vh, 620px);
+  z-index: 2147483647 !important;
+  transform: none !important;
+  margin: 0 !important;
+  pointer-events: none;
+  isolation: isolate;
+  contain: layout paint style;
+}
+#qa-overlay-root > * {
+  pointer-events: auto;
+}
+#qa-overlay-root dialog,
+#qa-overlay-root .qa-panel,
+#qa-overlay-root .qa-area {
+  z-index: 2147483001;
+}
+#qa-overlay-root .qa-console-independent {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-height: inherit;
+  overflow: auto;
+  isolation: isolate;
+}
+#qa-overlay-root .qa-console-independent pre {
+  max-height: min(55vh, 500px);
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+body.receiver-mode #gui-dialog-mirror-root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: visible;
+  isolation: isolate;
+  z-index: 10001;
+  pointer-events: none;
+}
+body.receiver-mode #gui-dialog-mirror-root[hidden] {
+  display: none !important;
+}
+body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.gui-dialog-mediaSessions) {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  color: var(--gold);
+  background: rgba(9, 9, 9, 0.97);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+  pointer-events: auto;
+}
+body.receiver-mode .gui-dialog-mirror.effect-params-dialog,
+body.receiver-mode .gui-dialog-mirror.audition-params-dialog,
+body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions,
+body.receiver-mode .gui-dialog-mirror.pad-settings-dialog {
+  pointer-events: auto;
+}
+body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
+body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open],
+body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions {
+  animation: none;
+  display: flex !important;
+  /* Sender geometry is the transformed visual border box. Anchor the receiver
+     at that exact box origin, then apply the app's resting scale multiplied by
+     the dynamic viewport scale so the mirror scales down exactly like the app. */
+  margin: 0;
+  transform: scale(calc(var(--effect-dialog-resting-scale) * var(--scale, 1)));
+  transform-origin: 0 0;
+  opacity: 1;
+}
+body.receiver-mode .gui-dialog-mirror h3 {
+  margin: 0;
+  color: var(--gold);
+  font-size: 0.9em;
+}
+body.receiver-mode .gui-dialog-mirror p {
+  margin: 0;
+  color: #ddd;
+  font-size: 0.7em;
+}
+body.receiver-mode .gui-dialog-mirror-control {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) minmax(90px, 1.4fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-size: 0.7em;
+}
+body.receiver-mode .gui-dialog-mirror-control input {
+  min-width: 0;
+  accent-color: var(--gold);
+}
+body.receiver-mode .gui-dialog-mirror-control {
+  min-height: 26px;
+  gap: 6px;
+}
+body.receiver-mode .gui-dialog-mirror-control input[type="range"] {
+  width: 100%;
+}
+body.receiver-mode .gui-dialog-mirror-value {
+  min-width: 36px;
+  color: #fff;
+  font-size: 0.72em;
+  text-align: right;
+}
+body.receiver-mode .track-buttons button.mirrored-active,
+body.receiver-mode #master-record-button.mirrored-active,
+body.receiver-mode #lfo-toggle.mirrored-active,
+body.receiver-mode #lfo2-toggle.mirrored-active {
+  outline: 1px solid var(--gold);
+  box-shadow: 0 0 5px rgba(255, 196, 0, 0.55);
+}
+body.receiver-mode .track-buttons button[id^="t-play-"].playing,
+body.receiver-mode .track-buttons button[id^="t-play-"].mirrored-active {
+  background-color: var(--green) !important;
+  color: white !important;
+  border-color: white !important;
+  box-shadow: 0 0 6px var(--green), inset 0 0 0 1px rgba(255, 255, 255, 0.45) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-stop-"].stopped,
+body.receiver-mode .track-buttons button[id^="t-stop-"].mirrored-active {
+  background-color: var(--gold) !important;
+  color: var(--red) !important;
+  border-color: white !important;
+  box-shadow: 0 0 6px var(--gold) !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rec-"].recording,
+body.receiver-mode .track-buttons button[id^="t-rec-"].mirrored-active,
+body.receiver-mode #master-record-button.recording,
+body.receiver-mode #master-record-button.mirrored-active {
+  background-color: var(--red) !important;
+  color: white !important;
+  border-color: white !important;
+  box-shadow: 0 0 7px var(--red) !important;
+  animation: receiver-record-active-pulse 0.7s infinite alternate ease-in-out !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"].reversed,
+body.receiver-mode .track-buttons button[id^="t-rev-"].mirrored-active {
+  background-color: var(--green) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 7px var(--gold) !important;
+  animation: receiver-reverse-active-pulse 0.6s infinite alternate ease-in-out !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"].reverse-preparing {
+  background-color: var(--dark-gray) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+  animation: reverse-prepare-pulse 0.9s infinite alternate ease-in-out !important;
+}
+body.receiver-mode .track-buttons button[id^="t-rev-"].reverse-failed {
+  background-color: var(--dark-gray) !important;
+  color: var(--red) !important;
+  border-color: var(--red) !important;
+  box-shadow: 0 0 7px var(--red) !important;
+  animation: none !important;
+}
+body.receiver-mode #lfo-toggle.sweeping,
+body.receiver-mode #lfo2-toggle.sweeping,
+body.receiver-mode #lfo-toggle.mirrored-active,
+body.receiver-mode #lfo2-toggle.mirrored-active {
+  background-color: var(--green) !important;
+  color: white !important;
+  border-color: var(--gold) !important;
+  outline: 1px solid var(--gold) !important;
+  box-shadow: 0 0 7px var(--green) !important;
+}
+@keyframes receiver-record-active-pulse {
+  from { filter: brightness(0.82); }
+  to { filter: brightness(1.18); }
+}
+@keyframes receiver-reverse-active-pulse {
+  from { filter: brightness(0.78); }
+  to { filter: brightness(1.22); }
+}
+body.receiver-mode .meter-bar {
+  transition: none !important;
+}
+body.receiver-mode .scrolling-text.active-scrolling {
+  display: inline-block;
+  min-width: 100%;
+  animation: receiver-gui-scroll 8s linear infinite;
+}
+@keyframes receiver-gui-scroll {
+  from { transform: translateX(0); }
+  50% { transform: translateX(calc(-100% + 160px)); }
+  to { transform: translateX(0); }
+}
 body.receiver-mode .sample-grid {
   display: grid !important;
-  grid-template-columns: repeat(4, 1fr) !important;
-  gap: 5px !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  grid-template-rows: repeat(4, minmax(0, 1fr)) !important;
+  grid-auto-flow: row !important;
+  grid-auto-columns: minmax(0, 1fr) !important;
+  row-gap: 2px !important;
+  column-gap: 4px !important;
   margin-top: 2px !important;
 }
 body.receiver-mode .sample-btn {
-  aspect-ratio: 1 !important;
+  width: calc(100% - 8px) !important;
+  height: calc(100% - 12px) !important;
+  min-height: 0 !important;
+  aspect-ratio: auto !important;
   font-family: "Cousine", monospace !important;
   font-size: 1.1em !important;
+  line-height: 1 !important;
   font-weight: 720 !important;
-  border-radius: 8px !important;
-  border-width: 3px !important;
+  letter-spacing: 0.5px !important;
+  border-radius: 12px !important;
+  border-width: 2px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  justify-self: center !important;
+  align-self: center !important;
   text-transform: uppercase;
 }
 body.receiver-mode .scrolling-text-wrapper {
@@ -3584,7 +5307,7 @@ body.receiver-mode .track-buttons button[id^="t-rec-"] {
 body.receiver-mode .track-buttons button[id^="t-rev-"] {
   background-color: var(--gold) !important;
   color: var(--green) !important;
-  border: 1px solid var(--green) !important;
+  border: 1px solid #00ff00 !important;
 }
 body.receiver-mode .bridge-connected-pulse {
   animation: pulse-dot 2s infinite !important;
@@ -3603,7 +5326,7 @@ body.receiver-mode #audio-unlock-overlay {
   align-items: center;
   justify-content: center;
   z-index: 2000000;
-  transition: opacity 0.5s ease, visibility 0.5s ease;
+  transition: none !important;
   opacity: 0;
   visibility: hidden;
 }
@@ -3656,7 +5379,7 @@ body.receiver-mode .unlock-button {
   text-transform: uppercase;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
-body.receiver-mode .unlock-button:hover, 
+body.receiver-mode .unlock-button:hover,
 body.receiver-mode .unlock-button:focus {
   background: #fff;
   border-color: #fff;
@@ -3699,9 +5422,7 @@ body.receiver-mode .unlock-button:focus {
 /* --- Phase 1: State Toggles --- */
 
 /* App Curtain Fade (GlobalUIMethods.js L21-22) */
-#app-curtain {
-  transition: opacity 1.2s ease-out;
-}
+#app-curtain { transition: none !important; }
 #app-curtain.fade-out {
   opacity: 0;
   pointer-events: none;
@@ -3751,7 +5472,7 @@ body.receiver-mode .unlock-button:focus {
   display: grid !important;
   grid-template-columns: auto 1fr auto !important;
   align-items: center !important;
-  gap: 4px !important; 
+  gap: 4px !important;
   width: 100% !important;
   min-height: 25px !important; /* QA: +5px height for input gain area */
   overflow: visible !important;
@@ -3894,22 +5615,29 @@ body.receiver-mode .unlock-button:focus {
   font-weight: bold;
 }
 
-/* Slot Button Row (EffectUI.js L52-54) */
 .audition-slot-selector {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 5px;
+  align-items: center;
+  width: 100%;
+}
+
+.audition-slot-selector--compact {
+  gap: 6px;
+  margin-top: 6px;
+  align-items: center;
+  width: 100%;
+}
+
+.audition-slot-selector-row {
+  display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 5px;
-}
-.audition-slot-selector .slot-label-text {
-  font-size: 0.8em;
-  font-weight: bold;
-  color: #ccc;
-}
-.audition-slot-selector .slot-btn-row {
-  display: flex;
-  gap: 4px;
+  justify-content: center;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 /* Slot Assign Button States (EffectUI.js L62, Interactions.js L324/L377) */
@@ -3927,6 +5655,25 @@ body.receiver-mode .unlock-button:focus {
 .slot-assign-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.audition-step-btn {
+  min-width: 1.8rem;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  height: auto !important;
+  line-height: normal !important;
+  cursor: pointer;
+}
+
+.audition-slot-assign-btn {
+  min-width: 2.1rem;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  background: #444;
+  border: 1px solid #666;
+  color: white;
+  border-radius: 3px;
 }
 
 /* Effect Params Wrapper (EffectUI.js L79) */
@@ -4165,27 +5912,6 @@ body.receiver-mode .unlock-button:focus {
 .pad-settings-dialog .close-btn:hover {
   background: #555;
 }
-
-/* Audio Files Modal (FileSelectionUI.js showAudioFilesModal) */
-.audio-files-modal {
-  padding: 20px;
-  background: #222;
-  color: var(--gold);
-  border: 1px solid var(--gold);
-  max-width: 80vw;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-.audio-files-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.audio-files-modal .close-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-}
 .scan-status {
   padding: 5px 10px;
   color: var(--gold);
@@ -4266,21 +5992,6 @@ dialog.action-prompt {
 }
 .action-btn {
   padding: 8px 16px;
-}
-
-/* Modals.js - legacy-audio-files-modal */
-dialog.legacy-audio-files-modal {
-  padding: 20px;
-  background: #222;
-  color: #fff;
-  border: 1px solid var(--gold);
-  border-radius: 8px;
-  max-height: 80vh;
-  overflow-y: auto;
-  z-index: 10000;
-}
-.legacy-audio-files-modal h3 {
-  margin-top: 0;
 }
 .legacy-audio-files-list {
   display: flex;
@@ -4475,7 +6186,7 @@ dialog.input-prompt-dialog {
 .loop-control-slider-wrapper { margin-top: 2px; }
 .loop-control-param-value { display: block; text-align: left; width: 100%; }
 
-/* --- Universal MXS Dialog Styling (Based on effect-params-dialog) --- */
+/* --- Universal MXS Dialog Styling --- */
 .mxs-dialog {
   position: fixed;
   top: 50%;
@@ -4520,6 +6231,9 @@ dialog.input-prompt-dialog {
   position: sticky;
   top: 0;
   z-index: 10;
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .mxs-dialog .dialog-header-top {
@@ -4541,15 +6255,33 @@ dialog.input-prompt-dialog {
 }
 
 .mxs-dialog .close-dialog-btn {
+  position: absolute;
+  top: 4px;
+  right: 7px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  border: none;
+  border: 2px solid var(--green);
+  border-radius: 3px;
   color: var(--red);
   cursor: pointer;
   font-weight: bold;
-  font-size: 1.4em;
-  padding: 0 8px;
+  font-size: 13px;
   line-height: 1;
-  width: auto;
+  padding: 0;
+  margin: 0;
+  z-index: 100;
+  text-transform: lowercase !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.mxs-dialog .close-dialog-btn:focus,
+.mxs-dialog .close-dialog-btn:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 .mxs-dialog .close-dialog-btn:hover {
   filter: brightness(1.5);
@@ -4599,3 +6331,742 @@ dialog.input-prompt-dialog {
   background-color: var(--red);
 }
 
+/* --- VERTICAL SLOT TABS SIDEBAR --- */
+.vertical-slot-tabs {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 4px);
+  right: auto;
+  width: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  z-index: 2147483647;
+  overflow: visible;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.effect-params-dialog.is-stack-hidden .vertical-slot-tabs,
+.audition-params-dialog.is-stack-hidden .vertical-slot-tabs {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.vertical-slot-tabs .vertical-tab-arrow {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  margin: 0 auto;
+}
+
+.audition-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gold);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.audition-panel .dialog-header-status--audition {
+  width: auto;
+  margin: 0;
+  color: var(--gold);
+}
+
+/* Custom interactive hover adjustments for vertical sidebar labels */
+.vertical-slot-tabs .fx-chain-slot-label:hover {
+  border-color: var(--green) !important;
+  transform: translateX(3px);
+  transition: all 0.15s ease-in-out;
+}
+
+.vertical-tab-slot {
+  margin-bottom: 0;
+  width: 30px;
+  height: 26px;
+  flex: 0 0 auto;
+}
+
+.vertical-tab-slot .fx-chain-slot-label {
+  width: 30px;
+  height: 26px !important;
+  line-height: 26px !important;
+  padding: 0;
+  margin: 0;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: 700;
+  font-size: 15px !important;
+  letter-spacing: -0.7px;
+  text-align: center;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+}
+
+/* Exterior dialog tabs use the shared active gold/green treatment. */
+.vertical-slot-tabs .fx-chain-slot-label.selected,
+.vertical-slot-tabs .fx-chain-slot input[type="checkbox"]:checked + .fx-chain-slot-label.selected {
+  background-color: var(--gold) !important;
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+  box-shadow: 0 0 6px var(--gold);
+}
+
+/* Force active/selected slot numbers in the main track chain to match REC. */
+.fx-chain-slot-label.selected,
+.fx-chain-slot input[type="checkbox"]:checked + .fx-chain-slot-label.selected {
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  box-shadow: 0 0 6px var(--red);
+}
+
+/* --- Effect Dialog Action Buttons --- */
+.dialog-header-actions-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 8px;
+  margin-top: 0;
+  width: auto;
+  min-width: 0;
+}
+
+.dialog-header-action-btn {
+  background: #333;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+}
+
+.dialog-header-action-btn:hover:not(:disabled) {
+  background: #444;
+  color: #fff;
+  border-color: var(--green);
+}
+
+.dialog-header-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dialog-header-action-btn.dialog-action-bypass.active-bypass {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+}
+
+.dialog-header-action-btn.dialog-action-delete:hover:not(:disabled) {
+  background: #600;
+  color: #fff;
+  border-color: var(--red);
+}
+
+/* --- Sampler Pad Settings Dialog Styling --- */
+.pad-settings-dialog {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  transform: none;
+  margin: 0;
+  width: 490px !important;
+  max-width: 95vw !important;
+  max-height: 85vh !important;
+  z-index: 2500 !important;
+  background: var(--off-black, #121212) !important;
+  /* Match the Effects parameter dialog: green edge, gold and red outer rings. */
+  border: 1px solid var(--green) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9) !important;
+  display: none;
+  flex-direction: column;
+  overflow: hidden !important;
+  outline: none !important;
+}
+
+.pad-settings-dialog[open] {
+  display: flex !important;
+}
+
+.pad-fx-editor-dialog {
+  position: fixed !important;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  width: 440px !important;
+  max-width: 95vw !important;
+  max-height: 82vh !important;
+  z-index: 2600 !important;
+  background: var(--off-black, #121212) !important;
+  border: 1px solid var(--green) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9) !important;
+  color: #fff;
+  display: none;
+  flex-direction: column;
+  overflow: hidden !important;
+  outline: none !important;
+}
+
+.pad-fx-editor-dialog[open] {
+  display: flex !important;
+}
+
+.pad-settings-dialog .dialog-header {
+  cursor: move !important;
+  user-select: none !important;
+}
+
+.pad-settings-dialog .dialog-content {
+  overflow-y: auto !important;
+  max-height: calc(85vh - 55px) !important;
+  padding: 14px 16px !important;
+}
+
+/* Consolidated Sample Station Pad Dialog */
+.pad-settings-dialog .pad-dialog-content {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  background: var(--off-black) !important;
+}
+
+.pad-dialog-close-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 18px;
+}
+
+.pad-dialog-title-row {
+  align-items: center;
+}
+
+.pad-dialog-nav-group {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.pad-dialog-nav-group .effect-dialog-title-viewport,
+.pad-dialog-nav-group .pad-dialog-title-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pad-dialog-nav-group .dialog-title {
+  min-width: 0;
+  color: var(--gold);
+  font-family: inherit;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pad-dialog-pad-label {
+  flex: 0 0 auto;
+}
+
+.pad-dialog-nav-arrow {
+  width: 24px;
+  min-width: 24px;
+  padding: 0 4px;
+}
+
+.pad-control-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.pad-dialog-scroll-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  scrollbar-color: var(--gold) var(--off-black);
+  scrollbar-width: thin;
+}
+
+.pad-dialog-bottom-actions {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px 12px;
+  box-sizing: border-box;
+  border-top: 1px solid #444;
+  background: var(--off-black);
+}
+
+.pad-dialog-bottom-actions .pad-refresh-action {
+  grid-column: 2;
+  justify-self: stretch;
+  width: auto;
+}
+
+.pad-envelope-preview {
+  grid-template-columns: minmax(148px, max-content) minmax(0, 1fr);
+  min-height: 92px;
+}
+
+.pad-dialog-bottom-control-rows {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0 10px;
+  box-sizing: border-box;
+  background: var(--off-black);
+}
+
+.pad-control-row-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pad-control-row-single .pad-control-btn {
+  grid-column: 2;
+}
+
+.pad-dialog-section-title {
+  width: 100%;
+  padding-top: 4px;
+  color: var(--gold) !important;
+  font-family: inherit;
+  font-size: 0.8em;
+  font-weight: bold;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pad-dialog-pad-title {
+  color: var(--gold);
+  font-size: 1.08em;
+  font-weight: bold;
+}
+
+.pad-control-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+}
+
+.pad-control-btn {
+  min-width: 0;
+  min-height: 28px;
+  padding: 5px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Same visual and interaction contract as the live Track PLAY button. */
+.pad-control-btn.track-play-contract {
+  background-color: #222 !important;
+  color: var(--gold) !important;
+  border: 1px solid #444 !important;
+  border-radius: 4px !important;
+  font-family: monospace;
+  font-size: 0.9em;
+  font-weight: bold;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
+}
+
+.pad-control-btn.track-play-contract:hover:not(:disabled) {
+  background-color: #2d2d2d !important;
+  border-color: var(--gold) !important;
+  color: #fff !important;
+  box-shadow: 0 0 6px rgba(250, 215, 142, 0.25);
+}
+
+.pad-control-btn.track-play-contract:active:not(:disabled) {
+  transform: translateY(1px);
+  background-color: #1a1a1a !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.pad-control-btn.track-play-contract:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(100%);
+}
+
+.pad-control-btn.track-play-contract.playing {
+  background-color: var(--green) !important;
+  color: var(--off-black) !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 8px var(--green);
+}
+
+.pad-control-btn.track-play-contract.active,
+.pad-control-btn.track-play-contract.playing.active {
+  background: var(--gold) !important;
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+  box-shadow: 0 0 6px rgba(250, 215, 142, 0.35);
+}
+
+.pad-control-btn:focus-visible,
+.pad-setting-select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.pad-settings-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px solid #444;
+}
+
+.pad-settings-group-header {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold, #f39c12);
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--gold, #f39c12);
+  border-radius: 3px;
+  padding: 6px 10px;
+  margin: 10px 0 4px 0;
+  user-select: none;
+}
+
+.pad-setting-range-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+  width: min(100%, 240px);
+  justify-self: end;
+}
+
+.pad-setting-range-control input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--gold);
+}
+
+.pad-setting-value {
+  min-width: 54px;
+  color: var(--gold);
+  font-family: monospace;
+  font-size: 0.9em;
+  font-weight: normal;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pad-setting-check {
+  grid-template-columns: 18px minmax(0, 1fr);
+  cursor: pointer;
+}
+
+.pad-setting-check input[type="checkbox"] {
+  accent-color: var(--gold);
+  justify-self: start;
+  margin: 0;
+}
+
+.pad-setting-check input[type="checkbox"]:focus-visible,
+.pad-setting-range-control input[type="range"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.pad-setting-input {
+  width: min(100%, 240px);
+  justify-self: end;
+  min-height: 24px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  background: var(--dark-green-transparent);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 5px;
+  font: inherit;
+  font-weight: normal;
+}
+
+.pad-setting-input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.pad-setting-action-btn {
+  width: min(100%, 240px);
+  justify-self: end;
+}
+
+.pad-setting-field {
+  display: grid;
+  grid-template-columns: minmax(148px, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--gold);
+  font-family: inherit;
+  font-size: 0.75em;
+  font-weight: 720;
+  padding: 0 2px;
+  min-height: 16px;
+  text-transform: none;
+}
+
+.pad-setting-field > span {
+  white-space: nowrap;
+}
+
+.pad-setting-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+}
+
+/* Pad selectors intentionally copy the Effects selector skin without
+   inheriting the track-effect delegated event class. */
+.pad-settings-dialog .pad-setting-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: min(100%, 240px);
+  justify-self: end;
+  margin: 0;
+  background-color: var(--dark-green-transparent);
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  border-radius: 5px;
+  padding: 0 25px 0 8px;
+  height: 24px;
+  min-height: 24px;
+  line-height: 24px;
+  box-sizing: border-box;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+  white-space: nowrap;
+}
+
+.pad-settings-dialog .pad-setting-select:hover {
+  background-color: var(--red);
+  color: var(--gold);
+  border-color: var(--gold);
+}
+
+.pad-settings-dialog .pad-setting-select:focus,
+.pad-settings-dialog .pad-setting-select:focus-visible {
+  background-color: var(--gold);
+  color: var(--dark-red);
+  border-color: var(--gold);
+  outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+}
+
+@media (max-width: 620px) {
+  .pad-settings-dialog {
+    width: calc(100vw - 16px) !important;
+  }
+
+  .pad-settings-strip {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 420px) {
+  .pad-control-row,
+  .pad-control-row-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pad-control-row-single .pad-control-btn {
+    width: 50%;
+    justify-self: center;
+    grid-column: 1 / -1;
+  }
+
+  .pad-control-row:nth-child(1) .pad-control-btn:last-child,
+  .pad-control-row:nth-child(2) .pad-control-btn:last-child {
+    grid-column: span 2;
+  }
+}
+
+/* Canonical app-wide dropdown skin: this is the Track Effects selector
+   contract shared by Master, Track, Sample Station, and dialogs. */
+select.app-select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-color: var(--dark-green-transparent) !important;
+  color: var(--gold) !important;
+  border: 1px solid var(--gold) !important;
+  border-radius: 5px !important;
+  padding: 0 25px 0 8px !important;
+  height: 24px !important;
+  min-height: 24px !important;
+  line-height: 24px !important;
+  font-family: sans-serif !important;
+  font-size: 0.72em !important;
+  font-weight: normal !important;
+  text-transform: none !important;
+  box-sizing: border-box !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23FAD78E' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 12px !important;
+}
+
+select.app-select:hover {
+  background-color: var(--red) !important;
+  color: var(--gold) !important;
+  border-color: var(--gold) !important;
+}
+
+select.app-select option {
+  font-family: sans-serif !important;
+  font-size: 0.72em !important;
+  font-weight: normal !important;
+}
+
+select.app-select:focus,
+select.app-select:focus-visible {
+  background-color: var(--gold) !important;
+  color: var(--dark-red) !important;
+  border-color: var(--gold) !important;
+  outline: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%238B0000' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708 .708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E") !important;
+}
+
+select.app-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+/* Receiver GUI dialog/menu registry. */
+body.receiver-mode #gui-dialog-registry-root {
+  position: absolute;
+  inset: 8% 4% auto 4%;
+  z-index: 1800;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  color: var(--gold, #ffcc00);
+  background: rgba(8, 8, 8, 0.94);
+  border: 1px solid rgba(255, 204, 0, 0.55);
+  pointer-events: none;
+}
+
+body.receiver-mode #waveform-render-status {
+  position: absolute;
+  right: 2%;
+  bottom: 1.5%;
+  z-index: 1750;
+  padding: 3px 7px;
+  color: #b9f6ca;
+  background: rgba(8, 8, 8, 0.78);
+  border: 1px solid rgba(185, 246, 202, 0.45);
+  font-size: 0.62rem;
+  pointer-events: none;
+}
+
+body.receiver-mode #waveform-render-status[hidden] {
+  display: none;
+}
+
+body.receiver-mode #gui-dialog-registry-root[hidden] {
+  display: none;
+}
+
+body.receiver-mode #gui-dialog-registry-root > h2 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+body.receiver-mode .gui-dialog-registry-entry {
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+  color: #f5f5f5;
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 204, 0, 0.3);
+}
+
+body.receiver-mode .gui-dialog-registry-entry h3 {
+  margin: 0;
+  color: var(--gold, #ffcc00);
+  font-size: 0.75rem;
+}
+
+body.receiver-mode .gui-dialog-registry-entry small,
+body.receiver-mode .gui-dialog-registry-control,
+body.receiver-mode .gui-dialog-registry-menu {
+  font-size: 0.62rem;
+}
+
+body.receiver-mode .gui-dialog-registry-control {
+  display: inline-block;
+  margin-right: 4px;
+  color: #b9f6ca;
+}
+
+body.receiver-mode .gui-dialog-registry-menu {
+  display: grid;
+  gap: 2px;
+  color: #ddd;
+}
+
+body.receiver-mode .gui-dialog-registry-menu select {
+  width: 100%;
+  color: #ddd;
+  background: #222;
+  border: 1px solid #555;
+}

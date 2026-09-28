@@ -18,6 +18,7 @@
   margin-bottom: 2px;
 }
 
+.track .waveform-box,
 .track-item .waveform-box {
   width: 100% !important;
   height: 56px !important; /* Adjusted to fit 26px * 2 + 4px gap */
@@ -25,6 +26,19 @@
   flex: 0 0 56px !important;
   display: flex !important;
   align-items: stretch !important; /* Ensure children fill height */
+}
+
+.track .waveform-canvas-container {
+  min-width: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  flex: 1 1 auto !important;
+}
+
+.track .waveform-canvas {
+  min-width: 0 !important;
+  min-height: 26px !important;
+  flex: 0 0 26px !important;
 }
 
 .track-input-row {
@@ -42,9 +56,11 @@
   align-items: center !important;
   justify-content: space-between !important;
   gap: 5px !important;
-  padding-top: 5px !important;
-  border-top: 1px solid var(--mid-gray) !important;
-  margin-top: 5px !important;
+  padding: 1px 0 !important;
+  border: none !important;
+  border-top: none !important;
+  margin: 0 !important;
+  background: transparent !important;
 }
 
 #tracks-container,
@@ -67,16 +83,41 @@
 
 .track-header {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
-  font-size: 0.9em;
+  font-size: 1.2em;
   color: var(--gold);
   margin-bottom: 5px;
   text-align: center;
+  height: 24px;
+  min-height: 24px;
+  line-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 5px;
+  padding: 3px 5px 0;
+  box-sizing: border-box;
   flex-shrink: 0;
+}
+
+button.track-header,
+.track-header-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
+  transition: color 0.15s ease, filter 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button.track-header:hover,
+.track-header-btn:hover {
+  filter: brightness(1.25);
+  color: #fff;
 }
 
 .track-buttons {
@@ -97,7 +138,7 @@
   justify-content: center !important;
   font-family: "Cousine", monospace !important;
   font-weight: 720 !important;
-  border-radius: 4px;
+  border-radius: 4px !important;
   cursor: pointer;
   transition: all 0.2s;
   border: 1px solid var(--gold);
@@ -143,9 +184,10 @@
   font-family: monospace;
   background: #111;
   padding: 3px;
-  border-radius: 4px;
+  border-radius: 4px !important;
   border: 1px solid #333;
   flex-shrink: 0;
+  box-sizing: border-box !important;
 }
 
 .track-buttons button:hover {
@@ -156,37 +198,43 @@
   background-color: var(--green);
   color: #fff;
   border-color: #00ff00;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="record"] {
   background-color: var(--red);
   color: #fff;
   border-color: #ff0000;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="stop"] {
   background-color: var(--gold) !important;
   color: var(--red) !important;
-  border-color: var(--red) !important;
+  border: 1px solid var(--red) !important;
+  border-radius: 4px !important;
 }
 
 .track-buttons button[data-action="reverse"] {
-  background-color: #333;
-  color: #ccc;
-  border-color: #555;
+  background-color: var(--gold);
+  color: var(--green);
+  border: 1px solid #00ff00 !important;
+  border-radius: 4px !important;
   transition: all 0.2s;
 }
 
-.track-buttons button[data-action="reverse"].reversed {
-  background-color: var(--gold);
-  color: #000;
-  border-color: #fff;
-  font-weight: bold;
-  box-shadow: 0 0 5px var(--gold);
+.track-buttons button[data-action="stop"]:hover,
+.track-buttons button[data-action="reverse"]:hover {
+  background-color: var(--gold) !important;
+  filter: brightness(1.2) !important;
 }
 
-.track-buttons button[data-action="reverse"].reversed.blinking {
-  animation: none;
+.track-buttons button[data-action="reverse"].reversed,
+.track-buttons button[data-action="reverse"].active,
+.track-buttons button[data-action="reverse"].playing-reverse {
+  font-weight: bold;
+  border-radius: 4px !important;
+  animation: rev-blink-green-kelly 0.6s infinite ease-in-out !important;
 }
 
 .track-buttons button.recording {
@@ -325,9 +373,11 @@
   align-items: center !important;
   justify-content: space-between !important;
   gap: 5px !important;
-  padding-top: 5px !important;
-  border-top: 1px solid var(--mid-gray) !important;
-  margin-top: 5px !important;
+  padding: 1px 0 !important;
+  border: none !important;
+  border-top: none !important;
+  margin: 0 !important;
+  background: transparent !important;
 }
 
 .track-bottom-layout label {
