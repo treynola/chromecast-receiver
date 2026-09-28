@@ -1,9 +1,19 @@
 
 
-      window.SERVER_PORT = "{{SERVER_PORT}}";
-      window.RECEIVER_TOKEN = "{{RECEIVER_TOKEN}}";
-      window.STREAM_TOKEN = "{{STREAM_TOKEN}}";
-      window.LOG_TOKEN = "{{LOG_TOKEN}}";
+      window.SERVER_PORT = String(window.location.port || "");
+      window.RECEIVER_TOKEN = "";
+      window.STREAM_TOKEN = "";
+      window.LOG_TOKEN = "";
+      const LOCAL_BOOTSTRAP_TOKEN = new URLSearchParams(window.location.hash.slice(1)).get("bootstrap");
+      if (LOCAL_BOOTSTRAP_TOKEN) {
+        try {
+          window.history.replaceState(
+            window.history.state,
+            "",
+            window.location.pathname + window.location.search,
+          );
+        } catch (_error) {}
+      }
 
       (function () {
         function redactBridgeUrl(value) {
@@ -12151,6 +12161,31 @@
           };
         }
 
+        async function connectLocalReceiverWithBootstrap(hostname) {
+          const bootstrapToken = LOCAL_BOOTSTRAP_TOKEN;
+          if (!isValidBridgeCredential(bootstrapToken)) return false;
+
+          const endpoint = new URL("/receiver/bootstrap", window.location.href);
+          try {
+            const response = await fetch(endpoint.toString(), {
+              method: "POST",
+              cache: "no-store",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token: bootstrapToken }),
+            });
+            if (!response.ok) throw new Error("bootstrap_rejected_" + response.status);
+            const credentials = await response.json();
+            if (!acceptBridgeCredentials(credentials, "local_bootstrap")) {
+              throw new Error("bootstrap_credentials_invalid");
+            }
+            connectBinaryBridge(hostname, window.SERVER_PORT, credentials.token);
+            return true;
+          } catch (error) {
+            relayLogToStudio("❌ Receiver: Local bridge bootstrap failed: " + String(error));
+            return false;
+          }
+        }
+
         function handleInboundData(data) {
           if (window._receiverShutdownInProgress) return;
           try {
@@ -12347,7 +12382,9 @@
                 hostname === "127.0.0.1" ||
                 /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
               if (isLocal) {
-                connectBinaryBridge(hostname);
+                void connectLocalReceiverWithBootstrap(hostname).then((connected) => {
+                  if (!connected) relayLogToStudio("❌ Receiver: No authorized local bridge connection was established.");
+                });
               } else {
                 console.log(
                   "📡 Receiver: Public hosting detected. Staying silent until BRIDGE_CONFIG.",
