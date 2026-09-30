@@ -12275,7 +12275,8 @@
 
           // [V13.9.40] Aggressive Startup Trace
           console.log("🎬 Receiver: Startup sequence initiated.");
-          console.log("🔗 URL: " + window.location.href);
+          const receiverPageUrl = window.location.origin + window.location.pathname;
+          console.log("🔗 URL: " + receiverPageUrl);
 
           if (typeof cast !== "undefined" && cast.framework) {
             try {
@@ -12284,7 +12285,7 @@
                 throw new Error("CastReceiverContext unavailable");
               }
 
-              relayLogToStudio("🎬 Receiver: Startup - URL: " + window.location.href);
+              relayLogToStudio("🎬 Receiver: Startup - URL: " + receiverPageUrl);
 
               // [v13.9.504] SENDER_CONNECTED/DISCONNECTED listeners
               context.addEventListener(
