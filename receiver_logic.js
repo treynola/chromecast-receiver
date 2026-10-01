@@ -8581,7 +8581,7 @@
                 }
                 applyDataset(element, node.data);
 
-                const controlIndex = Number(node.controlIndex);
+                const controlIndex = node.controlIndex;
                 if (Number.isInteger(controlIndex) && controlIndex >= 0) {
                   const control = (dialog.controls || []).find(
                     (candidate, index) =>
@@ -8590,7 +8590,7 @@
                   if (control) applyControlState(element, control, dialog, controlIndex);
                 }
 
-                const actionIndex = Number(node.actionIndex);
+                const actionIndex = node.actionIndex;
                 if (Number.isInteger(actionIndex) && actionIndex >= 0) {
                   const action = actions.find(
                     (candidate, index) =>
@@ -9149,6 +9149,48 @@
           });
           restoreMirroredDialogInteractionState(root, preservedInteractionState);
           finishDialogRender("rebuild");
+        }
+
+        function summarizeMirroredDialogVisualState() {
+          const root = getEl("gui-dialog-mirror-root");
+          const viewportWidth = Math.max(1, Number(window.innerWidth) || 1);
+          const viewportHeight = Math.max(1, Number(window.innerHeight) || 1);
+          const panels = Array.from(root?.children || []).slice(0, 4).map((panel) => {
+            const rect = panel.getBoundingClientRect();
+            const style = window.getComputedStyle(panel);
+            const intersectionWidth = Math.max(0,
+              Math.min(viewportWidth, rect.right) - Math.max(0, rect.left));
+            const intersectionHeight = Math.max(0,
+              Math.min(viewportHeight, rect.bottom) - Math.max(0, rect.top));
+            let inModalTopLayer = false;
+            try { inModalTopLayer = panel.matches(":modal"); } catch (_error) {}
+            const open = panel.tagName !== "DIALOG" || panel.open === true;
+            const visible = root?.hidden !== true && open &&
+              style.display !== "none" && style.visibility !== "hidden" &&
+              Number(style.opacity || 1) > 0 &&
+              intersectionWidth > 0 && intersectionHeight > 0;
+            return {
+              id: String(panel.dataset.dialogId || "").slice(0, 128),
+              kind: String(panel.dataset.dialogKind || "generic").slice(0, 48),
+              tag: panel.tagName,
+              open,
+              inModalTopLayer,
+              display: style.display,
+              visibility: style.visibility,
+              opacity: Number(style.opacity || 1),
+              viewportIntersectionWidthPx: Math.round(intersectionWidth),
+              viewportIntersectionHeightPx: Math.round(intersectionHeight),
+              contentNodeCount: panel.querySelector(".dialog-content")?.children.length ?? 0,
+              actionCount: panel.querySelectorAll("button, label[data-action]").length,
+              visible,
+            };
+          });
+          return {
+            dialogPanelCount: root?.children.length ?? 0,
+            dialogRootHidden: root?.hidden ?? true,
+            dialogVisiblePanelCount: panels.filter((panel) => panel.visible).length,
+            dialogPanels: panels,
+          };
         }
 
         let lastRenderTime = 0;
@@ -11228,8 +11270,7 @@
                     dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
                     dialogCount: lastDialogRenderStats.dialogCount,
                     dialogDomNodes: lastDialogRenderStats.domNodeCount,
-                    dialogPanelCount: document.getElementById("gui-dialog-mirror-root")?.children.length ?? 0,
-                    dialogRootHidden: document.getElementById("gui-dialog-mirror-root")?.hidden ?? true,
+                    ...summarizeMirroredDialogVisualState(),
                     renderPhases: lastGuiRenderPhaseStats,
                     ...summarizeLfoVisualState(normalizedState),
                     ...summarizeMirroredButtonVisualState(normalizedState),
