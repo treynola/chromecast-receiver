@@ -11132,6 +11132,32 @@
           const messageStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
             : Date.now();
+          const timelineCaptureSequence = Number(envelope?.timelineCaptureSequence);
+          const snapshotPlaybackEpoch = Number(envelope?.playbackEpoch);
+          const snapshotPlaybackRevision = Number(envelope?.playbackRevision);
+          const receiverPlaybackEpochAtAck = Number(lastPlaybackEpoch);
+          const receiverPlaybackRevisionAtAck = Number(lastPlaybackRevision);
+          const hasSnapshotPlaybackIdentity = Number.isSafeInteger(snapshotPlaybackEpoch) &&
+            snapshotPlaybackEpoch >= 0 && Number.isSafeInteger(snapshotPlaybackRevision) &&
+            snapshotPlaybackRevision >= 0;
+          const hasReceiverPlaybackIdentity = Number.isSafeInteger(receiverPlaybackEpochAtAck) &&
+            receiverPlaybackEpochAtAck >= 0 && Number.isSafeInteger(receiverPlaybackRevisionAtAck) &&
+            receiverPlaybackRevisionAtAck >= 0;
+          const timelineAckDetails = {
+            ...(Number.isSafeInteger(timelineCaptureSequence) && timelineCaptureSequence >= 0
+              ? { timelineCaptureSequence }
+              : {}),
+            ...(hasSnapshotPlaybackIdentity
+              ? { playbackEpoch: snapshotPlaybackEpoch, playbackRevision: snapshotPlaybackRevision }
+              : {}),
+            ...(hasReceiverPlaybackIdentity
+              ? { receiverPlaybackEpochAtAck, receiverPlaybackRevisionAtAck }
+              : {}),
+            playbackIdentityMatchedAtAck: hasSnapshotPlaybackIdentity && hasReceiverPlaybackIdentity
+              ? snapshotPlaybackEpoch === receiverPlaybackEpochAtAck &&
+                snapshotPlaybackRevision === receiverPlaybackRevisionAtAck
+              : null,
+          };
           if (Number.isSafeInteger(revision) && revision >= 0 && revision === lastGuiRevision) {
             // A bounded sender retry can arrive after the original render was
             // accepted. ACK the committed revision without rendering twice.
@@ -11145,6 +11171,7 @@
                   ackType,
                   channel: "gui",
                   guiRevision: revision,
+                  ...timelineAckDetails,
                   guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
                   rawCount: guiRawMessageCount,
                   rejectedCount: guiRejectedCount,
@@ -11299,6 +11326,7 @@
                 ackType,
                 channel: "gui",
                 guiRevision: acceptedRevision,
+                ...timelineAckDetails,
                 guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
                 rawCount: guiRawMessageCount,
                 rejectedCount: guiRejectedCount,
