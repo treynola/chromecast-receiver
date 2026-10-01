@@ -3820,6 +3820,10 @@ select option {
   max-width: 95vw !important;
 }
 
+#media-sessions-dialog[open] {
+  animation: none;
+}
+
 .media-dialog-tabs {
   display: flex;
   gap: 4px;
@@ -5104,6 +5108,11 @@ body.receiver-mode .gui-dialog-mirror.audition-params-dialog,
 body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions,
 body.receiver-mode .gui-dialog-mirror.pad-settings-dialog {
   pointer-events: auto;
+}
+body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions {
+  position: fixed;
+  background: var(--off-black);
+  border: 1px solid var(--green);
 }
 body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
 body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open],

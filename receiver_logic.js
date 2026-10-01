@@ -8316,6 +8316,8 @@
           if (!root) return;
           const renderStartedAt = Date.now();
           const list = Array.isArray(dialogs) ? dialogs : [];
+          root.hidden = list.length === 0;
+          root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
           const finishDialogRender = (mode) => {
             lastDialogRenderStats = {
               mode,
@@ -8325,7 +8327,13 @@
             };
           };
           const signature = JSON.stringify(list);
-          if (signature === lastDialogMirrorState) {
+          if (
+            signature === lastDialogMirrorState &&
+            root.children.length === list.length &&
+            list.every((dialog) => Array.from(root.children).some(
+              (panel) => panel.dataset.dialogId === String(dialog?.id || ""),
+            ))
+          ) {
             finishDialogRender("unchanged");
             return;
           }
@@ -8341,8 +8349,6 @@
           lastDialogMirrorLayoutState = layoutSignature;
           const preservedInteractionState = captureMirroredDialogInteractionState(root);
           root.replaceChildren();
-          root.hidden = list.length === 0;
-          root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
           const normalizeClassName = normalizeMirroredDialogClassName;
           const applyDataset = syncMirroredElementDataset;
           const appendMirroredPanel = (panel, useModalTopLayer = false) => {
@@ -8445,7 +8451,7 @@
               dialog.kind === "mediaSessions" &&
               dialog.samplePadDomManifest;
             const panel = document.createElement(
-              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "dialog" : "section",
+              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog || exactMediaSessionsDialog ? "dialog" : "section",
             );
             panel.className = [
               "gui-dialog-mirror",
@@ -8591,6 +8597,7 @@
                       Number(candidate.actionIndex ?? index) === actionIndex,
                   );
                   if (action) {
+                    element.className = normalizeClassName(action.className, "gui-dialog-action-btn");
                     if (element.tagName === "BUTTON") {
                       element.type = "button";
                       element.disabled = Boolean(action.disabled);
@@ -11221,6 +11228,8 @@
                     dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
                     dialogCount: lastDialogRenderStats.dialogCount,
                     dialogDomNodes: lastDialogRenderStats.domNodeCount,
+                    dialogPanelCount: document.getElementById("gui-dialog-mirror-root")?.children.length ?? 0,
+                    dialogRootHidden: document.getElementById("gui-dialog-mirror-root")?.hidden ?? true,
                     renderPhases: lastGuiRenderPhaseStats,
                     ...summarizeLfoVisualState(normalizedState),
                     ...summarizeMirroredButtonVisualState(normalizedState),
