@@ -2729,12 +2729,20 @@ select option {
   flex-shrink: 0;
 }
 
+.track-bpm-base-badge {
+  font: normal 10px/1 "Courier New", Courier, monospace;
+  color: var(--gold);
+  opacity: 0.8;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 .track-bpm-counter-container {
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 1;
-  padding-left: 6px;
+  padding-left: 4px;
 }
 
 .track-bpm-counter {
@@ -2754,6 +2762,44 @@ select option {
 .track-bpm-counter:focus {
   border-color: var(--gold);
   box-shadow: 0 0 4px rgba(250, 215, 142, 0.3);
+}
+
+.track-bpm-multiplier-btn {
+  font: 700 9px/1 monospace;
+  color: #ccc;
+  background: #181818;
+  border: 1px solid #444;
+  border-radius: 2px;
+  padding: 2px 3px;
+  margin-left: 2px;
+  cursor: pointer;
+  height: 18px;
+  line-height: 12px;
+  transition: all 0.15s ease;
+}
+
+.track-bpm-multiplier-btn:hover {
+  background: #282828;
+  border-color: var(--gold);
+  color: #fff;
+}
+
+.track-bpm-multiplier-btn:active {
+  background: #333;
+}
+
+.track-bpm-module.is-master {
+  border-color: var(--gold);
+  box-shadow: 0 0 4px rgba(250, 215, 142, 0.25);
+}
+
+.track-bpm-module.is-follower {
+  border-color: var(--green);
+}
+
+.track-bpm-module.is-follower .track-bpm-counter {
+  border-color: var(--green);
+  color: var(--green);
 }
 
 .track-bpm-line2 {
