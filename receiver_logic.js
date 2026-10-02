@@ -5107,16 +5107,17 @@
             const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
             const playhead = activeAudio.currentTime;
             const latencyBefore = liveEdge - playhead;
+            const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
+            const effectiveTargetSec = Math.max(NATIVE_STARTUP_TARGET_SEC, NATIVE_SAFE_DECODE_BUFFER_SEC);
+            const resumeTrimThresholdSec = effectiveTargetSec + 0.20;
             if (
               !Number.isFinite(latencyBefore) ||
-              latencyBefore <= NATIVE_STARTUP_TRIM_THRESHOLD_SEC
+              latencyBefore <= resumeTrimThresholdSec
             ) {
               return false;
             }
-            const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
-            const effectiveTargetSec = Math.max(NATIVE_STARTUP_TARGET_SEC, NATIVE_SAFE_DECODE_BUFFER_SEC);
             const trimTarget = Math.max(bufferedStart, liveEdge - effectiveTargetSec);
-            if (trimTarget <= playhead + 0.25) return false;
+            if (trimTarget <= playhead + 0.20) return false;
 
             activeAudio.currentTime = trimTarget;
             const latencyAfter = Math.max(0, liveEdge - trimTarget);
@@ -5352,7 +5353,7 @@
             now - lastPcmQueueResetAt <= PCM_QUEUE_RESET_DEDUPE_MS;
           if (workletNode && workletNode.port && !duplicateReset) {
             try {
-              workletNode.port.postMessage({ type: "RESET" });
+              workletNode.port.postMessage({ type: "PAUSE" });
               workletQueueResetCount += 1;
               lastPcmQueueResetAt = now;
             } catch (e) {}
@@ -5362,7 +5363,7 @@
             notifyPlaybackMode("pcm_fallback", (reason || "playback_idle") + "_pcm_ready");
           }
           if (reason && !duplicateReset) {
-            relayLogToStudio("⏸️ Receiver: PCM playout paused; worklet retained and queue reset (" + reason + ").");
+            relayLogToStudio("⏸️ Receiver: PCM playout paused; worklet retained and queue held (" + reason + ").");
           }
         }
 
@@ -8049,6 +8050,15 @@
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
             if (exactSamplePadDialog) {
+              const activeTab = dialog.samplePadLayout?.activeTab;
+              if (activeTab && panel.dataset.padTab !== activeTab) {
+                panel.dataset.padTab = activeTab;
+                panel.querySelectorAll(".pad-dialog-tab-btn").forEach((btn) => {
+                  const isActive = btn.dataset.padTab === activeTab;
+                  btn.classList.toggle("active", isActive);
+                  btn.setAttribute("aria-selected", String(isActive));
+                });
+              }
               const padTitle = panel.querySelector(".pad-dialog-pad-title");
               const sampleName = panel.querySelector("[data-pad-sample-name]");
               if (padTitle && dialog.samplePadLayout?.padTitleText !== undefined) {
@@ -8738,6 +8748,41 @@
               header.appendChild(headerTop);
               panel.appendChild(header);
 
+              panel.dataset.padTab = layout.activeTab || "main";
+              const tabsContainer = document.createElement("div");
+              tabsContainer.className = "pad-dialog-tabs";
+              tabsContainer.setAttribute("role", "tablist");
+              tabsContainer.setAttribute("aria-label", "Pad Settings Categories");
+              const tabsList = Array.isArray(layout.tabs) && layout.tabs.length > 0 ? layout.tabs : [
+                { id: "main", label: "MAIN" },
+                { id: "envelope", label: "ENVELOPE" },
+                { id: "tone-dac", label: "TONE & DAC" },
+                { id: "playback", label: "PLAYBACK" },
+                { id: "performance", label: "PERFORMANCE" },
+                { id: "pad-fx", label: "PAD FX" },
+              ];
+              tabsList.forEach((tab) => {
+                const tabBtn = document.createElement("button");
+                tabBtn.type = "button";
+                tabBtn.className = "pad-dialog-tab-btn";
+                const isActive = tab.id === (panel.dataset.padTab || "main");
+                if (isActive) tabBtn.classList.add("active");
+                tabBtn.setAttribute("role", "tab");
+                tabBtn.setAttribute("aria-selected", String(isActive));
+                tabBtn.dataset.padTab = tab.id;
+                tabBtn.textContent = tab.label;
+                tabBtn.addEventListener("click", () => {
+                  panel.dataset.padTab = tab.id;
+                  tabsContainer.querySelectorAll(".pad-dialog-tab-btn").forEach((b) => {
+                    const active = b.dataset.padTab === tab.id;
+                    b.classList.toggle("active", active);
+                    b.setAttribute("aria-selected", String(active));
+                  });
+                });
+                tabsContainer.appendChild(tabBtn);
+              });
+              panel.appendChild(tabsContainer);
+
               const content = document.createElement("div");
               content.className = normalizeClassName(
                 dialog.contentClassName,
@@ -8753,6 +8798,7 @@
                 layout.primaryRowsClassName,
                 "pad-control-rows",
               );
+              primaryRows.dataset.tab = "main performance";
               appendActionRows(primaryRows, layout.primaryRows);
               scrollContent.appendChild(primaryRows);
               const bottomControlRows = document.createElement("div");
@@ -8760,6 +8806,7 @@
                 layout.bottomControlRowsClassName,
                 "pad-dialog-bottom-control-rows",
               );
+              bottomControlRows.dataset.tab = "main performance";
               appendActionRows(bottomControlRows, layout.bottomControlRows);
               scrollContent.appendChild(bottomControlRows);
               const settingsStrip = document.createElement("div");
@@ -8771,6 +8818,7 @@
                 if (item.kind === "bpmModule") {
                   const bpmField = document.createElement("div");
                   bpmField.className = normalizeClassName(item.className, "pad-setting-field pad-bpm-module");
+                  bpmField.dataset.tab = "main";
                   const line1 = document.createElement("div");
                   line1.className = "pad-bpm-line1";
                   const title = document.createElement("div");

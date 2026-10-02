@@ -4582,6 +4582,56 @@ select option {
 .sample-center-container .center-header {
   font-size: 1.2em;
   margin-bottom: 2px !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.sampler-bank-selector {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.sampler-bank-btn {
+  background: var(--off-black, #141414);
+  color: var(--gold, #ffcc00);
+  border: 1px solid var(--gold, #ffcc00);
+  border-radius: 3px;
+  font-family: "Cousine", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.sampler-bank-btn:hover {
+  background: rgba(255, 204, 0, 0.2);
+  color: #fff;
+  border-color: #fff;
+}
+
+.sampler-bank-btn.active {
+  background: var(--gold, #ffcc00) !important;
+  color: #111 !important;
+  border-color: var(--gold, #ffcc00) !important;
+  box-shadow: 0 0 6px rgba(255, 204, 0, 0.6);
+}
+
+.sample-grid.sixteen-levels-active .sample-btn.sixteen-levels-pad {
+  border-color: #ff8800 !important;
+  box-shadow: 0 0 0 2px #ff8800, 0 0 0 4px rgba(255, 136, 0, 0.4) !important;
+  background: linear-gradient(135deg, rgba(255, 136, 0, 0.15), var(--off-black)) !important;
+}
+
+.sample-grid.sixteen-levels-active .sample-btn.aux-pad {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+  border-style: dashed !important;
 }
 
 .sample-grid {
@@ -6887,6 +6937,107 @@ dialog.input-prompt-dialog {
   width: 24px;
   min-width: 24px;
   padding: 0 4px;
+}
+
+/* Pad Dialog Tabs */
+.pad-dialog-tabs {
+  display: flex;
+  background: #111;
+  border-bottom: 1px solid #333;
+  padding: 4px 6px 0 6px;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-sizing: border-box;
+}
+
+.pad-dialog-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.pad-dialog-tab-btn {
+  background: #1c1c1c;
+  color: #888;
+  border: 1px solid #333;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  font-family: "Cousine", monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.pad-dialog-tab-btn:hover {
+  color: var(--gold, #ffcc00);
+  background: #282828;
+}
+
+.pad-dialog-tab-btn.active {
+  background: var(--off-black, #141414) !important;
+  color: var(--gold, #ffcc00) !important;
+  border-color: var(--gold, #ffcc00) !important;
+  border-bottom: 1px solid var(--off-black, #141414) !important;
+  margin-bottom: -1px;
+  z-index: 2;
+  box-shadow: 0 -2px 6px rgba(255, 204, 0, 0.25);
+}
+
+/* Tab Content Visibility Filters */
+.pad-settings-dialog[data-pad-tab="main"] [data-tab]:not([data-tab~="main"]),
+.pad-settings-dialog[data-pad-tab="envelope"] [data-tab]:not([data-tab~="envelope"]),
+.pad-settings-dialog[data-pad-tab="tone-dac"] [data-tab]:not([data-tab~="tone-dac"]),
+.pad-settings-dialog[data-pad-tab="playback"] [data-tab]:not([data-tab~="playback"]),
+.pad-settings-dialog[data-pad-tab="performance"] [data-tab]:not([data-tab~="performance"]),
+.pad-settings-dialog[data-pad-tab="pad-fx"] [data-tab]:not([data-tab~="pad-fx"]) {
+  display: none !important;
+}
+
+/* Pad FX Summary Card */
+.pad-fx-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #181818;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 6px 0;
+}
+
+.pad-fx-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pad-fx-summary-title {
+  font-family: "Cousine", monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--gold, #ffcc00);
+}
+
+.pad-fx-summary-status {
+  font-family: "Cousine", monospace;
+  font-size: 0.78rem;
+  color: var(--green, #00ff66);
+}
+
+.pad-fx-summary-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 0.72rem;
+  color: #aaa;
+}
+
+.pad-fx-launch-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+  padding: 4px 12px;
 }
 
 .pad-control-rows {
