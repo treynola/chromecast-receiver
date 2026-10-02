@@ -1,4 +1,4 @@
-/* Receiver build: pruned 31 Studio-only modal/session CSS blocks. */
+/* Receiver build: pruned 9 Studio-only modal/session CSS blocks. */
 /* 04-ui-modules.css - All specific UI modules, modals, and dialogs */
 
 
@@ -1631,6 +1631,8 @@ select option {
     opacity: 0;
   }
 }
+
+#docs-dialog,
 .effect-params-dialog,
 .audition-params-dialog {
   background-color: transparent;
@@ -1643,13 +1645,69 @@ select option {
   transform: scale(0.12);
   opacity: 0;
 }
+
+#docs-dialog[open],
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   animation: dialog-open 1.44s ease-in-out forwards;
 }
+
+/* Ensure backdrop is consistent */
+#docs-dialog::backdrop,
 .effect-params-dialog::backdrop,
 .audition-params-dialog::backdrop {
   background: rgba(0, 0, 0, 0.7);
+}
+
+
+#docs-dialog pre {
+  background-color: var(--green);
+  color: var(--gold);
+  font-family: "Courier New", Courier, monospace;
+  font-size: 1.1em;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 15px;
+  margin: 0;
+  margin-top: 30px;
+  text-align: left;
+  font-weight: bold;
+}
+
+#docs-dialog pre .red {
+  color: var(--red);
+}
+
+#docs-dialog pre .gold {
+  color: var(--red);
+}
+
+#docs-dialog pre .green {
+  color: var(--red);
+}
+
+#docs-dialog pre .light {
+  color: var(--gold);
+}
+
+#docs-dialog .section-header {
+  display: block;
+  font-weight: bold;
+  margin: 0.5em 0 0.2em 0;
+}
+
+#docs-dialog div {
+  margin: 0;
+  padding: 0;
+}
+
+#docs-dialog .indented {
+  padding-left: 15px;
+}
+
+#docs-dialog div > span {
+  display: block;
 }
 
 #close-docs-button,
@@ -1809,6 +1867,67 @@ select option {
   }
 }
 
+#audio-files-modal {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  overflow: visible;
+  width: 50vw;
+  height: 92vh;
+  max-width: 1200px;
+  transform: scale(0.12);
+  opacity: 0;
+}
+
+#audio-files-modal[open] {
+  animation: dialog-open 1.44s ease-in-out forwards;
+}
+
+#audio-files-modal.closing {
+  animation: dialog-close 0.72s ease-in-out forwards;
+}
+
+#audio-files-modal::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.audio-files-modal-content {
+  position: relative;
+  background-color: #000;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 3px var(--green),
+    0 0 0 6px var(--gold),
+    0 0 0 9px var(--red);
+}
+
+.audio-files-modal-content h2 {
+  color: var(--gold);
+  text-align: center;
+}
+
+.audio-files-modal-content button {
+  background-color: var(--green);
+  color: var(--gold);
+  margin-right: 10px;
+  border: 1px solid var(--gold);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: "Courier New", Courier, monospace;
+  font-weight: bold;
+  transition: filter 0.2s ease;
+}
+
+.audio-files-modal-content button:hover {
+  filter: brightness(1.2);
+}
+
 #audio-files-list {
   list-style: none;
   padding: 0;
@@ -1841,6 +1960,50 @@ select option {
   color: var(--gold);
   font-size: 0.85em;
   border-bottom: 1px solid var(--mid-gray);
+}
+
+#close-audio-files-modal {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 100;
+  background: var(--gold);
+  color: var(--red);
+  border: 3px solid var(--green);
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1.1em;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  line-height: 1;
+  font-family: "Courier New", Courier, monospace;
+}
+
+#close-audio-files-modal {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 100;
+  background: var(--gold);
+  color: var(--red);
+  border: 3px solid var(--green);
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 1.1em;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  line-height: 1;
+  font-family: "Courier New", Courier, monospace;
 }
 
 /* --- Load to Track Modal Styling --- */
@@ -5134,7 +5297,31 @@ body.receiver-mode #gui-dialog-mirror-root {
 body.receiver-mode #gui-dialog-mirror-root[hidden] {
   display: none !important;
 }
-body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.gui-dialog-mediaSessions) {
+body.receiver-mode .gui-dialog-mirror.mxs-dialog {
+  background: var(--off-black);
+  border: 1px solid var(--green);
+  border-radius: 12px;
+  padding: 0;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--red),
+    0 8px 32px rgba(0, 0, 0, 0.9);
+  pointer-events: auto;
+}
+body.receiver-mode .gui-dialog-mirror.mxs-dialog.error-dialog {
+  border-color: var(--red);
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 0 4px var(--green),
+    0 8px 32px rgba(0, 0, 0, 0.9);
+}
+body.receiver-mode .gui-dialog-mirror.mxs-dialog:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.sample-editor-dialog) {
+  position: fixed;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+body.receiver-mode .gui-dialog-mirror:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.gui-dialog-mediaSessions):not(.mxs-dialog) {
   position: absolute;
   display: flex;
   flex-direction: column;
@@ -5967,6 +6154,27 @@ body.receiver-mode .unlock-button:focus {
 .pad-settings-dialog .close-btn:hover {
   background: #555;
 }
+
+/* Audio Files Modal (FileSelectionUI.js showAudioFilesModal) */
+.audio-files-modal {
+  padding: 20px;
+  background: #222;
+  color: var(--gold);
+  border: 1px solid var(--gold);
+  max-width: 80vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.audio-files-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.audio-files-modal .close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
 .scan-status {
   padding: 5px 10px;
   color: var(--gold);
@@ -6267,8 +6475,25 @@ dialog.input-prompt-dialog {
   flex-direction: column;
 }
 
+@keyframes mxs-dialog-open {
+  from {
+    transform: translate(-50%, -50%) scale(0.12);
+    opacity: 0;
+  }
+
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
 .mxs-dialog[open] {
   display: flex;
+  animation: mxs-dialog-open 0.3s ease-out forwards;
+}
+
+.mxs-dialog.effect-params-dialog[open],
+.mxs-dialog.audition-params-dialog[open] {
   animation: dialog-open 0.3s ease-out forwards;
 }
 

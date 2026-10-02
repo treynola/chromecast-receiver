@@ -8016,9 +8016,9 @@
             samplePadLayout: dialog.samplePadLayout
               ? { ...dialog.samplePadLayout, sampleNameText: undefined }
               : null,
-            samplePadDomManifest: ["samplePadSettings", "sampleEditor", "mediaSessions"].includes(dialog.kind)
-              ? getMirroredDialogManifestLayout(dialog.samplePadDomManifest)
-              : dialog.samplePadDomManifest,
+            samplePadDomManifest: (dialog.dialogDomManifest || dialog.samplePadDomManifest)
+              ? getMirroredDialogManifestLayout(dialog.dialogDomManifest || dialog.samplePadDomManifest)
+              : null,
             sampleEditorVisual: dialog.sampleEditorVisual,
           })));
         }
@@ -8450,9 +8450,16 @@
             const exactMediaSessionsDialog = dialog.dialogLayoutVersion >= 4 &&
               dialog.kind === "mediaSessions" &&
               dialog.samplePadDomManifest;
-            const panel = document.createElement(
+            const domManifest = dialog.dialogDomManifest || dialog.samplePadDomManifest;
+            const samplePadManifest = (exactSampleEditorDialog || exactMediaSessionsDialog || (!exactEffectDialog && !exactSamplePadDialog && domManifest))
+              ? domManifest
+              : null;
+            let panel = document.createElement(
               exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog || exactMediaSessionsDialog ? "dialog" : "section",
             );
+            if (panel.tagName === "SECTION" && samplePadManifest) {
+              panel = document.createElement("dialog");
+            }
             panel.className = [
               "gui-dialog-mirror",
               exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "" : "mxs-dialog",
@@ -8506,9 +8513,6 @@
               return button;
             };
 
-            const samplePadManifest = exactSampleEditorDialog || exactMediaSessionsDialog
-              ? dialog.samplePadDomManifest
-              : null;
             if (samplePadManifest) {
               panel.dataset.dialogDomTruncated = String(samplePadManifest.truncated === true);
               panel.dataset.dialogDomOmittedChildren = String(
@@ -8518,23 +8522,44 @@
             if (
               samplePadManifest?.schema === "mxs-004.cast-dialog-dom.v1" &&
               samplePadManifest.version === 1 &&
-              (samplePadManifest.truncated !== true || exactMediaSessionsDialog) &&
+              (samplePadManifest.truncated !== true || exactMediaSessionsDialog || (Array.isArray(samplePadManifest.children) && samplePadManifest.children.length > 0)) &&
               Array.isArray(samplePadManifest.children)
             ) {
               const allowedTags = new Set([
+                "a",
+                "b",
                 "button",
                 "canvas",
+                "code",
                 "div",
+                "em",
+                "h1",
+                "h2",
+                "h3",
+                "h4",
+                "h5",
+                "h6",
+                "hr",
                 "i",
                 "input",
                 "label",
+                "li",
+                "ol",
                 "option",
                 "output",
                 "p",
+                "pre",
                 "select",
                 "span",
                 "strong",
+                "table",
+                "tbody",
+                "td",
                 "textarea",
+                "th",
+                "thead",
+                "tr",
+                "ul",
               ]);
               let hydratedNodeCount = 0;
               const hydrateNode = (node, depth = 0) => {
@@ -10179,6 +10204,7 @@
                     }
                   : null,
                 samplePadDomManifest: previousDialog.samplePadDomManifest,
+                dialogDomManifest: previousDialog.dialogDomManifest || previousDialog.samplePadDomManifest,
               };
             });
           }
