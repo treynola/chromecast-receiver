@@ -4584,7 +4584,8 @@ select option {
   margin-bottom: 2px !important;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 20px;
   padding: 0 4px;
 }
 
@@ -4592,6 +4593,10 @@ select option {
   display: inline-flex;
   gap: 3px;
   align-items: center;
+}
+
+.sampler-bank-selector[hidden] {
+  display: none !important;
 }
 
 .sampler-bank-btn {
@@ -5365,7 +5370,7 @@ body.receiver-mode .gui-dialog-mirror.mxs-dialog.error-dialog {
     0 0 0 4px var(--green),
     0 8px 32px rgba(0, 0, 0, 0.9);
 }
-body.receiver-mode .gui-dialog-mirror.mxs-dialog:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.sample-editor-dialog) {
+body.receiver-mode .gui-dialog-mirror.mxs-dialog:not(.effect-params-dialog):not(.audition-params-dialog):not(.pad-settings-dialog):not(.sample-editor-dialog):not(.gui-dialog-mediaSessions) {
   position: fixed;
   top: 50% !important;
   left: 50% !important;
@@ -5404,6 +5409,15 @@ body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions {
   position: fixed;
   background: var(--off-black);
   border: 1px solid var(--green);
+  max-height: 85vh;
+  overflow: hidden;
+}
+body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions .dialog-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
 }
 body.receiver-mode .gui-dialog-mirror.effect-params-dialog[open],
 body.receiver-mode .gui-dialog-mirror.audition-params-dialog[open],
@@ -6842,6 +6856,8 @@ dialog.input-prompt-dialog {
 
 .pad-settings-dialog[open] {
   display: flex !important;
+  animation: none;
+  transform: none;
 }
 
 .pad-fx-editor-dialog {

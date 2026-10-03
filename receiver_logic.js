@@ -8228,7 +8228,7 @@
           const dialogId = panel.dataset.dialogId || "";
           if (element === panel) return `${dialogId}|panel`;
           const scrollables = Array.from(panel.querySelectorAll(
-            ".pad-dialog-scroll-content,.dialog-content",
+            ".pad-dialog-scroll-content,.dialog-content,.media-dialog-view-container",
           ));
           const index = scrollables.indexOf(element);
           return index >= 0 ? `${dialogId}|content|${index}` : "";
@@ -8257,7 +8257,7 @@
           const scrollElements = [
             ...Array.from(root.children),
             ...Array.from(root.querySelectorAll(
-              ".pad-dialog-scroll-content,.dialog-content",
+              ".pad-dialog-scroll-content,.dialog-content,.media-dialog-view-container",
             )),
           ];
           const scroll = scrollElements.map((element) => ({
@@ -8401,6 +8401,9 @@
             }
             value.dataset.dialogId = dialog.id || "";
             value.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
+            if (control.parameterKey && !control.id) {
+              value.dataset.parameterKey = String(control.parameterKey);
+            }
             const displayDescriptor = control.displayDescriptor || (
               control.formatterKind
                 ? {
@@ -8770,6 +8773,13 @@
                 tabBtn.setAttribute("role", "tab");
                 tabBtn.setAttribute("aria-selected", String(isActive));
                 tabBtn.dataset.padTab = tab.id;
+                const tabAction = actionByIndex(tab.actionIndex);
+                if (tabAction) {
+                  tabBtn.dataset.dialogId = dialog.id || "";
+                  tabBtn.dataset.actionIndex = String(tab.actionIndex);
+                  tabBtn.dataset.actionId = tabAction.actionId || `button-${tab.actionIndex}`;
+                  applyDataset(tabBtn, tabAction.data);
+                }
                 tabBtn.textContent = tab.label;
                 tabBtn.addEventListener("click", () => {
                   panel.dataset.padTab = tab.id;
@@ -9231,6 +9241,9 @@
           const panels = Array.from(root?.children || []).slice(0, 4).map((panel) => {
             const rect = panel.getBoundingClientRect();
             const style = window.getComputedStyle(panel);
+            const mediaScroll = panel.dataset.dialogKind === "mediaSessions"
+              ? panel.querySelector(".media-dialog-view-container")
+              : null;
             const intersectionWidth = Math.max(0,
               Math.min(viewportWidth, rect.right) - Math.max(0, rect.left));
             const intersectionHeight = Math.max(0,
@@ -9251,8 +9264,15 @@
               display: style.display,
               visibility: style.visibility,
               opacity: Number(style.opacity || 1),
+              viewportLeftPx: Math.round(rect.left),
+              viewportTopPx: Math.round(rect.top),
               viewportIntersectionWidthPx: Math.round(intersectionWidth),
               viewportIntersectionHeightPx: Math.round(intersectionHeight),
+              ...(mediaScroll ? {
+                scrollViewportHeightPx: mediaScroll.clientHeight,
+                scrollContentHeightPx: mediaScroll.scrollHeight,
+                scrollTopPx: mediaScroll.scrollTop,
+              } : {}),
               contentNodeCount: panel.querySelector(".dialog-content")?.children.length ?? 0,
               actionCount: panel.querySelectorAll("button, label[data-action]").length,
               visible,
