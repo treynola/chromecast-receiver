@@ -5392,6 +5392,14 @@ body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions,
 body.receiver-mode .gui-dialog-mirror.pad-settings-dialog {
   pointer-events: auto;
 }
+body.receiver-mode .gui-dialog-mirror.gui-dialog-samplePadSettings {
+  /* The sender anchors pad controls near its left edge. On a TV that leaves
+     the mirrored dialog and pad navigation out of comfortable reach. */
+  left: 50% !important;
+  top: max(8px, min(6vh, 50px)) !important;
+  transform: translateX(-50%) !important;
+  max-height: 88vh !important;
+}
 body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions {
   position: fixed;
   background: var(--off-black);
