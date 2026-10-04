@@ -8574,6 +8574,20 @@
                 "tr",
                 "ul",
               ]);
+              const controlsByIndex = new Map();
+              (dialog.controls || []).forEach((control, index) => {
+                const controlIndex = Number(control.controlIndex ?? index);
+                if (Number.isInteger(controlIndex) && controlIndex >= 0 && !controlsByIndex.has(controlIndex)) {
+                  controlsByIndex.set(controlIndex, control);
+                }
+              });
+              const actionsByIndex = new Map();
+              actions.forEach((action, index) => {
+                const actionIndex = Number(action.actionIndex ?? index);
+                if (Number.isInteger(actionIndex) && actionIndex >= 0 && !actionsByIndex.has(actionIndex)) {
+                  actionsByIndex.set(actionIndex, action);
+                }
+              });
               let hydratedNodeCount = 0;
               const hydrateNode = (node, depth = 0) => {
                 if (!node || depth > 24 || hydratedNodeCount >= 2048) return null;
@@ -8621,19 +8635,13 @@
 
                 const controlIndex = node.controlIndex;
                 if (Number.isInteger(controlIndex) && controlIndex >= 0) {
-                  const control = (dialog.controls || []).find(
-                    (candidate, index) =>
-                      Number(candidate.controlIndex ?? index) === controlIndex,
-                  );
+                  const control = controlsByIndex.get(controlIndex);
                   if (control) applyControlState(element, control, dialog, controlIndex);
                 }
 
                 const actionIndex = node.actionIndex;
                 if (Number.isInteger(actionIndex) && actionIndex >= 0) {
-                  const action = actions.find(
-                    (candidate, index) =>
-                      Number(candidate.actionIndex ?? index) === actionIndex,
-                  );
+                  const action = actionsByIndex.get(actionIndex);
                   if (action) {
                     element.className = normalizeClassName(action.className, "gui-dialog-action-btn");
                     if (element.tagName === "BUTTON") {
