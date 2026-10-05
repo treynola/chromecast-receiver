@@ -11269,13 +11269,46 @@
           return summary;
         }
 
-        function reportGuiAckError(stage, error) {
+        function reportGuiAckError(stage, error, details = {}) {
           const now = Date.now();
-          if (guiLastAckErrorAt && now - guiLastAckErrorAt < 5000) return;
+          if (guiLastAckErrorAt && now - guiLastAckErrorAt < 5000) return false;
           guiLastAckErrorAt = now;
-          writeCastDebug("warn", "GUI_ACK_FAILED " + JSON.stringify({
-            stage, message: String(error?.message || error).slice(0, 200),
-          }));
+          try {
+            writeCastDebug("warn", "GUI_ACK_FAILED " + JSON.stringify({
+              ...details,
+              stage,
+              message: String(error?.message || error).slice(0, 200),
+            }));
+          } catch (_logError) {}
+          return true;
+        }
+
+        function reportGuiStateProcessingFailure(envelope, error, source = "binary bridge") {
+          const reason = "receiver_processing_exception";
+          const details = {
+            stage: "binary_message_dispatch",
+            revision: Number(envelope?.guiRevision ?? -1),
+            messageType: String(envelope?.type || "unknown"),
+            source,
+            guiSessionNonceMatches: envelope?.guiSessionNonce === guiSessionNonce,
+            bridgeConfigReady: receiverBridgeConfigReady === true,
+            ackOutcome: "not_sent_processing_exception",
+            message: String(error?.message || error).slice(0, 200),
+          };
+          guiRejectedCount += 1;
+          guiLastRejectReason = reason;
+          try {
+            emitGuiChannelTelemetry("processing_error", { reason, ...details });
+          } catch (_telemetryError) {}
+          let shouldSendError = false;
+          try {
+            shouldSendError = reportGuiAckError(details.stage, error, details);
+          } catch (_logError) {}
+          if (shouldSendError) {
+            try {
+              emitGuiChannelError(reason, details);
+            } catch (_sendError) {}
+          }
         }
 
         function handleGuiStateUpdateCommand(state, envelope, ackType = "snapshot") {
@@ -11347,7 +11380,19 @@
                   payloadBytes: 0,
                 });
               } catch (error) {
-                reportGuiAckError("duplicate_send", error);
+                reportGuiAckError("duplicate_send", error, {
+                  revision,
+                  messageType: envelope?.type || "GUI_STATE_UPDATE",
+                  guiSessionNonceMatches: envelope?.guiSessionNonce === guiSessionNonce,
+                  ackOutcome: "duplicate_ack_send_failed",
+                });
+                try {
+                  emitGuiChannelTelemetry("ack_send_failed", {
+                    revision,
+                    messageType: envelope?.type || "GUI_STATE_UPDATE",
+                    ackOutcome: "duplicate_ack_send_failed",
+                  });
+                } catch (_telemetryError) {}
               }
             }
             return;
@@ -11461,7 +11506,11 @@
               } catch (error) {
                 visualTelemetry = {};
                 if (renderResult !== "deferred") {
-                  reportGuiAckError("optional_telemetry", error);
+                  reportGuiAckError("optional_telemetry", error, {
+                    revision: acceptedRevision,
+                    messageType: envelope?.type || "GUI_STATE_UPDATE",
+                    ackOutcome: "minimal_ack_retained",
+                  });
                 }
               }
               const receiverProcessingMs = Math.max(0,
@@ -11501,7 +11550,19 @@
                 waveformMissing: visualTelemetry.waveformMissing ?? null,
               });
             } catch (error) {
-              reportGuiAckError("send", error);
+              reportGuiAckError("send", error, {
+                revision: acceptedRevision,
+                messageType: envelope?.type || "GUI_STATE_UPDATE",
+                guiSessionNonceMatches: envelope?.guiSessionNonce === guiSessionNonce,
+                ackOutcome: "ack_send_failed",
+              });
+              try {
+                emitGuiChannelTelemetry("ack_send_failed", {
+                  revision: acceptedRevision,
+                  messageType: envelope?.type || "GUI_STATE_UPDATE",
+                  ackOutcome: "ack_send_failed",
+                });
+              } catch (_telemetryError) {}
             }
           }
         }
@@ -11711,10 +11772,23 @@
             "PLAYBACK_PAUSE",
             "PCM_RELAY",
           ].includes(d.type);
+          const guiIdentityReady = requiresAuthenticatedGui
+            ? identityAllowsGui()
+            : true;
           if (
             requiresAuthenticatedGui &&
-            (!identityAllowsGui() || !receiverBridgeConfigReady)
+            (!guiIdentityReady || !receiverBridgeConfigReady)
           ) {
+            if (rawGuiType === "GUI_STATE_UPDATE" || rawGuiType === "GUI_SNAPSHOT" || rawGuiType === "GUI_PATCH") {
+              emitGuiChannelTelemetry("blocked_not_ready", {
+                revision: Number(d.guiRevision ?? -1),
+                messageType: rawGuiType,
+                guiIdentityReady,
+                bridgeConfigReady: receiverBridgeConfigReady === true,
+                guiSessionNonceMatches: d.guiSessionNonce === guiSessionNonce,
+                ackOutcome: "not_sent_readiness_gate",
+              });
+            }
             relayLogToStudio(
               "⏸️ Receiver: Ignored " +
                 d.type +
@@ -12260,7 +12334,18 @@
                 } else {
                   handleReceiverCommand(d, "binary bridge");
                 }
-              } catch (e) {}
+              } catch (e) {
+                if (
+                  d && (
+                    d.type === "GUI_STATE_UPDATE" ||
+                    d.type === "GUI_SNAPSHOT" ||
+                    (d.type === "GUI_PATCH" &&
+                      (d.patchType === "live_state" || d.patchType === "volume_state"))
+                  )
+                ) {
+                  reportGuiStateProcessingFailure(d, e, "binary bridge");
+                }
+              }
             }
           };
 
