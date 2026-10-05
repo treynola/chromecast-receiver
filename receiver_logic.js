@@ -6386,9 +6386,14 @@
                 bpmModule.dataset.trackIndex = String(i);
                 bpmModule.id = `t-bpm-module-${i}`;
                 bpmModule.innerHTML = `<div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div>`;
-                const mainControls = existingTrack.querySelector(".main-controls");
-                if (mainControls) existingTrack.insertBefore(bpmModule, mainControls);
-                else existingTrack.appendChild(bpmModule);
+                const loopControls = existingTrack.querySelector(".loop-controls");
+                if (loopControls) {
+                  existingTrack.insertBefore(bpmModule, loopControls);
+                } else {
+                  const wfBox = existingTrack.querySelector(".waveform-box");
+                  if (wfBox && wfBox.nextSibling) existingTrack.insertBefore(bpmModule, wfBox.nextSibling);
+                  else existingTrack.appendChild(bpmModule);
+                }
               }
               continue;
             }
@@ -6402,13 +6407,13 @@
                         <div class="track-time-display" id="t-time-${i}">00:00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
                         <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external waveform-label-l">L</div><div class="waveform-label-external waveform-label-r">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
+                        <div class="track-bpm-module" data-track-index="${i}" id="t-bpm-module-${i}"><div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div></div>
+                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
+                        <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
                         <div class="control-group track-input-group"><div class="track-input-layout"><label>Input</label><select id="t-input-${i}" class="input-source app-select" data-action="select-input"><option value="mic" selected>Microphone</option><option value="file">Import File</option><option value="directory">Import Directory</option><option value="mc-pa">MC PA Mode</option><option value="system">System Loopback</option></select></div></div>
                         <div class="control-group track-input-gain-group master-row-layout pa-mic-adjustment" id="input-gain-group-${i}"><label class="master-label">Input Gain</label><input type="range" class="pa-mic-slider" data-param="inputGain" id="t-gain-sl-${i}" min="-48" max="24" step="0.1" value="0" title="Increment: 0.1"><span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span></div>
-                        <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
-                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
                         <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
-                        <div class="track-bpm-module" data-track-index="${i}" id="t-bpm-module-${i}"><div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div></div>
                         <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group" data-param-label="${cfg.p}"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}" data-value-for="${cfg.p}">${Number(cfg.val).toFixed(1)}${cfg.u}</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" title="Click to assign ${cfg.l} LFO 1. Double-click to reverse." aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" title="Click to assign ${cfg.l} LFO 2. Double-click to reverse." aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" data-param="${cfg.p}" min="${cfg.min}" max="${cfg.max}" step="${cfg.s}" value="${cfg.val}" title="Increment: ${cfg.s}"><span class="preset-marker min-preset-marker" id="t-min-marker-${i}-${cfg.p}" data-min-marker-for="${cfg.p}"></span><span class="preset-marker max-preset-marker" id="t-max-marker-${i}-${cfg.p}" data-max-marker-for="${cfg.p}"></span></div></div>`).join("")}</div>`;
             grid.appendChild(t);
           }
@@ -7555,8 +7560,10 @@
 
         function updateEffectOptions(id, options, selected) {
           const select = getEl(id);
-          if (!select || !Array.isArray(options) || !options.length) return;
-          const signature = rememberEffectOptions(options);
+          if (!select) return;
+          const hasOptions = Array.isArray(options) && options.length > 0;
+          if (!hasOptions && (!effectOptionsCatalog || !effectOptionsCatalog.length)) return;
+          const signature = hasOptions ? rememberEffectOptions(options) : effectOptionsCatalogSignature;
           const cacheKey = "effect-options:" + id;
           const selectedValue = String(selected ?? "none");
           const catalogChanged = valCache[cacheKey] !== signature;
@@ -9533,13 +9540,19 @@
           if (nextRevision >= 0 && nextRevision < pendingWaveformRevision) return;
           pendingWaveformState = s;
           pendingWaveformRevision = nextRevision;
-          const elapsed = Date.now() - lastWaveformRenderTime;
-          if (force || elapsed >= WAVEFORM_RENDER_THROTTLE_MS) {
+          if (force || lastWaveformRenderRevision === -1) {
             if (waveformRenderTimer) {
               clearTimeout(waveformRenderTimer);
               waveformRenderTimer = null;
             }
             flushScheduledWaveformRender();
+            return;
+          }
+          if (elapsed >= WAVEFORM_RENDER_THROTTLE_MS) {
+            if (waveformRenderTimer) {
+              clearTimeout(waveformRenderTimer);
+            }
+            waveformRenderTimer = setTimeout(flushScheduledWaveformRender, 0);
             return;
           }
           if (!waveformRenderTimer) {
@@ -9548,6 +9561,29 @@
               Math.max(0, WAVEFORM_RENDER_THROTTLE_MS - elapsed),
             );
           }
+        }
+
+        function getTrackParamsCacheKey(t, s) {
+          const p = t.params;
+          if (!p) return "";
+          const pd = t.paramDisplays;
+          const la = t.lfoAssigns;
+          const li = t.lfoIndicators;
+          let liKey = "";
+          if (li) {
+            for (let k = 0; k < KNOB_CONFIGS.length; k++) {
+              const ind = li[KNOB_CONFIGS[k].p];
+              if (ind) {
+                liKey += `${ind.lfo1?.checked ? 1 : 0}${ind.lfo1?.reversed ? 1 : 0}${ind.lfo2?.checked ? 1 : 0}${ind.lfo2?.reversed ? 1 : 0}${ind.minMarker?.active ? 1 : 0}:${ind.minMarker?.left || 0}:${ind.maxMarker?.active ? 1 : 0}:${ind.maxMarker?.left || 0};`;
+              } else {
+                liKey += "0;";
+              }
+            }
+          }
+          return `${p.pitch}:${p.vol}:${p.pan}:${p.treble}:${p.mid_freq}:${p.mid_gain}:${p.bass}:${p.inputGain}:${p.loopStart}:${p.loopEnd}_` +
+            `${pd ? `${pd.pitch?.displayValue || ""}:${pd.vol?.displayValue || ""}:${pd.pan?.displayValue || ""}:${pd.treble?.displayValue || ""}:${pd.mid_freq?.displayValue || ""}:${pd.mid_gain?.displayValue || ""}:${pd.bass?.displayValue || ""}:${pd.inputGain?.displayValue || ""}:${pd.loopStart?.displayValue || ""}:${pd.loopEnd?.displayValue || ""}` : ""}_` +
+            `${la ? `${(la[1] || []).join(",")}|${(la[2] || []).join(",")}` : ""}_` +
+            `${liKey}_${s.master?.lfo1?.active ? 1 : 0}${s.master?.lfo2?.active ? 1 : 0}`;
         }
 
         const _lastParamsCache = [];
@@ -10581,13 +10617,7 @@
                   }
                 }
                 if (t.params) {
-                  const paramsStr = JSON.stringify(t.params);
-                  const paramDisplaysStr = JSON.stringify(t.paramDisplays || {});
-                  const lfoAssignsStr = JSON.stringify(t.lfoAssigns);
-                  const lfoIndicatorsStr = JSON.stringify(t.lfoIndicators);
-                  const lfoActivityKey = `${s.master?.lfo1?.active ? 1 : 0}${s.master?.lfo2?.active ? 1 : 0}`;
-                  const trackCacheKey =
-                    paramsStr + "_" + paramDisplaysStr + "_" + lfoAssignsStr + "_" + lfoIndicatorsStr + "_" + lfoActivityKey;
+                  const trackCacheKey = getTrackParamsCacheKey(t, s);
                   if (_lastParamsCache[i] !== trackCacheKey) {
                     _lastParamsCache[i] = trackCacheKey;
                     KNOB_CONFIGS.forEach((cfg) => {
@@ -11355,7 +11385,7 @@
             guiLastDeferredRevision = revision;
             renderResult = "deferred";
           } else {
-            renderResult = renderState(normalizedState, false, acceptedRevision);
+            renderResult = renderState(normalizedState, false, revision);
           }
           const renderFinishedAt = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()

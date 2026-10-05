@@ -2951,6 +2951,13 @@ select option {
   background: #333;
 }
 
+.track-bpm-multiplier-btn.at-limit {
+  opacity: 0.45;
+  border-color: #662222;
+  color: #884444;
+  cursor: not-allowed;
+}
+
 .track-bpm-module.is-master {
   border-color: var(--gold);
   box-shadow: 0 0 4px rgba(250, 215, 142, 0.25);
