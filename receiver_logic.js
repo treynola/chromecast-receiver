@@ -9548,7 +9548,11 @@
             flushScheduledWaveformRender();
             return;
           }
-          if (elapsed >= WAVEFORM_RENDER_THROTTLE_MS) {
+          const elapsedSinceLastRenderMs = Math.max(
+            0,
+            Date.now() - lastWaveformRenderTime,
+          );
+          if (elapsedSinceLastRenderMs >= WAVEFORM_RENDER_THROTTLE_MS) {
             if (waveformRenderTimer) {
               clearTimeout(waveformRenderTimer);
             }
@@ -9558,7 +9562,10 @@
           if (!waveformRenderTimer) {
             waveformRenderTimer = setTimeout(
               flushScheduledWaveformRender,
-              Math.max(0, WAVEFORM_RENDER_THROTTLE_MS - elapsed),
+              Math.max(
+                0,
+                WAVEFORM_RENDER_THROTTLE_MS - elapsedSinceLastRenderMs,
+              ),
             );
           }
         }
