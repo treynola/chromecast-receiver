@@ -217,6 +217,8 @@
         const NATIVE_STARTUP_TRIM_RETRY_TIMEOUT_MS = 1000;
         const NATIVE_LATENCY_SAMPLE_INTERVAL_MS = 200;
         const NATIVE_LATENCY_REPORT_INTERVAL_MS = 1000;
+        const NATIVE_LATENCY_FAST_REPORT_INTERVAL_MS = 400;
+        const NATIVE_LATENCY_FAST_REPORT_WINDOW_MS = 4000;
         const NATIVE_LATENCY_ROLLING_WINDOW_MS = 1600;
         const NATIVE_LATENCY_MIN_REPORT_SAMPLES = 3;
         const CAF_TELEMETRY_MEDIA_EVENT_THROTTLE_MS = 250;
@@ -3120,6 +3122,7 @@
           let lastSamplePlayhead = null;
           let lastSampleAt = 0;
           let lastReportAt = 0;
+          let fastReportWindowUntilMs = 0;
           let continuousAudibleStartedAt = 0;
           window._nativeLatencyIntervalId = setInterval(() => {
             // Prewarm and paused media can have a large progressive-WAV tail,
@@ -3171,6 +3174,7 @@
               lastSamplePlayhead = null;
               lastSampleAt = 0;
               lastReportAt = 0;
+              fastReportWindowUntilMs = progressNow + NATIVE_LATENCY_FAST_REPORT_WINDOW_MS;
               continuousAudibleStartedAt = progressNow;
             }
             // Report the observed transport buffer only. Seeking the live media
@@ -3277,8 +3281,11 @@
               lastNativePlayoutProofTime = reportedPlayhead;
             }
 
+            const reportIntervalMs = progressNow < fastReportWindowUntilMs
+              ? NATIVE_LATENCY_FAST_REPORT_INTERVAL_MS
+              : NATIVE_LATENCY_REPORT_INTERVAL_MS;
             if (
-              progressNow - lastReportAt < NATIVE_LATENCY_REPORT_INTERVAL_MS ||
+              progressNow - lastReportAt < reportIntervalMs ||
               latencySamples.length < NATIVE_LATENCY_MIN_REPORT_SAMPLES
             ) {
               return;
@@ -3310,6 +3317,7 @@
                       rawSpan <= 0.35 && medianAbsoluteDeviation <= 0.18
                         ? "bootstrap_coherent"
                         : "rolling_noisy",
+                    reportIntervalMs,
                     reportAtEpochMs: progressNow,
                     sampleAgeMs: Math.max(0, progressNow - latencySamples[latencySamples.length - 1].at),
                     sampleCount: latencySamples.length,
@@ -7396,9 +7404,14 @@
           };
         }
 
-        function drawMirroredWaveform(id, waveform, source, cacheResult = true) {
+        function drawMirroredWaveform(id, waveform, source, cacheResult = true, signatureOverride = null) {
           const canvas = getEl(id);
           if (!canvas || !waveform || !Array.isArray(waveform.points)) return false;
+          const cacheKey = "waveform:" + id;
+          const signature = cacheResult
+            ? (signatureOverride || JSON.stringify(waveform))
+            : null;
+          if (cacheResult && valCache[cacheKey] === signature) return true;
           const hasData = waveform.hasData !== false;
           const active = waveform.active !== false;
           const resolvedSource = waveform.source || source || "unknown";
@@ -7419,9 +7432,6 @@
           canvas.dataset.waveformPeak = peak.toFixed(6);
           canvas.dataset.waveformNonFlat = nonFlat ? "true" : "false";
           canvas.dataset.waveformPaintMode = paintMode;
-          const signature = JSON.stringify(waveform);
-          const cacheKey = "waveform:" + id;
-          if (cacheResult && valCache[cacheKey] === signature) return true;
           const width = canvas.clientWidth || Number(canvas.getAttribute("width")) || 238;
           const height = canvas.clientHeight || Number(canvas.getAttribute("height")) || 26;
           if (canvas.width !== width || canvas.height !== height) {
@@ -7504,7 +7514,15 @@
         }
 
         let effectOptionsCatalog = ["none"];
-        let effectOptionsCatalogSignature = JSON.stringify(effectOptionsCatalog);
+        function effectOptionsSignature(options) {
+          const serialized = JSON.stringify(options);
+          let hash = 0x811c9dc5;
+          for (let index = 0; index < serialized.length; index += 1) {
+            hash = Math.imul(hash ^ serialized.charCodeAt(index), 0x01000193) >>> 0;
+          }
+          return `mxs.effect-options.v1:${options.length}:${hash.toString(16).padStart(8, "0")}`;
+        }
+        let effectOptionsCatalogSignature = effectOptionsSignature(effectOptionsCatalog);
         const effectOptionsArrayCache = new WeakMap();
 
         function createEffectOption(value) {
@@ -7515,22 +7533,35 @@
           return item;
         }
 
-        function rememberEffectOptions(options) {
-          if (!Array.isArray(options) || !options.length) return effectOptionsCatalogSignature;
-          let cached = effectOptionsArrayCache.get(options);
-          if (!cached) {
-            const normalized = options.map((option) => String(option));
-            cached = {
-              normalized,
-              signature: JSON.stringify(normalized),
-            };
-            effectOptionsArrayCache.set(options, cached);
+        function rememberEffectOptions(options, declaredSignature) {
+          let signature = effectOptionsCatalogSignature;
+          let normalized = effectOptionsCatalog;
+          if (Array.isArray(options)) {
+            let cached = effectOptionsArrayCache.get(options);
+            if (!cached) {
+              const values = options.map((option) => String(option)).filter(Boolean);
+              normalized = ["none", ...Array.from(new Set(values.filter((option) => option !== "none")))];
+              cached = {
+                normalized,
+                signature: effectOptionsSignature(normalized),
+              };
+              effectOptionsArrayCache.set(options, cached);
+            }
+            normalized = cached.normalized;
+            signature = cached.signature;
           }
-          if (cached.signature !== effectOptionsCatalogSignature) {
-            effectOptionsCatalog = cached.normalized;
-            effectOptionsCatalogSignature = cached.signature;
+          if (
+            declaredSignature !== undefined &&
+            declaredSignature !== null &&
+            String(declaredSignature) !== signature
+          ) {
+            return null;
           }
-          return cached.signature;
+          if (Array.isArray(options) && signature !== effectOptionsCatalogSignature) {
+            effectOptionsCatalog = normalized;
+            effectOptionsCatalogSignature = signature;
+          }
+          return signature;
         }
 
         function hydrateEffectOptionsSelect(select) {
@@ -7558,12 +7589,11 @@
           return true;
         }
 
-        function updateEffectOptions(id, options, selected) {
+        function updateEffectOptions(id, options, selected, declaredSignature) {
           const select = getEl(id);
           if (!select) return;
-          const hasOptions = Array.isArray(options) && options.length > 0;
-          if (!hasOptions && (!effectOptionsCatalog || !effectOptionsCatalog.length)) return;
-          const signature = hasOptions ? rememberEffectOptions(options) : effectOptionsCatalogSignature;
+          const signature = rememberEffectOptions(options, declaredSignature);
+          if (!signature) return;
           const cacheKey = "effect-options:" + id;
           const selectedValue = String(selected ?? "none");
           const catalogChanged = valCache[cacheKey] !== signature;
@@ -7588,6 +7618,7 @@
           const selects = Array.from(document.querySelectorAll("select.effect-type-select"));
           return {
             catalogCount: effectOptionsCatalog.length,
+            catalogSignature: effectOptionsCatalogSignature,
             selectCount: selects.length,
             deferredSelectCount: selects.filter(
               (select) => select.dataset.effectOptionsHydrated !== "true",
@@ -9355,7 +9386,13 @@
               ? state.target
               : interpolateMirroredWaveform(state.from, state.target, progress);
             state.displayed = frame;
-            drawMirroredWaveform(id, frame, state.source, progress >= 1);
+            drawMirroredWaveform(
+              id,
+              frame,
+              state.source,
+              progress >= 1,
+              progress >= 1 ? state.signature : null,
+            );
             if (progress < 1) needsAnotherFrame = true;
           });
           if (needsAnotherFrame) scheduleMirroredWaveformFrame();
@@ -9367,7 +9404,7 @@
           const signature = JSON.stringify(waveform);
           const previous = mirroredWaveformVisuals.get(id);
           if (previous?.signature === signature) {
-            return drawMirroredWaveform(id, waveform, resolvedSource);
+            return drawMirroredWaveform(id, waveform, resolvedSource, true, signature);
           }
           // Source inactivity is authoritative. Never interpolate a stale
           // analyser frame toward silence because that keeps a visibly moving
@@ -9385,7 +9422,7 @@
             };
             mirroredWaveformVisuals.set(id, inactiveState);
             delete valCache["waveform:" + id];
-            return drawMirroredWaveform(id, waveform, resolvedSource, true);
+            return drawMirroredWaveform(id, waveform, resolvedSource, true, signature);
           }
           const sourceChanged = previous && previous.source !== resolvedSource;
           const canInterpolate = Boolean(
@@ -9411,6 +9448,7 @@
             nextState.displayed,
             resolvedSource,
             !canInterpolate,
+            !canInterpolate ? signature : null,
           );
           if (canInterpolate) scheduleMirroredWaveformFrame();
           return didDraw;
@@ -9433,6 +9471,9 @@
 
         function renderWaveformState(s) {
           if (!s) return false;
+          const waveformStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
           try {
             let expected = 0;
             let drawn = 0;
@@ -9492,6 +9533,12 @@
               drawn,
               missing,
               dataAvailable: Math.max(0, expected - missing),
+              renderTimeMs: Math.max(
+                0,
+                (typeof performance !== "undefined" && typeof performance.now === "function"
+                  ? performance.now()
+                  : Date.now()) - waveformStartedAt,
+              ),
               surfaces,
             };
             const status = getEl("waveform-render-status");
@@ -9602,6 +9649,8 @@
         const MIRRORED_TIMELINE_MAX_SOFT_CORRECTION_SEC = 0.05;
         let mirroredTimelineState = {
           captureSequence: -1,
+          playbackEpoch: null,
+          playbackRevision: null,
           master: null,
           tracks: [],
         };
@@ -9676,6 +9725,24 @@
           if (delta > span / 2) delta -= span;
           if (delta < -span / 2) delta += span;
           return delta;
+        }
+
+        function isMirroredTimelineIdentityCurrent(
+          transport,
+          receiverPlaybackEpoch,
+          receiverPlaybackRevision,
+        ) {
+          const snapshotEpoch = Number(transport?.playbackEpoch);
+          const snapshotRevision = Number(transport?.playbackRevision);
+          const receiverEpoch = Number(receiverPlaybackEpoch);
+          const receiverRevision = Number(receiverPlaybackRevision);
+          const snapshotIdentityKnown = Number.isSafeInteger(snapshotEpoch) && snapshotEpoch >= 0 &&
+            Number.isSafeInteger(snapshotRevision) && snapshotRevision >= 0;
+          const receiverIdentityKnown = Number.isSafeInteger(receiverEpoch) && receiverEpoch >= 0 &&
+            Number.isSafeInteger(receiverRevision) && receiverRevision >= 0;
+          if (!snapshotIdentityKnown) return true;
+          if (!receiverIdentityKnown) return snapshotRevision === 0;
+          return snapshotEpoch === receiverEpoch && snapshotRevision === receiverRevision;
         }
 
         function createMirroredTimelineAnchor(previous, rawTimeline, nowMs) {
@@ -9789,12 +9856,26 @@
 
         function updateMirroredTimelineState(state) {
           if (!state || typeof state !== "object") return false;
-          const rawMaster = state.transport?.master || state.master?.timeline;
+          const transport = state.transport && typeof state.transport === "object"
+            ? state.transport
+            : {};
+          if (!isMirroredTimelineIdentityCurrent(transport, lastPlaybackEpoch, lastPlaybackRevision)) {
+            return true;
+          }
+          const rawMaster = transport.master || state.master?.timeline;
           const rawTracks = Array.isArray(state.tracks)
             ? state.tracks.map((track) => track?.timeline || null)
             : [];
           if (!rawMaster && !rawTracks.some(Boolean)) return false;
-          const captureSequence = Number(state.transport?.captureSequence);
+          const captureSequence = Number(transport.captureSequence);
+          const playbackEpoch = Number(transport.playbackEpoch);
+          const playbackRevision = Number(transport.playbackRevision);
+          const hasPlaybackIdentity = Number.isSafeInteger(playbackEpoch) && playbackEpoch >= 0 &&
+            Number.isSafeInteger(playbackRevision) && playbackRevision >= 0;
+          const playbackIdentityChanged = hasPlaybackIdentity && (
+            playbackEpoch !== mirroredTimelineState.playbackEpoch ||
+            playbackRevision !== mirroredTimelineState.playbackRevision
+          );
           if (
             Number.isSafeInteger(captureSequence) &&
             captureSequence >= 0 &&
@@ -9802,19 +9883,28 @@
           ) {
             return true;
           }
+          // Anchor interpolation to the receiver's monotonic clock at receipt.
+          // transport.capturedAtMs is sender-epoch telemetry and must not be
+          // subtracted from this receiver clock without an offset calibration.
           const nowMs = getMirroredTimelineNow();
           mirroredTimelineState = {
             captureSequence: Number.isSafeInteger(captureSequence)
               ? captureSequence
               : mirroredTimelineState.captureSequence,
+            playbackEpoch: hasPlaybackIdentity
+              ? playbackEpoch
+              : mirroredTimelineState.playbackEpoch,
+            playbackRevision: hasPlaybackIdentity
+              ? playbackRevision
+              : mirroredTimelineState.playbackRevision,
             master: createMirroredTimelineAnchor(
-              mirroredTimelineState.master,
+              playbackIdentityChanged ? null : mirroredTimelineState.master,
               rawMaster,
               nowMs,
             ),
             tracks: rawTracks.map((timeline, index) =>
               createMirroredTimelineAnchor(
-                mirroredTimelineState.tracks[index],
+                playbackIdentityChanged ? null : mirroredTimelineState.tracks[index],
                 timeline,
                 nowMs,
               ),
@@ -9834,7 +9924,13 @@
           }
           mirroredTimelineFrameHandle = null;
           lastMirroredTimelinePaintMs = 0;
-          mirroredTimelineState = { captureSequence: -1, master: null, tracks: [] };
+          mirroredTimelineState = {
+            captureSequence: -1,
+            playbackEpoch: null,
+            playbackRevision: null,
+            master: null,
+            tracks: [],
+          };
         }
 
         const LFO_VISUAL_FRAME_INTERVAL_MS = 1000 / 30;
@@ -10353,7 +10449,9 @@
 
         function renderState(s, force = false, guiRevision = -1) {
           if (!s) return false;
-          rememberEffectOptions(s.effectOptions);
+          if (rememberEffectOptions(s.effectOptions, s.effectOptionsCatalogSignature) === null) {
+            return false;
+          }
           const phaseClock = () =>
             typeof performance !== "undefined" && typeof performance.now === "function"
               ? performance.now()
@@ -10368,7 +10466,9 @@
           // Cursor updates are isolated from the full GUI render budget so
           // PCM playout can keep the TV pointer responsive while the regular
           // GUI render remains throttled. Ordering is guarded by cursor.revision.
+          const cursorPhaseStartedAt = phaseClock();
           renderCursorState(s.cursor);
+          const cursorPhaseFinishedAt = phaseClock();
           const now = Date.now();
           const renderThrottleMs =
             window._binaryActive || window._playbackMode === "pcm_fallback"
@@ -10377,15 +10477,25 @@
           // Waveform state is latest-value data. Queue it before the broader
           // DOM throttle so a burst of GUI snapshots cannot leave the canvas
           // one or more revisions behind while controls remain throttled.
+          const waveformPhaseStartedAt = phaseClock();
           scheduleWaveformRender(s, force, guiRevision);
+          const waveformPhaseFinishedAt = phaseClock();
+          const timelinePhaseStartedAt = phaseClock();
           const hasMirroredTimeline = updateMirroredTimelineState(s);
+          const timelinePhaseFinishedAt = phaseClock();
           const preludeFinishedAt = phaseClock();
+          const preludePhases = {
+            cursorMs: Math.max(0, cursorPhaseFinishedAt - cursorPhaseStartedAt),
+            waveformScheduleMs: Math.max(0, waveformPhaseFinishedAt - waveformPhaseStartedAt),
+            timelineMs: Math.max(0, timelinePhaseFinishedAt - timelinePhaseStartedAt),
+          };
           if (!force && now - lastRenderTime < renderThrottleMs) {
             guiRenderThrottleSkips += 1;
             lastGuiRenderPhaseStats = {
               throttled: true,
               buildMs: Math.max(0, buildFinishedAt - phaseStartedAt),
               preludeMs: Math.max(0, preludeFinishedAt - buildFinishedAt),
+              preludePhases,
               masterMs: 0,
               dialogsMs: 0,
               samplerMs: 0,
@@ -10562,7 +10672,12 @@
                 updateButtonState(`t-stop-${i}`, t.buttons && t.buttons.stop);
                 updateButtonState(`t-play-${i}`, t.buttons && t.buttons.play);
                 updateButtonState(`t-rev-${i}`, t.buttons && t.buttons.reverse);
-                updateEffectOptions(`t-effect-select-${i}`, s.effectOptions, t.effectSelection);
+                updateEffectOptions(
+                  `t-effect-select-${i}`,
+                  s.effectOptions,
+                  t.effectSelection,
+                  s.effectOptionsCatalogSignature,
+                );
                 updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
                 updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
                 const bpmVal = Number.isFinite(Number(t.effectiveBpm ?? t.bpm))
@@ -10773,6 +10888,7 @@
               throttled: false,
               buildMs: Math.max(0, buildFinishedAt - phaseStartedAt),
               preludeMs: Math.max(0, preludeFinishedAt - buildFinishedAt),
+              preludePhases,
               masterMs: Math.max(0, masterFinishedAt - preludeFinishedAt),
               dialogsMs: Math.max(0, dialogsFinishedAt - masterFinishedAt),
               samplerMs: Math.max(0, samplerFinishedAt - dialogsFinishedAt),
@@ -11494,6 +11610,9 @@
                     waveformExpected: lastWaveformRenderStats.expected,
                     waveformDrawn: lastWaveformRenderStats.drawn,
                     waveformMissing: lastWaveformRenderStats.missing,
+                    waveformRenderTimeMs: Number.isFinite(Number(lastWaveformRenderStats.renderTimeMs))
+                      ? Number(lastWaveformRenderStats.renderTimeMs)
+                      : null,
                     waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
                     ...(waveformProofDue ? { waveformSurfaces: lastWaveformRenderStats.surfaces } : {}),
                     dialogRenderMode: lastDialogRenderStats.mode,
