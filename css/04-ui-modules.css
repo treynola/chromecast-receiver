@@ -4309,6 +4309,28 @@ select option {
   font-weight: 500;
 }
 
+.playlist-access-summary {
+  color: #aaa;
+  font-size: 0.74em;
+  padding: 3px 2px 7px;
+}
+
+.playlist-item-access {
+  flex: 0 0 auto;
+  font-size: 0.56em;
+  font-weight: 800;
+  letter-spacing: 0.35px;
+  white-space: nowrap;
+}
+
+.playlist-item-access.is-ready {
+  color: #74d890;
+}
+
+.playlist-item-access.needs-access {
+  color: #ffbf69;
+}
+
 .playlist-item-badge {
   font-size: 0.6em;
   font-weight: 800;
