@@ -9469,7 +9469,7 @@
           });
         }
 
-        function renderWaveformState(s) {
+        function renderWaveformState(s, guiRevision = -1) {
           if (!s) return false;
           const waveformStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
@@ -9529,6 +9529,7 @@
               });
             }
             lastWaveformRenderStats = {
+              guiRevision,
               expected,
               drawn,
               missing,
@@ -9556,6 +9557,7 @@
           } catch (e) {
             console.error("❌ Receiver Waveform Render Error:", e);
             lastWaveformRenderStats = {
+              guiRevision,
               expected: 0,
               drawn: 0,
               missing: 0,
@@ -9576,7 +9578,7 @@
           if (revision >= 0 && revision < lastWaveformRenderRevision) return;
           lastWaveformRenderTime = Date.now();
           if (revision >= 0) lastWaveformRenderRevision = revision;
-          renderWaveformState(state);
+          renderWaveformState(state, revision);
         }
 
         function scheduleWaveformRender(s, force = false, revision = -1) {
@@ -9590,9 +9592,13 @@
           if (force || lastWaveformRenderRevision === -1) {
             if (waveformRenderTimer) {
               clearTimeout(waveformRenderTimer);
-              waveformRenderTimer = null;
             }
-            flushScheduledWaveformRender();
+            // The first snapshot can contain ten waveform surfaces. Painting
+            // them synchronously delayed the receiver GUI ACK by roughly
+            // 770 ms on the QA device; controls and dialog actions are
+            // authoritative now, while these latest-value canvases can paint
+            // on the next task without blocking that interaction boundary.
+            waveformRenderTimer = setTimeout(flushScheduledWaveformRender, 0);
             return;
           }
           const elapsedSinceLastRenderMs = Math.max(
@@ -11614,6 +11620,12 @@
                       ? Number(lastWaveformRenderStats.renderTimeMs)
                       : null,
                     waveformDataAvailable: lastWaveformRenderStats.dataAvailable,
+                    waveformRenderPending: pendingWaveformState !== null,
+                    waveformPendingRevision: pendingWaveformState !== null
+                      ? pendingWaveformRevision
+                      : null,
+                    waveformRenderedRevision: lastWaveformRenderRevision,
+                    waveformRenderRevision: lastWaveformRenderStats.guiRevision ?? -1,
                     ...(waveformProofDue ? { waveformSurfaces: lastWaveformRenderStats.surfaces } : {}),
                     dialogRenderMode: lastDialogRenderStats.mode,
                     dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
