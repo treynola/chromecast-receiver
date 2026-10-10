@@ -1589,6 +1589,230 @@ select option {
   outline-offset: 2px;
 }
 
+/* H3000 rack controls follow the sampler dialog's readable, full-width rows.
+   The rack dialog is fixed-width, so viewport-based 2/3-column rules produce
+   tiny controls on desktop screens. */
+.effect-params-grid.rackmount-parameter-layout {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  padding: 12px !important;
+}
+
+.effect-params-grid.rackmount-parameter-layout > .rackmount-parameter-control,
+.effect-params-grid.rackmount-parameter-layout > .rackmount-control-section {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-parameter-control {
+  position: relative;
+  align-items: stretch !important;
+  gap: 7px !important;
+  min-height: 0 !important;
+  padding: 9px 11px !important;
+  border: 1px solid #3f473a;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #242720, #191b18);
+}
+
+.effect-params-grid.rackmount-parameter-layout .effect-param-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+  padding: 0 56px 0 0 !important;
+  margin: 0 !important;
+  text-align: left !important;
+}
+
+.effect-params-grid.rackmount-parameter-layout .effect-param-title label {
+  color: #e0c674;
+  font-size: 0.74rem;
+  line-height: 1.2;
+  letter-spacing: 0.035em;
+}
+
+.effect-params-grid.rackmount-parameter-layout .slider-wrapper {
+  min-height: 18px !important;
+  padding: 0 !important;
+}
+
+.effect-params-grid.rackmount-parameter-layout .effect-param-value {
+  position: absolute;
+  top: 10px;
+  right: 11px;
+  width: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  text-align: right !important;
+}
+
+.effect-params-grid.rackmount-parameter-layout .param-value {
+  color: #b7e47a;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-control-section {
+  align-self: stretch;
+  padding: 0 10px;
+  border: 1px solid #3b4336;
+  border-radius: 9px;
+  background: #171a16;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-control-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  color: #e0c674;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-control-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-control-section > summary::after {
+  content: "+";
+  color: #b7e47a;
+  font: 700 1rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-control-section[open] {
+  display: flex !important;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 9px;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-control-section[open] > summary::after {
+  content: "−";
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-control {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 128px);
+  grid-template-areas:
+    "label label"
+    "counter input"
+    "name name"
+    "status status"
+    "actions actions"
+    "browser browser";
+  align-items: center !important;
+  gap: 7px 10px !important;
+  padding: 11px !important;
+  border-color: #64704f;
+  background: linear-gradient(145deg, #252b20, #171b16);
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-control > .effect-param-title {
+  grid-area: label;
+  padding-right: 0 !important;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-row {
+  grid-area: counter;
+  grid-template-columns: 34px minmax(76px, 1fr) 34px;
+  gap: 7px;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-display {
+  min-height: 38px;
+  padding: 5px 8px;
+  border-color: #70865a;
+  border-radius: 6px;
+  font-size: 1.45rem;
+  letter-spacing: 0.16em;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-step,
+.effect-params-grid.rackmount-parameter-layout .program-counter-input,
+.effect-params-grid.rackmount-parameter-layout .program-counter-action {
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-input {
+  grid-area: input;
+  padding: 4px 8px;
+  font-size: 0.95rem;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-name {
+  grid-area: name;
+  min-height: 1.2em;
+  color: #f0ead9;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-status {
+  grid-area: status;
+  min-height: 1em;
+  text-align: left;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-actions {
+  grid-area: actions;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 32px;
+  padding-top: 2px;
+  border-top: 1px solid #353d30;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-action {
+  padding: 4px 10px;
+  color: #e8d58d;
+  font-size: 0.72rem;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-edited {
+  margin-right: auto;
+  font-size: 0.67rem;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-program-browser {
+  grid-area: browser;
+  display: grid;
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid #353d30;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-program-browser input[type="search"],
+.effect-params-grid.rackmount-parameter-layout .rackmount-program-browser select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 5px 9px;
+  border: 1px solid #4c5742;
+  border-radius: 6px;
+  background: #11140f;
+  color: #f0ead9;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-browser-status {
+  grid-area: auto;
+  padding: 0 2px;
+  color: #b7e47a;
+  text-align: left;
+}
+
 .effect-trigger-control {
   justify-content: center;
   gap: 5px;
