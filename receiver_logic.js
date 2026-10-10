@@ -3054,7 +3054,10 @@
           document.addEventListener("input", (event) => {
             const target = event.target;
             if (target && target.matches("input[type=range], input[type=checkbox]")) {
-              if (target.type !== "checkbox") applyOptimisticMirroredParameterDisplay(target);
+              if (target.type !== "checkbox") {
+                applyOptimisticMirroredParameterDisplay(target);
+                updateMirroredLoopMarker(target);
+              }
               sendGuiInteraction(target, "input");
             }
           });
@@ -6179,6 +6182,29 @@
           if (formatterKind === "loop_timecode_v1") {
             return formatMirroredLoopTimecode(value);
           }
+          if (formatterKind === "effect_tone_v1") {
+            const tone = meta.toneMapping || {};
+            const position = Math.max(0, Math.min(1, value));
+            const percent = `${Number((position * 100).toFixed(1))}%`;
+            if (position === 0.5) return `${percent} · Neutral`;
+            if (tone.kind === "shared") {
+              const gain = (position - 0.5) * 12;
+              return `${percent} · ${gain > 0 ? "+" : ""}${gain.toFixed(1)} dB`;
+            }
+            const minimum = Number(tone.min);
+            const maximum = Number(tone.max);
+            const neutral = Number(tone.neutral);
+            if (![minimum, maximum, neutral].every(Number.isFinite)) return percent;
+            let physical = position <= 0.5
+              ? minimum + (neutral - minimum) * position * 2
+              : neutral + (maximum - neutral) * (position - 0.5) * 2;
+            if (tone.discrete) {
+              const step = Number(tone.step) > 0 ? Number(tone.step) : 1;
+              physical = Math.max(minimum, Math.min(maximum, Math.round(physical / step) * step));
+            }
+            const label = tone.discrete && tone.labels?.[Math.round(physical)];
+            return `${percent} · ${label || Number(physical.toFixed(3))}${label ? "" : String(tone.nativeUnit || "")}`;
+          }
           if (formatterKind === "exact_numeric_v1") {
             const normalized = Object.is(value, -0) ? 0 : value;
             if (normalized === 0 && meta.zeroDisplay !== null && meta.zeroDisplay !== undefined) {
@@ -6414,7 +6440,7 @@
                         <div class="track-playlist-nav" id="t-playlist-nav-${i}" style="display: none;"><button id="t-pl-prev-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-prev" data-action="playlist-prev" data-track-index="${i}">&lt;</button><div class="track-playlist-info" id="t-pl-info-${i}"><span class="track-playlist-counter" id="t-pl-counter-${i}">1/1</span></div><button id="t-pl-next-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-next" data-action="playlist-next" data-track-index="${i}">&gt;</button></div>
                         <div class="track-time-display" id="t-time-${i}">00:00:00:00</div>
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
-                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external waveform-label-l">L</div><div class="waveform-label-external waveform-label-r">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker" id="t-playhead-${i}"></div></div></div>
+                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external waveform-label-l">L</div><div class="waveform-label-external waveform-label-r">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker is-at-start" id="t-playhead-${i}"></div></div></div>
                         <div class="track-bpm-module" data-track-index="${i}" id="t-bpm-module-${i}"><div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div></div>
                         <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
@@ -7317,6 +7343,26 @@
             valCache[id] = left;
           }
         }
+        function updateMirroredLoopMarker(control) {
+          const parameter = control?.dataset?.param;
+          if (parameter !== "loopStart" && parameter !== "loopEnd") return;
+          const trackIndex = Number(control.closest(".track")?.dataset.trackIndex);
+          if (!Number.isInteger(trackIndex)) return;
+          const markerId = parameter === "loopStart"
+            ? `t-ls-m-${trackIndex}`
+            : `t-le-m-${trackIndex}`;
+          const marker = getEl(markerId);
+          if (!marker) return;
+          const duration = Number(control.max);
+          const value = Number(control.value);
+          const valid = Number.isFinite(duration) && duration > 0 && Number.isFinite(value);
+          const position = valid ? Math.max(0, Math.min(value, duration)) : 0;
+          marker.classList.toggle(
+            "is-visible",
+            valid && (parameter === "loopStart" ? position > 0 : position < duration - 0.001),
+          );
+          if (valid) updateStyleLeft(markerId, `${(position / duration) * 100}%`);
+        }
         function updateButtonState(id, buttonState) {
           const el = getEl(id);
           if (!el || !buttonState) return;
@@ -7509,8 +7555,13 @@
         }
 
         function updateMirroredPlayhead(id, position) {
-          const value = `${Math.max(0, Math.min(1, Number(position) || 0)) * 100}%`;
-          updateStyleLeft(id, value);
+          const ratio = Math.max(0, Math.min(1, Number(position) || 0));
+          updateStyleLeft(id, `${ratio * 100}%`);
+          const marker = getEl(id);
+          if (marker) {
+            marker.classList.toggle("is-at-start", ratio <= 0.02);
+            marker.classList.toggle("is-at-end", ratio >= 0.98);
+          }
         }
 
         let effectOptionsCatalog = ["none"];
@@ -10684,8 +10735,6 @@
                   t.effectSelection,
                   s.effectOptionsCatalogSignature,
                 );
-                updateStyleLeft("t-ls-m-" + i, t.loopStart * 100 + "%");
-                updateStyleLeft("t-le-m-" + i, t.loopEnd * 100 + "%");
                 const bpmVal = Number.isFinite(Number(t.effectiveBpm ?? t.bpm))
                   ? Number(t.effectiveBpm ?? t.bpm).toFixed(1)
                   : "120.0";
@@ -10830,6 +10879,7 @@
                         descriptor,
                         rawValue,
                       );
+                      updateMirroredLoopMarker(control);
                     });
                   }
                 }

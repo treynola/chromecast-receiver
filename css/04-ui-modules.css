@@ -1478,6 +1478,154 @@ select option {
   pointer-events: none;
 }
 
+.effect-control-group.program-counter-control {
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px;
+  min-height: 116px;
+}
+
+.program-counter-control .effect-param-title {
+  text-align: center;
+}
+
+.program-counter-row {
+  display: grid;
+  grid-template-columns: 28px minmax(68px, 1fr) 28px;
+  align-items: center;
+  gap: 4px;
+}
+
+.program-counter-display {
+  display: block;
+  min-width: 68px;
+  padding: 2px 5px;
+  border: 1px solid #59624b;
+  border-radius: 3px;
+  background: #10130f;
+  color: var(--green, #b7e47a);
+  font: 700 1.3rem/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-shadow: 0 0 7px rgba(183, 228, 122, 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+.program-counter-step,
+.program-counter-action {
+  min-height: 25px;
+  border: 1px solid #666;
+  border-radius: 3px;
+  background: #222;
+  color: var(--gold, #d5b15b);
+  cursor: pointer;
+  font: inherit;
+}
+
+.program-counter-step {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.program-counter-input {
+  width: 100%;
+  min-height: 25px;
+  box-sizing: border-box;
+  border: 1px solid #777;
+  border-radius: 3px;
+  background: #171717;
+  color: #f4f1e8;
+  font: 600 0.85rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+
+.program-counter-name {
+  min-height: 1.1em;
+  color: #ddd;
+  font-size: 0.72rem;
+  line-height: 1.15;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.program-counter-status {
+  min-height: 1.15em;
+  color: var(--green, #b7e47a);
+  font-size: 0.66rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.program-counter-status.is-error {
+  color: #ff9b8f;
+}
+
+.program-counter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.program-counter-action {
+  padding: 2px 6px;
+  font-size: 0.64rem;
+  line-height: 1.2;
+}
+
+.program-counter-edited {
+  color: #b8b8b8;
+  font: 700 0.62rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+}
+
+.program-counter-edited.is-edited {
+  color: var(--gold, #d5b15b);
+}
+
+.program-counter-control button:focus-visible,
+.program-counter-input:focus-visible {
+  outline: 2px solid var(--gold, #d5b15b);
+  outline-offset: 2px;
+}
+
+.effect-trigger-control {
+  justify-content: center;
+  gap: 5px;
+  min-height: 64px;
+}
+
+.effect-param-trigger {
+  min-width: 78px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #777;
+  border-radius: 4px;
+  background: #171717;
+  color: var(--green, #b7e47a);
+  font: 700 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.effect-param-trigger:hover,
+.effect-param-trigger:focus-visible {
+  border-color: var(--gold, #d5b15b);
+  color: var(--gold, #d5b15b);
+}
+
+.effect-param-trigger-status {
+  min-height: 1em;
+  color: #c8d8b6;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.effect-param-trigger-status.is-error {
+  color: #ff9b8f;
+}
+
 .fx-chain-container {
   margin-top: 2px;
   padding-top: 2px;
@@ -5143,63 +5291,33 @@ select option {
   padding-right: 6px;
   margin-right: 6px;
 }
-/* --- LOOP MARKERS (SEMI-TRANSPARENT AREAS) --- */
+/* --- LOOP REFERENCE LINES --- */
 .loop-marker {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 2px !important;
-  background-color: rgba(250, 215, 142, 0.8) !important;
+  width: 1px !important;
+  background-color: var(--gold, #fad78e) !important;
   pointer-events: none;
   z-index: 10 !important;
   transition: left 0.1s ease-out;
-  display: none; /* Hidden until JS positions them */
+  display: none;
 }
 
-.loop-marker::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 60px !important;
-  pointer-events: none;
-}
-
-.loop-start-marker::after {
-  left: 0;
-  background: linear-gradient(
-    to right,
-    rgba(250, 215, 142, 0.4),
-    transparent
-  ) !important;
-}
-
-.loop-end-marker::after {
-  right: 0;
-  background: linear-gradient(
-    to left,
-    rgba(255, 0, 0, 0.4),
-    transparent
-  ) !important;
-}
-
-.loop-start-marker {
-  border-right: 1px solid var(--gold) !important;
-}
-.loop-end-marker {
-  border-left: 1px solid var(--red) !important;
-  background-color: rgba(255, 0, 0, 0.8) !important;
+.loop-marker.is-visible {
+  display: block;
 }
 
 .play-marker {
   position: absolute;
+  left: 0;
   top: 0 !important;
   bottom: 0 !important;
   width: 1px !important;
   background-color: var(--red, #ff0000) !important;
   pointer-events: auto;
   cursor: ew-resize;
-  z-index: 9 !important;
+  z-index: 11 !important;
   box-shadow: 0 0 3px rgba(255, 0, 0, 0.8);
 }
 
@@ -5208,12 +5326,22 @@ select option {
   display: block;
   position: absolute;
   bottom: 0;
-  left: -4px;
-  width: 9px;
-  height: 6px;
+  left: -2px;
+  width: 5px;
+  height: 3px;
   background-color: var(--red, #ff0000);
   clip-path: polygon(50% 0, 0 100%, 100% 100%);
   z-index: 10;
+}
+
+.play-marker.is-at-start::before {
+  left: 1px;
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+
+.play-marker.is-at-end::before {
+  left: -5px;
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
 }
 
 #master-play-marker {
