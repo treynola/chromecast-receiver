@@ -1616,6 +1616,7 @@ select option {
   border: 1px solid #3f473a;
   border-radius: 8px;
   background: linear-gradient(145deg, #242720, #191b18);
+  scroll-margin-block: 12px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .effect-param-title {
@@ -1700,23 +1701,35 @@ select option {
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-control {
-  display: grid !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 7px !important;
+  padding: 0 !important;
+  overflow: visible;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(96px, 128px);
   grid-template-areas:
     "label label"
     "counter input"
-    "name name"
-    "status status"
-    "actions actions"
-    "browser browser";
+    "position position"
+    "candidates candidates";
   align-items: center !important;
   gap: 7px 10px !important;
-  padding: 11px !important;
-  border-color: #64704f;
+  padding: 11px;
+  border: 1px solid #64704f;
+  border-radius: 8px;
   background: linear-gradient(145deg, #252b20, #171b16);
+  box-shadow: 0 5px 8px rgba(0, 0, 0, 0.35);
 }
 
-.effect-params-grid.rackmount-parameter-layout .program-counter-control > .effect-param-title {
+.effect-params-grid.rackmount-parameter-layout .program-counter-head > .effect-param-title {
   grid-area: label;
   padding-right: 0 !important;
 }
@@ -1749,8 +1762,35 @@ select option {
   font-size: 0.95rem;
 }
 
+.effect-params-grid.rackmount-parameter-layout .program-counter-position {
+  grid-area: position;
+  min-width: 0;
+  color: #b7e47a;
+  font: 600 0.7rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-candidate-choice {
+  grid-area: candidates;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 5px 9px;
+  border: 1px solid #b58f42;
+  border-radius: 6px;
+  background: #11140f;
+  color: #f0ead9;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.effect-params-grid.rackmount-parameter-layout .program-counter-candidate-choice[hidden] {
+  display: none !important;
+}
+
 .effect-params-grid.rackmount-parameter-layout .program-counter-name {
-  grid-area: name;
   min-height: 1.2em;
   color: #f0ead9;
   font-size: 0.8rem;
@@ -1758,13 +1798,12 @@ select option {
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-status {
-  grid-area: status;
   min-height: 1em;
   text-align: left;
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-actions {
-  grid-area: actions;
+  display: flex;
   justify-content: flex-start;
   gap: 8px;
   min-height: 32px;
@@ -1784,11 +1823,23 @@ select option {
 }
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-program-browser {
-  grid-area: browser;
   display: grid;
   gap: 7px;
   padding-top: 9px;
   border-top: 1px solid #353d30;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-program-browser-details > summary {
+  color: #e0c674;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.effect-params-grid.rackmount-parameter-layout .rackmount-program-browser-controls {
+  display: grid;
+  gap: 7px;
+  padding-top: 7px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-program-browser input[type="search"],
@@ -2863,6 +2914,42 @@ select option {
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   display: flex;
+}
+
+.effect-params-dialog.has-rackmount-parameters {
+  max-height: min(82vh, calc(100dvh - 24px));
+  min-height: 0;
+  overflow: visible;
+}
+
+.effect-params-dialog.has-rackmount-parameters > .dialog-header {
+  flex: 0 0 auto;
+}
+
+.effect-params-dialog.has-rackmount-parameters > .dialog-content {
+  /* The dialog itself uses height:auto. Keep an intrinsic flex basis here so
+     the content contributes to its height before max-height constrains it;
+     a zero basis can collapse the only parameter viewport in WebKit. */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 72vh;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px;
+  scrollbar-gutter: stable;
+}
+
+@media (max-height: 560px) {
+  .effect-params-dialog.has-rackmount-parameters {
+    max-height: calc(100dvh - 12px);
+  }
+
+  .effect-params-dialog.has-rackmount-parameters > .dialog-content {
+    padding-top: 2px;
+    padding-bottom: 12px;
+  }
 }
 
 .effect-params-dialog.is-stack-front,
