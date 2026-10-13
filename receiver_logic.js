@@ -7965,6 +7965,7 @@
           "envelopeDecay",
           "envelopeSustain",
           "envelopeRelease",
+          "sampleEditorStatus",
           "waveformDuration",
           "waveformEnd",
           "waveformStart",
@@ -8000,6 +8001,8 @@
                 Number.isInteger(Number(node.actionIndex))
               ) ||
               Object.prototype.hasOwnProperty.call(data, "padSampleName") ||
+              Object.prototype.hasOwnProperty.call(data, "sampleEditorStatus") ||
+              /(?:^|\s)dialog-header-status(?:\s|$)/.test(className) ||
               String(node.tagName || "") === "output" ||
               /(?:^|\s)pad-setting-value(?:\s|$)/.test(className);
             return {
@@ -8059,58 +8062,64 @@
               disabled: undefined,
             })),
           });
-          return JSON.stringify((dialogs || []).map((dialog) => ({
-            ...dialog,
-            shellClassName: normalizeMirroredDialogStructuralClassName(dialog.shellClassName),
-            title: undefined,
-            geometry: undefined,
-            left: undefined,
-            top: undefined,
-            width: undefined,
-            height: undefined,
-            header: dialog.header
-              ? {
-                  ...dialog.header,
-                  title: undefined,
-                  status: undefined,
-                  titleOverflowing: undefined,
-                  titleLines: (dialog.header.titleLines || []).map((line) => ({
-                    ...line,
-                    text: undefined,
-                  })),
-                }
-              : undefined,
-            controls: (dialog.controls || []).map(normalizeControl),
-            actions: (dialog.actions || []).map((action) => ({
-              ...action,
-              label: undefined,
-              className: normalizeMirroredDialogStructuralClassName(action?.className),
+          return JSON.stringify((dialogs || []).map((dialog) => {
+            const manifest = (dialog.dialogDomManifest || dialog.samplePadDomManifest)
+              ? getMirroredDialogManifestLayout(
+                  dialog.dialogDomManifest || dialog.samplePadDomManifest,
+                )
+              : null;
+            return {
+              ...dialog,
+              shellClassName: normalizeMirroredDialogStructuralClassName(dialog.shellClassName),
               title: undefined,
-              ariaLabel: undefined,
-              ariaInvalid: undefined,
-              ariaPressed: undefined,
-              pressed: undefined,
-              disabled: undefined,
-              data: normalizeMirroredDialogStructuralData(action?.data),
-            })),
-            effectSlotTabs: dialog.effectSlotTabs
-              ? {
-                  ...dialog.effectSlotTabs,
-                  items: (dialog.effectSlotTabs.items || []).map((item) => ({
-                    ...item,
-                    className: normalizeMirroredDialogStructuralClassName(item?.className),
-                    control: item.control ? normalizeControl(item.control) : null,
-                  })),
-                }
-              : null,
-            samplePadLayout: dialog.samplePadLayout
-              ? { ...dialog.samplePadLayout, sampleNameText: undefined }
-              : null,
-            samplePadDomManifest: (dialog.dialogDomManifest || dialog.samplePadDomManifest)
-              ? getMirroredDialogManifestLayout(dialog.dialogDomManifest || dialog.samplePadDomManifest)
-              : null,
-            sampleEditorVisual: dialog.sampleEditorVisual,
-          })));
+              geometry: undefined,
+              left: undefined,
+              top: undefined,
+              width: undefined,
+              height: undefined,
+              header: dialog.header
+                ? {
+                    ...dialog.header,
+                    title: undefined,
+                    status: undefined,
+                    titleOverflowing: undefined,
+                    titleLines: (dialog.header.titleLines || []).map((line) => ({
+                      ...line,
+                      text: undefined,
+                    })),
+                  }
+                : undefined,
+              controls: (dialog.controls || []).map(normalizeControl),
+              actions: (dialog.actions || []).map((action) => ({
+                ...action,
+                label: undefined,
+                className: normalizeMirroredDialogStructuralClassName(action?.className),
+                title: undefined,
+                ariaLabel: undefined,
+                ariaInvalid: undefined,
+                ariaPressed: undefined,
+                pressed: undefined,
+                disabled: undefined,
+                data: normalizeMirroredDialogStructuralData(action?.data),
+              })),
+              effectSlotTabs: dialog.effectSlotTabs
+                ? {
+                    ...dialog.effectSlotTabs,
+                    items: (dialog.effectSlotTabs.items || []).map((item) => ({
+                      ...item,
+                      className: normalizeMirroredDialogStructuralClassName(item?.className),
+                      control: item.control ? normalizeControl(item.control) : null,
+                    })),
+                  }
+                : null,
+              samplePadLayout: dialog.samplePadLayout
+                ? { ...dialog.samplePadLayout, sampleNameText: undefined }
+                : null,
+              samplePadDomManifest: manifest,
+              dialogDomManifest: manifest,
+              sampleEditorVisual: dialog.sampleEditorVisual,
+            };
+          }));
         }
 
         function patchMirroredDialogState(root, dialogs) {
