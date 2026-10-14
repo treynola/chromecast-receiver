@@ -1596,8 +1596,23 @@ select option {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 8px !important;
-  padding: 12px !important;
+  gap: 4px !important;
+  padding: 6px !important;
+}
+
+/* Reverb 2016 has a compact, fixed control set. Two columns keep its complete
+   parameter surface visible together; the dialog scroller remains available
+   as a fallback on short windows. */
+.effect-params-grid.rackmount-parameter-layout.reverb2016-parameter-layout {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  align-content: start;
+  align-items: stretch !important;
+}
+
+.effect-params-grid.reverb2016-parameter-layout > .program-counter-control,
+.effect-params-grid.reverb2016-parameter-layout > .rackmount-control-section {
+  grid-column: 1 / -1;
 }
 
 .effect-params-grid.rackmount-parameter-layout > .rackmount-parameter-control,
@@ -1610,20 +1625,20 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .rackmount-parameter-control {
   position: relative;
   align-items: stretch !important;
-  gap: 7px !important;
+  gap: 4px !important;
   min-height: 0 !important;
-  padding: 9px 11px !important;
+  padding: 5px 8px !important;
   border: 1px solid #3f473a;
   border-radius: 8px;
   background: linear-gradient(145deg, #242720, #191b18);
-  scroll-margin-block: 12px;
+  scroll-margin-block: 8px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .effect-param-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 18px;
+  min-height: 14px;
   padding: 0 56px 0 0 !important;
   margin: 0 !important;
   text-align: left !important;
@@ -1637,7 +1652,7 @@ select option {
 }
 
 .effect-params-grid.rackmount-parameter-layout .slider-wrapper {
-  min-height: 18px !important;
+  min-height: 14px !important;
   padding: 0 !important;
 }
 
@@ -1659,7 +1674,7 @@ select option {
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-control-section {
   align-self: stretch;
-  padding: 0 10px;
+  padding: 0 7px;
   border: 1px solid #3b4336;
   border-radius: 9px;
   background: #171a16;
@@ -1669,7 +1684,7 @@ select option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 38px;
+  min-height: 28px;
   color: #e0c674;
   cursor: pointer;
   font-size: 0.75rem;
@@ -1692,8 +1707,8 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .rackmount-control-section[open] {
   display: flex !important;
   flex-direction: column;
-  gap: 7px;
-  padding-bottom: 9px;
+  gap: 4px;
+  padding-bottom: 5px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-control-section[open] > summary::after {
@@ -1704,7 +1719,7 @@ select option {
   display: flex !important;
   flex-direction: column;
   align-items: stretch !important;
-  gap: 7px !important;
+  gap: 4px !important;
   padding: 0 !important;
   overflow: visible;
 }
@@ -1721,8 +1736,8 @@ select option {
     "position position"
     "candidates candidates";
   align-items: center !important;
-  gap: 7px 10px !important;
-  padding: 11px;
+  gap: 4px 7px !important;
+  padding: 6px;
   border: 1px solid #64704f;
   border-radius: 8px;
   background: linear-gradient(145deg, #252b20, #171b16);
@@ -2917,6 +2932,8 @@ select option {
 }
 
 .effect-params-dialog.has-rackmount-parameters {
+  height: min(82vh, calc(100vh - 24px));
+  height: min(82dvh, calc(100dvh - 24px));
   max-height: min(82vh, calc(100dvh - 24px));
   min-height: 0;
   overflow: visible;
@@ -2927,28 +2944,38 @@ select option {
 }
 
 .effect-params-dialog.has-rackmount-parameters > .dialog-content {
-  /* The dialog itself uses height:auto. Keep an intrinsic flex basis here so
-     the content contributes to its height before max-height constrains it;
-     a zero basis can collapse the only parameter viewport in WebKit. */
-  flex: 1 1 auto;
+  /* Give the one parameter scroller the definite space left under the header.
+     A max-height on an auto-height dialog left lower rows outside the visible
+     area in the owner's Tauri QA build. */
+  flex: 1 1 0px;
   min-height: 0;
-  max-height: 72vh;
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  height: 0;
+  max-height: none;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: auto !important;
   overscroll-behavior: contain;
-  scroll-padding-block: 12px;
+  touch-action: pan-y;
+  scroll-padding-block: 8px;
   scrollbar-gutter: stable;
 }
 
 @media (max-height: 560px) {
   .effect-params-dialog.has-rackmount-parameters {
+    height: calc(100vh - 12px);
+    height: calc(100dvh - 12px);
     max-height: calc(100dvh - 12px);
   }
 
   .effect-params-dialog.has-rackmount-parameters > .dialog-content {
     padding-top: 2px;
     padding-bottom: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .effect-params-grid.rackmount-parameter-layout.reverb2016-parameter-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 }
 
