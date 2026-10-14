@@ -10367,6 +10367,34 @@
           return null;
         }
 
+        function renderMirroredTrackLfoAssignments(track, trackIndex) {
+          KNOB_CONFIGS.forEach((config) => {
+            const indicator = track?.lfoIndicators?.[config.p];
+            [1, 2].forEach((lfoIndex) => {
+              const checkbox = getEl(`t-lfo${lfoIndex}-chk-${trackIndex}-${config.p}`);
+              if (!checkbox) return;
+              const visual = indicator?.[`lfo${lfoIndex}`];
+              const assigned = visual && typeof visual === "object"
+                ? visual.checked === true
+                : Boolean(visual ?? track?.lfoAssigns?.[lfoIndex]?.includes?.(config.p));
+              checkbox.checked = assigned;
+              checkbox.classList.toggle(
+                "reversed",
+                Boolean(visual && typeof visual === "object" && visual.reversed),
+              );
+            });
+            [
+              ["min", indicator?.minMarker],
+              ["max", indicator?.maxMarker],
+            ].forEach(([kind, markerState]) => {
+              const marker = getEl(`t-${kind}-marker-${trackIndex}-${config.p}`);
+              if (!marker) return;
+              marker.classList.toggle("active", Boolean(markerState?.active));
+              marker.style.left = `${Math.max(0, Math.min(100, Number(markerState?.left) || 0))}%`;
+            });
+          });
+        }
+
         function markerValueFromPercent(marker, minimum, maximum, fallback) {
           if (!marker?.active) return fallback;
           const left = Number(marker.left);
@@ -11119,49 +11147,8 @@
                         );
                       }
 
-                      const l1 = getEl(`t-lfo1-chk-${i}-${cfg.p}`);
-                      const l1Checked = !!(
-                        t.lfoAssigns &&
-                        t.lfoAssigns[1] &&
-                        t.lfoAssigns[1].includes(cfg.p)
-                      );
-                      if (l1 && l1.checked !== l1Checked) {
-                        l1.checked = l1Checked;
-                      }
-                      const l2 = getEl(`t-lfo2-chk-${i}-${cfg.p}`);
-                      const l2Checked = !!(
-                        t.lfoAssigns &&
-                        t.lfoAssigns[2] &&
-                        t.lfoAssigns[2].includes(cfg.p)
-                      );
-                      if (l2 && l2.checked !== l2Checked) {
-                        l2.checked = l2Checked;
-                      }
-                      const indicator = t.lfoIndicators && t.lfoIndicators[cfg.p];
-                      const l1Visual = indicator?.lfo1 && typeof indicator.lfo1 === "object"
-                        ? indicator.lfo1
-                        : { checked: Boolean(indicator?.lfo1 ?? l1Checked), reversed: false };
-                      const l2Visual = indicator?.lfo2 && typeof indicator.lfo2 === "object"
-                        ? indicator.lfo2
-                        : { checked: Boolean(indicator?.lfo2 ?? l2Checked), reversed: false };
-                      if (l1) {
-                        l1.checked = Boolean(l1Visual.checked);
-                        l1.classList.toggle("reversed", Boolean(l1Visual.reversed));
-                      }
-                      if (l2) {
-                        l2.checked = Boolean(l2Visual.checked);
-                        l2.classList.toggle("reversed", Boolean(l2Visual.reversed));
-                      }
-                      [
-                        ["min", indicator?.minMarker],
-                        ["max", indicator?.maxMarker],
-                      ].forEach(([kind, markerState]) => {
-                        const marker = getEl(`t-${kind}-marker-${i}-${cfg.p}`);
-                        if (!marker) return;
-                        marker.classList.toggle("active", Boolean(markerState?.active));
-                        marker.style.left = `${Math.max(0, Math.min(100, Number(markerState?.left) || 0))}%`;
-                      });
                     });
+                    renderMirroredTrackLfoAssignments(t, i);
                     applyMirroredParameterDisplay(
                       `t-gain-sl-${i}`,
                       `t-gain-val-${i}`,
@@ -11762,26 +11749,48 @@
             lfoReversedCount: 0,
             lfoMinMarkerCount: 0,
             lfoMaxMarkerCount: 0,
+            lfoMaster1Active: state?.master?.lfo1?.active === true,
+            lfoMaster2Active: state?.master?.lfo2?.active === true,
+            lfoAssignmentsByTrack: [],
+            lfoCheckboxMissingCount: 0,
+            lfoCheckboxMismatchCount: 0,
+            lfoSliderMissingCount: 0,
             lfoMeter1: Number(state?.master?.lfo1?.value) || 0,
             lfoMeter2: Number(state?.master?.lfo2?.value) || 0,
             track1Pan: null,
           };
           (state?.tracks || []).forEach((track, trackIndex) => {
+            const trackAssignments = { trackIndex, lfo1: [], lfo2: [] };
             if (trackIndex === 0 && Number.isFinite(Number(track?.params?.pan))) {
               summary.track1Pan = Number(track.params.pan);
             }
-            Object.values(track?.lfoIndicators || {}).forEach((indicator) => {
-              [indicator?.lfo1, indicator?.lfo2].forEach((lfo) => {
+            KNOB_CONFIGS.forEach((config) => {
+              const indicator = track?.lfoIndicators?.[config.p];
+              [1, 2].forEach((lfoIndex) => {
+                const lfo = indicator?.[`lfo${lfoIndex}`];
+                const assigned = lfo && typeof lfo === "object"
+                  ? lfo.checked === true
+                  : Boolean(lfo ?? track?.lfoAssigns?.[lfoIndex]?.includes?.(config.p));
                 if (lfo && typeof lfo === "object") {
-                  if (lfo.checked) summary.lfoAssignmentCount += 1;
-                  if (lfo.checked && lfo.reversed) summary.lfoReversedCount += 1;
-                } else if (lfo) {
-                  summary.lfoAssignmentCount += 1;
+                  if (assigned && lfo.reversed) summary.lfoReversedCount += 1;
+                }
+                if (!assigned) return;
+                summary.lfoAssignmentCount += 1;
+                const parameterAssignments = trackAssignments[`lfo${lfoIndex}`];
+                parameterAssignments.push(config.p);
+                const checkbox = getEl(`t-lfo${lfoIndex}-chk-${trackIndex}-${config.p}`);
+                if (!checkbox) summary.lfoCheckboxMissingCount += 1;
+                else if (!checkbox.checked) summary.lfoCheckboxMismatchCount += 1;
+                if (!getEl(`t-${config.p}-sl-${trackIndex}`)) {
+                  summary.lfoSliderMissingCount += 1;
                 }
               });
               if (indicator?.minMarker?.active) summary.lfoMinMarkerCount += 1;
               if (indicator?.maxMarker?.active) summary.lfoMaxMarkerCount += 1;
             });
+            if (trackAssignments.lfo1.length || trackAssignments.lfo2.length) {
+              summary.lfoAssignmentsByTrack.push(trackAssignments);
+            }
           });
           return summary;
         }
