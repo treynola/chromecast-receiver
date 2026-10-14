@@ -312,12 +312,22 @@
         const GUI_CHANNEL_TELEMETRY_INTERVAL_MS = 5000;
         const GUI_WAVEFORM_PROOF_INTERVAL_MS = 30000;
         const GUI_LFO_VISUAL_PROOF_INTERVAL_MS = 1000;
+        const GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS = 250;
+        const GUI_CLOCK_SYNC_INTERVAL_MS = 2000;
+        const GUI_CLOCK_SYNC_MAX_RTT_MS = 250;
         var guiChannelTelemetryTimer = null;
         var guiChannelTelemetryEventCounts = {};
         var guiChannelTelemetryLastDetails = {};
         var guiLastWaveformProofAt = 0;
         var guiLastLfoVisualProofAt = 0;
         var guiLastLfoVisualProofSignature = "";
+        var lastLfoVisualTelemetryAtMs = 0;
+        var lfoVisualFrameSequence = 0;
+        var guiClockSyncInterval = null;
+        var guiClockSyncSequence = 0;
+        var pendingGuiClockSyncProbes = new Map();
+        var guiClockSyncSamples = [];
+        var guiClockSyncEstimate = null;
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
         var pcmRuntimeHighWatermarkDiagnostics = 0;
         var pcmRuntimeNativeFallbacks = 0;
@@ -419,6 +429,9 @@
           // GUI snapshot after HANDSHAKE_ACK and BRIDGE_CONFIG are both live.
           sendAuthenticatedGuiReady("bridge_authenticated");
           sendReceiverHandshakeCommit("bridge_authenticated");
+          if (guiControlWS && guiControlWS.readyState === WebSocket.OPEN) {
+            startGuiClockSync();
+          }
         }
 
         // HANDSHAKE_ACK is the backend's authenticated response. This
@@ -484,7 +497,7 @@
           const signature = guiSessionNonce + ":" + stage;
           if (lastGuiReadyNonce === signature) return true;
           try {
-            binaryWS.send(JSON.stringify({
+            sendReceiverBridgeMessage({
               type: "GUI_READY",
               transport: "gui",
               guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
@@ -493,7 +506,7 @@
               guiRevision: lastGuiRevision,
               latestSnapshotReplay: true,
               bootStage: stage,
-            }));
+            }, "gui");
             lastGuiReadyNonce = signature;
             relayLogToStudio("✅ Receiver: Authenticated GUI_READY sent; GUI snapshot replay is now safe.");
             return true;
@@ -1354,7 +1367,7 @@
         }
 
         function sendGuiChannelTelemetry(event, details = {}) {
-          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
+          if (!guiControlWS || guiControlWS.readyState !== WebSocket.OPEN) return false;
           const payload = {
             type: "GUI_CHANNEL_TELEMETRY",
             transport: "gui",
@@ -1376,8 +1389,7 @@
             ...details,
           };
           try {
-            binaryWS.send(JSON.stringify(payload));
-            return true;
+            return sendReceiverBridgeMessage(payload, "gui");
           } catch (_error) {
             return false;
           }
@@ -1433,8 +1445,7 @@
             ...details,
           };
           try {
-            binaryWS.send(JSON.stringify(payload));
-            return true;
+            return sendReceiverBridgeMessage(payload, "gui");
           } catch (_error) {
             return false;
           }
@@ -1461,8 +1472,7 @@
             ...details,
           };
           try {
-            binaryWS.send(JSON.stringify(payload));
-            return true;
+            return sendReceiverBridgeMessage(payload);
           } catch (_error) {
             return false;
           }
@@ -1999,12 +2009,12 @@
               socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
             };
-            binaryWS.send(JSON.stringify({ type: "PLAYBACK_MODE", ...readiness }));
-            binaryWS.send(JSON.stringify({
+            sendReceiverBridgeMessage({ type: "PLAYBACK_MODE", ...readiness });
+            sendReceiverBridgeMessage({
               type: "PLAYOUT_STATE",
               state: readiness.ready ? "ready" : "selecting",
               ...readiness,
-            }));
+            });
             playbackModeLastSent = mode;
             playbackModeLastSentReady = ready !== false;
             playbackModeLastSentGeneration = playbackModeSocketGeneration;
@@ -2024,7 +2034,7 @@
             return;
           }
           try {
-            binaryWS.send(JSON.stringify({
+            sendReceiverBridgeMessage({
               type: "PLAYOUT_STATE",
               state: "selecting",
               stage: stage || "unknown",
@@ -2035,7 +2045,7 @@
               audioPathOwnerGeneration: castAudioOwnerArbiter.snapshot().generation,
               socketGeneration: playbackModeSocketGeneration,
               lifecycleGeneration: workletLifecycleGeneration,
-            }));
+            });
           } catch (e) {}
         }
 
@@ -2075,7 +2085,7 @@
             proof: proof && typeof proof === "object" ? proof : {},
           };
           try {
-            binaryWS.send(JSON.stringify(readiness));
+            sendReceiverBridgeMessage(readiness);
             receiverPlayoutAudibleSignature = signature;
             relayLogToStudio(
               "🔊 Receiver: Audibility proven for " + selectedMode +
@@ -2242,12 +2252,12 @@
           emitReceiverTelemetry("AUDIO_WORKLET_CAPABILITY " + JSON.stringify(result));
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN && window._handshakeAcked) {
             try {
-              binaryWS.send(JSON.stringify({
+              sendReceiverBridgeMessage({
                 type: "AUDIO_PATH_CAPABILITY",
                 pcm: { ...result },
                 selectedPath: result.supported ? "pcm_v2" : "native_caf",
                 authoritative: true,
-              }));
+              });
             } catch (e) {}
           }
           return result;
@@ -2688,12 +2698,12 @@
             // cannot strand CAF in pre-Play silence indefinitely.
             resetPlaybackRevisionGate("native_recovery_retry");
             try {
-              binaryWS.send(JSON.stringify({
+              sendReceiverBridgeMessage({
                 type: "RECEIVER_READY",
                 reason: "native_recovery_retry",
                 socketGeneration: playbackModeSocketGeneration,
                 lifecycleGeneration: workletLifecycleGeneration,
-              }));
+              });
               relayLogToStudio(
                 "🔁 Receiver: Native Play recovery retry requested after bounded startup silence.",
               );
@@ -2818,6 +2828,7 @@
             domNodeCount: 0,
           };
           resetSmoothLfoVisuals();
+          resetGuiClockSync(reason || "gui_revision_gate_reset");
           resetMirroredWaveformVisuals();
           resetMirroredTimelineState();
           if (reason) {
@@ -2942,7 +2953,16 @@
           }
           try {
             markReceiverGuiInteractionPending(element, guiInteractionRevision, kind);
-            binaryWS.send(JSON.stringify(message));
+            if (!sendReceiverBridgeMessage(message, "gui")) {
+              clearReceiverGuiInteractionFeedback(element);
+              element.dataset.castInteractionState = "failed";
+              emitGuiChannelTelemetry("action_queue_overflow", {
+                revision: guiInteractionRevision,
+                targetId: element.id,
+                parameterKey: message.parameterKey || null,
+              });
+              return;
+            }
             lastGuiInputDispatch.set(element, {
               kind,
               value: interactionValue,
@@ -3091,18 +3111,51 @@
             ? messageRevision
             : lastPlaybackRevision;
           const appliedAtEpochMs = Date.now();
+          const appliedAtMonotonicMs = getLfoVisualNow();
+          const receivedAtMonotonicMs = Number(message && message._receiverReceivedAtMonotonicMs);
           const receivedAtEpochMs = Number(message && message._receiverReceivedAtEpochMs);
           const issuedAtEpochMs = Number(message && message.issuedAtEpochMs);
-          // GUI snapshots do not use playback ACKs. Only playback commands
-          // reach this function, keeping ACK traffic off the GUI path.
+          const receiverAudioClock = activeAudioPathOwner === "pcm_v2" && audioCtx
+            ? {
+                kind: "audio_context_frame",
+                owner: activeAudioPathOwner,
+                frame: Number.isFinite(Number(audioCtx.currentTime)) &&
+                  Number.isFinite(Number(audioCtx.sampleRate))
+                  ? Math.floor(Number(audioCtx.currentTime) * Number(audioCtx.sampleRate))
+                  : null,
+                timeSeconds: Number.isFinite(Number(audioCtx.currentTime))
+                  ? Number(audioCtx.currentTime)
+                  : null,
+                sampleRate: Number.isFinite(Number(audioCtx.sampleRate))
+                  ? Number(audioCtx.sampleRate)
+                  : null,
+              }
+            : window._playbackMode === "native"
+              ? {
+                  kind: "native_media_playhead",
+                  owner: "native_caf",
+                  timeSeconds: readNativeResumeMediaState().currentTime,
+                  frame: null,
+                  sampleRate: null,
+                }
+              : { kind: "not_audible", owner: activeAudioPathOwner || "none", frame: null };
+          // Ordered command acknowledgements share the independent control
+          // lane with GUI ACKs and never queue behind PCM media.
           try {
-            binaryWS.send(
-              JSON.stringify({
+            sendReceiverBridgeMessage({
                 type: "PLAYBACK_COMMAND_ACK",
                 action: ackAction,
                 playbackEpoch,
                 playbackRevision,
                 desiredPlaybackState,
+                receivedAtMonotonicMs: Number.isFinite(receivedAtMonotonicMs)
+                  ? receivedAtMonotonicMs
+                  : null,
+                appliedAtMonotonicMs,
+                receiverMonotonicQueueMs: Number.isFinite(receivedAtMonotonicMs)
+                  ? Math.max(0, appliedAtMonotonicMs - receivedAtMonotonicMs)
+                  : null,
+                receiverAudioClock,
                 receivedAtEpochMs: Number.isFinite(receivedAtEpochMs)
                   ? receivedAtEpochMs
                   : null,
@@ -3114,8 +3167,7 @@
                   Number.isFinite(receivedAtEpochMs) && Number.isFinite(issuedAtEpochMs)
                     ? receivedAtEpochMs - issuedAtEpochMs
                     : null,
-              }),
-            );
+              });
           } catch (e) {}
         }
 
@@ -3310,8 +3362,7 @@
             lastReportAt = progressNow;
 
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-              binaryWS.send(
-                JSON.stringify({
+              sendReceiverBridgeMessage({
                   type: "NATIVE_LATENCY_REPORT",
                   latency: medianLatency,
                   syncComponents: {
@@ -3349,8 +3400,7 @@
                     playbackRevision: lastPlaybackRevision,
                     startupAttemptId: nativeStartupAttemptId,
                   },
-                }),
-              );
+                });
             }
           }, NATIVE_LATENCY_SAMPLE_INTERVAL_MS);
         }
@@ -4384,13 +4434,13 @@
           const started = escalatePcmRuntimeToNative(reason);
           if (!started && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
-              binaryWS.send(JSON.stringify({
+              sendReceiverBridgeMessage({
                 type: "PCM_RUNTIME_UNSUSTAINABLE",
                 reason,
                 rawQueueWallMs: Number.isFinite(rawQueueWallMs) ? rawQueueWallMs : null,
                 highWatermarkMs: 900,
                 diagnostics: pcmRuntimeHighWatermarkDiagnostics,
-              }));
+              });
             } catch (e) {}
             relayLogToStudio(
               "❌ Receiver: Native runtime fallback could not start; PCM session is unsustainable.",
@@ -5870,12 +5920,12 @@
             const started = degradePcmStartupToNative("pcm_startup_pending_overrun");
             if (!started && binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               try {
-                binaryWS.send(JSON.stringify({
+                sendReceiverBridgeMessage({
                   type: "PCM_RUNTIME_UNSUSTAINABLE",
                   reason: "pcm_startup_pending_overrun",
                   droppedFrames,
                   pendingPackets: queued.length,
-                }));
+                });
               } catch (e) {}
             }
             return;
@@ -7224,8 +7274,7 @@
           // [v13.9.504] PREFER BINARY WS: Fastest and most reliable path
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
-              binaryWS.send(JSON.stringify({ type: "LOG", msg: msg }));
-              sent = true;
+              sent = sendReceiverBridgeMessage({ type: "LOG", msg: msg });
             } catch (e) {}
           }
 
@@ -8146,6 +8195,13 @@
               normalizeMirroredDialogClassName(dialog.shellClassName),
               `gui-dialog-${dialog.kind || "generic"}`,
             ].filter(Boolean).join(" ");
+            panel.dataset.effectName = String(dialog.identity?.effectName || "").slice(0, 128);
+            panel.dataset.programId = String(dialog.identity?.programId || "").slice(0, 32);
+            panel.dataset.programName = String(dialog.identity?.programName || "").slice(0, 128);
+            panel.dataset.expectedControlCount = String(
+              (dialog.controls || []).length +
+              (dialog.effectSlotTabs?.items || []).filter((item) => item?.control).length,
+            );
             if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog && dialog.kind !== "mediaSessions") {
               panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
@@ -8426,6 +8482,7 @@
           const root = getEl("gui-dialog-mirror-root");
           if (!root) return;
           const renderStartedAt = Date.now();
+          let firstPaintTimeMs = null;
           const list = Array.isArray(dialogs) ? dialogs : [];
           root.hidden = list.length === 0;
           root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
@@ -8433,6 +8490,7 @@
             lastDialogRenderStats = {
               mode,
               renderTimeMs: Math.max(0, Date.now() - renderStartedAt),
+              firstPaintTimeMs,
               dialogCount: list.length,
               domNodeCount: root.querySelectorAll?.("*")?.length || 0,
             };
@@ -8464,6 +8522,14 @@
           const applyDataset = syncMirroredElementDataset;
           const appendMirroredPanel = (panel, useModalTopLayer = false) => {
             root.appendChild(panel);
+            const recordFirstPaintCommit = () => {
+              // This is the first open DOM commit. The ACK separately reports
+              // computed visibility and viewport intersection; it is not a
+              // compositor or TV panel scan-out measurement.
+              const elapsedMs = Math.max(0, Date.now() - renderStartedAt);
+              panel.dataset.dialogFirstPaintMs = String(elapsedMs);
+              if (firstPaintTimeMs === null) firstPaintTimeMs = elapsedMs;
+            };
             if (
               useModalTopLayer &&
               panel.tagName === "DIALOG" &&
@@ -8471,10 +8537,12 @@
             ) {
               try {
                 panel.showModal();
+                recordFirstPaintCommit();
                 return;
               } catch (_error) {}
             }
             panel.setAttribute("open", "");
+            recordFirstPaintCommit();
           };
           const applyControlState = (value, control, dialog, controlIndex) => {
             const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
@@ -8585,6 +8653,13 @@
             if (dialog.ariaLabelledby) panel.setAttribute("aria-labelledby", dialog.ariaLabelledby);
             panel.dataset.dialogId = dialog.id || "";
             panel.dataset.dialogKind = dialog.kind || "generic";
+            panel.dataset.effectName = String(dialog.identity?.effectName || "").slice(0, 128);
+            panel.dataset.programId = String(dialog.identity?.programId || "").slice(0, 32);
+            panel.dataset.programName = String(dialog.identity?.programName || "").slice(0, 128);
+            panel.dataset.expectedControlCount = String(
+              (dialog.controls || []).length +
+              (dialog.effectSlotTabs?.items || []).filter((item) => item?.control).length,
+            );
             if (dialog.padId) panel.dataset.padId = String(dialog.padId);
             applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
             applyMirroredDialogLayoutSize(panel, dialog);
@@ -9367,6 +9442,12 @@
             return {
               id: String(panel.dataset.dialogId || "").slice(0, 128),
               kind: String(panel.dataset.dialogKind || "generic").slice(0, 48),
+              effectName: String(panel.dataset.effectName || "").slice(0, 128) || null,
+              programId: String(panel.dataset.programId || "").slice(0, 32) || null,
+              programName: String(panel.dataset.programName || "").slice(0, 128) || null,
+              firstPaintTimeMs: Number.isFinite(Number(panel.dataset.dialogFirstPaintMs))
+                ? Number(panel.dataset.dialogFirstPaintMs)
+                : null,
               tag: panel.tagName,
               open,
               inModalTopLayer,
@@ -9383,11 +9464,18 @@
                 scrollTopPx: mediaScroll.scrollTop,
               } : {}),
               contentNodeCount: panel.querySelector(".dialog-content")?.children.length ?? 0,
+              expectedControlCount: Number(panel.dataset.expectedControlCount || 0),
+              renderedControlCount: panel.querySelectorAll("input, select, textarea").length,
+              controlCountMismatch: Math.max(0, Number(panel.dataset.expectedControlCount || 0)) !==
+                panel.querySelectorAll("input, select, textarea").length,
+              manifestNodeCount: Number(panel.dataset.dialogDomNodes || 0),
               actionCount: panel.querySelectorAll("button, label[data-action]").length,
               visible,
             };
           });
           return {
+            dialogViewportWidthPx: viewportWidth,
+            dialogViewportHeightPx: viewportHeight,
             dialogPanelCount: root?.children.length ?? 0,
             dialogRootHidden: root?.hidden ?? true,
             dialogVisiblePanelCount: panels.filter((panel) => panel.visible).length,
@@ -10033,6 +10121,168 @@
             : Date.now();
         }
 
+        function estimateGuiClockMapping(samples) {
+          const valid = (Array.isArray(samples) ? samples : [])
+            .filter((sample) => Number.isFinite(Number(sample?.receiverMidMs)) &&
+              Number.isFinite(Number(sample?.senderMidMs)) &&
+              Number.isFinite(Number(sample?.rttMs)) && Number(sample.rttMs) >= 0)
+            .sort((a, b) => Number(a.rttMs) - Number(b.rttMs));
+          if (!valid.length) return null;
+          const bestRttMs = Number(valid[0].rttMs);
+          const fitSamples = valid
+            .filter((sample) => Number(sample.rttMs) <= bestRttMs + Math.max(10, bestRttMs * 0.5))
+            .slice(0, 6);
+          const receiverReferenceMs = fitSamples.reduce(
+            (sum, sample) => sum + Number(sample.receiverMidMs), 0,
+          ) / fitSamples.length;
+          const senderReferenceMs = fitSamples.reduce(
+            (sum, sample) => sum + Number(sample.senderMidMs), 0,
+          ) / fitSamples.length;
+          let slope = 1;
+          if (fitSamples.length >= 3) {
+            let numerator = 0;
+            let denominator = 0;
+            fitSamples.forEach((sample) => {
+              const receiverDelta = Number(sample.receiverMidMs) - receiverReferenceMs;
+              const senderDelta = Number(sample.senderMidMs) - senderReferenceMs;
+              numerator += receiverDelta * senderDelta;
+              denominator += receiverDelta * receiverDelta;
+            });
+            if (denominator > 0) slope = numerator / denominator;
+          }
+          if (!Number.isFinite(slope) || Math.abs(slope - 1) > 0.001) slope = 1;
+          return {
+            slope,
+            receiverReferenceMs,
+            senderReferenceMs,
+            driftPpm: (slope - 1) * 1_000_000,
+            bestRttMs,
+            uncertaintyMs: bestRttMs / 2,
+            sampleCount: fitSamples.length,
+          };
+        }
+
+        function mapReceiverToSenderMonotonic(receiverMonotonicMs, mapping = guiClockSyncEstimate) {
+          const receiverMs = Number(receiverMonotonicMs);
+          if (!mapping || !Number.isFinite(receiverMs)) return null;
+          return Number(mapping.senderReferenceMs) +
+            Number(mapping.slope || 1) * (receiverMs - Number(mapping.receiverReferenceMs));
+        }
+
+        function resetGuiClockSync(reason) {
+          pendingGuiClockSyncProbes.clear();
+          guiClockSyncSamples = [];
+          guiClockSyncEstimate = null;
+          lastLfoVisualTelemetryAtMs = 0;
+          if (reason) {
+            emitGuiChannelTelemetry("clock_sync_reset", { reason });
+          }
+        }
+
+        function sendGuiClockSyncProbe() {
+          if (
+            !guiControlWS || guiControlWS.readyState !== WebSocket.OPEN ||
+            !window._handshakeAcked || !receiverBridgeConfigReady ||
+            typeof guiSessionNonce !== "string" || guiSessionNonce.length < 8
+          ) return false;
+          const receiverMonotonicSentAtMs = getLfoVisualNow();
+          const probeId = `${playbackModeSocketGeneration}:${++guiClockSyncSequence}`;
+          pendingGuiClockSyncProbes.set(probeId, {
+            receiverMonotonicSentAtMs,
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: lastPlaybackRevision,
+          });
+          while (pendingGuiClockSyncProbes.size > 8) {
+            pendingGuiClockSyncProbes.delete(pendingGuiClockSyncProbes.keys().next().value);
+          }
+          const accepted = sendReceiverBridgeMessage({
+            type: "GUI_CLOCK_SYNC_PING",
+            transport: "gui",
+            guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+            guiSessionNonce,
+            probeId,
+            receiverMonotonicSentAtMs,
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: lastPlaybackRevision,
+          }, "gui");
+          if (!accepted) pendingGuiClockSyncProbes.delete(probeId);
+          return accepted;
+        }
+
+        function startGuiClockSync() {
+          if (guiClockSyncInterval) clearInterval(guiClockSyncInterval);
+          guiClockSyncInterval = null;
+          sendGuiClockSyncProbe();
+          guiClockSyncInterval = setInterval(sendGuiClockSyncProbe, GUI_CLOCK_SYNC_INTERVAL_MS);
+        }
+
+        function stopGuiClockSync() {
+          if (guiClockSyncInterval) clearInterval(guiClockSyncInterval);
+          guiClockSyncInterval = null;
+          pendingGuiClockSyncProbes.clear();
+        }
+
+        function acceptGuiClockSyncPong(message) {
+          const probeId = String(message?.probeId || "");
+          const pending = pendingGuiClockSyncProbes.get(probeId);
+          if (!pending) return false;
+          pendingGuiClockSyncProbes.delete(probeId);
+          const receiverMonotonicSentAtMs = Number(pending.receiverMonotonicSentAtMs);
+          const senderMonotonicReceivedAtMs = Number(message.senderMonotonicReceivedAtMs);
+          const senderMonotonicSentAtMs = Number(message.senderMonotonicSentAtMs);
+          const receiverMonotonicReceivedAtMs = getLfoVisualNow();
+          if (
+            !Number.isFinite(receiverMonotonicSentAtMs) ||
+            !Number.isFinite(senderMonotonicReceivedAtMs) ||
+            !Number.isFinite(senderMonotonicSentAtMs) ||
+            Math.abs(Number(message.receiverMonotonicSentAtMs) - receiverMonotonicSentAtMs) > 0.01 ||
+            Number(message.playbackEpoch) !== Number(pending.playbackEpoch) ||
+            Number(message.playbackRevision) !== Number(pending.playbackRevision) ||
+            pending.playbackEpoch !== lastPlaybackEpoch ||
+            pending.playbackRevision !== lastPlaybackRevision
+          ) return false;
+          const rttMs = (receiverMonotonicReceivedAtMs - receiverMonotonicSentAtMs) -
+            (senderMonotonicSentAtMs - senderMonotonicReceivedAtMs);
+          if (!Number.isFinite(rttMs) || rttMs < 0 || rttMs > GUI_CLOCK_SYNC_MAX_RTT_MS) {
+            emitGuiChannelTelemetry("clock_sync_rejected", {
+              reason: "round_trip_out_of_bounds",
+              rttMs: Number.isFinite(rttMs) ? rttMs : null,
+              probeId,
+            });
+            return false;
+          }
+          guiClockSyncSamples.push({
+            receiverMidMs: (receiverMonotonicSentAtMs + receiverMonotonicReceivedAtMs) / 2,
+            senderMidMs: (senderMonotonicReceivedAtMs + senderMonotonicSentAtMs) / 2,
+            rttMs,
+          });
+          guiClockSyncSamples = guiClockSyncSamples.slice(-8);
+          guiClockSyncEstimate = estimateGuiClockMapping(guiClockSyncSamples);
+          emitGuiChannelTelemetry("clock_sync_sample", {
+            probeId,
+            roundTripMs: Number(rttMs.toFixed(3)),
+            offsetMs: Number((guiClockSyncEstimate.senderReferenceMs -
+              guiClockSyncEstimate.receiverReferenceMs).toFixed(3)),
+            driftPpm: Number(guiClockSyncEstimate.driftPpm.toFixed(2)),
+            uncertaintyMs: Number(guiClockSyncEstimate.uncertaintyMs.toFixed(3)),
+            sampleCount: guiClockSyncEstimate.sampleCount,
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: lastPlaybackRevision,
+          });
+          return true;
+        }
+
+        function mirroredCaptureAgeMs(transport, receiverMonotonicNowMs = getLfoVisualNow()) {
+          if (transport?.captureTimestampClock !== "sender_performance_ms") return null;
+          const capturedAtMonotonicMs = Number(transport?.capturedAtMonotonicMs);
+          if (!Number.isFinite(capturedAtMonotonicMs) || !guiClockSyncEstimate) return null;
+          const estimatedSenderNowMs = mapReceiverToSenderMonotonic(receiverMonotonicNowMs);
+          if (!Number.isFinite(estimatedSenderNowMs)) return null;
+          const ageMs = estimatedSenderNowMs - capturedAtMonotonicMs;
+          if (!Number.isFinite(ageMs) || ageMs < -50 || ageMs > 10_000) return null;
+          return Math.max(0, ageMs);
+        }
+
         function advanceSmoothLfoClock(clock, nowMs) {
           if (!clock || !clock.active || clock.phase === null) {
             if (clock) clock.lastFrameMs = nowMs;
@@ -10058,7 +10308,7 @@
           }
         }
 
-        function syncSmoothLfoClock(index, state, nowMs) {
+        function syncSmoothLfoClock(index, state, nowMs, captureAgeMs = null) {
           const clock = smoothLfoClocks[index];
           if (!clock) return;
           advanceSmoothLfoClock(clock, nowMs);
@@ -10068,7 +10318,13 @@
           if (Number.isFinite(nextPeriod) && nextPeriod > 0) {
             clock.period = Math.max(0.1, Math.min(60, nextPeriod));
           }
-          const sampledPhase = normalizeLfoPhase(state?.phase);
+          let sampledPhase = normalizeLfoPhase(state?.phase);
+          if (sampledPhase !== null && captureAgeMs !== null && Number.isFinite(captureAgeMs)) {
+            sampledPhase = normalizeLfoPhase(
+              sampledPhase + (LFO_VISUAL_TWO_PI * Math.max(0, captureAgeMs)) /
+                (clock.period * 1000),
+            );
+          }
           clock.active = nextActive;
           if (!nextActive) {
             clock.correction = 0;
@@ -10205,14 +10461,53 @@
                 );
               });
             });
+            if (nowMs - lastLfoVisualTelemetryAtMs >= GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS) {
+              const samples = summarizeLfoVisualSamples(lastMirroredState);
+              if (samples.some((sample) => sample.masterActive)) {
+                const transport = lastMirroredState?.transport || {};
+                const captureAgeMs = mirroredCaptureAgeMs(transport, nowMs);
+                lastLfoVisualTelemetryAtMs = nowMs;
+                lfoVisualFrameSequence += 1;
+                sendGuiChannelTelemetry("lfo_visual_frame", {
+                  lfoVisualFrameSequence,
+                  receiverRenderMonotonicMs: Number(nowMs.toFixed(3)),
+                  timelineCaptureSequence: Number.isSafeInteger(Number(transport.captureSequence))
+                    ? Number(transport.captureSequence)
+                    : null,
+                  playbackEpoch: Number.isSafeInteger(Number(transport.playbackEpoch))
+                    ? Number(transport.playbackEpoch)
+                    : null,
+                  playbackRevision: Number.isSafeInteger(Number(transport.playbackRevision))
+                    ? Number(transport.playbackRevision)
+                    : null,
+                  senderCaptureMonotonicMs: Number.isFinite(Number(transport.capturedAtMonotonicMs))
+                    ? Number(transport.capturedAtMonotonicMs)
+                    : null,
+                  captureAgeMs: captureAgeMs === null ? null : Number(captureAgeMs.toFixed(3)),
+                  clockSync: guiClockSyncEstimate
+                    ? {
+                        sampleCount: guiClockSyncEstimate.sampleCount,
+                        bestRttMs: Number(guiClockSyncEstimate.bestRttMs.toFixed(3)),
+                        uncertaintyMs: Number(guiClockSyncEstimate.uncertaintyMs.toFixed(3)),
+                        driftPpm: Number(guiClockSyncEstimate.driftPpm.toFixed(2)),
+                      }
+                    : null,
+                  lfoVisualSamples: samples.map((sample) => ({
+                    ...sample,
+                    receiverRenderMonotonicMs: Number(nowMs.toFixed(3)),
+                  })),
+                });
+              }
+            }
           }
           scheduleSmoothLfoRender();
         }
 
-        function syncSmoothLfoVisuals(master) {
+        function syncSmoothLfoVisuals(master, transport = null) {
           const nowMs = getLfoVisualNow();
-          syncSmoothLfoClock(1, master?.lfo1, nowMs);
-          syncSmoothLfoClock(2, master?.lfo2, nowMs);
+          const captureAgeMs = mirroredCaptureAgeMs(transport, nowMs);
+          syncSmoothLfoClock(1, master?.lfo1, nowMs, captureAgeMs);
+          syncSmoothLfoClock(2, master?.lfo2, nowMs, captureAgeMs);
           if (canRenderSmoothLfo(1) || canRenderSmoothLfo(2)) {
             scheduleSmoothLfoRender();
           }
@@ -10582,7 +10877,7 @@
               updateText("recording-time-display", s.transport.position);
             }
             if (s.master) {
-              syncSmoothLfoVisuals(s.master);
+              syncSmoothLfoVisuals(s.master, s.transport);
               applyMirroredParameterDisplay(
                 "master-volume",
                 "master-volume-value",
@@ -10985,6 +11280,13 @@
         let currentBridgeLogToken = null;
         let currentBridgeNetworkEpoch = 0;
         let binaryWS = null;
+        var guiControlWS = null;
+        let guiControlTargetKey = "";
+        let guiControlConnectionGeneration = 0;
+        let guiControlReconnectTimer = null;
+        let pendingGuiControlMessages = new Map();
+        let pendingGuiControlActions = [];
+        const MAX_PENDING_GUI_ACTIONS = 64;
         let wsConnectTimeout = null;
         let handshakeRetryInterval = null;
         let playoutPathLogged = false;
@@ -10994,6 +11296,124 @@
         const CAST_SESSION_HEARTBEAT_PROTOCOL_VERSION = 1;
         let lastCastSessionHeartbeatAt = 0;
         let lastCastSessionHeartbeatSequence = 0;
+
+        const GUI_CONTROL_OUTBOUND_TYPES = new Set([
+          "PLAYBACK_MODE",
+          "PLAYOUT_STATE",
+          "RECEIVER_READY",
+          "PLAYBACK_COMMAND_ACK",
+          "NATIVE_LATENCY_REPORT",
+          "PCM_RUNTIME_UNSUSTAINABLE",
+          "DIAG",
+          "AUDIO_PATH_CAPABILITY",
+          "CAST_SESSION_HEARTBEAT",
+          "CAST_SESSION_HEARTBEAT_ACK",
+          "PCM_V2_JITTER_TARGET",
+          "RELOAD",
+          "RECEIVER_SHUTDOWN",
+          "GUI_SNAPSHOT",
+          "GUI_PATCH",
+          "GUI_STATE_UPDATE",
+          "CURSOR_UPDATE",
+          "GUI_READY",
+          "GUI_ACK",
+          "GUI_STATE_ACK",
+          "GUI_CHANNEL_TELEMETRY",
+          "GUI_ERROR",
+          "CAF_TELEMETRY",
+          "GUI_ACTION",
+          "GUI_INTERACTION_EVENT",
+          "GUI_ACTION_RESULT",
+          "GUI_ACTION_RESULT_DELIVERY",
+          "GUI_CURSOR_ACK",
+          "GUI_CLOCK_SYNC_PING",
+          "LOG",
+          "RECEIVER_BOOT_DIAGNOSTIC",
+          "FORCE_CLOSE",
+        ]);
+
+        function sendReceiverBridgeMessage(payload, requestedChannel = "auto") {
+          let message = payload;
+          if (typeof payload === "string") {
+            try {
+              message = JSON.parse(payload);
+            } catch (_error) {
+              message = null;
+            }
+          }
+          const messageType = message && typeof message.type === "string" ? message.type : "";
+          const useGuiControl = requestedChannel === "gui" ||
+            (requestedChannel === "auto" && GUI_CONTROL_OUTBOUND_TYPES.has(messageType));
+          const socket = useGuiControl ? guiControlWS : binaryWS;
+          const serialized = typeof payload === "string" ? payload : JSON.stringify(payload);
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            try {
+              socket.send(serialized);
+              return true;
+            } catch (_error) {}
+          }
+          if (useGuiControl && messageType) {
+            if (messageType === "GUI_ACTION") {
+              if (pendingGuiControlActions.length >= MAX_PENDING_GUI_ACTIONS) {
+                guiRejectedCount += 1;
+                guiLastRejectReason = "gui_control_action_queue_full";
+                return false;
+              }
+              pendingGuiControlActions.push(serialized);
+              return true;
+            }
+            // Control/state is latest-value data. Keep one bounded pending
+            // value per type so a reconnect cannot replay an obsolete burst.
+            pendingGuiControlMessages.set(messageType, serialized);
+            while (pendingGuiControlMessages.size > 32) {
+              pendingGuiControlMessages.delete(pendingGuiControlMessages.keys().next().value);
+            }
+            return true;
+          }
+          return false;
+        }
+
+        function flushReceiverGuiControlMessages() {
+          if (!guiControlWS || guiControlWS.readyState !== WebSocket.OPEN) return;
+          for (const [messageType, serialized] of pendingGuiControlMessages) {
+            try {
+              guiControlWS.send(serialized);
+              pendingGuiControlMessages.delete(messageType);
+            } catch (_error) {
+              break;
+            }
+          }
+        }
+
+        function flushPendingReceiverGuiActions() {
+          if (
+            !pendingGuiControlActions.length ||
+            !guiControlWS || guiControlWS.readyState !== WebSocket.OPEN ||
+            !Number.isSafeInteger(guiLastReceivedRevision) || guiLastReceivedRevision < 0
+          ) return 0;
+          const pending = pendingGuiControlActions.splice(0, MAX_PENDING_GUI_ACTIONS);
+          let flushed = 0;
+          for (let index = 0; index < pending.length; index += 1) {
+            const serialized = pending[index];
+            try {
+              const action = JSON.parse(serialized);
+              action.guiSessionNonce = guiSessionNonce;
+              action.senderGuiRevision = guiLastReceivedRevision;
+              guiControlWS.send(JSON.stringify(action));
+              flushed += 1;
+            } catch (_error) {
+              pendingGuiControlActions.unshift(...pending.slice(index));
+              break;
+            }
+          }
+          if (flushed > 0) {
+            emitGuiChannelTelemetry("queued_actions_replayed", {
+              count: flushed,
+              senderGuiRevision: guiLastReceivedRevision,
+            });
+          }
+          return flushed;
+        }
 
         function isValidBridgeCredential(value) {
           return typeof value === "string" &&
@@ -11049,8 +11469,7 @@
           let sent = false;
           if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
             try {
-              binaryWS.send(JSON.stringify(payload));
-              sent = true;
+              sent = sendReceiverBridgeMessage(payload, "gui");
             } catch (_error) {}
           }
           if (!sent && typeof cast !== "undefined" && cast.framework) {
@@ -11096,13 +11515,8 @@
         }
 
         function sendCastSessionHeartbeatAck(payload, source) {
-          if (source === "binary bridge") {
-            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-              try {
-                binaryWS.send(JSON.stringify(payload));
-                return true;
-              } catch (_error) {}
-            }
+          if (source === "binary bridge" || source === "GUI control WebSocket") {
+            return sendReceiverBridgeMessage(payload, "gui");
           } else if (source === "Cast channel" && typeof cast !== "undefined" && cast.framework) {
             try {
               const context = getCastReceiverContext();
@@ -11658,7 +12072,7 @@
             // accepted. ACK the committed revision without rendering twice.
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
               try {
-                binaryWS.send(JSON.stringify({
+                sendReceiverBridgeMessage({
                   type: "GUI_ACK",
                   transport: "gui",
                   guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
@@ -11681,7 +12095,7 @@
                       : Date.now()) - messageStartedAt,
                   ),
                   payloadBytes: 0,
-                }));
+                }, "gui");
                 guiAckCount += 1;
                 guiLastAckRevision = revision;
                 emitGuiChannelTelemetry("acknowledged", {
@@ -11706,6 +12120,7 @@
                 } catch (_telemetryError) {}
               }
             }
+            flushPendingReceiverGuiActions();
             return;
           }
           if (!acceptGuiRevision(envelope)) {
@@ -11764,6 +12179,7 @@
           commitGuiRevision(envelope);
           guiReceivedCount += 1;
           guiLastReceivedRevision = revision;
+          flushPendingReceiverGuiActions();
           // GUI state is latest-value control data. PCM owns the audio clock,
           // but it must not prevent the receiver from applying authenticated
           // controls, labels, dialogs, and interaction state.
@@ -11811,6 +12227,7 @@
                     ...(waveformProofDue ? { waveformSurfaces: lastWaveformRenderStats.surfaces } : {}),
                     dialogRenderMode: lastDialogRenderStats.mode,
                     dialogRenderTimeMs: lastDialogRenderStats.renderTimeMs,
+                    dialogFirstPaintTimeMs: lastDialogRenderStats.firstPaintTimeMs ?? null,
                     dialogCount: lastDialogRenderStats.dialogCount,
                     dialogDomNodes: lastDialogRenderStats.domNodeCount,
                     ...summarizeMirroredDialogVisualState(),
@@ -11839,7 +12256,7 @@
                   ? performance.now()
                   : Date.now()) - messageStartedAt,
               );
-              binaryWS.send(JSON.stringify({
+              sendReceiverBridgeMessage({
                 type: "GUI_ACK",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
@@ -11859,7 +12276,7 @@
                 receiverProcessingMs,
                 payloadBytes,
                 ...visualTelemetry,
-              }));
+              }, "gui");
               guiAckCount += 1;
               guiLastAckRevision = revision;
               emitGuiChannelTelemetry("acknowledged", {
@@ -12020,6 +12437,13 @@
           ) {
             d._receiverReceivedAtEpochMs = Date.now();
           }
+          if (
+            d &&
+            (d.type === "PLAYBACK_START" || d.type === "PLAYBACK_PAUSE" || d.type === "PLAYBACK_STOP") &&
+            !Number.isFinite(Number(d._receiverReceivedAtMonotonicMs))
+          ) {
+            d._receiverReceivedAtMonotonicMs = getLfoVisualNow();
+          }
           if (d && d.type === "GUI_ACTION_RESULT") {
             if (
               d.transport !== "gui" ||
@@ -12055,6 +12479,19 @@
             return true;
           }
           const rawGuiType = d && d.type;
+          if (rawGuiType === "GUI_CLOCK_SYNC_PONG") {
+            if (
+              source !== "GUI control WebSocket" ||
+              d.transport !== "gui" ||
+              Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION ||
+              d.guiSessionNonce !== guiSessionNonce
+            ) {
+              emitGuiChannelTelemetry("clock_sync_rejected", { reason: "invalid_pong_envelope" });
+              return true;
+            }
+            acceptGuiClockSyncPong(d);
+            return true;
+          }
           if (rawGuiType === "GUI_SNAPSHOT") {
             d = { ...d, type: "GUI_STATE_UPDATE" };
           } else if (rawGuiType === "GUI_PATCH") {
@@ -12234,6 +12671,114 @@
         }
 
 
+        function closeGuiControlBridge(reason) {
+          if (guiControlReconnectTimer) {
+            clearTimeout(guiControlReconnectTimer);
+            guiControlReconnectTimer = null;
+          }
+          stopGuiClockSync();
+          guiControlConnectionGeneration += 1;
+          const socket = guiControlWS;
+          guiControlWS = null;
+          guiControlTargetKey = "";
+          if (socket) {
+            socket.onopen = null;
+            socket.onmessage = null;
+            socket.onclose = null;
+            socket.onerror = null;
+            try { socket.close(); } catch (_error) {}
+          }
+          if (reason) {
+            sendReceiverBootDiagnostic("gui_control_channel_closed", { reason });
+          }
+        }
+
+        function scheduleGuiControlReconnect() {
+          if (
+            window._receiverShutdownInProgress ||
+            !binaryWS || binaryWS.readyState !== WebSocket.OPEN ||
+            !currentBridgeIp || !currentBridgePort || !currentBridgeToken ||
+            guiControlReconnectTimer
+          ) return;
+          guiControlReconnectTimer = setTimeout(() => {
+            guiControlReconnectTimer = null;
+            connectGuiControlBridge(currentBridgeIp, currentBridgePort, currentBridgeToken);
+          }, 500);
+        }
+
+        function connectGuiControlBridge(ip, port, token) {
+          if (window._receiverShutdownInProgress || !isValidBridgeCredential(token)) return false;
+          const targetKey = `${ip}:${port}:${token}`;
+          if (
+            guiControlWS &&
+            guiControlTargetKey === targetKey &&
+            (guiControlWS.readyState === WebSocket.OPEN || guiControlWS.readyState === WebSocket.CONNECTING)
+          ) return true;
+          if (guiControlWS) closeGuiControlBridge("gui_control_target_changed");
+          const generation = ++guiControlConnectionGeneration;
+          const url = `ws://${ip}:${port}/?role=receiver&token=${encodeURIComponent(token)}&channel=gui`;
+          let socket;
+          try {
+            socket = new WebSocket(url);
+            guiControlWS = socket;
+            guiControlTargetKey = targetKey;
+          } catch (error) {
+            relayLogToStudio("❌ Receiver: GUI/control WebSocket constructor failed: " + String(error?.message || error));
+            scheduleGuiControlReconnect();
+            return false;
+          }
+          socket.onopen = () => {
+            if (generation !== guiControlConnectionGeneration || window._receiverShutdownInProgress) {
+              try { socket.close(); } catch (_error) {}
+              return;
+            }
+            flushReceiverGuiControlMessages();
+            sendReceiverBootDiagnostic("gui_control_channel_open", {
+              generation,
+              mediaGeneration: binaryConnectionGeneration,
+              socketGeneration: playbackModeSocketGeneration,
+            });
+            sendAuthenticatedGuiReady(window._receiverBootStage || "gui_control_connected");
+            if (window._handshakeAcked && receiverBridgeConfigReady) {
+              sendReceiverBridgeMessage({
+                type: "RECEIVER_READY",
+                reason: "gui_control_channel_connected",
+                socketGeneration: playbackModeSocketGeneration,
+                lifecycleGeneration: workletLifecycleGeneration,
+              });
+              startGuiClockSync();
+            }
+          };
+          socket.onmessage = (event) => {
+            if (generation !== guiControlConnectionGeneration || window._receiverShutdownInProgress) return;
+            let data = null;
+            try {
+              data = JSON.parse(event.data);
+              handleReceiverCommand(data, "GUI control WebSocket");
+            } catch (error) {
+              if (!(error instanceof SyntaxError)) {
+                if (data && ["GUI_SNAPSHOT", "GUI_STATE_UPDATE", "GUI_PATCH"].includes(data.type)) {
+                  reportGuiStateProcessingFailure(data, error, "GUI control WebSocket");
+                }
+                console.warn("Receiver GUI/control message handler error:", error);
+              }
+            }
+          };
+          socket.onerror = () => {
+            if (generation !== guiControlConnectionGeneration) return;
+            relayLogToStudio("⚠️ Receiver: GUI/control channel reported a transport error; media playout remains independent.");
+          };
+          socket.onclose = () => {
+            if (generation !== guiControlConnectionGeneration) return;
+            guiControlWS = null;
+            stopGuiClockSync();
+            lastGuiReadyNonce = null;
+            relayLogToStudio("🔁 Receiver: GUI/control channel closed; keeping the selected media path active while reconnecting.");
+            scheduleGuiControlReconnect();
+          };
+          return true;
+        }
+
         function connectBinaryBridge(ip, customPort, customToken) {
           if (window._receiverShutdownInProgress) {
             return;
@@ -12281,7 +12826,7 @@
             window._sendHandshake = null;
           }
 
-          const url = `ws://${ip}:${targetPort}/?role=receiver&token=${encodeURIComponent(targetToken)}`;
+          const url = `ws://${ip}:${targetPort}/?role=receiver&token=${encodeURIComponent(targetToken)}&channel=media`;
           try {
             relayLogToStudio(`📡 Receiver: Attempting to connect to ${redactBridgeUrl(url)}`);
             binaryWS = new WebSocket(url);
@@ -12298,6 +12843,9 @@
             if (generation !== binaryConnectionGeneration) return;
             if (window._receiverShutdownInProgress) return;
             clearReceiverSessionCaches("new_cast_handshake");
+            pendingGuiControlMessages.clear();
+            pendingGuiControlActions = [];
+            lastGuiReadyNonce = null;
             pcmV2Validator = null;
             pcmV2AllowInitialOffset = true;
             pcmV2Telemetry = createPcmV2Telemetry();
@@ -12319,6 +12867,7 @@
               readyState: binaryWS.readyState,
               url: redactBridgeUrl(url),
             });
+            connectGuiControlBridge(ip, targetPort, targetToken);
             relayLogToStudio(`✅ Receiver: WebSocket Connected to ${redactBridgeUrl(url)}`);
             if (window._receiverUiRevealed) {
               sendAuthenticatedGuiReady(window._receiverBootStage || "gui_revealed");
@@ -12585,11 +13134,11 @@
                   if (window._receiverReadyGeneration !== playbackModeSocketGeneration) {
                     window._receiverReadyGeneration = playbackModeSocketGeneration;
                     try {
-                      binaryWS.send(JSON.stringify({
+                      sendReceiverBridgeMessage({
                         type: "RECEIVER_READY",
                         socketGeneration: playbackModeSocketGeneration,
                         lifecycleGeneration: workletLifecycleGeneration,
-                      }));
+                      });
                     } catch (e) {}
                   }
 
@@ -12632,6 +13181,11 @@
                     announceGuiReady: true,
                     markPathReady: false,
                   });
+                  connectGuiControlBridge(
+                    d.ip || currentBridgeIp,
+                    Number(d.port) || currentBridgePort,
+                    d.token || currentBridgeToken,
+                  );
                   // Proactive fallback: If we haven't received HANDSHAKE_ACK yet, resend HANDSHAKE.
                   if (!window._handshakeAcked && typeof window._sendHandshake === "function") {
                     window._sendHandshake();
@@ -12672,6 +13226,7 @@
 
           binaryWS.onclose = (event) => {
             if (generation !== binaryConnectionGeneration) return;
+            closeGuiControlBridge("media_websocket_closed");
             const closeDetails = {
               generation,
               code: Number.isFinite(Number(event?.code)) ? Number(event.code) : null,
