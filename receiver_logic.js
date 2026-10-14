@@ -311,10 +311,13 @@
         var guiLastPayloadBytes = 0;
         const GUI_CHANNEL_TELEMETRY_INTERVAL_MS = 5000;
         const GUI_WAVEFORM_PROOF_INTERVAL_MS = 30000;
+        const GUI_LFO_VISUAL_PROOF_INTERVAL_MS = 1000;
         var guiChannelTelemetryTimer = null;
         var guiChannelTelemetryEventCounts = {};
         var guiChannelTelemetryLastDetails = {};
         var guiLastWaveformProofAt = 0;
+        var guiLastLfoVisualProofAt = 0;
+        var guiLastLfoVisualProofSignature = "";
         const PCM_RUNTIME_HIGH_WATERMARK_DIAGS = 3;
         var pcmRuntimeHighWatermarkDiagnostics = 0;
         var pcmRuntimeNativeFallbacks = 0;
@@ -10011,6 +10014,7 @@
         let lastSmoothLfoPaintMs = 0;
 
         function normalizeLfoPhase(value) {
+          if (value == null) return null;
           const phase = Number(value);
           if (!Number.isFinite(phase)) return null;
           return ((phase % LFO_VISUAL_TWO_PI) + LFO_VISUAL_TWO_PI) % LFO_VISUAL_TWO_PI;
@@ -11368,6 +11372,125 @@
           return summary;
         }
 
+        function summarizeLfoVisualSamples(state) {
+          const samples = [];
+          (state?.tracks || []).forEach((track, trackIndex) => {
+            [1, 2].forEach((lfoIndex) => {
+              const config = KNOB_CONFIGS.find((item) => {
+                const indicator = track?.lfoIndicators?.[item.p];
+                const visual = indicator?.[`lfo${lfoIndex}`];
+                return Boolean(
+                  visual && typeof visual === "object"
+                    ? visual.checked
+                    : visual ?? track?.lfoAssigns?.[lfoIndex]?.includes?.(item.p),
+                );
+              });
+              if (!config) return;
+
+              const binding = getTrackLfoVisualBinding(track, config.p);
+              const clock = smoothLfoClocks[lfoIndex];
+              const masterLfo = state?.master?.[`lfo${lfoIndex}`];
+              const assignment = track?.lfoIndicators?.[config.p]?.[`lfo${lfoIndex}`];
+              const slider = getEl(`t-${config.p}-sl-${trackIndex}`);
+              const valueDisplay = getEl(`t-${config.p}-val-${trackIndex}`);
+              const minimum = Number.isFinite(Number(slider?.min))
+                ? Number(slider.min)
+                : config.min;
+              const maximum = Number.isFinite(Number(slider?.max))
+                ? Number(slider.max)
+                : config.max;
+              const indicator = track?.lfoIndicators?.[config.p];
+              const rangeMinimum = markerValueFromPercent(
+                indicator?.minMarker,
+                minimum,
+                maximum,
+                minimum,
+              );
+              const rangeMaximum = markerValueFromPercent(
+                indicator?.maxMarker,
+                minimum,
+                maximum,
+                maximum,
+              );
+              const phaseRad = clock?.phase == null ? Number.NaN : Number(clock.phase);
+              const phaseAvailable = Number.isFinite(phaseRad);
+              const rawValue = phaseAvailable ? Math.sin(phaseRad) : null;
+              const reversed = Boolean(
+                assignment && typeof assignment === "object"
+                  ? assignment.reversed
+                  : binding?.reversed,
+              );
+              const renderBindingMatches = binding?.index === lfoIndex;
+              const signedValue = rawValue === null
+                ? null
+                : reversed ? -rawValue : rawValue;
+              const active = Boolean(
+                masterLfo?.active && clock?.active && phaseAvailable && renderBindingMatches,
+              );
+              const scaledValue = active && signedValue !== null
+                ? ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum
+                : null;
+              const renderedValue = Number(slider?.value);
+
+              samples.push({
+                trackIndex,
+                parameter: config.p,
+                lfoIndex,
+                assigned: true,
+                reversed,
+                renderBindingLfoIndex: binding?.index ?? null,
+                renderBindingMatches,
+                active,
+                masterActive: Boolean(masterLfo?.active),
+                clockActive: Boolean(clock?.active),
+                phaseAvailable,
+                phaseRad: phaseAvailable ? Number(phaseRad.toFixed(4)) : null,
+                signedValue: signedValue === null ? null : Number(signedValue.toFixed(4)),
+                rangeMinimum: Number(rangeMinimum.toFixed(4)),
+                rangeMaximum: Number(rangeMaximum.toFixed(4)),
+                expectedValue: scaledValue === null ? null : Number(scaledValue.toFixed(4)),
+                renderedValue: slider && Number.isFinite(renderedValue)
+                  ? Number(renderedValue.toFixed(4))
+                  : null,
+                renderedLabel: valueDisplay?.textContent ?? null,
+                controlPresent: Boolean(slider),
+                interactionPending: slider?.dataset.castInteractionState === "pending",
+              });
+            });
+          });
+          return samples;
+        }
+
+        function captureLfoVisualProof(state, nowMs = Date.now()) {
+          const samples = summarizeLfoVisualSamples(state);
+          if (samples.length === 0) return null;
+          const signature = JSON.stringify(samples.map((sample) => [
+            sample.trackIndex,
+            sample.parameter,
+            sample.lfoIndex,
+            sample.reversed,
+            sample.renderBindingLfoIndex,
+            sample.renderBindingMatches,
+            sample.masterActive,
+            sample.clockActive,
+            sample.phaseAvailable,
+          ]));
+          const changed = signature !== guiLastLfoVisualProofSignature;
+          const active = samples.some((sample) => sample.masterActive);
+          if (!changed && !active) return null;
+          if (
+            !changed &&
+            nowMs - guiLastLfoVisualProofAt < GUI_LFO_VISUAL_PROOF_INTERVAL_MS
+          ) return null;
+
+          guiLastLfoVisualProofAt = nowMs;
+          guiLastLfoVisualProofSignature = signature;
+          return {
+            lfoVisualSampleAtMs: nowMs,
+            lfoVisualSamples: samples,
+          };
+        }
+
         function summarizeMirroredButtonVisualState(state) {
           const expected = [];
           const add = (id, buttonState) => {
@@ -11693,6 +11816,7 @@
                     ...summarizeMirroredDialogVisualState(),
                     renderPhases: lastGuiRenderPhaseStats,
                     ...summarizeLfoVisualState(normalizedState),
+                    ...(captureLfoVisualProof(normalizedState) || {}),
                     ...summarizeMirroredButtonVisualState(normalizedState),
                     ...summarizeSamplerVisualLayout(),
                   };
