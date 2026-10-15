@@ -313,6 +313,7 @@
         const GUI_WAVEFORM_PROOF_INTERVAL_MS = 30000;
         const GUI_LFO_VISUAL_PROOF_INTERVAL_MS = 1000;
         const GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS = 250;
+        const GUI_LFO_TELEMETRY_REPORT_INTERVAL_MS = 1000;
         const GUI_CLOCK_SYNC_INTERVAL_MS = 2000;
         const GUI_CLOCK_SYNC_MAX_RTT_MS = 250;
         var guiChannelTelemetryTimer = null;
@@ -6411,6 +6412,10 @@
         let mirroredTrackCount = 0;
 
         function buildGUI(trackCount = 4) {
+          lastQueuedPresentationVisualKey = null;
+          _lastAssignmentCache.length = 0;
+          _lastParamsCache.length = 0;
+          _lastFxCache.length = 0;
           const normalizedTrackCount = Math.max(
             1,
             Math.min(32, Math.floor(Number(trackCount) || 4)),
@@ -9785,10 +9790,7 @@
           }
         }
 
-        function getTrackParamsCacheKey(t, s) {
-          const p = t.params;
-          if (!p) return "";
-          const pd = t.paramDisplays;
+        function getTrackAssignmentCacheKey(t, s) {
           const la = t.lfoAssigns;
           const li = t.lfoIndicators;
           let liKey = "";
@@ -9802,15 +9804,27 @@
               }
             }
           }
-          return `${p.pitch}:${p.vol}:${p.pan}:${p.treble}:${p.mid_freq}:${p.mid_gain}:${p.bass}:${p.inputGain}:${p.loopStart}:${p.loopEnd}_` +
-            `${pd ? `${pd.pitch?.displayValue || ""}:${pd.vol?.displayValue || ""}:${pd.pan?.displayValue || ""}:${pd.treble?.displayValue || ""}:${pd.mid_freq?.displayValue || ""}:${pd.mid_gain?.displayValue || ""}:${pd.bass?.displayValue || ""}:${pd.inputGain?.displayValue || ""}:${pd.loopStart?.displayValue || ""}:${pd.loopEnd?.displayValue || ""}` : ""}_` +
-            `${la ? `${(la[1] || []).join(",")}|${(la[2] || []).join(",")}` : ""}_` +
-            `${liKey}_${s.master?.lfo1?.active ? 1 : 0}${s.master?.lfo2?.active ? 1 : 0}`;
+          return `${la ? `${(la[1] || []).join(",")}|${(la[2] || []).join(",")}` : ""}_${liKey}`;
         }
 
+        function getTrackParamsCacheKey(t, s) {
+          const p = t.params;
+          if (!p) return "";
+          const pd = t.paramDisplays;
+          return `${p.pitch}:${p.vol}:${p.pan}:${p.treble}:${p.mid_freq}:${p.mid_gain}:${p.bass}:${p.inputGain}:${p.loopStart}:${p.loopEnd}_` +
+            `${pd ? `${pd.pitch?.displayValue || ""}:${pd.vol?.displayValue || ""}:${pd.pan?.displayValue || ""}:${pd.treble?.displayValue || ""}:${pd.mid_freq?.displayValue || ""}:${pd.mid_gain?.displayValue || ""}:${pd.bass?.displayValue || ""}:${pd.inputGain?.displayValue || ""}:${pd.loopStart?.displayValue || ""}:${pd.loopEnd?.displayValue || ""}` : ""}`;
+        }
+
+        function getSamplerPadVisualSignature(p) {
+          // Only the receiver pad surface is relevant here. Envelopes, FX,
+          // assets and layer graphs remain in the immutable structural state.
+          return JSON.stringify([p.id, p.loaded, p.active, p.repeat?.enabled, p.reverse, p.name,
+            p.selected, p.mode, p.muted, p.tune, p.baseBpm, p.effectiveBpm, p.syncAll, p.syncTrack, p.color]);
+        }
+
+        const _lastAssignmentCache = [];
         const _lastParamsCache = [];
         const _lastFxCache = [];
-        let _lastSamplerCache = "";
         let lastMirroredState = null;
         let guiLastVisualProofAt = 0;
         let pendingGuiRenderTimer = null;
@@ -9818,16 +9832,23 @@
         let pendingGuiRenderRevision = -1;
         let pendingGuiPaintRevision = -1;
         let pendingGuiPaintHandle = null;
-        function scheduleGuiPaintOpportunity(revision) {
-          pendingGuiPaintRevision = Math.max(pendingGuiPaintRevision, revision);
+        let pendingGuiPaintSubmittedAtMs = 0;
+        function scheduleGuiPaintOpportunity(revision, submittedAtMs = getLfoVisualNow()) {
+          if (revision >= pendingGuiPaintRevision) {
+            pendingGuiPaintRevision = revision;
+            pendingGuiPaintSubmittedAtMs = submittedAtMs;
+          }
           if (pendingGuiPaintHandle !== null || typeof window.requestAnimationFrame !== "function") return;
-          const submittedAtMs = getLfoVisualNow();
           window.requestAnimationFrame(() => {
+            const proofRevision = pendingGuiPaintRevision;
+            const proofSubmittedAtMs = pendingGuiPaintSubmittedAtMs;
             pendingGuiPaintHandle = window.requestAnimationFrame(() => {
               pendingGuiPaintHandle = null;
-              sendGuiChannelTelemetry("gui_paint_opportunity", { guiRevision: pendingGuiPaintRevision,
+              sendGuiChannelTelemetry("gui_paint_opportunity", { guiRevision: proofRevision,
+                submittedAtMonotonicMs: proofSubmittedAtMs,
                 evidenceStage: "two_animation_frames_after_dom_submission", physicalPaintVerified: false,
-                elapsedMs: getLfoVisualNow() - submittedAtMs, presentation: getPresentedSourceAudioTime() });
+                elapsedMs: getLfoVisualNow() - proofSubmittedAtMs, presentation: getPresentedSourceAudioTime() });
+              if (pendingGuiPaintRevision > proofRevision) scheduleGuiPaintOpportunity(pendingGuiPaintRevision, pendingGuiPaintSubmittedAtMs);
             });
           });
           pendingGuiPaintHandle = -1;
@@ -10055,9 +10076,9 @@
           if (hasRunningTimeline) scheduleMirroredTimelineFrame();
         }
 
-        function updateMirroredTimelineState(state) {
+        function updateMirroredTimelineState(state, frameNowMs = getMirroredTimelineNow()) {
           if (typeof getPresentationVisualState === "function") {
-            const presented = getPresentationVisualState(state);
+            const presented = getPresentationVisualState(state, frameNowMs);
             if (presented) state = presented;
             else if (Number.isFinite(state?.transport?.capturedAtAudioSec) &&
                 (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) return true;
@@ -10093,7 +10114,7 @@
           // Anchor interpolation to the receiver's monotonic clock at receipt.
           // transport.capturedAtMs is sender-epoch telemetry and must not be
           // subtracted from this receiver clock without an offset calibration.
-          const nowMs = getMirroredTimelineNow();
+          const nowMs = frameNowMs;
           mirroredTimelineState = {
             captureSequence: Number.isSafeInteger(captureSequence)
               ? captureSequence
@@ -10152,7 +10173,101 @@
         let lastSmoothLfoPaintMs = 0;
         let presentationSpans = [];
         let lastSubmittedLfoProof = null;
+        let lastLfoTelemetryReportAtMs = 0;
+        let lfoFrameMeasurements = { lastAt: null, lastSource: null, frames: 0, gaps: 0,
+          bins: [0, 0, 0, 0, 0, 0, 0], maxGapMs: 0, held: 0, backwards: 0, maxStepErrorMs: 0, unavailable: 0 };
+
+        function recordLfoFrameMeasurement(nowMs) {
+          const clocks = [smoothLfoClocks[1], smoothLfoClocks[2]];
+          const clock = clocks.find((item) => item.active && item.phase !== null);
+          if (!clock) { lfoFrameMeasurements.lastAt = null; lfoFrameMeasurements.lastSource = null; return; }
+          const m = lfoFrameMeasurements;
+          m.frames++;
+          const source = Number.isFinite(clock.sourceAudioSec) && clock.presentationAvailable ? clock.sourceAudioSec : null;
+          if (source === null) m.unavailable++;
+          if (m.lastAt !== null) {
+            const gap = Math.max(0, nowMs - m.lastAt);
+            const bounds = [16.67, 33.34, 50, 100, 250, 500, Infinity];
+            m.bins[bounds.findIndex((bound) => gap <= bound)]++;
+            m.gaps++;
+            m.maxGapMs = Math.max(m.maxGapMs, gap);
+            if (source !== null && m.lastSource !== null) {
+              const step = (source - m.lastSource) * 1000;
+              if (Math.abs(step) < 0.001) m.held++;
+              if (step < -0.001) m.backwards++;
+              m.maxStepErrorMs = Math.max(m.maxStepErrorMs, Math.abs(step - gap));
+            }
+          }
+          m.lastAt = nowMs;
+          m.lastSource = source;
+        }
+
+        function takeLfoFrameMeasurements() {
+          const m = lfoFrameMeasurements;
+          const result = { schema: "mxs.cast.frame-stats.v1", frames: m.frames, gaps: m.gaps,
+            gapBoundsMs: [16.67, 33.34, 50, 100, 250, 500, null], gapCounts: m.bins,
+            maxGapMs: m.maxGapMs, heldSourceSteps: m.held, backwardSourceSteps: m.backwards,
+            maxSourceStepErrorMs: m.maxStepErrorMs, unavailableFrames: m.unavailable };
+          lfoFrameMeasurements = { lastAt: m.lastAt, lastSource: m.lastSource, frames: 0, gaps: 0,
+            bins: [0, 0, 0, 0, 0, 0, 0], maxGapMs: 0, held: 0, backwards: 0, maxStepErrorMs: 0, unavailable: 0 };
+          return result;
+        }
         let nativePresentationGeneration = -1;
+        // Media currentTime may advance in coarse steps. Project between fresh
+        // readings, with bounded correction and a hard stall horizon. This is a
+        // media estimate; it does not measure the speaker/display offset.
+        const NATIVE_PRESENTATION_STALE_MS = 350;
+        let nativePresentationClock = null;
+
+        function projectNativePresentationClock(audio, identity, nowMs) {
+          const raw = audio.currentTime;
+          const rate = Number.isFinite(audio.playbackRate) && audio.playbackRate > 0 ? audio.playbackRate : 1;
+          if (!Number.isFinite(raw) || audio.paused || audio.seeking || audio.readyState < 3) {
+            nativePresentationClock = null;
+            return null;
+          }
+          let c = nativePresentationClock;
+          const reset = (reason) => {
+            c = { identity, audio, raw, projected: raw, atMs: nowMs, changedAtMs: nowMs,
+              quantumMs: 0, repeated: 0, observations: 1, resets: (c?.resets || 0) + 1, reason, errorMs: 0 };
+            nativePresentationClock = c;
+          };
+          if (!c || c.identity !== identity || c.audio !== audio) reset("identity");
+          nowMs = Math.max(c.atMs, nowMs);
+          const dt = Math.max(0, nowMs - c.atMs);
+          const delta = raw - c.raw;
+          if (delta < -0.001 || Math.abs(delta - dt * rate / 1000) > 0.75) reset("discontinuity");
+          else if (delta > 0) {
+            if (nowMs - c.changedAtMs > NATIVE_PRESENTATION_STALE_MS) reset("resume_after_stall");
+            else {
+              // A repeated reading followed by a step reveals clock quantum;
+              // continuous observations must not be confused with RAF cadence.
+              if (c.repeated > 0 || (dt > 0 && Math.abs(delta * 1000 - dt * rate) > 2)) {
+                c.quantumMs = Math.min(250, Math.max(c.quantumMs, delta * 1000));
+              }
+              c.observations++;
+              c.changedAtMs = nowMs;
+              c.repeated = 0;
+              c.reason = "tracking";
+            }
+          } else if (dt > 0) c.repeated++;
+          const ageMs = Math.max(0, nowMs - c.changedAtMs);
+          if (ageMs > NATIVE_PRESENTATION_STALE_MS) return null;
+          const elapsed = Math.max(0, nowMs - c.atMs);
+          const predicted = c.projected + elapsed * rate / 1000;
+          const error = raw - predicted;
+          const tolerance = Math.max(0.002, c.quantumMs / 1000);
+          const outside = Math.sign(error) * Math.max(0, Math.abs(error) - tolerance);
+          const correction = delta > 0 ? Math.max(-elapsed * 0.00005, Math.min(elapsed * 0.00005, outside)) : 0;
+          c.projected = Math.max(c.projected, predicted + correction);
+          c.errorMs = error * 1000;
+          c.raw = raw;
+          c.atMs = nowMs;
+          return { mediaSec: c.projected, mediaClockResolutionMs: c.quantumMs || null,
+            mediaClockUncertaintyMs: c.quantumMs || (c.observations >= 3 ? 2 : NATIVE_PRESENTATION_STALE_MS), observationAgeMs: ageMs,
+            clockCorrectionMs: correction * 1000, clockErrorMs: c.errorMs,
+            clockStatus: c.reason, clockObservations: c.observations, clockResets: c.resets };
+        }
         let pcmPresentationPosition = null;
         let presentationVisualHistory = [];
         let lastPresentationVisualSequence = -1;
@@ -10162,7 +10277,8 @@
           if (!transport || !Number.isFinite(transport.capturedAtAudioSec)) return;
           let previous = presentationVisualHistory[presentationVisualHistory.length - 1];
           if (previous && (previous.transport.playbackEpoch !== transport.playbackEpoch ||
-              previous.transport.playbackRevision !== transport.playbackRevision)) {
+              previous.transport.playbackRevision !== transport.playbackRevision ||
+              previous.transport.sourceAudioClock?.sessionId !== transport.sourceAudioClock?.sessionId)) {
             presentationVisualHistory = [];
             lastPresentationVisualSequence = -1;
             previous = null;
@@ -10187,6 +10303,23 @@
           return null;
         }
 
+        let lastQueuedPresentationVisualKey = null;
+        let lastQueuedPresentationHasTimeline = false;
+        function queuePresentationVisuals(state, nowMs = getLfoVisualNow(), force = false, revision = -1) {
+          const presented = getPresentationVisualState(state, nowMs);
+          if (!presented && Number.isFinite(state?.transport?.capturedAtAudioSec) &&
+              (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) return true;
+          const visual = presented || state;
+          const t = visual?.transport;
+          const key = Number.isSafeInteger(t?.captureSequence)
+            ? `${t.sourceAudioClock?.sessionId}:${t.playbackEpoch}:${t.playbackRevision}:${t.captureSequence}` : null;
+          if (key !== null && key === lastQueuedPresentationVisualKey) return lastQueuedPresentationHasTimeline;
+          lastQueuedPresentationVisualKey = key;
+          scheduleWaveformRender(visual, force, revision);
+          lastQueuedPresentationHasTimeline = updateMirroredTimelineState(visual, nowMs);
+          return lastQueuedPresentationHasTimeline;
+        }
+
         function acceptPresentationSpans(message) {
           if (message.playbackEpoch !== lastPlaybackEpoch || message.playbackRevision !== lastPlaybackRevision) return false;
           const native = message.type === "NATIVE_PRESENTATION_SPANS";
@@ -10195,6 +10328,7 @@
           if (native && message.streamGeneration !== nativePresentationGeneration) {
             presentationSpans = [];
             nativePresentationGeneration = message.streamGeneration;
+            nativePresentationClock = null;
           }
           if (!Number.isFinite(message.mediaRate) || message.mediaRate <= 0 || !Array.isArray(message.spans)) return false;
           for (const span of message.spans.slice(0, 32)) {
@@ -10227,10 +10361,11 @@
         function getPresentedSourceAudioTime(nowMs = getLfoVisualNow()) {
           const route = window._playbackMode;
           let mediaFrame = null;
+          let mediaEstimate = null;
           if (route === "native" && nativeStreamActive && !nativeStreamPaused) {
             const audio = document.getElementById("native-stream-audio") || document.getElementById("cast-media-element");
             const activeAudio = audio && !audio.paused && audio.readyState >= 3 ? audio : document.getElementById("cast-media-element");
-            if (activeAudio && !activeAudio.paused && activeAudio.readyState >= 3 && Number.isFinite(activeAudio.currentTime)) {
+            if (activeAudio && !activeAudio.paused && !activeAudio.seeking && activeAudio.readyState >= 3 && Number.isFinite(activeAudio.currentTime)) {
               let span = null;
               for (let i = presentationSpans.length - 1; i >= 0; i--) {
                 const item = presentationSpans[i];
@@ -10239,7 +10374,13 @@
                   break;
                 }
               }
-              if (span) mediaFrame = activeAudio.currentTime * span.mediaRate;
+              if (span) {
+                const identity = `${nativeStartupAttemptId}:${nativePresentationGeneration}:${lastPlaybackEpoch}:${lastPlaybackRevision}:${lastMirroredState?.transport?.sourceAudioClock?.sessionId}:${span.mediaRate}`;
+                mediaEstimate = projectNativePresentationClock(activeAudio, identity, nowMs);
+                if (mediaEstimate) mediaFrame = mediaEstimate.mediaSec * span.mediaRate;
+              }
+            } else {
+              nativePresentationClock = null;
             }
           } else if (route === "pcm_fallback" && pcmPresentationPosition && audioCtx?.state === "running") {
             const anchor = pcmPresentationPosition;
@@ -10252,7 +10393,10 @@
                 anchor.playbackEpoch === lastPlaybackEpoch && anchor.playbackRevision === lastPlaybackRevision &&
                 anchor.sessionId === lastMirroredState?.transport?.sourceAudioClock?.sessionId) mediaFrame = anchor.mediaFrame + elapsed * audioCtx.sampleRate;
           }
-          if (mediaFrame === null) return null;
+          if (mediaFrame === null) {
+            if (route !== "native" || nativeStreamPaused || !nativeStreamActive) nativePresentationClock = null;
+            return null;
+          }
           const clock = lastMirroredState?.transport?.sourceAudioClock;
           for (let i = presentationSpans.length - 1; i >= 0; i--) {
             const span = presentationSpans[i];
@@ -10264,8 +10408,10 @@
             if (audioSec === null) return null;
             return { audioSec, sourceFrame, route, uncertaintyMs: (Number(span.uncertaintyFrames) || 0) * 1000 / span.sourceRate,
               uncertaintyBasis: "source_frame_mapping_only", acousticOffsetMs: null, mediaClockResolutionMs: null,
+              ...mediaEstimate,
               playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision };
           }
+          if (route === "native") nativePresentationClock = null;
           return null;
         }
 
@@ -10612,7 +10758,7 @@
               const assigned = visual && typeof visual === "object"
                 ? visual.checked === true
                 : Boolean(visual ?? track?.lfoAssigns?.[lfoIndex]?.includes?.(config.p));
-              checkbox.checked = assigned;
+              if (checkbox.checked !== assigned) checkbox.checked = assigned;
               checkbox.classList.toggle(
                 "reversed",
                 Boolean(visual && typeof visual === "object" && visual.reversed),
@@ -10625,7 +10771,8 @@
               const marker = getEl(`t-${kind}-marker-${trackIndex}-${config.p}`);
               if (!marker) return;
               marker.classList.toggle("active", Boolean(markerState?.active));
-              marker.style.left = `${Math.max(0, Math.min(100, Number(markerState?.left) || 0))}%`;
+              const left = `${Math.max(0, Math.min(100, Number(markerState?.left) || 0))}%`;
+              if (marker.style.left !== left) marker.style.left = left;
             });
           });
         }
@@ -10653,6 +10800,10 @@
 
         function resetSmoothLfoVisuals() {
           lastSubmittedLfoProof = null;
+          lastLfoTelemetryReportAtMs = 0;
+          lfoFrameMeasurements.lastAt = null;
+          lfoFrameMeasurements.lastSource = null;
+          takeLfoFrameMeasurements();
           if (smoothLfoFrameHandle !== null) {
             if (smoothLfoFrameUsesTimeout) window.clearTimeout(smoothLfoFrameHandle);
             else if (typeof window.cancelAnimationFrame === "function") {
@@ -10682,9 +10833,13 @@
             : getLfoVisualNow();
           [1, 2].forEach((index) => advanceSmoothLfoClock(smoothLfoClocks[index], nowMs));
           const hasActiveClock = canRenderSmoothLfo(1) || canRenderSmoothLfo(2);
-          if (!hasActiveClock) return;
+          if (!hasActiveClock) {
+            if ([1, 2].some((index) => smoothLfoClocks[index].model?.rateTimeline?.length)) scheduleSmoothLfoRender();
+            return;
+          }
           if (nowMs - lastSmoothLfoPaintMs >= LFO_VISUAL_FRAME_INTERVAL_MS - 1) {
             lastSmoothLfoPaintMs = nowMs;
+            recordLfoFrameMeasurement(nowMs);
             [1, 2].forEach((index) => {
               if (!canRenderSmoothLfo(index)) return;
               const signedValue = Math.sin(smoothLfoClocks[index].phase) * (smoothLfoClocks[index].gateValue ?? 1);
@@ -10696,8 +10851,7 @@
             const presentedVisual = getPresentationVisualState(lastMirroredState, nowMs);
             if (presentedVisual && presentedVisual.transport.captureSequence !== lastPresentationVisualSequence) {
               lastPresentationVisualSequence = presentedVisual.transport.captureSequence;
-              scheduleWaveformRender(presentedVisual, false, -1);
-              updateMirroredTimelineState(presentedVisual);
+              queuePresentationVisuals(lastMirroredState, nowMs);
             }
             (presentedVisual?.tracks || lastMirroredState?.tracks || []).forEach((track, trackIndex) => {
               KNOB_CONFIGS.forEach((config) => {
@@ -10740,12 +10894,14 @@
               });
             });
             if (!lastSubmittedLfoProof || nowMs - lastLfoVisualTelemetryAtMs >= GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS) {
-              const samples = summarizeLfoVisualSamples(lastMirroredState);
+              const samples = summarizeLfoVisualSamples(lastMirroredState, nowMs);
               lastLfoVisualTelemetryAtMs = nowMs;
               lfoVisualFrameSequence += 1;
               lastSubmittedLfoProof = { samples, sampledAtMs: Date.now(), receiverMonotonicMs: nowMs,
                 frameSequence: lfoVisualFrameSequence, transport: lastMirroredState?.transport || {} };
-              if (samples.some((sample) => sample.masterActive || sample.clockActive)) {
+              if (samples.some((sample) => sample.masterActive || sample.clockActive) &&
+                  (!lastLfoTelemetryReportAtMs || nowMs - lastLfoTelemetryReportAtMs >= GUI_LFO_TELEMETRY_REPORT_INTERVAL_MS)) {
+                lastLfoTelemetryReportAtMs = nowMs;
                 const transport = lastMirroredState?.transport || {};
                 const captureAgeMs = mirroredCaptureAgeMs(transport, nowMs);
                 sendGuiChannelTelemetry("lfo_visual_frame", {
@@ -10775,10 +10931,9 @@
                         driftPpm: Number(guiClockSyncEstimate.driftPpm.toFixed(2)),
                       }
                     : null,
-                  lfoVisualSamples: samples.map((sample) => ({
-                    ...sample,
-                    receiverRenderMonotonicMs: Number(nowMs.toFixed(3)),
-                  })),
+                  frameStats: takeLfoFrameMeasurements(),
+                  presentation: getPresentedSourceAudioTime(nowMs),
+                  ...packLfoVisualEvidence(samples),
                 });
               }
             }
@@ -10805,7 +10960,8 @@
                 }, nowMs);
             syncSmoothLfoClock(index, state, nowMs, sampleAgeMs);
           });
-          if (canRenderSmoothLfo(1) || canRenderSmoothLfo(2)) {
+          if (canRenderSmoothLfo(1) || canRenderSmoothLfo(2) ||
+              [1, 2].some((index) => smoothLfoClocks[index].model?.rateTimeline?.length)) {
             scheduleSmoothLfoRender();
           }
         }
@@ -11146,10 +11302,10 @@
           // DOM throttle so a burst of GUI snapshots cannot leave the canvas
           // one or more revisions behind while controls remain throttled.
           const waveformPhaseStartedAt = phaseClock();
-          scheduleWaveformRender(getPresentationVisualState(s) || s, force, guiRevision);
+          const hasMirroredTimeline = queuePresentationVisuals(s, phaseClock(), force, guiRevision);
           const waveformPhaseFinishedAt = phaseClock();
           const timelinePhaseStartedAt = phaseClock();
-          const hasMirroredTimeline = updateMirroredTimelineState(s);
+
           const timelinePhaseFinishedAt = phaseClock();
           const preludeFinishedAt = phaseClock();
           const preludePhases = {
@@ -11269,9 +11425,6 @@
             renderDialogMirrors(s.dialogs);
             const dialogsFinishedAt = phaseClock();
             if (s.sampler) {
-              const samplerStr = JSON.stringify(s.sampler);
-              if (_lastSamplerCache !== samplerStr) {
-                _lastSamplerCache = samplerStr;
                 s.sampler.forEach((p, i) => {
                   if (i >= RECEIVER_SAMPLER_PAD_COUNT) return;
                   const numericPadId = Number(p?.id);
@@ -11280,7 +11433,7 @@
                     : i + 1;
                   const btnId = "sample-" + padId;
                   const padCacheKey = `sampler-pad:${padId}`;
-                  const padSignature = JSON.stringify(p);
+                  const padSignature = getSamplerPadVisualSignature(p);
                   if (valCache[padCacheKey] === padSignature) return;
                   valCache[padCacheKey] = padSignature;
                   const cls = [
@@ -11330,7 +11483,6 @@
                     pad.setAttribute("aria-label", pad.title);
                   }
                 });
-              }
             }
             const samplerFinishedAt = phaseClock();
             if (s.tracks)
@@ -11426,6 +11578,11 @@
                     plNav.style.display = "none";
                   }
                 }
+                const assignmentKey = getTrackAssignmentCacheKey(t, s);
+                if (_lastAssignmentCache[i] !== assignmentKey) {
+                  _lastAssignmentCache[i] = assignmentKey;
+                  renderMirroredTrackLfoAssignments(t, i);
+                }
                 if (t.params) {
                   const trackCacheKey = getTrackParamsCacheKey(t, s);
                   if (_lastParamsCache[i] !== trackCacheKey) {
@@ -11445,7 +11602,6 @@
                       }
 
                     });
-                    renderMirroredTrackLfoAssignments(t, i);
                     applyMirroredParameterDisplay(
                       `t-gain-sl-${i}`,
                       `t-gain-val-${i}`,
@@ -12094,9 +12250,9 @@
           return summary;
         }
 
-        function summarizeLfoVisualSamples(state) {
+        function summarizeLfoVisualSamples(state, nowMs = getLfoVisualNow()) {
           const samples = [];
-          const visualState = getPresentationVisualState(state) || state;
+          const visualState = getPresentationVisualState(state, nowMs) || state;
           (visualState?.tracks || []).slice(0, 4).forEach((track, trackIndex) => {
             KNOB_CONFIGS.forEach((config) => {
               const binding = getTrackLfoVisualBinding(track, config.p);
@@ -12139,6 +12295,19 @@
           return samples;
         }
 
+        function packLfoVisualEvidence(samples) {
+          const columns = ["trackIndex", "parameter", "lfoIndex", "reversed", "active", "masterActive",
+            "clockActive", "phaseAvailable", "phaseRad", "rangeMinimum", "rangeMaximum", "expectedValue", "renderedValue",
+            "renderedLabel", "controlPresent", "controlStep", "manualOwned", "interactionPending",
+            "sourceAudioSec", "presentationAvailable", "controlRateError", "controlClockMode"];
+          return { lfoVisualSchema: "mxs.cast.lfo-proof.v2", lfoVisualColumns: columns,
+            lfoVisualRows: samples.slice(0, 28).map((sample) => columns.map((key) => {
+              const value = sample[key];
+              return typeof value === "number" && Number.isFinite(value) ? Number(value.toFixed(6)) :
+                typeof value === "string" ? value.slice(0, 48) : value ?? null;
+            })) };
+        }
+
         function captureLfoVisualProof(state, nowMs = Date.now()) {
           const proof = lastSubmittedLfoProof;
           if (!proof) return null;
@@ -12173,7 +12342,7 @@
             lfoVisualProofCaptureSequence: proof.transport.captureSequence ?? null,
             lfoVisualProofFrameSequence: proof.frameSequence,
             lfoVisualEvidenceStage: "last_animation_frame_dom_submitted",
-            lfoVisualSamples: samples,
+            ...packLfoVisualEvidence(samples),
           };
         }
 
