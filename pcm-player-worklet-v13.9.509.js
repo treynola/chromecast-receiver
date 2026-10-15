@@ -83,6 +83,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastDiagRawQueuedFrames = null;
     this._lastPacketWallMs = 0;
     this._lastPacketMetadata = null;
+    this._presentationPackets = [];
+    this._presentationEpoch = null;
+    this._presentationRevision = null;
 
     this._startupPrebuffers = 0;
     this._startupAlignmentCount = 0;
@@ -116,6 +119,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (event) => {
       try {
         const message = event.data;
+        if (["RESET", "PAUSE", "RESUME", "CONFIG"].includes(message?.type) &&
+            Number.isSafeInteger(message.playbackEpoch) && Number.isSafeInteger(message.playbackRevision)) {
+          this._presentationEpoch = message.playbackEpoch;
+          this._presentationRevision = message.playbackRevision;
+        }
         if (message && message.type === "RESET") {
           this._intentionalReset();
           return;
@@ -151,7 +159,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
         this._lastPacketWallMs = typeof Date !== "undefined" ? Date.now() : 0;
         this._lastPacketMetadata = packetMetadata;
+        const startFrame = this._totalWritten / 2;
         this._writePcm(arrayBuffer);
+        const sourceFrame = packetMetadata?.sourceFrame == null ? NaN : Number(packetMetadata.sourceFrame);
+        if (Number.isSafeInteger(sourceFrame)) {
+          this._presentationPackets.push({ startFrame, endFrame: this._totalWritten / 2,
+            sourceFrame, sessionId: packetMetadata.sessionId });
+          this._presentationPackets = this._presentationPackets.slice(-512);
+        }
         this._trimStartupWatermark();
       } catch (error) {
         this.port.postMessage({ type: "LOG", msg: `Worklet error: ${error.message}` });
@@ -340,6 +355,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._readFrameIdx = 0;
     this._totalWritten = 0;
     this._totalRead = 0;
+    this._presentationPackets = [];
     this._isBuffering = true;
     this._playoutStarted = false;
     this._emergencyAwaitingRecovery = false;
@@ -619,6 +635,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._silenceFrames += Math.max(0, framesInBlock - rendered);
       this._framesProcessed += framesInBlock;
       this._outputFrames += framesInBlock;
+      if (this._callbackCount % 16 === 0) {
+        const cursor = this._totalRead / 2;
+        const packet = this._presentationPackets.find((item) => cursor > item.startFrame && cursor <= item.endFrame);
+        if (packet) this.port.postMessage({ type: "PRESENTATION_POSITION", sessionId: packet.sessionId,
+          playbackEpoch: this._presentationEpoch, playbackRevision: this._presentationRevision,
+          mediaFrame: packet.sourceFrame + cursor - packet.startFrame,
+          audioTime: (typeof currentFrame === "number" ? currentFrame : 0) / sampleRate + framesInBlock / sampleRate,
+          playing: !this._paused && !this._isBuffering && rendered > 0 });
+        while (this._presentationPackets.length > 1 && this._presentationPackets[0].endFrame < cursor) this._presentationPackets.shift();
+      }
 
       const rawQueuedSamples = Math.max(0, this._totalWritten - this._totalRead);
       const rawQueuedFrames = Math.floor(rawQueuedSamples / 2);

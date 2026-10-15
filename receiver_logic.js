@@ -1435,7 +1435,7 @@
         }
 
         function emitGuiChannelError(reason, details = {}) {
-          if (!binaryWS || binaryWS.readyState !== WebSocket.OPEN) return false;
+          if (!guiControlWS || guiControlWS.readyState !== WebSocket.OPEN) return false;
           const payload = {
             type: "GUI_ERROR",
             transport: "gui",
@@ -2818,6 +2818,10 @@
 
         function resetGuiRevisionGate(reason) {
           lastGuiRevision = -1;
+          guiRevisionStates.clear();
+          if (pendingGuiRenderTimer !== null) clearTimeout(pendingGuiRenderTimer);
+          pendingGuiRenderTimer = null;
+          pendingGuiRenderState = null;
           lastCursorRevision = -1;
           lastDialogMirrorState = "";
           lastDialogMirrorLayoutState = "";
@@ -4656,7 +4660,7 @@
           if (workletNode) {
             try {
               if (workletNode.port) {
-                workletNode.port.postMessage({ type: "RESET" });
+                workletNode.port.postMessage({ type: "RESET", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision });
                 workletNode.port.onmessage = null;
               }
             } catch (e) {}
@@ -5268,7 +5272,7 @@
           if (workletNode) {
             try {
               if (workletNode.port) {
-                workletNode.port.postMessage({ type: "RESET" });
+                workletNode.port.postMessage({ type: "RESET", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision });
                 workletNode.port.onmessage = null;
               }
             } catch (e) {}
@@ -5417,7 +5421,7 @@
             now - lastPcmQueueResetAt <= PCM_QUEUE_RESET_DEDUPE_MS;
           if (workletNode && workletNode.port && !duplicateReset) {
             try {
-              workletNode.port.postMessage({ type: "PAUSE" });
+              workletNode.port.postMessage({ type: "PAUSE", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision });
               workletQueueResetCount += 1;
               lastPcmQueueResetAt = now;
             } catch (e) {}
@@ -5762,13 +5766,13 @@
             (window.STREAM_TOKEN && !window.STREAM_TOKEN.startsWith("{{")
               ? window.STREAM_TOKEN
               : "");
-          const streamUrl = "http://" + ip + ":" + targetPort +
-            "/stream.wav?token=" + encodeURIComponent(streamToken) + "&cb=" + Date.now();
           if ((nativeStreamActive || nativeStreamStarting) && nativeStreamUrl && nativeStreamUrl.indexOf("http://" + ip + ":" + targetPort + "/stream.wav") === 0) {
             return true;
           }
 
           const attemptId = ++nativeStartupAttemptId;
+          const streamUrl = "http://" + ip + ":" + targetPort +
+            "/stream.wav?token=" + encodeURIComponent(streamToken) + "&cb=" + Date.now() + "&attempt=" + attemptId;
           clearNativeStreamReloadTimer();
           nativeStreamStarting = true;
           nativeStreamActive = false;
@@ -6831,6 +6835,11 @@
             relayLogToStudio(`✅ Receiver sink active @ ${actualRate}Hz`);
 
             workletNode.port.onmessage = (e) => {
+              if (e.data.type === "PRESENTATION_POSITION") {
+                if (Number.isSafeInteger(e.data.mediaFrame) && Number.isFinite(e.data.audioTime) &&
+                    e.data.playbackEpoch === lastPlaybackEpoch && e.data.playbackRevision === lastPlaybackRevision) pcmPresentationPosition = e.data;
+                return;
+              }
               if (e.data.type === "DIAG") {
                 window._lastWorkletDiagTime = Date.now();
                 const renderedFrames = Number(e.data.renderedFrames);
@@ -7036,6 +7045,8 @@
             }
             workletNode.port.postMessage({
               type: "CONFIG",
+              playbackEpoch: lastPlaybackEpoch,
+              playbackRevision: lastPlaybackRevision,
               bitDepth: negotiatedBitDepth,
             });
             relayLogToStudio(
@@ -9801,6 +9812,27 @@
         const _lastFxCache = [];
         let _lastSamplerCache = "";
         let lastMirroredState = null;
+        let guiLastVisualProofAt = 0;
+        let pendingGuiRenderTimer = null;
+        let pendingGuiRenderState = null;
+        let pendingGuiRenderRevision = -1;
+        let pendingGuiPaintRevision = -1;
+        let pendingGuiPaintHandle = null;
+        function scheduleGuiPaintOpportunity(revision) {
+          pendingGuiPaintRevision = Math.max(pendingGuiPaintRevision, revision);
+          if (pendingGuiPaintHandle !== null || typeof window.requestAnimationFrame !== "function") return;
+          const submittedAtMs = getLfoVisualNow();
+          window.requestAnimationFrame(() => {
+            pendingGuiPaintHandle = window.requestAnimationFrame(() => {
+              pendingGuiPaintHandle = null;
+              sendGuiChannelTelemetry("gui_paint_opportunity", { guiRevision: pendingGuiPaintRevision,
+                evidenceStage: "two_animation_frames_after_dom_submission", physicalPaintVerified: false,
+                elapsedMs: getLfoVisualNow() - submittedAtMs, presentation: getPresentedSourceAudioTime() });
+            });
+          });
+          pendingGuiPaintHandle = -1;
+        }
+        const guiRevisionStates = new Map();
         const MIRRORED_TIMELINE_FRAME_INTERVAL_MS = 1000 / 30;
         const MIRRORED_TIMELINE_DISCONTINUITY_SEC = 0.75;
         const MIRRORED_TIMELINE_MAX_SOFT_CORRECTION_SEC = 0.05;
@@ -9861,6 +9893,17 @@
         function calculateMirroredTimelinePosition(anchor, nowMs) {
           if (!anchor?.timeline) return 0;
           const timeline = anchor.timeline;
+          const presented = typeof getPresentedSourceAudioTime === "function" ? getPresentedSourceAudioTime(nowMs) : null;
+          if (presented && Number.isFinite(anchor.capturedAtAudioSec)) {
+            const elapsed = timeline.running === true ? presented.audioSec - anchor.capturedAtAudioSec : 0;
+            anchor.lastPresentedPosition = clampMirroredTimelinePosition(Number(anchor.positionSeconds) + elapsed *
+              Math.max(0.01, Number(timeline.playbackRate) || 1) * (Number(timeline.direction) < 0 ? -1 : 1), timeline);
+            return anchor.lastPresentedPosition;
+          }
+          if (Number.isFinite(anchor.capturedAtAudioSec) &&
+              (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) {
+            return anchor.lastPresentedPosition ?? anchor.positionSeconds;
+          }
           const elapsedSeconds = timeline.running === true
             ? Math.max(0, Number(nowMs) - Number(anchor.receivedAtMs || nowMs)) / 1000
             : 0;
@@ -9889,10 +9932,10 @@
           receiverPlaybackEpoch,
           receiverPlaybackRevision,
         ) {
-          const snapshotEpoch = Number(transport?.playbackEpoch);
-          const snapshotRevision = Number(transport?.playbackRevision);
-          const receiverEpoch = Number(receiverPlaybackEpoch);
-          const receiverRevision = Number(receiverPlaybackRevision);
+          const snapshotEpoch = transport?.playbackEpoch == null ? NaN : Number(transport.playbackEpoch);
+          const snapshotRevision = transport?.playbackRevision == null ? NaN : Number(transport.playbackRevision);
+          const receiverEpoch = receiverPlaybackEpoch == null ? NaN : Number(receiverPlaybackEpoch);
+          const receiverRevision = receiverPlaybackRevision == null ? NaN : Number(receiverPlaybackRevision);
           const snapshotIdentityKnown = Number.isSafeInteger(snapshotEpoch) && snapshotEpoch >= 0 &&
             Number.isSafeInteger(snapshotRevision) && snapshotRevision >= 0;
           const receiverIdentityKnown = Number.isSafeInteger(receiverEpoch) && receiverEpoch >= 0 &&
@@ -9945,6 +9988,7 @@
           }
           return {
             timeline,
+            capturedAtAudioSec: rawTimeline.capturedAtAudioSec,
             positionSeconds: timeline.running === true ? anchoredPosition : authoritative,
             receivedAtMs: nowMs,
           };
@@ -10012,6 +10056,12 @@
         }
 
         function updateMirroredTimelineState(state) {
+          if (typeof getPresentationVisualState === "function") {
+            const presented = getPresentationVisualState(state);
+            if (presented) state = presented;
+            else if (Number.isFinite(state?.transport?.capturedAtAudioSec) &&
+                (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) return true;
+          }
           if (!state || typeof state !== "object") return false;
           const transport = state.transport && typeof state.transport === "object"
             ? state.transport
@@ -10024,9 +10074,9 @@
             ? state.tracks.map((track) => track?.timeline || null)
             : [];
           if (!rawMaster && !rawTracks.some(Boolean)) return false;
-          const captureSequence = Number(transport.captureSequence);
-          const playbackEpoch = Number(transport.playbackEpoch);
-          const playbackRevision = Number(transport.playbackRevision);
+          const captureSequence = transport.captureSequence == null ? NaN : Number(transport.captureSequence);
+          const playbackEpoch = transport.playbackEpoch == null ? NaN : Number(transport.playbackEpoch);
+          const playbackRevision = transport.playbackRevision == null ? NaN : Number(transport.playbackRevision);
           const hasPlaybackIdentity = Number.isSafeInteger(playbackEpoch) && playbackEpoch >= 0 &&
             Number.isSafeInteger(playbackRevision) && playbackRevision >= 0;
           const playbackIdentityChanged = hasPlaybackIdentity && (
@@ -10056,13 +10106,13 @@
               : mirroredTimelineState.playbackRevision,
             master: createMirroredTimelineAnchor(
               playbackIdentityChanged ? null : mirroredTimelineState.master,
-              rawMaster,
+              rawMaster ? { ...rawMaster, capturedAtAudioSec: transport.capturedAtAudioSec } : null,
               nowMs,
             ),
             tracks: rawTracks.map((timeline, index) =>
               createMirroredTimelineAnchor(
                 playbackIdentityChanged ? null : mirroredTimelineState.tracks[index],
-                timeline,
+                timeline ? { ...timeline, capturedAtAudioSec: transport.capturedAtAudioSec } : null,
                 nowMs,
               ),
             ),
@@ -10100,6 +10150,147 @@
         let smoothLfoFrameHandle = null;
         let smoothLfoFrameUsesTimeout = false;
         let lastSmoothLfoPaintMs = 0;
+        let presentationSpans = [];
+        let lastSubmittedLfoProof = null;
+        let nativePresentationGeneration = -1;
+        let pcmPresentationPosition = null;
+        let presentationVisualHistory = [];
+        let lastPresentationVisualSequence = -1;
+
+        function rememberPresentationVisualState(state) {
+          const transport = state?.transport;
+          if (!transport || !Number.isFinite(transport.capturedAtAudioSec)) return;
+          let previous = presentationVisualHistory[presentationVisualHistory.length - 1];
+          if (previous && (previous.transport.playbackEpoch !== transport.playbackEpoch ||
+              previous.transport.playbackRevision !== transport.playbackRevision)) {
+            presentationVisualHistory = [];
+            lastPresentationVisualSequence = -1;
+            previous = null;
+          }
+          if (previous && previous.transport.captureSequence >= transport.captureSequence) return;
+          presentationVisualHistory.push({ transport, master: { waveform: state.master.waveform, meters: state.master.meters,
+            timeline: state.master.timeline }, tracks: state.tracks.map((track) => ({ waveform: track.waveform,
+              meters: track.meters, timeline: track.timeline, lfoBindings: track.lfoBindings,
+              manualKnobInteraction: track.manualKnobInteraction, lfoIndicators: track.lfoIndicators,
+              lfoAssigns: track.lfoAssigns, paramDisplays: track.paramDisplays })) });
+          presentationVisualHistory = presentationVisualHistory.slice(-256);
+        }
+
+        function getPresentationVisualState(fallback, nowMs = getLfoVisualNow()) {
+          const presented = getPresentedSourceAudioTime(nowMs);
+          if (!presented) return null;
+          for (let i = presentationVisualHistory.length - 1; i >= 0; i--) {
+            const state = presentationVisualHistory[i];
+            if (state.transport.playbackEpoch !== presented.playbackEpoch || state.transport.playbackRevision !== presented.playbackRevision) continue;
+            if (state.transport.capturedAtAudioSec <= presented.audioSec) return state;
+          }
+          return null;
+        }
+
+        function acceptPresentationSpans(message) {
+          if (message.playbackEpoch !== lastPlaybackEpoch || message.playbackRevision !== lastPlaybackRevision) return false;
+          const native = message.type === "NATIVE_PRESENTATION_SPANS";
+          if (native && (message.attemptId !== nativeStartupAttemptId ||
+              !Number.isSafeInteger(message.streamGeneration) || message.streamGeneration < nativePresentationGeneration)) return false;
+          if (native && message.streamGeneration !== nativePresentationGeneration) {
+            presentationSpans = [];
+            nativePresentationGeneration = message.streamGeneration;
+          }
+          if (!Number.isFinite(message.mediaRate) || message.mediaRate <= 0 || !Array.isArray(message.spans)) return false;
+          for (const span of message.spans.slice(0, 32)) {
+            const keys = ["sourceFrameStart", "sourceFrameEnd", "mediaFrameStart", "mediaFrameEnd"];
+            if (!keys.every((key) => span[key] != null && Number.isSafeInteger(Number(span[key])) && Number(span[key]) >= 0) ||
+                Number(span.sourceFrameEnd) <= Number(span.sourceFrameStart) || Number(span.mediaFrameEnd) <= Number(span.mediaFrameStart) ||
+                !Number.isFinite(span.sourceRate) || span.sourceRate <= 0 || !/^\d+$/.test(span.sessionId || "")) continue;
+            presentationSpans.push({ ...span, mediaRate: message.mediaRate,
+              route: native ? "native" : "pcm_fallback", playbackEpoch: message.playbackEpoch,
+              playbackRevision: message.playbackRevision });
+          }
+          presentationSpans = presentationSpans.slice(-2048);
+          return true;
+        }
+
+        function sourceFrameToAudioTime(clock, sourceFrame) {
+          if (!clock || !Number.isFinite(clock.sampleRate) || clock.sampleRate <= 0 || !Array.isArray(clock.segments)) return null;
+          for (let i = Math.min(clock.segments.length, 128) - 1; i >= 0; i--) {
+            const segment = clock.segments[i];
+            if (!segment || ![segment.sourceFrameStart, segment.sourceFrameEnd, segment.audioFrameStart, segment.audioFrameEnd]
+                .every((value) => Number.isSafeInteger(value) && value >= 0)) continue;
+            if (segment.sourceFrameEnd - segment.sourceFrameStart !== segment.audioFrameEnd - segment.audioFrameStart) continue;
+            if (sourceFrame >= segment.sourceFrameStart && sourceFrame <= segment.sourceFrameEnd) {
+              return (segment.audioFrameStart + sourceFrame - segment.sourceFrameStart) / clock.sampleRate;
+            }
+          }
+          return null;
+        }
+
+        function getPresentedSourceAudioTime(nowMs = getLfoVisualNow()) {
+          const route = window._playbackMode;
+          let mediaFrame = null;
+          if (route === "native" && nativeStreamActive && !nativeStreamPaused) {
+            const audio = document.getElementById("native-stream-audio") || document.getElementById("cast-media-element");
+            const activeAudio = audio && !audio.paused && audio.readyState >= 3 ? audio : document.getElementById("cast-media-element");
+            if (activeAudio && !activeAudio.paused && activeAudio.readyState >= 3 && Number.isFinite(activeAudio.currentTime)) {
+              let span = null;
+              for (let i = presentationSpans.length - 1; i >= 0; i--) {
+                const item = presentationSpans[i];
+                if (item.route === "native" && item.playbackEpoch === lastPlaybackEpoch && item.playbackRevision === lastPlaybackRevision) {
+                  span = item;
+                  break;
+                }
+              }
+              if (span) mediaFrame = activeAudio.currentTime * span.mediaRate;
+            }
+          } else if (route === "pcm_fallback" && pcmPresentationPosition && audioCtx?.state === "running") {
+            const anchor = pcmPresentationPosition;
+            const timestamp = audioCtx.getOutputTimestamp?.();
+            const audible = timestamp && timestamp.contextTime > 0 && timestamp.performanceTime > 0
+              ? timestamp.contextTime + (nowMs - timestamp.performanceTime) / 1000
+              : audioCtx.currentTime - (audioCtx.baseLatency || 0) - (audioCtx.outputLatency || 0);
+            const elapsed = audible - anchor.audioTime;
+            if (elapsed >= -0.25 && elapsed <= 0.25 && anchor.playing &&
+                anchor.playbackEpoch === lastPlaybackEpoch && anchor.playbackRevision === lastPlaybackRevision &&
+                anchor.sessionId === lastMirroredState?.transport?.sourceAudioClock?.sessionId) mediaFrame = anchor.mediaFrame + elapsed * audioCtx.sampleRate;
+          }
+          if (mediaFrame === null) return null;
+          const clock = lastMirroredState?.transport?.sourceAudioClock;
+          for (let i = presentationSpans.length - 1; i >= 0; i--) {
+            const span = presentationSpans[i];
+            if (span.route !== route || span.playbackEpoch !== lastPlaybackEpoch || span.playbackRevision !== lastPlaybackRevision ||
+                span.sessionId !== clock?.sessionId || mediaFrame < Number(span.mediaFrameStart) || mediaFrame > Number(span.mediaFrameEnd)) continue;
+            const ratio = (mediaFrame - Number(span.mediaFrameStart)) / (Number(span.mediaFrameEnd) - Number(span.mediaFrameStart));
+            const sourceFrame = Number(span.sourceFrameStart) + ratio * (Number(span.sourceFrameEnd) - Number(span.sourceFrameStart));
+            const audioSec = sourceFrameToAudioTime(clock, sourceFrame);
+            if (audioSec === null) return null;
+            return { audioSec, sourceFrame, route, uncertaintyMs: (Number(span.uncertaintyFrames) || 0) * 1000 / span.sourceRate,
+              uncertaintyBasis: "source_frame_mapping_only", acousticOffsetMs: null, mediaClockResolutionMs: null,
+              playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision };
+          }
+          return null;
+        }
+
+        function sampleLfoTimeline(model, audioSec) {
+          const segmentAt = (segments) => {
+            if (!Array.isArray(segments)) return null;
+            for (let i = segments.length - 1; i >= 0; i--) {
+              const segment = segments[i];
+              if (Array.isArray(segment) && segment.every(Number.isFinite) && segment[0] <= audioSec) return segment;
+            }
+            return null;
+          };
+          const rate = segmentAt(model.rateTimeline);
+          if (!rate || rate.length < 5 || rate[2] <= 0 || rate[3] <= 0 || rate[4] < 0) return null;
+          const elapsed = Math.max(0, audioSec - rate[0]);
+          const ramp = Math.min(elapsed, rate[4]);
+          const cycles = rate[4] > 0
+            ? rate[2] * ramp + (rate[3] - rate[2]) * ramp * ramp / (2 * rate[4]) + rate[3] * (elapsed - ramp)
+            : rate[3] * elapsed;
+          const gate = segmentAt(model.gateTimeline);
+          const gateValue = gate && gate.length >= 4 ? gate[1] + (gate[2] - gate[1]) *
+            (gate[3] > 0 ? Math.min(1, Math.max(0, audioSec - gate[0]) / gate[3]) : 1) : 0;
+          return { phase: normalizeLfoPhase(rate[1] + LFO_VISUAL_TWO_PI * cycles),
+            gateValue: Math.max(0, Math.min(1, gateValue)), active: Boolean(gate && gate[2] > 0) };
+        }
 
         function normalizeLfoPhase(value) {
           if (value == null) return null;
@@ -10123,7 +10314,8 @@
 
         function estimateGuiClockMapping(samples) {
           const valid = (Array.isArray(samples) ? samples : [])
-            .filter((sample) => Number.isFinite(Number(sample?.receiverMidMs)) &&
+            .filter((sample) => sample?.receiverMidMs != null && sample?.senderMidMs != null && sample?.rttMs != null &&
+              Number.isFinite(Number(sample.receiverMidMs)) &&
               Number.isFinite(Number(sample?.senderMidMs)) &&
               Number.isFinite(Number(sample?.rttMs)) && Number(sample.rttMs) >= 0)
             .sort((a, b) => Number(a.rttMs) - Number(b.rttMs));
@@ -10159,12 +10351,15 @@
             bestRttMs,
             uncertaintyMs: bestRttMs / 2,
             sampleCount: fitSamples.length,
+            lastSampleReceiverMs: Math.max(...valid.map((sample) => Number(sample.receiverMidMs))),
           };
         }
 
         function mapReceiverToSenderMonotonic(receiverMonotonicMs, mapping = guiClockSyncEstimate) {
           const receiverMs = Number(receiverMonotonicMs);
           if (!mapping || !Number.isFinite(receiverMs)) return null;
+          const lastSampleMs = Number(mapping.lastSampleReceiverMs ?? mapping.receiverReferenceMs);
+          if (!Number.isFinite(lastSampleMs) || receiverMs - lastSampleMs > 10_000) return null;
           return Number(mapping.senderReferenceMs) +
             Number(mapping.slope || 1) * (receiverMs - Number(mapping.receiverReferenceMs));
         }
@@ -10274,7 +10469,8 @@
 
         function mirroredCaptureAgeMs(transport, receiverMonotonicNowMs = getLfoVisualNow()) {
           if (transport?.captureTimestampClock !== "sender_performance_ms") return null;
-          const capturedAtMonotonicMs = Number(transport?.capturedAtMonotonicMs);
+          if (transport?.capturedAtMonotonicMs == null) return null;
+          const capturedAtMonotonicMs = Number(transport.capturedAtMonotonicMs);
           if (!Number.isFinite(capturedAtMonotonicMs) || !guiClockSyncEstimate) return null;
           const estimatedSenderNowMs = mapReceiverToSenderMonotonic(receiverMonotonicNowMs);
           if (!Number.isFinite(estimatedSenderNowMs)) return null;
@@ -10284,6 +10480,17 @@
         }
 
         function advanceSmoothLfoClock(clock, nowMs) {
+          if (clock?.model) {
+            const presented = getPresentedSourceAudioTime(nowMs);
+            const mediaOwned = window._playbackMode === "native" || window._playbackMode === "pcm_fallback";
+            const elapsed = clock.model.clockRunning === true ? Math.max(0, nowMs - clock.modelReceivedAtMs) / 1000 : 0;
+            const audioSec = presented?.audioSec ?? (mediaOwned ? null : clock.model.sampledAtAudioSec + elapsed + clock.modelCaptureAgeSec);
+            const sample = audioSec === null ? null : sampleLfoTimeline(clock.model, audioSec);
+            clock.presentation = presented;
+            clock.presentationAvailable = Boolean(sample);
+            if (sample) Object.assign(clock, sample, { sourceAudioSec: audioSec, correction: 0, lastFrameMs: nowMs });
+            return;
+          }
           if (!clock || !clock.active || clock.phase === null) {
             if (clock) clock.lastFrameMs = nowMs;
             return;
@@ -10292,7 +10499,7 @@
             clock.lastFrameMs = nowMs;
             return;
           }
-          const deltaSeconds = Math.max(0, Math.min(0.1, (nowMs - clock.lastFrameMs) / 1000));
+          const deltaSeconds = Math.max(0, (nowMs - clock.lastFrameMs) / 1000);
           clock.lastFrameMs = nowMs;
           clock.phase = normalizeLfoPhase(
             clock.phase + (LFO_VISUAL_TWO_PI * deltaSeconds) / Math.max(0.1, clock.period),
@@ -10311,6 +10518,17 @@
         function syncSmoothLfoClock(index, state, nowMs, captureAgeMs = null) {
           const clock = smoothLfoClocks[index];
           if (!clock) return;
+          const sampledAtMs = state?.sampledAtMonotonicMs == null ? null : Number(state.sampledAtMonotonicMs);
+          if (Number.isFinite(sampledAtMs) && Number.isFinite(clock.lastSampledAtMonotonicMs) &&
+              sampledAtMs < clock.lastSampledAtMonotonicMs) return;
+          if (Number.isFinite(sampledAtMs)) clock.lastSampledAtMonotonicMs = sampledAtMs;
+          if (Array.isArray(state?.rateTimeline) && Number.isFinite(state.sampledAtAudioSec)) {
+            clock.model = { ...state, rateTimeline: state.rateTimeline.slice(-512), gateTimeline: state.gateTimeline?.slice(-128) || [] };
+            clock.modelReceivedAtMs = nowMs;
+            clock.modelCaptureAgeSec = Math.max(0, captureAgeMs || 0) / 1000;
+            advanceSmoothLfoClock(clock, nowMs);
+            return;
+          }
           advanceSmoothLfoClock(clock, nowMs);
           const wasActive = clock.active;
           const nextActive = Boolean(state?.active);
@@ -10343,11 +10561,15 @@
 
         function canRenderSmoothLfo(index) {
           const clock = smoothLfoClocks[index];
-          return Boolean(clock?.active && clock.phase !== null);
+          return Boolean(clock && clock.phase !== null && (clock.active || clock.model));
         }
 
         function getTrackLfoVisualBinding(track, parameter) {
           if (!track || !parameter) return null;
+          if (track.lfoBindings && Object.prototype.hasOwnProperty.call(track.lfoBindings, parameter)) {
+            const binding = track.lfoBindings[parameter];
+            return binding && [1, 2].includes(binding.index) ? { ...binding, authoritative: true } : null;
+          }
           const indicator = track.lfoIndicators?.[parameter];
           for (const index of [1, 2]) {
             const visual = indicator?.[`lfo${index}`];
@@ -10363,6 +10585,19 @@
               minMarker: indicator?.minMarker,
               maxMarker: indicator?.maxMarker,
             };
+          }
+          return null;
+        }
+
+        function samplePresentedControlValue(binding, trackIndex, parameter, audioSec) {
+          if (binding?.controlClockMode !== "media_element_control_rate") return null;
+          const latest = lastMirroredState?.tracks?.[trackIndex]?.lfoBindings?.[parameter];
+          const timeline = latest?.connectedAtAudioSec === binding.connectedAtAudioSec && latest?.index === binding.index
+            ? latest.controlTimeline : binding.controlTimeline;
+          if (!Array.isArray(timeline) || !Number.isFinite(audioSec)) return null;
+          for (let i = Math.min(512, timeline.length) - 1; i >= 0; i--) {
+            const point = timeline[i];
+            if (Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]) && point[0] <= audioSec) return point[1];
           }
           return null;
         }
@@ -10417,6 +10652,7 @@
         }
 
         function resetSmoothLfoVisuals() {
+          lastSubmittedLfoProof = null;
           if (smoothLfoFrameHandle !== null) {
             if (smoothLfoFrameUsesTimeout) window.clearTimeout(smoothLfoFrameHandle);
             else if (typeof window.cancelAnimationFrame === "function") {
@@ -10432,6 +10668,9 @@
               correction: 0,
               period: 1.8,
               lastFrameMs: 0,
+              lastSampledAtMonotonicMs: null,
+              model: null,
+              presentationAvailable: false,
             });
           });
         }
@@ -10448,28 +10687,35 @@
             lastSmoothLfoPaintMs = nowMs;
             [1, 2].forEach((index) => {
               if (!canRenderSmoothLfo(index)) return;
-              const signedValue = Math.sin(smoothLfoClocks[index].phase);
+              const signedValue = Math.sin(smoothLfoClocks[index].phase) * (smoothLfoClocks[index].gateValue ?? 1);
               updateStyleWidth(
                 index === 1 ? "lfo-meter-bar" : "lfo2-meter-bar",
                 `${Math.abs(signedValue) * 100}%`,
               );
             });
-            (lastMirroredState?.tracks || []).forEach((track, trackIndex) => {
+            const presentedVisual = getPresentationVisualState(lastMirroredState, nowMs);
+            if (presentedVisual && presentedVisual.transport.captureSequence !== lastPresentationVisualSequence) {
+              lastPresentationVisualSequence = presentedVisual.transport.captureSequence;
+              scheduleWaveformRender(presentedVisual, false, -1);
+              updateMirroredTimelineState(presentedVisual);
+            }
+            (presentedVisual?.tracks || lastMirroredState?.tracks || []).forEach((track, trackIndex) => {
               KNOB_CONFIGS.forEach((config) => {
                 const binding = getTrackLfoVisualBinding(track, config.p);
                 if (!binding || !canRenderSmoothLfo(binding.index)) return;
+                if (binding.manualOwned || track.manualKnobInteraction?.[config.p]) return;
                 const sliderId = `t-${config.p}-sl-${trackIndex}`;
                 const slider = getEl(sliderId);
                 if (!slider || slider.dataset.castInteractionState === "pending") return;
                 const minimum = Number.isFinite(Number(slider.min)) ? Number(slider.min) : config.min;
                 const maximum = Number.isFinite(Number(slider.max)) ? Number(slider.max) : config.max;
-                const rangeMinimum = markerValueFromPercent(
+                const rangeMinimum = binding.authoritative ? binding.min : markerValueFromPercent(
                   binding.minMarker,
                   minimum,
                   maximum,
                   minimum,
                 );
-                const rangeMaximum = markerValueFromPercent(
+                const rangeMaximum = binding.authoritative ? binding.max : markerValueFromPercent(
                   binding.maxMarker,
                   minimum,
                   maximum,
@@ -10477,27 +10723,36 @@
                 );
                 let signedValue = Math.sin(smoothLfoClocks[binding.index].phase);
                 if (binding.reversed) signedValue = -signedValue;
-                const scaled =
+                const modulated =
                   ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum;
+                const gate = smoothLfoClocks[binding.index].gateValue ?? 1;
+                const controlValue = samplePresentedControlValue(binding, trackIndex, config.p, smoothLfoClocks[binding.index].sourceAudioSec);
+                if (binding.controlClockMode === "media_element_control_rate" && controlValue === null) return;
+                const scaled = controlValue ?? (binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated);
                 updateValue(sliderId, scaled);
                 updateText(
                   `t-${config.p}-val-${trackIndex}`,
                   formatMirroredParameterDisplay(
                     track.paramDisplays?.[config.p],
-                    scaled,
+                    Number(slider.value),
                   ),
                 );
               });
             });
-            if (nowMs - lastLfoVisualTelemetryAtMs >= GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS) {
+            if (!lastSubmittedLfoProof || nowMs - lastLfoVisualTelemetryAtMs >= GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS) {
               const samples = summarizeLfoVisualSamples(lastMirroredState);
-              if (samples.some((sample) => sample.masterActive)) {
+              lastLfoVisualTelemetryAtMs = nowMs;
+              lfoVisualFrameSequence += 1;
+              lastSubmittedLfoProof = { samples, sampledAtMs: Date.now(), receiverMonotonicMs: nowMs,
+                frameSequence: lfoVisualFrameSequence, transport: lastMirroredState?.transport || {} };
+              if (samples.some((sample) => sample.masterActive || sample.clockActive)) {
                 const transport = lastMirroredState?.transport || {};
                 const captureAgeMs = mirroredCaptureAgeMs(transport, nowMs);
-                lastLfoVisualTelemetryAtMs = nowMs;
-                lfoVisualFrameSequence += 1;
                 sendGuiChannelTelemetry("lfo_visual_frame", {
                   lfoVisualFrameSequence,
+                  evidenceStage: "animation_frame_dom_submitted",
+                  assignedControlCoverage: samples.length,
+                  coverageTruncated: false,
                   receiverRenderMonotonicMs: Number(nowMs.toFixed(3)),
                   timelineCaptureSequence: Number.isSafeInteger(Number(transport.captureSequence))
                     ? Number(transport.captureSequence)
@@ -10532,10 +10787,24 @@
         }
 
         function syncSmoothLfoVisuals(master, transport = null) {
+          const epoch = transport?.playbackEpoch;
+          const revision = transport?.playbackRevision;
+          if (Number.isSafeInteger(epoch) && Number.isSafeInteger(revision) &&
+              typeof lastPlaybackEpoch === "number" && typeof lastPlaybackRevision === "number" &&
+              lastPlaybackEpoch >= 0 && lastPlaybackRevision >= 0 &&
+              (epoch !== lastPlaybackEpoch || revision !== lastPlaybackRevision)) return;
           const nowMs = getLfoVisualNow();
           const captureAgeMs = mirroredCaptureAgeMs(transport, nowMs);
-          syncSmoothLfoClock(1, master?.lfo1, nowMs, captureAgeMs);
-          syncSmoothLfoClock(2, master?.lfo2, nowMs, captureAgeMs);
+          [1, 2].forEach((index) => {
+            const state = master?.[`lfo${index}`];
+            const sampleAgeMs = state?.sampledAtMonotonicMs == null
+              ? captureAgeMs
+              : mirroredCaptureAgeMs({
+                  captureTimestampClock: "sender_performance_ms",
+                  capturedAtMonotonicMs: state.sampledAtMonotonicMs,
+                }, nowMs);
+            syncSmoothLfoClock(index, state, nowMs, sampleAgeMs);
+          });
           if (canRenderSmoothLfo(1) || canRenderSmoothLfo(2)) {
             scheduleSmoothLfoRender();
           }
@@ -10599,15 +10868,15 @@
           return copy;
         }
 
-        function mergeGuiLivePatch(patch) {
+        function mergeGuiLivePatch(patch, baseState = lastMirroredState) {
           if (
-            !lastMirroredState ||
+            !baseState ||
             !patch ||
             typeof patch !== "object"
           ) {
             return null;
           }
-          const nextState = cloneMirroredState(lastMirroredState);
+          const nextState = cloneMirroredState(baseState);
           if (!nextState) return null;
           if (Number.isInteger(Number(patch.trackCount)) && Number(patch.trackCount) > 0) {
             nextState.trackCount = Number(patch.trackCount);
@@ -10690,6 +10959,8 @@
                 params: {
                   ...(previousTrack?.params || {}),
                   ...(trackPatch.params || {}),
+                  ...(trackPatch.params?.volume != null && trackPatch.params?.vol == null
+                    ? { vol: trackPatch.params.volume } : {}),
                 },
                 paramDisplays: {
                   ...(previousTrack?.paramDisplays || {}),
@@ -10703,6 +10974,10 @@
                   ...(previousTrack?.lfoIndicators || {}),
                   ...(trackPatch.lfoIndicators || {}),
                 },
+                lfoBindings: trackPatch.lfoBindings ? {
+                  ...(previousTrack?.lfoBindings || {}),
+                  ...trackPatch.lfoBindings,
+                } : previousTrack?.lfoBindings,
               };
             });
           }
@@ -10871,7 +11146,7 @@
           // DOM throttle so a burst of GUI snapshots cannot leave the canvas
           // one or more revisions behind while controls remain throttled.
           const waveformPhaseStartedAt = phaseClock();
-          scheduleWaveformRender(s, force, guiRevision);
+          scheduleWaveformRender(getPresentationVisualState(s) || s, force, guiRevision);
           const waveformPhaseFinishedAt = phaseClock();
           const timelinePhaseStartedAt = phaseClock();
           const hasMirroredTimeline = updateMirroredTimelineState(s);
@@ -10883,6 +11158,19 @@
             timelineMs: Math.max(0, timelinePhaseFinishedAt - timelinePhaseStartedAt),
           };
           if (!force && now - lastRenderTime < renderThrottleMs) {
+            pendingGuiRenderState = s;
+            pendingGuiRenderRevision = guiRevision;
+            if (pendingGuiRenderTimer === null) pendingGuiRenderTimer = setTimeout(() => {
+              pendingGuiRenderTimer = null;
+              const state = pendingGuiRenderState;
+              const revision = pendingGuiRenderRevision;
+              pendingGuiRenderState = null;
+              if (state && renderState(state, true, revision) === true) {
+                guiRenderedCount += 1;
+                guiLastRenderedRevision = revision;
+                sendGuiChannelTelemetry("applied", { revision, renderResult: "rendered_after_throttle" });
+              }
+            }, Math.max(1, renderThrottleMs - (now - lastRenderTime)));
             guiRenderThrottleSkips += 1;
             lastGuiRenderPhaseStats = {
               throttled: true,
@@ -10900,6 +11188,11 @@
             return "throttled";
           }
           lastRenderTime = now;
+          if (pendingGuiRenderState && guiRevision >= pendingGuiRenderRevision) {
+            clearTimeout(pendingGuiRenderTimer);
+            pendingGuiRenderTimer = null;
+            pendingGuiRenderState = null;
+          }
           try {
             if (!hasMirroredTimeline && s.transport?.position) {
               updateText("recording-time-display", s.transport.position);
@@ -10986,6 +11279,10 @@
                     ? numericPadId
                     : i + 1;
                   const btnId = "sample-" + padId;
+                  const padCacheKey = `sampler-pad:${padId}`;
+                  const padSignature = JSON.stringify(p);
+                  if (valCache[padCacheKey] === padSignature) return;
+                  valCache[padCacheKey] = padSignature;
                   const cls = [
                     "sample-btn",
                     p.loaded ? "loaded" : "",
@@ -11257,6 +11554,7 @@
             console.error("❌ Receiver Render Error:", e);
             return false;
           }
+          if (typeof scheduleGuiPaintOpportunity === "function") scheduleGuiPaintOpportunity(guiRevision);
           return true;
         }
 
@@ -11319,7 +11617,7 @@
           "FORCE_CLOSE",
         ]);
 
-        function sendReceiverBridgeMessage(payload, requestedChannel = "auto") {
+        function sendReceiverBridgeMessage(payload, requestedChannel = "auto", requireImmediate = false) {
           let message = payload;
           if (typeof payload === "string") {
             try {
@@ -11339,6 +11637,7 @@
               return true;
             } catch (_error) {}
           }
+          if (requireImmediate) return false;
           if (useGuiControl && messageType) {
             if (messageType === "GUI_ACTION") {
               if (pendingGuiControlActions.length >= MAX_PENDING_GUI_ACTIONS) {
@@ -11717,7 +12016,7 @@
             reason || "playback_start",
           );
           if (workletNode && workletNode.port) {
-            try { workletNode.port.postMessage({ type: "RESUME" }); } catch (e) {}
+            try { workletNode.port.postMessage({ type: "RESUME", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision }); } catch (e) {}
           }
           const immediateState = buildImmediatePlaybackState(d.trackId);
           if (immediateState) {
@@ -11797,87 +12096,43 @@
 
         function summarizeLfoVisualSamples(state) {
           const samples = [];
-          (state?.tracks || []).forEach((track, trackIndex) => {
-            [1, 2].forEach((lfoIndex) => {
-              const config = KNOB_CONFIGS.find((item) => {
-                const indicator = track?.lfoIndicators?.[item.p];
-                const visual = indicator?.[`lfo${lfoIndex}`];
-                return Boolean(
-                  visual && typeof visual === "object"
-                    ? visual.checked
-                    : visual ?? track?.lfoAssigns?.[lfoIndex]?.includes?.(item.p),
-                );
-              });
-              if (!config) return;
-
+          const visualState = getPresentationVisualState(state) || state;
+          (visualState?.tracks || []).slice(0, 4).forEach((track, trackIndex) => {
+            KNOB_CONFIGS.forEach((config) => {
               const binding = getTrackLfoVisualBinding(track, config.p);
+              if (!binding) return;
+              const lfoIndex = binding.index;
               const clock = smoothLfoClocks[lfoIndex];
-              const masterLfo = state?.master?.[`lfo${lfoIndex}`];
-              const assignment = track?.lfoIndicators?.[config.p]?.[`lfo${lfoIndex}`];
               const slider = getEl(`t-${config.p}-sl-${trackIndex}`);
               const valueDisplay = getEl(`t-${config.p}-val-${trackIndex}`);
-              const minimum = Number.isFinite(Number(slider?.min))
-                ? Number(slider.min)
-                : config.min;
-              const maximum = Number.isFinite(Number(slider?.max))
-                ? Number(slider.max)
-                : config.max;
-              const indicator = track?.lfoIndicators?.[config.p];
-              const rangeMinimum = markerValueFromPercent(
-                indicator?.minMarker,
-                minimum,
-                maximum,
-                minimum,
-              );
-              const rangeMaximum = markerValueFromPercent(
-                indicator?.maxMarker,
-                minimum,
-                maximum,
-                maximum,
-              );
-              const phaseRad = clock?.phase == null ? Number.NaN : Number(clock.phase);
-              const phaseAvailable = Number.isFinite(phaseRad);
-              const rawValue = phaseAvailable ? Math.sin(phaseRad) : null;
-              const reversed = Boolean(
-                assignment && typeof assignment === "object"
-                  ? assignment.reversed
-                  : binding?.reversed,
-              );
-              const renderBindingMatches = binding?.index === lfoIndex;
-              const signedValue = rawValue === null
-                ? null
-                : reversed ? -rawValue : rawValue;
-              const active = Boolean(
-                masterLfo?.active && clock?.active && phaseAvailable && renderBindingMatches,
-              );
-              const scaledValue = active && signedValue !== null
-                ? ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum
-                : null;
-              const renderedValue = Number(slider?.value);
-
-              samples.push({
-                trackIndex,
-                parameter: config.p,
-                lfoIndex,
-                assigned: true,
-                reversed,
-                renderBindingLfoIndex: binding?.index ?? null,
-                renderBindingMatches,
-                active,
-                masterActive: Boolean(masterLfo?.active),
-                clockActive: Boolean(clock?.active),
-                phaseAvailable,
-                phaseRad: phaseAvailable ? Number(phaseRad.toFixed(4)) : null,
-                signedValue: signedValue === null ? null : Number(signedValue.toFixed(4)),
-                rangeMinimum: Number(rangeMinimum.toFixed(4)),
-                rangeMaximum: Number(rangeMaximum.toFixed(4)),
-                expectedValue: scaledValue === null ? null : Number(scaledValue.toFixed(4)),
-                renderedValue: slider && Number.isFinite(renderedValue)
-                  ? Number(renderedValue.toFixed(4))
-                  : null,
-                renderedLabel: valueDisplay?.textContent ?? null,
-                controlPresent: Boolean(slider),
+              const minimum = Number.isFinite(Number(slider?.min)) ? Number(slider.min) : config.min;
+              const maximum = Number.isFinite(Number(slider?.max)) ? Number(slider.max) : config.max;
+              const rangeMinimum = binding.authoritative ? binding.min : markerValueFromPercent(binding.minMarker, minimum, maximum, minimum);
+              const rangeMaximum = binding.authoritative ? binding.max : markerValueFromPercent(binding.maxMarker, minimum, maximum, maximum);
+              const phaseAvailable = Number.isFinite(clock?.phase) && clock.phase !== null;
+              let signedValue = phaseAvailable ? Math.sin(clock.phase) : null;
+              if (binding.reversed && signedValue !== null) signedValue = -signedValue;
+              const modulated = signedValue === null ? null : (signedValue + 1) * 0.5 * (rangeMaximum - rangeMinimum) + rangeMinimum;
+              const gate = clock?.gateValue ?? 1;
+              const controlValue = samplePresentedControlValue(binding, trackIndex, config.p, clock?.sourceAudioSec);
+              const expected = binding.controlClockMode === "media_element_control_rate" ? controlValue :
+                modulated === null ? null : binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated;
+              const renderedValue = slider ? Number(slider.value) : null;
+              samples.push({ trackIndex, parameter: config.p, lfoIndex, assigned: true,
+                reversed: Boolean(binding.reversed), renderBindingLfoIndex: lfoIndex, renderBindingMatches: true,
+                active: Boolean(clock?.active && phaseAvailable), masterActive: Boolean(state?.master?.[`lfo${lfoIndex}`]?.active),
+                clockActive: Boolean(clock?.active), phaseAvailable, phaseRad: phaseAvailable ? clock.phase : null,
+                signedValue, rangeMinimum, rangeMaximum, expectedValue: expected, renderedValue: renderedValue === null ? null : Number(renderedValue.toFixed(4)),
+                renderedLabel: valueDisplay?.textContent ?? null, controlPresent: Boolean(slider),
+                controlStep: Number(slider?.step) || config.s,
+                manualOwned: Boolean(binding.manualOwned || track.manualKnobInteraction?.[config.p]),
                 interactionPending: slider?.dataset.castInteractionState === "pending",
+                sourceAudioSec: clock?.sourceAudioSec ?? null,
+                presentation: clock?.presentation ?? null,
+                presentationAvailable: clock?.presentationAvailable ?? false,
+                controlClockMode: binding.controlClockMode || "native_audio_param",
+                controlRateError: binding.controlRateError === true,
+                evidenceStage: "animation_frame_dom_submitted",
               });
             });
           });
@@ -11885,7 +12140,11 @@
         }
 
         function captureLfoVisualProof(state, nowMs = Date.now()) {
-          const samples = summarizeLfoVisualSamples(state);
+          const proof = lastSubmittedLfoProof;
+          if (!proof) return null;
+          if (Number.isSafeInteger(state?.transport?.playbackEpoch) && Number.isSafeInteger(proof.transport.playbackEpoch) &&
+              (state.transport.playbackEpoch !== proof.transport.playbackEpoch || state.transport.playbackRevision !== proof.transport.playbackRevision)) return null;
+          const samples = proof.samples;
           if (samples.length === 0) return null;
           const signature = JSON.stringify(samples.map((sample) => [
             sample.trackIndex,
@@ -11909,7 +12168,11 @@
           guiLastLfoVisualProofAt = nowMs;
           guiLastLfoVisualProofSignature = signature;
           return {
-            lfoVisualSampleAtMs: nowMs,
+            lfoVisualSampleAtMs: proof.sampledAtMs,
+            lfoVisualReceiverMonotonicMs: proof.receiverMonotonicMs,
+            lfoVisualProofCaptureSequence: proof.transport.captureSequence ?? null,
+            lfoVisualProofFrameSequence: proof.frameSequence,
+            lfoVisualEvidenceStage: "last_animation_frame_dom_submitted",
             lfoVisualSamples: samples,
           };
         }
@@ -12079,9 +12342,9 @@
           if (Number.isSafeInteger(revision) && revision >= 0 && revision === lastGuiRevision) {
             // A bounded sender retry can arrive after the original render was
             // accepted. ACK the committed revision without rendering twice.
-            if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+            if (guiControlWS && guiControlWS.readyState === WebSocket.OPEN) {
               try {
-                sendReceiverBridgeMessage({
+                const ackSent = sendReceiverBridgeMessage({
                   type: "GUI_ACK",
                   transport: "gui",
                   guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
@@ -12104,7 +12367,8 @@
                       : Date.now()) - messageStartedAt,
                   ),
                   payloadBytes: 0,
-                }, "gui");
+                }, "gui", true);
+                if (!ackSent) throw new Error("GUI ACK socket write failed");
                 guiAckCount += 1;
                 guiLastAckRevision = revision;
                 emitGuiChannelTelemetry("acknowledged", {
@@ -12146,6 +12410,7 @@
             writeCastDebug("warn", "Receiver rejected GUI_STATE_UPDATE with an unsupported state schema.");
             return;
           }
+          rememberPresentationVisualState(normalizedState);
           const acceptedRevision = Number(envelope.guiRevision || -1);
           const renderStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
             ? performance.now()
@@ -12171,7 +12436,7 @@
             ? performance.now()
             : Date.now();
           const renderTimeMs = Math.max(0, renderFinishedAt - renderStartedAt);
-          const payloadBytes = JSON.stringify(state).length;
+          const payloadBytes = Number.isSafeInteger(envelope._receiverWireBytes) ? envelope._receiverWireBytes : null;
           if (renderResult === false) {
             rejectGuiChannelMessage("render_failed", {
               revision: acceptedRevision,
@@ -12211,11 +12476,17 @@
           guiLastRenderTimeMs = renderTimeMs;
           guiLastPayloadBytes = payloadBytes;
           lastMirroredState = normalizedState;
-          if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
+          if (envelope.patchType !== "volume_state") {
+            guiRevisionStates.set(acceptedRevision, normalizedState);
+            while (guiRevisionStates.size > 32) guiRevisionStates.delete(guiRevisionStates.keys().next().value);
+          }
+          if (guiControlWS && guiControlWS.readyState === WebSocket.OPEN) {
             try {
               let visualTelemetry = {};
               try {
-                if (renderResult !== "deferred") {
+                const visualProofDue = ackType !== "patch" || Date.now() - guiLastVisualProofAt >= 1000;
+                if (renderResult !== "deferred" && visualProofDue) {
+                  guiLastVisualProofAt = Date.now();
                   const waveformProofDue =
                     lastWaveformRenderStats.missing > 0 ||
                     Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
@@ -12265,7 +12536,7 @@
                   ? performance.now()
                   : Date.now()) - messageStartedAt,
               );
-              sendReceiverBridgeMessage({
+              const ackSent = sendReceiverBridgeMessage({
                 type: "GUI_ACK",
                 transport: "gui",
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
@@ -12285,7 +12556,8 @@
                 receiverProcessingMs,
                 payloadBytes,
                 ...visualTelemetry,
-              }, "gui");
+              }, "gui", true);
+              if (!ackSent) throw new Error("GUI ACK socket write failed");
               guiAckCount += 1;
               guiLastAckRevision = revision;
               emitGuiChannelTelemetry("acknowledged", {
@@ -12326,24 +12598,63 @@
             return null;
           }
           const finite = (value, fallback = 0) => {
+            if ((typeof value !== "number" && typeof value !== "string") || String(value).trim() === "") return fallback;
             const number = Number(value);
             return Number.isFinite(number) ? number : fallback;
           };
+          const nonnegative = (value) => {
+            const number = finite(value, null);
+            return number !== null && number >= 0 ? number : null;
+          };
+          const identity = (value) => {
+            const number = nonnegative(value);
+            return Number.isSafeInteger(number) ? number : null;
+          };
+          const transport = state.transport && typeof state.transport === "object"
+            ? state.transport
+            : {};
+          const playbackEpoch = identity(transport.playbackEpoch);
+          const playbackRevision = identity(transport.playbackRevision);
+          const hasPlaybackIdentity = playbackEpoch !== null && playbackRevision !== null;
+          const timeline = (raw) => raw && typeof raw === "object" && !Array.isArray(raw) ? {
+            ...raw,
+            positionSeconds: Math.max(0, finite(raw.positionSeconds)),
+            durationSeconds: Math.max(0, finite(raw.durationSeconds)),
+            playbackRate: Math.max(0.01, finite(raw.playbackRate, 1)),
+            direction: finite(raw.direction, 1) < 0 ? -1 : 1,
+            running: raw.running === true,
+            loopEnabled: raw.loopEnabled === true,
+            loopStartSeconds: Math.max(0, finite(raw.loopStartSeconds)),
+            loopEndSeconds: Math.max(0, finite(raw.loopEndSeconds, finite(raw.durationSeconds))),
+          } : null;
           const meters = (value) => ({
             l: Math.max(0, Math.min(1, finite(value?.l))),
             r: value?.r == null ? null : Math.max(0, Math.min(1, finite(value.r))),
           });
           const normalized = {
             ...state,
-              guiContractVersion: Number(state.guiContractVersion) || 3,
+            guiContractVersion: Number(state.guiContractVersion) || 3,
             transport: {
-              position: String(state.transport?.position || "00:00:00"),
+              position: String(transport.position || "00:00:00"),
+              formatterKind: typeof transport.formatterKind === "string" ? transport.formatterKind : null,
+              captureSequence: identity(transport.captureSequence),
+              capturedAtMs: nonnegative(transport.capturedAtMs),
+              capturedAtMonotonicMs: nonnegative(transport.capturedAtMonotonicMs),
+              captureTimestampClock: transport.captureTimestampClock === "sender_performance_ms"
+                ? "sender_performance_ms" : null,
+              playbackEpoch: hasPlaybackIdentity ? playbackEpoch : null,
+              playbackRevision: hasPlaybackIdentity ? playbackRevision : null,
+              master: timeline(transport.master),
+              capturedAtAudioSec: nonnegative(transport.capturedAtAudioSec),
+              sourceAudioClock: transport.sourceAudioClock && typeof transport.sourceAudioClock === "object"
+                ? transport.sourceAudioClock : null,
             },
             master: {
               ...state.master,
               volume: finite(state.master.volume),
               loopLength: Math.max(0, finite(state.master.loopLength, 4)),
               meters: meters(state.master.meters),
+              timeline: timeline(state.master.timeline),
             },
             tracks: state.tracks.slice(0, 4).map((track, index) => ({
               ...track,
@@ -12352,10 +12663,12 @@
               meters: meters(track?.meters),
               buttons: track?.buttons && typeof track.buttons === "object" ? track.buttons : {},
               params: track?.params && typeof track.params === "object" ? track.params : {},
+              timeline: timeline(track?.timeline),
             })),
             dialogs: Array.isArray(state.dialogs) ? state.dialogs : [],
             dialogRegistry: Array.isArray(state.dialogRegistry) ? state.dialogRegistry : [],
             qa: {
+              revision: identity(state.qa.revision),
               visible: Boolean(state.qa.visible),
               text: String(state.qa.text || "").slice(0, 4000),
             },
@@ -12488,6 +12801,10 @@
             return true;
           }
           const rawGuiType = d && d.type;
+          if (rawGuiType === "NATIVE_PRESENTATION_SPANS" || rawGuiType === "PCM_PRESENTATION_SPANS") {
+            if (source === "GUI control WebSocket") acceptPresentationSpans(d);
+            return true;
+          }
           if (rawGuiType === "GUI_CLOCK_SYNC_PONG") {
             if (
               source !== "GUI control WebSocket" ||
@@ -12616,7 +12933,9 @@
                 writeCastDebug("warn", "Receiver rejected GUI_STATE_PATCH with an unsupported protocol envelope.");
                 return true;
               }
-              const mergedState = mergeGuiLivePatch(d.patch);
+              const explicitBase = d.patchType === "live_state" && Number.isSafeInteger(d.guiBaseRevision);
+              const baseState = explicitBase ? guiRevisionStates.get(d.guiBaseRevision) : lastMirroredState;
+              const mergedState = mergeGuiLivePatch(d.patch, baseState || null);
               if (!mergedState) {
                 rejectGuiChannelMessage("missing_patch_base", {
                   revision: Number(d.guiRevision ?? -1),
@@ -12763,6 +13082,7 @@
             let data = null;
             try {
               data = JSON.parse(event.data);
+              data._receiverWireBytes = new TextEncoder().encode(event.data).byteLength;
               handleReceiverCommand(data, "GUI control WebSocket");
             } catch (error) {
               if (!(error instanceof SyntaxError)) {
@@ -13304,7 +13624,7 @@
             }
             if (workletNode) {
               try {
-                workletNode.port.postMessage({ type: "RESET" });
+                workletNode.port.postMessage({ type: "RESET", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision });
               } catch (e) {}
             }
             window._lastBinaryTime = 0;
