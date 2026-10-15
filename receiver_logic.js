@@ -6416,6 +6416,9 @@
           _lastAssignmentCache.length = 0;
           _lastParamsCache.length = 0;
           _lastFxCache.length = 0;
+          Object.keys(valCache).forEach((key) => {
+            if (key.startsWith("track-metadata:")) delete valCache[key];
+          });
           const normalizedTrackCount = Math.max(
             1,
             Math.min(32, Math.floor(Number(trackCount) || 4)),
@@ -10080,8 +10083,7 @@
           if (typeof getPresentationVisualState === "function") {
             const presented = getPresentationVisualState(state, frameNowMs);
             if (presented) state = presented;
-            else if (Number.isFinite(state?.transport?.capturedAtAudioSec) &&
-                (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) return true;
+            else if (window._playbackMode === "native" || window._playbackMode === "pcm_fallback") return true;
           }
           if (!state || typeof state !== "object") return false;
           const transport = state.transport && typeof state.transport === "object"
@@ -10307,12 +10309,33 @@
         let lastQueuedPresentationHasTimeline = false;
         function queuePresentationVisuals(state, nowMs = getLfoVisualNow(), force = false, revision = -1) {
           const presented = getPresentationVisualState(state, nowMs);
-          if (!presented && Number.isFinite(state?.transport?.capturedAtAudioSec) &&
-              (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) return true;
+          if (!presented && (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")) {
+            if (state?.transport?.visualClockMode !== "idle_preview") return true;
+            // Decoded-file geometry is static content, not a claim about
+            // audible position. Paint it while CAF is prewarmed, but omit
+            // live analyser/master surfaces and timelines until media mapping
+            // can anchor those visuals to actual presentation.
+            const staticTracks = (state.tracks || []).map((track) => {
+              const waveform = track?.waveform;
+              const isStaticFile = waveform && ["decoded_buffer", "streaming_cue"].includes(waveform.source);
+              return isStaticFile ? { waveform, timeline: null } : null;
+            });
+            const staticVisual = { transport: state.transport, master: {}, tracks: staticTracks };
+            const transport = state.transport;
+            const key = Number.isSafeInteger(transport.captureSequence)
+              ? `${transport.sourceAudioClock?.sessionId}:${transport.playbackEpoch}:${transport.playbackRevision}:${transport.captureSequence}:static`
+              : null;
+            if (key !== null && key === lastQueuedPresentationVisualKey) return lastQueuedPresentationHasTimeline;
+            lastQueuedPresentationVisualKey = key;
+            scheduleWaveformRender(staticVisual, force, revision);
+            lastQueuedPresentationHasTimeline = false;
+            return false;
+          }
           const visual = presented || state;
           const t = visual?.transport;
           const key = Number.isSafeInteger(t?.captureSequence)
-            ? `${t.sourceAudioClock?.sessionId}:${t.playbackEpoch}:${t.playbackRevision}:${t.captureSequence}` : null;
+            ? `${t.sourceAudioClock?.sessionId}:${t.playbackEpoch}:${t.playbackRevision}:${t.captureSequence}:${presented
+              ? `mapped:${presented.transport?.playbackEpoch}:${presented.transport?.playbackRevision}` : "unmapped"}` : null;
           if (key !== null && key === lastQueuedPresentationVisualKey) return lastQueuedPresentationHasTimeline;
           lastQueuedPresentationVisualKey = key;
           scheduleWaveformRender(visual, force, revision);
@@ -10630,11 +10653,21 @@
             const presented = getPresentedSourceAudioTime(nowMs);
             const mediaOwned = window._playbackMode === "native" || window._playbackMode === "pcm_fallback";
             const elapsed = clock.model.clockRunning === true ? Math.max(0, nowMs - clock.modelReceivedAtMs) / 1000 : 0;
-            const audioSec = presented?.audioSec ?? (mediaOwned ? null : clock.model.sampledAtAudioSec + elapsed + clock.modelCaptureAgeSec);
+            const previewAgeMs = nowMs - clock.modelReceivedAtMs;
+            const previewAvailable = lastMirroredState?.transport?.visualClockMode === "idle_preview" &&
+              previewAgeMs >= 0 && previewAgeMs <= 1500 && Number.isFinite(clock.model.sampledAtAudioSec);
+            const audioSec = presented?.audioSec ?? (previewAvailable || !mediaOwned
+              ? clock.model.sampledAtAudioSec + elapsed + clock.modelCaptureAgeSec
+              : null);
             const sample = audioSec === null ? null : sampleLfoTimeline(clock.model, audioSec);
             clock.presentation = presented;
-            clock.presentationAvailable = Boolean(sample);
-            if (sample) Object.assign(clock, sample, { sourceAudioSec: audioSec, correction: 0, lastFrameMs: nowMs });
+            clock.presentationAvailable = Boolean(sample && (presented || !mediaOwned));
+            clock.previewAvailable = Boolean(!presented && previewAvailable && sample);
+            if (sample) Object.assign(clock, sample, {
+              sourceAudioSec: presented || !mediaOwned ? audioSec : null,
+              correction: 0,
+              lastFrameMs: nowMs,
+            });
             return;
           }
           if (!clock || !clock.active || clock.phase === null) {
@@ -10707,7 +10740,9 @@
 
         function canRenderSmoothLfo(index) {
           const clock = smoothLfoClocks[index];
-          return Boolean(clock && clock.phase !== null && (clock.active || clock.model));
+          const mediaOwned = window._playbackMode === "native" || window._playbackMode === "pcm_fallback";
+          return Boolean(clock && clock.phase !== null && (clock.active || clock.model) &&
+            (!clock.model || !mediaOwned || clock.presentationAvailable || clock.previewAvailable));
         }
 
         function getTrackLfoVisualBinding(track, parameter) {
@@ -10822,6 +10857,7 @@
               lastSampledAtMonotonicMs: null,
               model: null,
               presentationAvailable: false,
+              previewAvailable: false,
             });
           });
         }
@@ -11487,6 +11523,15 @@
             const samplerFinishedAt = phaseClock();
             if (s.tracks)
               s.tracks.forEach((t, i) => {
+                const trackMetadataKey = `track-metadata:${i}`;
+                const trackMetadataSignature = JSON.stringify([
+                  t.trackId, t.fileName, t.isPlaying, t.isPaused, t.isRecording,
+                  t.buttons?.record, t.buttons?.stop, t.buttons?.play, t.buttons?.reverse,
+                  t.effectSelection, s.effectOptionsCatalogSignature, t.effectiveBpm ?? t.bpm, t.baseBpm,
+                  t.isMaster, t.isFollower, t.syncAll, t.syncButtons, t.syncWith, t.playlist,
+                ]);
+                if (valCache[trackMetadataKey] !== trackMetadataSignature) {
+                  valCache[trackMetadataKey] = trackMetadataSignature;
                 const trackName = t.fileName || "Ready";
                 updateText("t-scroll-" + i, trackName);
                 updateClass(
@@ -11577,6 +11622,7 @@
                   } else {
                     plNav.style.display = "none";
                   }
+                }
                 }
                 const assignmentKey = getTrackAssignmentCacheKey(t, s);
                 if (_lastAssignmentCache[i] !== assignmentKey) {
@@ -12286,6 +12332,7 @@
                 sourceAudioSec: clock?.sourceAudioSec ?? null,
                 presentation: clock?.presentation ?? null,
                 presentationAvailable: clock?.presentationAvailable ?? false,
+                idlePreview: clock?.previewAvailable ?? false,
                 controlClockMode: binding.controlClockMode || "native_audio_param",
                 controlRateError: binding.controlRateError === true,
                 evidenceStage: "animation_frame_dom_submitted",
@@ -12299,7 +12346,7 @@
           const columns = ["trackIndex", "parameter", "lfoIndex", "reversed", "active", "masterActive",
             "clockActive", "phaseAvailable", "phaseRad", "rangeMinimum", "rangeMaximum", "expectedValue", "renderedValue",
             "renderedLabel", "controlPresent", "controlStep", "manualOwned", "interactionPending",
-            "sourceAudioSec", "presentationAvailable", "controlRateError", "controlClockMode"];
+            "sourceAudioSec", "presentationAvailable", "controlRateError", "controlClockMode", "idlePreview"];
           return { lfoVisualSchema: "mxs.cast.lfo-proof.v2", lfoVisualColumns: columns,
             lfoVisualRows: samples.slice(0, 28).map((sample) => columns.map((key) => {
               const value = sample[key];
@@ -12811,6 +12858,8 @@
               capturedAtMonotonicMs: nonnegative(transport.capturedAtMonotonicMs),
               captureTimestampClock: transport.captureTimestampClock === "sender_performance_ms"
                 ? "sender_performance_ms" : null,
+              visualClockMode: transport.visualClockMode === "idle_preview" || transport.visualClockMode === "audio_presentation"
+                ? transport.visualClockMode : null,
               playbackEpoch: hasPlaybackIdentity ? playbackEpoch : null,
               playbackRevision: hasPlaybackIdentity ? playbackRevision : null,
               master: timeline(transport.master),
