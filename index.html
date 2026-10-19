@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script src="build_identity.js?v=13.9.509-5a43bec168e4"></script>
     <meta charset="UTF-8" />
+    <script src="build_identity.js?v=13.9.509-e4e5e6181af4"></script>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MXS-004 Studio Mirror v13.9.509</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-e409116265cd" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-e409116265cd" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-e409116265cd" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-e409116265cd" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-9ab53f35ed29" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-9ab53f35ed29" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-9ab53f35ed29" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-9ab53f35ed29" />
     <link rel="stylesheet" href="css/icons.css?v=13.9.509" />
   </head>
   <body class="app-loading receiver-mode">
@@ -234,10 +234,10 @@
           <div
             class="master-bottom-buttons"
           >
-            <button id="import-files-button">IMPORT</button
-            ><button id="show-docs-button">DOCS</button
-            ><button id="sample-station-button">MEDIA</button
-            ><button id="settings-button">SETTINGS</button>
+            <button type="button" id="import-files-button">IMPORT</button
+            ><button type="button" id="show-docs-button">DOCS</button
+            ><button type="button" id="sample-station-button">MEDIA</button
+            ><button type="button" id="settings-button">SETTINGS</button>
           </div>
           <!-- [v13.9.462] FIX: castMediaElement class removed — Cast SDK was hijacking this
                element and fighting the custom PCM AudioWorklet pipeline for audio output. -->
@@ -290,14 +290,14 @@
           Chromecast autoplay rules block web audio playout.<br>
           Press <strong>ANY BUTTON</strong> on your TV remote or click below to start audio.
         </div>
-        <button class="unlock-button" id="btn-unlock-audio">Unlock Audio</button>
+        <button type="button" class="unlock-button" id="btn-unlock-audio">Unlock Audio</button>
       </div>
     </div>
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-180715cb4aa8"></script>
-    <script src="cast-gui-action-catalog.js?v=13.9.509-180715cb4aa8"></script>
-    <script src="receiver_logic.js?v=13.9.509-180715cb4aa8"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-5b573e61e473"></script>
+    <script src="cast-gui-action-catalog.js?v=13.9.509-5b573e61e473"></script>
+    <script src="receiver_logic.js?v=13.9.509-5b573e61e473"></script>
   </body>
 </html>

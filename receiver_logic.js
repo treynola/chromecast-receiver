@@ -2147,7 +2147,9 @@
         }
 
         function getWorkletCapabilityBuildKey() {
-          const components = window.MXS_BUILD_IDENTITY && window.MXS_BUILD_IDENTITY.components;
+          const components =
+            window.MXS_BUILD_IDENTITY &&
+            (window.MXS_BUILD_IDENTITY.artifacts || window.MXS_BUILD_IDENTITY.components);
           if (!components || !components.receiverLogic || !components.receiverPcmWorklet) {
             return "";
           }
@@ -6507,11 +6509,11 @@
                         <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
                         <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external waveform-label-l">L</div><div class="waveform-label-external waveform-label-r">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker is-at-start" id="t-playhead-${i}"></div></div></div>
                         <div class="track-bpm-module" data-track-index="${i}" id="t-bpm-module-${i}"><div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div></div>
-                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
+                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 0.72em;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 0.72em;">Loop End</label><button class="slice-trigger-btn" id="t-slice-${i}"><i class="fa-solid fa-scissors"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
                         <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
                         <div class="control-group track-input-group"><div class="track-input-layout"><label>Input</label><select id="t-input-${i}" class="input-source app-select" data-action="select-input"><option value="mic" selected>Microphone</option><option value="file">Import File</option><option value="directory">Import Directory</option><option value="mc-pa">MC PA Mode</option><option value="system">System Loopback</option></select></div></div>
                         <div class="control-group track-input-gain-group master-row-layout pa-mic-adjustment" id="input-gain-group-${i}"><label class="master-label">Input Gain</label><input type="range" class="pa-mic-slider" data-param="inputGain" id="t-gain-sl-${i}" min="-48" max="24" step="0.1" value="0" title="Increment: 0.1"><span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
+                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}" for="t-fx-chk-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
                         <div class="control-group track-bottom-layout"><label class="margin-0">Effects:</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
                         <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group" data-param-label="${cfg.p}"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}" data-value-for="${cfg.p}">${Number(cfg.val).toFixed(1)}${cfg.u}</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" title="Click to assign ${cfg.l} LFO 1. Double-click to reverse." aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" title="Click to assign ${cfg.l} LFO 2. Double-click to reverse." aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" data-param="${cfg.p}" min="${cfg.min}" max="${cfg.max}" step="${cfg.s}" value="${cfg.val}" title="Increment: ${cfg.s}"><span class="preset-marker min-preset-marker" id="t-min-marker-${i}-${cfg.p}" data-min-marker-for="${cfg.p}"></span><span class="preset-marker max-preset-marker" id="t-max-marker-${i}-${cfg.p}" data-max-marker-for="${cfg.p}"></span></div></div>`).join("")}</div>`;
             grid.appendChild(t);
@@ -10177,7 +10179,10 @@
         let lastSubmittedLfoProof = null;
         let lastLfoTelemetryReportAtMs = 0;
         let lfoFrameMeasurements = { lastAt: null, lastSource: null, frames: 0, gaps: 0,
-          bins: [0, 0, 0, 0, 0, 0, 0], maxGapMs: 0, held: 0, backwards: 0, maxStepErrorMs: 0, unavailable: 0 };
+          bins: [0, 0, 0, 0, 0, 0, 0], maxGapMs: 0, held: 0, backwards: 0, maxStepErrorMs: 0,
+          unavailable: 0, workSamplesMs: [] };
+        let cachedLfoVisualState = null;
+        let cachedLfoVisualBindings = [];
 
         function recordLfoFrameMeasurement(nowMs) {
           const clocks = [smoothLfoClocks[1], smoothLfoClocks[2]];
@@ -10204,14 +10209,30 @@
           m.lastSource = source;
         }
 
+        function recordLfoFrameWork(startedAtMs) {
+          const endedAtMs = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+          const duration = Math.max(0, endedAtMs - startedAtMs);
+          const samples = lfoFrameMeasurements.workSamplesMs;
+          samples.push(duration);
+          if (samples.length > 128) samples.shift();
+        }
+
         function takeLfoFrameMeasurements() {
           const m = lfoFrameMeasurements;
+          const work = m.workSamplesMs.slice().sort((left, right) => left - right);
+          const workP95Index = work.length ? Math.min(work.length - 1, Math.ceil(work.length * 0.95) - 1) : -1;
           const result = { schema: "mxs.cast.frame-stats.v1", frames: m.frames, gaps: m.gaps,
             gapBoundsMs: [16.67, 33.34, 50, 100, 250, 500, null], gapCounts: m.bins,
             maxGapMs: m.maxGapMs, heldSourceSteps: m.held, backwardSourceSteps: m.backwards,
-            maxSourceStepErrorMs: m.maxStepErrorMs, unavailableFrames: m.unavailable };
+            maxSourceStepErrorMs: m.maxStepErrorMs, unavailableFrames: m.unavailable,
+            frameCallbackWorkSamples: work.length,
+            frameCallbackWorkP95Ms: workP95Index >= 0 ? Number(work[workP95Index].toFixed(3)) : null,
+            frameCallbackWorkMaxMs: work.length ? Number(work[work.length - 1].toFixed(3)) : null };
           lfoFrameMeasurements = { lastAt: m.lastAt, lastSource: m.lastSource, frames: 0, gaps: 0,
-            bins: [0, 0, 0, 0, 0, 0, 0], maxGapMs: 0, held: 0, backwards: 0, maxStepErrorMs: 0, unavailable: 0 };
+            bins: [0, 0, 0, 0, 0, 0, 0], maxGapMs: 0, held: 0, backwards: 0, maxStepErrorMs: 0,
+            unavailable: 0, workSamplesMs: [] };
           return result;
         }
         let nativePresentationGeneration = -1;
@@ -10770,6 +10791,27 @@
           return null;
         }
 
+        function getCachedLfoVisualBindings(visualState) {
+          if (visualState === cachedLfoVisualState) return cachedLfoVisualBindings;
+          cachedLfoVisualState = visualState;
+          cachedLfoVisualBindings = [];
+          (visualState?.tracks || []).forEach((track, trackIndex) => {
+            KNOB_CONFIGS.forEach((config) => {
+              const binding = getTrackLfoVisualBinding(track, config.p);
+              if (!binding) return;
+              cachedLfoVisualBindings.push({
+                track,
+                trackIndex,
+                config,
+                binding,
+                sliderId: `t-${config.p}-sl-${trackIndex}`,
+                labelId: `t-${config.p}-val-${trackIndex}`,
+              });
+            });
+          });
+          return cachedLfoVisualBindings;
+        }
+
         function samplePresentedControlValue(binding, trackIndex, parameter, audioSec) {
           if (binding?.controlClockMode !== "media_element_control_rate") return null;
           const latest = lastMirroredState?.tracks?.[trackIndex]?.lfoBindings?.[parameter];
@@ -10784,6 +10826,8 @@
         }
 
         function renderMirroredTrackLfoAssignments(track, trackIndex) {
+          cachedLfoVisualState = null;
+          cachedLfoVisualBindings = [];
           KNOB_CONFIGS.forEach((config) => {
             const indicator = track?.lfoIndicators?.[config.p];
             [1, 2].forEach((lfoIndex) => {
@@ -10836,6 +10880,8 @@
         function resetSmoothLfoVisuals() {
           lastSubmittedLfoProof = null;
           lastLfoTelemetryReportAtMs = 0;
+          cachedLfoVisualState = null;
+          cachedLfoVisualBindings = [];
           lfoFrameMeasurements.lastAt = null;
           lfoFrameMeasurements.lastSource = null;
           takeLfoFrameMeasurements();
@@ -10864,6 +10910,9 @@
 
         function renderSmoothLfoFrame(frameTime) {
           smoothLfoFrameHandle = null;
+          const frameWorkStartedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
           const nowMs = Number.isFinite(Number(frameTime))
             ? Number(frameTime)
             : getLfoVisualNow();
@@ -10889,46 +10938,49 @@
               lastPresentationVisualSequence = presentedVisual.transport.captureSequence;
               queuePresentationVisuals(lastMirroredState, nowMs);
             }
-            (presentedVisual?.tracks || lastMirroredState?.tracks || []).forEach((track, trackIndex) => {
-              KNOB_CONFIGS.forEach((config) => {
-                const binding = getTrackLfoVisualBinding(track, config.p);
-                if (!binding || !canRenderSmoothLfo(binding.index)) return;
-                if (binding.manualOwned || track.manualKnobInteraction?.[config.p]) return;
-                const sliderId = `t-${config.p}-sl-${trackIndex}`;
-                const slider = getEl(sliderId);
-                if (!slider || slider.dataset.castInteractionState === "pending") return;
-                const minimum = Number.isFinite(Number(slider.min)) ? Number(slider.min) : config.min;
-                const maximum = Number.isFinite(Number(slider.max)) ? Number(slider.max) : config.max;
-                const rangeMinimum = binding.authoritative ? binding.min : markerValueFromPercent(
-                  binding.minMarker,
-                  minimum,
-                  maximum,
-                  minimum,
-                );
-                const rangeMaximum = binding.authoritative ? binding.max : markerValueFromPercent(
-                  binding.maxMarker,
-                  minimum,
-                  maximum,
-                  maximum,
-                );
-                let signedValue = Math.sin(smoothLfoClocks[binding.index].phase);
-                if (binding.reversed) signedValue = -signedValue;
-                const modulated =
-                  ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum;
-                const gate = smoothLfoClocks[binding.index].gateValue ?? 1;
-                const controlValue = samplePresentedControlValue(binding, trackIndex, config.p, smoothLfoClocks[binding.index].sourceAudioSec);
-                if (binding.controlClockMode === "media_element_control_rate" && controlValue === null) return;
-                const scaled = controlValue ?? (binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated);
-                updateValue(sliderId, scaled);
-                updateText(
-                  `t-${config.p}-val-${trackIndex}`,
-                  formatMirroredParameterDisplay(
-                    track.paramDisplays?.[config.p],
-                    Number(slider.value),
-                  ),
-                );
-              });
+            getCachedLfoVisualBindings(presentedVisual || lastMirroredState).forEach((entry) => {
+              const { track, trackIndex, config, binding, sliderId, labelId } = entry;
+              if (!canRenderSmoothLfo(binding.index)) return;
+              if (binding.manualOwned || track.manualKnobInteraction?.[config.p]) return;
+              const slider = getEl(sliderId);
+              if (!slider || slider.dataset.castInteractionState === "pending") return;
+              const minimum = Number.isFinite(Number(slider.min)) ? Number(slider.min) : config.min;
+              const maximum = Number.isFinite(Number(slider.max)) ? Number(slider.max) : config.max;
+              const rangeMinimum = binding.authoritative ? binding.min : markerValueFromPercent(
+                binding.minMarker,
+                minimum,
+                maximum,
+                minimum,
+              );
+              const rangeMaximum = binding.authoritative ? binding.max : markerValueFromPercent(
+                binding.maxMarker,
+                minimum,
+                maximum,
+                maximum,
+              );
+              let signedValue = Math.sin(smoothLfoClocks[binding.index].phase);
+              if (binding.reversed) signedValue = -signedValue;
+              const modulated =
+                ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum;
+              const gate = smoothLfoClocks[binding.index].gateValue ?? 1;
+              const currentBinding = track.lfoBindings?.[config.p];
+              const controlClockMode = currentBinding?.index === binding.index
+                ? currentBinding.controlClockMode
+                : binding.controlClockMode;
+              const sampleBinding = currentBinding?.index === binding.index ? currentBinding : binding;
+              const controlValue = samplePresentedControlValue(sampleBinding, trackIndex, config.p, smoothLfoClocks[binding.index].sourceAudioSec);
+              if (controlClockMode === "media_element_control_rate" && controlValue === null) return;
+              const scaled = controlValue ?? (binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated);
+              updateValue(sliderId, scaled);
+              updateText(
+                labelId,
+                formatMirroredParameterDisplay(
+                  track.paramDisplays?.[config.p],
+                  Number(slider.value),
+                ),
+              );
             });
+            recordLfoFrameWork(frameWorkStartedAt);
             if (!lastSubmittedLfoProof || nowMs - lastLfoVisualTelemetryAtMs >= GUI_LFO_RENDER_TELEMETRY_INTERVAL_MS) {
               const samples = summarizeLfoVisualSamples(lastMirroredState, nowMs);
               lastLfoVisualTelemetryAtMs = nowMs;
@@ -13629,6 +13681,7 @@
               if (audioCtx && audioCtx.state === "suspended") resumeAudio();
               var reader = new FileReader();
               reader.onload = function() {
+                if (generation !== binaryConnectionGeneration) return;
                 if (playbackPaused) return;
                 const packet = validatePcmV2Packet(this.result);
                 if (packet) queueBinaryFrame(packet);
@@ -13893,8 +13946,7 @@
             });
             console.error("❌ Binary Bridge Error:", e);
             relayLogToStudio(`❌ Receiver: WebSocket Error on ${url}`);
-            // [v13.9.504] Retry with full connection params (port + token preserved)
-            scheduleBinaryReconnect(ip, customPort, customToken, 5000);
+            // Reconnection is managed exclusively by binaryWS.onclose with exponential backoff
           };
         }
 
@@ -14137,7 +14189,11 @@
 
             if (audioCtx) {
               const now = Date.now();
-              const isWorkletStalled = workletNode && (!window._lastWorkletDiagTime || (now - window._lastWorkletDiagTime > 4000));
+              const isWorkletStalled =
+                workletNode &&
+                !playbackPaused &&
+                activeAudioPathOwner === "pcm_v2" &&
+                (!window._lastWorkletDiagTime || now - window._lastWorkletDiagTime > 4000);
 
               if (audioCtx.state === "suspended" || isWorkletStalled) {
                 if (isWorkletStalled && workletNode) {
@@ -14186,20 +14242,15 @@
           });
 
           // [v13.9.504] Global interaction listeners to catch Receiver remote keys and clicks for AudioContext unlock
-          window.addEventListener("keydown", function(e) {
-            // relayLogToStudio("🎹 Receiver: keydown event: " + e.key + " (code: " + e.keyCode + ")");
-            resumeAudio();
-          });
+          const tryResumeOnInteraction = function() {
+            if (!audioCtx || audioCtx.state !== "running") {
+              resumeAudio();
+            }
+          };
 
-          window.addEventListener("click", function() {
-            // relayLogToStudio("🖱️ Receiver: click event detected.");
-            resumeAudio();
-          });
-
-          window.addEventListener("pointerdown", function() {
-            // relayLogToStudio("🖱️ Receiver: pointerdown event detected.");
-            resumeAudio();
-          });
+          window.addEventListener("keydown", tryResumeOnInteraction, { passive: true });
+          window.addEventListener("click", tryResumeOnInteraction, { passive: true });
+          window.addEventListener("pointerdown", tryResumeOnInteraction, { passive: true });
 
           const btnUnlock = document.getElementById("btn-unlock-audio");
           if (btnUnlock) {

@@ -2295,15 +2295,6 @@ select option {
   font-family: "Courier New", Courier, monospace;
   font-weight: bold;
 }
-@keyframes scroll-text {
-  from {
-    transform: translateX(100%);
-  }
-
-  to {
-    transform: translateX(-100%);
-  }
-}
 
 #audio-files-modal {
   background-color: transparent;
@@ -3866,10 +3857,14 @@ select option {
   outline: none !important;
   box-shadow: none !important;
 }
-.close-dialog-btn:focus,
-.close-dialog-btn:focus-visible {
+.close-dialog-btn:focus {
   outline: none !important;
   box-shadow: none !important;
+}
+.close-dialog-btn:focus-visible {
+  outline: 2px solid var(--gold) !important;
+  outline-offset: 1px !important;
+  box-shadow: 0 0 6px rgba(250, 215, 142, 0.6) !important;
 }
 
 /* Ensure z-index stacking for 7 slots - increased to stay above other UI */
@@ -4237,21 +4232,6 @@ select option {
   color: #ff4444;
   font-size: 24px;
   cursor: pointer;
-}
-
-/* --- Chromecast UI --- */
-#cast-dialog {
-  width: 350px;
-  background: var(--off-black);
-  border: 2px solid var(--gold);
-  color: var(--white);
-  padding: 20px;
-  border-radius: 8px;
-}
-
-.cast-content-wrapper {
-  position: relative;
-  padding: 10px;
 }
 
 #close-cast-button {
@@ -5547,77 +5527,6 @@ select option {
   color: white !important;
 }
 
-/* --- NEW 3-LINE LAYOUT STYLES --- */
-
-.loop-grid-layout {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  gap: 2px;
-  padding: 2px;
-}
-
-/* LINE 1: Labels & Scissors */
-.loop-line-1 {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.loop-line-1 label {
-  font-size: 0.65em;
-  /* Match LFO label size */
-  color: var(--green);
-  font-weight: bold;
-  text-transform: uppercase;
-}
-
-/* LINE 2: Sliders */
-.loop-line-2 {
-  display: flex;
-  gap: 4px;
-  width: 100%;
-  height: 12px;
-  /* Fixed height container for sliders */
-  align-items: center;
-}
-
-.loop-line-2 input[type="range"] {
-  flex: 1;
-  margin: 0;
-  height: 10px !important;
-  /* Match LFO slider height */
-  overflow: hidden;
-  /* Hide overflow */
-  padding: 0;
-}
-
-/* LINE 3: Values */
-.loop-line-3 {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.loop-line-3 .param-value {
-  font-size: 0.75em;
-  /* Match LFO value size */
-  color: var(--gold);
-  font-family: monospace;
-}
-
-/* END OF LOOP CONTROLS STYLES */
-/* Scissors Hover - Red Background, White Icon */
-.loop-controls .slice-trigger-btn:hover {
-  background-color: red !important;
-  border: 1px solid white !important;
-}
-
-.loop-controls .slice-trigger-btn:hover i {
-  color: white !important;
-}
-
 .loop-controls .slider-wrapper input[type="range"] {
   width: 100% !important;
   margin: 0 !important;
@@ -6094,7 +6003,6 @@ body.receiver-mode .scrolling-text {
 }
 body.receiver-mode .scrolling-text.active-scrolling {
   padding-left: 0;
-  animation: none;
 }
 body.receiver-mode .track-buttons button {
   flex: 1;
@@ -6394,7 +6302,9 @@ body.receiver-mode .unlock-button:focus {
 /* Track Picker Menu (RecordingUI.js L203) */
 
 /* Track Labels Font Size (TrackView.js — global rule replaces 6 inline fontSize) */
-.track label,
+.track label {
+  font-size: 0.72em;
+}
 
 /* Loop Grid Layout (TrackView.js L235-268 — replaces redundant inline styles) */
 .loop-row-layout {
@@ -6515,81 +6425,7 @@ body.receiver-mode .unlock-button:focus {
   justify-content: space-between;
 }
 
-/* Sampler Picker (RecordingUI.js L296-307) */
-.sampler-picker-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20000;
-}
-.sampler-picker-modal {
-  background: #222;
-  border: 2px solid var(--gold);
-  border-radius: 8px;
-  padding: 20px;
-  max-width: 360px;
-  width: 90vw;
-}
-.sampler-picker-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-.sampler-picker-title {
-  color: var(--gold);
-  font-weight: bold;
-  font-size: 1.1em;
-}
-.sampler-picker-close {
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 1.5em;
-  cursor: pointer;
-}
-.sampler-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-}
-.sampler-pad-pick {
-  background: #333;
-  border: 1px solid #555;
-  color: var(--gold);
-  padding: 12px 0;
-  text-align: center;
-  cursor: pointer;
-  border-radius: 4px;
-  font-weight: bold;
-  transition: background 0.15s;
-}
-.sampler-pad-pick:hover {
-  background: var(--green);
-  color: white;
-}
-
 /* --- Phase 3 Preview: Dialog Base Styles --- */
-
-/* Generic dialog base (Modals.js — shared across all dynamic dialogs) */
-.mxs-dialog {
-  padding: 20px;
-  background: #222;
-  color: #fff;
-  border: 1px solid var(--gold);
-  border-radius: 8px;
-  z-index: 10000;
-}
-.mxs-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
-}
-.mxs-dialog h3 {
-  margin-top: 0;
-  color: var(--gold);
-}
 
 /* Message Box (Modals.js showMessageBox) */
 .message-box {
@@ -6662,74 +6498,6 @@ body.receiver-mode .unlock-button:focus {
 .cast-status-success { color: var(--green); }
 .cast-status-error { color: var(--red); }
 .cast-status-warn { color: var(--gold); }
-
-/* Pad Settings Dialog (SamplerUI.js showPadSettings) */
-.pad-settings-dialog {
-  padding: 20px;
-  background: #222;
-  border: 2px solid var(--gold);
-  color: #fff;
-  border-radius: 8px;
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10000;
-}
-.pad-settings-dialog h3 {
-  color: var(--gold);
-  margin-bottom: 10px;
-  margin-top: 0;
-}
-.pad-settings-dialog .setting-row {
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-}
-.pad-settings-dialog .setting-row input[type="radio"],
-.pad-settings-dialog .setting-row input[type="checkbox"] {
-  margin-right: 10px;
-}
-.pad-settings-dialog .mode-label {
-  margin-bottom: 5px;
-  font-size: 0.9em;
-}
-.pad-settings-dialog .vintage-title {
-  color: var(--gold);
-  margin-bottom: 10px;
-  font-weight: bold;
-}
-.pad-settings-dialog hr {
-  border: 0;
-  border-top: 1px solid #444;
-  margin: 15px 0;
-}
-.pad-settings-dialog label {
-  font-size: 0.9em;
-}
-.pad-settings-dialog .section-label {
-  font-size: 0.8em;
-  margin-bottom: 3px;
-}
-.pad-settings-dialog select {
-  width: 100%;
-  background: #333;
-  color: white;
-  border: 1px solid #555;
-  padding: 4px;
-}
-.pad-settings-dialog .close-btn {
-  margin-top: 15px;
-  width: 100%;
-  padding: 8px;
-  background: #444;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-.pad-settings-dialog .close-btn:hover {
-  background: #555;
-}
 
 /* Audio Files Modal (FileSelectionUI.js showAudioFilesModal) */
 .audio-files-modal {
@@ -7017,23 +6785,6 @@ dialog.input-prompt-dialog {
 .text-gold { color: var(--gold) !important; }
 .text-red { color: var(--red) !important; }
 
-
-/* Toast Notification */
-.toast-notification {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: var(--green);
-  color: #fff;
-  padding: 10px 20px;
-  border-radius: 5px;
-  font-family: monospace;
-  font-weight: bold;
-  z-index: 30000;
-  animation: menuFadeIn 0.3s;
-}
-
-
 /* TrackView loop controls */
 .loop-control-header { display: flex; align-items: center; }
 .loop-control-slider-wrapper { margin-top: 2px; }
@@ -7148,10 +6899,14 @@ dialog.input-prompt-dialog {
   outline: none !important;
   box-shadow: none !important;
 }
-.mxs-dialog .close-dialog-btn:focus,
-.mxs-dialog .close-dialog-btn:focus-visible {
+.mxs-dialog .close-dialog-btn:focus {
   outline: none !important;
   box-shadow: none !important;
+}
+.mxs-dialog .close-dialog-btn:focus-visible {
+  outline: 2px solid var(--gold) !important;
+  outline-offset: 1px !important;
+  box-shadow: 0 0 6px rgba(250, 215, 142, 0.6) !important;
 }
 .mxs-dialog .close-dialog-btn:hover {
   filter: brightness(1.5);

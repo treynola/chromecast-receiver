@@ -244,38 +244,19 @@ button.track-header:hover,
   animation: recordingPulse 1.5s infinite alternate;
 }
 
+@keyframes recordingPulse {
+  0% {
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.4);
+    opacity: 1;
+  }
+  100% {
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.9);
+    opacity: 0.75;
+  }
+}
+
 .track .meter-container {
   margin: 0 !important;
-}
-
-.track-waveform-container {
-  position: relative;
-  width: 100%;
-  height: 100px;
-  background: #1a1a1a;
-  border: 1px solid var(--mid-gray);
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 5px;
-  display: flex;
-}
-
-.track-waveform-labels {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  width: 15px;
-  background: #2a2a2a;
-  border-right: 1px solid var(--mid-gray);
-  z-index: 10;
-}
-
-.track-waveform-canvases {
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .track-waveform-canvas-L,
@@ -365,19 +346,6 @@ button.track-header:hover,
   flex: 2 !important;
   width: auto !important;
   margin: 0 !important;
-}
-
-.track-bottom-layout {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 5px !important;
-  padding: 1px 0 !important;
-  border: none !important;
-  border-top: none !important;
-  margin: 0 !important;
-  background: transparent !important;
 }
 
 .track-bottom-layout label {

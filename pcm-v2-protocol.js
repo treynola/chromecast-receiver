@@ -19,6 +19,15 @@
   }
 
   function asU64(value, field) {
+    if (
+      value === null ||
+      value === undefined ||
+      typeof value === "boolean" ||
+      (typeof value === "string" && !/^\d+$/.test(value.trim())) ||
+      (typeof value === "number" && (!Number.isInteger(value) || value < 0))
+    ) {
+      fail(`invalid_${field}`);
+    }
     let parsed;
     try {
       parsed = BigInt(value);

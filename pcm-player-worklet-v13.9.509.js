@@ -84,6 +84,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._lastPacketWallMs = 0;
     this._lastPacketMetadata = null;
     this._presentationPackets = [];
+    this._presentationHead = 0;
     this._presentationEpoch = null;
     this._presentationRevision = null;
 
@@ -165,7 +166,13 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         if (Number.isSafeInteger(sourceFrame)) {
           this._presentationPackets.push({ startFrame, endFrame: this._totalWritten / 2,
             sourceFrame, sessionId: packetMetadata.sessionId });
-          this._presentationPackets = this._presentationPackets.slice(-512);
+          if (this._presentationPackets.length - this._presentationHead > 512) {
+            this._presentationHead++;
+            if (this._presentationHead > 64) {
+              this._presentationPackets.splice(0, this._presentationHead);
+              this._presentationHead = 0;
+            }
+          }
         }
         this._trimStartupWatermark();
       } catch (error) {
@@ -191,7 +198,8 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
   _writePcm(arrayBuffer) {
     if (this._bitDepth === 24) {
       const bytes = new Uint8Array(arrayBuffer);
-      const numSamples = Math.floor(bytes.length / 3);
+      const usableBytes = bytes.length - (bytes.length % 6);
+      const numSamples = usableBytes / 3;
       for (let i = 0; i < numSamples; i++) {
         const offset = i * 3;
         let value = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
@@ -204,14 +212,14 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     }
 
     const pcm16 = new Int16Array(arrayBuffer);
-    const len = pcm16.length;
+    const len = pcm16.length & ~1;
     if (this._writePtr + len <= this._ringLen) {
-      this._ringBuffer.set(pcm16, this._writePtr);
+      this._ringBuffer.set(pcm16.subarray(0, len), this._writePtr);
       this._writePtr = (this._writePtr + len) % this._ringLen;
     } else {
       const firstPart = this._ringLen - this._writePtr;
       this._ringBuffer.set(pcm16.subarray(0, firstPart), this._writePtr);
-      this._ringBuffer.set(pcm16.subarray(firstPart), 0);
+      this._ringBuffer.set(pcm16.subarray(firstPart, len), 0);
       this._writePtr = len - firstPart;
     }
     this._totalWritten += len;
@@ -356,6 +364,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     this._totalWritten = 0;
     this._totalRead = 0;
     this._presentationPackets = [];
+    this._presentationHead = 0;
     this._isBuffering = true;
     this._playoutStarted = false;
     this._emergencyAwaitingRecovery = false;
@@ -527,8 +536,23 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       if (!channel0) return true;
 
       if (this._paused) {
-        channel0.fill(0);
-        if (channel1 !== channel0) channel1.fill(0);
+        if (this._lastOutputL !== 0 || this._lastOutputR !== 0) {
+          for (let i = 0; i < channel0.length; i++) {
+            this._lastOutputL *= 0.85;
+            this._lastOutputR *= 0.85;
+            if (Math.abs(this._lastOutputL) < 1e-5) this._lastOutputL = 0;
+            if (Math.abs(this._lastOutputR) < 1e-5) this._lastOutputR = 0;
+            channel0[i] = this._lastOutputL;
+            if (channel1 !== channel0) channel1[i] = this._lastOutputR;
+          }
+        } else {
+          channel0.fill(0);
+          if (channel1 !== channel0) channel1.fill(0);
+        }
+        this._callbackCount++;
+        if (this._callbackCount % 100 === 0) {
+          this.port.postMessage({ type: "DIAG", callbackCount: this._callbackCount, paused: true, buffering: this._isBuffering, wallNow: typeof Date !== "undefined" ? Date.now() : 0 });
+        }
         return true;
       }
 
@@ -608,9 +632,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           consumed += 2;
           rendered++;
         } else if (!renderSilence) {
-          // The emergency floor should make this unreachable. Keep it explicit
-          // so a scheduling failure cannot masquerade as normal silence.
-          this._startUnderrunRecovery();
+          // If underrun recovery is not already active, trigger it once.
+          if (this._crossfadeKind !== "underrun_fade_out") {
+            this._startUnderrunRecovery();
+          }
+          // Smooth geometric decay rather than an abrupt step to 0
+          this._lastOutputL *= 0.85;
+          this._lastOutputR *= 0.85;
+          if (Math.abs(this._lastOutputL) < 1e-5) this._lastOutputL = 0;
+          if (Math.abs(this._lastOutputR) < 1e-5) this._lastOutputR = 0;
+          outputL = this._lastOutputL;
+          outputR = this._lastOutputR;
           this._finishCrossfade("underrun_fade_out");
           renderSilence = true;
         }
@@ -637,13 +669,29 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       this._outputFrames += framesInBlock;
       if (this._callbackCount % 16 === 0) {
         const cursor = this._totalRead / 2;
-        const packet = this._presentationPackets.find((item) => cursor > item.startFrame && cursor <= item.endFrame);
+        while (
+          this._presentationHead < this._presentationPackets.length - 1 &&
+          this._presentationPackets[this._presentationHead].endFrame < cursor
+        ) {
+          this._presentationHead++;
+        }
+        if (this._presentationHead > 64) {
+          this._presentationPackets.splice(0, this._presentationHead);
+          this._presentationHead = 0;
+        }
+        let packet = null;
+        for (let idx = this._presentationHead; idx < this._presentationPackets.length; idx++) {
+          const item = this._presentationPackets[idx];
+          if (cursor > item.startFrame && cursor <= item.endFrame) {
+            packet = item;
+            break;
+          }
+        }
         if (packet) this.port.postMessage({ type: "PRESENTATION_POSITION", sessionId: packet.sessionId,
           playbackEpoch: this._presentationEpoch, playbackRevision: this._presentationRevision,
           mediaFrame: packet.sourceFrame + cursor - packet.startFrame,
           audioTime: (typeof currentFrame === "number" ? currentFrame : 0) / sampleRate + framesInBlock / sampleRate,
           playing: !this._paused && !this._isBuffering && rendered > 0 });
-        while (this._presentationPackets.length > 1 && this._presentationPackets[0].endFrame < cursor) this._presentationPackets.shift();
       }
 
       const rawQueuedSamples = Math.max(0, this._totalWritten - this._totalRead);

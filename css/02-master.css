@@ -84,6 +84,10 @@
 
 /* Tighter spacing for bottom section items */
 .master-bottom-item {
+  width: 100% !important;
+  align-self: stretch !important;
+  display: flex !important;
+  flex-direction: column !important;
   flex: 0 0 24px !important;
   height: 24px !important;
   min-height: 24px !important;
@@ -213,18 +217,6 @@
   margin: 5px 0 0 0 !important;
   /* Match Track Input Row margin-top: 5px */
   padding: 0 5px !important;
-}
-
-.master-bottom-item {
-  width: 100% !important;
-  align-self: stretch !important;
-  padding: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 0 0 24px !important;
-  height: 24px !important;
-  margin-top: 8px !important;
-  margin-bottom: 8px !important;
 }
 
 .master-rec-row {

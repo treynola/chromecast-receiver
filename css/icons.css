@@ -16,6 +16,8 @@
   mask-repeat: no-repeat;
   -webkit-mask-size: contain;
   mask-size: contain;
+  flex-shrink: 0;
+  forced-color-adjust: none;
 }
 
 .fa-chromecast { --mxs-icon: url("../icons/chromecast.svg"); }

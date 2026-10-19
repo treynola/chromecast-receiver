@@ -9,6 +9,7 @@
   src: url("../fonts/MexcellentRg.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -16,6 +17,7 @@
   src: url("../fonts/Mexcellent3d.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -87,6 +89,15 @@ body {
 *::after {
   -webkit-user-select: none;
   user-select: none;
+}
+
+input[type="text"],
+input[type="search"],
+textarea,
+pre,
+code {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Sliders should show pointer cursor and accept keyboard focus */
