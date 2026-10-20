@@ -12821,6 +12821,81 @@
             });
             return;
           }
+          const snapshotPlaybackIdentityIsOlder = ackType === "snapshot" &&
+            hasSnapshotPlaybackIdentity && hasReceiverPlaybackIdentity &&
+            isRevisionOlder(
+              snapshotPlaybackEpoch,
+              snapshotPlaybackRevision,
+              receiverPlaybackEpochAtAck,
+              receiverPlaybackRevisionAtAck,
+            );
+          if (snapshotPlaybackIdentityIsOlder) {
+            const acceptedRevision = Number(envelope.guiRevision || -1);
+            const payloadBytes = Number.isSafeInteger(envelope._receiverWireBytes)
+              ? envelope._receiverWireBytes
+              : null;
+            // GUI revisions are consumed so a delayed retry cannot replay the
+            // same obsolete snapshot, but it must not replace visible or
+            // retained state after a newer playback command was accepted.
+            commitGuiRevision(envelope);
+            guiReceivedCount += 1;
+            guiLastReceivedRevision = revision;
+            flushPendingReceiverGuiActions();
+            emitGuiChannelTelemetry("stale_playback_snapshot_skipped", {
+              revision: acceptedRevision,
+              snapshotPlaybackEpoch,
+              snapshotPlaybackRevision,
+              receiverPlaybackEpochAtAck,
+              receiverPlaybackRevisionAtAck,
+              payloadBytes,
+            });
+            if (guiControlWS && guiControlWS.readyState === WebSocket.OPEN) {
+              try {
+                const receiverAckSentAtMonotonicMs = getLfoVisualNow();
+                const ackSent = sendReceiverBridgeMessage({
+                  type: "GUI_ACK",
+                  transport: "gui",
+                  guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION,
+                  guiSessionNonce,
+                  ackType,
+                  channel: "gui",
+                  guiRevision: acceptedRevision,
+                  ...timelineAckDetails,
+                  playbackIdentityOutcome: "stale_snapshot_skipped",
+                  receiverMessageStartedAtMonotonicMs: messageStartedAt,
+                  receiverAckSentAtMonotonicMs,
+                  senderMonotonicEstimateAtReceiverMessageStartMs:
+                    mapReceiverToSenderMonotonic(messageStartedAt),
+                  senderMonotonicEstimateAtReceiverAckSentMs:
+                    mapReceiverToSenderMonotonic(receiverAckSentAtMonotonicMs),
+                  senderMonotonicEstimateUncertaintyMs:
+                    Number.isFinite(guiClockSyncEstimate?.uncertaintyMs)
+                      ? guiClockSyncEstimate.uncertaintyMs
+                      : null,
+                  guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
+                  rawCount: guiRawMessageCount,
+                  rejectedCount: guiRejectedCount,
+                  receivedCount: guiReceivedCount,
+                  renderedCount: guiRenderedCount,
+                  renderedRevision: guiLastRenderedRevision,
+                  renderResult: "stale_playback_snapshot",
+                  renderTimeMs: 0,
+                  receiverProcessingMs: Math.max(0, receiverAckSentAtMonotonicMs - messageStartedAt),
+                  payloadBytes,
+                }, "gui", true);
+                if (!ackSent) throw new Error("stale GUI ACK socket write failed");
+                guiAckCount += 1;
+                guiLastAckRevision = revision;
+              } catch (error) {
+                reportGuiAckError("stale_snapshot_send", error, {
+                  revision: acceptedRevision,
+                  messageType: envelope?.type || "GUI_STATE_UPDATE",
+                  ackOutcome: "stale_snapshot_ack_send_failed",
+                });
+              }
+            }
+            return;
+          }
           const normalizedState = normalizeGuiState(state);
           if (!normalizedState) {
             rejectGuiChannelMessage("unsupported_state_schema", {
