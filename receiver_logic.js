@@ -10294,6 +10294,46 @@
         let pcmPresentationPosition = null;
         let presentationVisualHistory = [];
         let lastPresentationVisualSequence = -1;
+        let presentationClockLookupGeneration = 0;
+        let presentationSourceTimeCache = null;
+        let presentationVisualStateCache = null;
+        let activeRenderLookupStats = null;
+
+        function recordPresentationLookupStat(key, amount = 1) {
+          if (!activeRenderLookupStats) return;
+          activeRenderLookupStats[key] = (activeRenderLookupStats[key] || 0) + amount;
+        }
+
+        function samePresentationClockLookupKey(left, right) {
+          return Boolean(left && right &&
+            left.nowMs === right.nowMs &&
+            left.route === right.route &&
+            left.playbackEpoch === right.playbackEpoch &&
+            left.playbackRevision === right.playbackRevision &&
+            left.generation === right.generation &&
+            left.nativeGeneration === right.nativeGeneration &&
+            left.nativeAttempt === right.nativeAttempt &&
+            left.nativeActive === right.nativeActive &&
+            left.nativePaused === right.nativePaused &&
+            left.mediaElement === right.mediaElement &&
+            left.mediaTime === right.mediaTime &&
+            left.mediaPaused === right.mediaPaused &&
+            left.mediaSeeking === right.mediaSeeking &&
+            left.mediaReadyState === right.mediaReadyState &&
+            left.sourceSessionId === right.sourceSessionId &&
+            left.sourceCaptureSequence === right.sourceCaptureSequence &&
+            left.pcmMediaFrame === right.pcmMediaFrame &&
+            left.pcmAudioTime === right.pcmAudioTime &&
+            left.pcmPlaying === right.pcmPlaying &&
+            left.pcmPlaybackEpoch === right.pcmPlaybackEpoch &&
+            left.pcmPlaybackRevision === right.pcmPlaybackRevision &&
+            left.pcmSessionId === right.pcmSessionId &&
+            left.audioContextState === right.audioContextState &&
+            left.audioContextSampleRate === right.audioContextSampleRate &&
+            left.audioContextBaseLatency === right.audioContextBaseLatency &&
+            left.audioContextOutputLatency === right.audioContextOutputLatency &&
+            left.sourceClock === right.sourceClock);
+        }
 
         function rememberPresentationVisualState(state) {
           const transport = state?.transport;
@@ -10313,16 +10353,51 @@
               manualKnobInteraction: track.manualKnobInteraction, lfoIndicators: track.lfoIndicators,
               lfoAssigns: track.lfoAssigns, paramDisplays: track.paramDisplays })) });
           presentationVisualHistory = presentationVisualHistory.slice(-256);
+          presentationClockLookupGeneration += 1;
+          presentationSourceTimeCache = null;
+          presentationVisualStateCache = null;
         }
 
         function getPresentationVisualState(fallback, nowMs = getLfoVisualNow()) {
+          recordPresentationLookupStat("presentationStateCalls");
           const presented = getPresentedSourceAudioTime(nowMs);
-          if (!presented) return null;
+          const fallbackTransport = fallback?.transport;
+          const fallbackKey = {
+            nowMs,
+            generation: presentationClockLookupGeneration,
+            presentedAudioSec: presented?.audioSec ?? null,
+            presentedSourceFrame: presented?.sourceFrame ?? null,
+            captureSequence: fallbackTransport?.captureSequence ?? null,
+            playbackEpoch: fallbackTransport?.playbackEpoch ?? null,
+            playbackRevision: fallbackTransport?.playbackRevision ?? null,
+            sessionId: fallbackTransport?.sourceAudioClock?.sessionId ?? null,
+          };
+          const cachedState = presentationVisualStateCache;
+          if (cachedState && cachedState.nowMs === fallbackKey.nowMs &&
+              cachedState.generation === fallbackKey.generation &&
+              cachedState.captureSequence === fallbackKey.captureSequence &&
+              cachedState.playbackEpoch === fallbackKey.playbackEpoch &&
+              cachedState.playbackRevision === fallbackKey.playbackRevision &&
+              cachedState.sessionId === fallbackKey.sessionId &&
+              cachedState.presentedAudioSec === fallbackKey.presentedAudioSec &&
+              cachedState.presentedSourceFrame === fallbackKey.presentedSourceFrame) {
+            recordPresentationLookupStat("presentationStateCacheHits");
+            return cachedState.state;
+          }
+          if (!presented) {
+            presentationVisualStateCache = { ...fallbackKey, state: null };
+            return null;
+          }
           for (let i = presentationVisualHistory.length - 1; i >= 0; i--) {
+            recordPresentationLookupStat("presentationHistoryEntriesScanned");
             const state = presentationVisualHistory[i];
             if (state.transport.playbackEpoch !== presented.playbackEpoch || state.transport.playbackRevision !== presented.playbackRevision) continue;
-            if (state.transport.capturedAtAudioSec <= presented.audioSec) return state;
+            if (state.transport.capturedAtAudioSec <= presented.audioSec) {
+              presentationVisualStateCache = { ...fallbackKey, state };
+              return state;
+            }
           }
+          presentationVisualStateCache = { ...fallbackKey, state: null };
           return null;
         }
 
@@ -10385,12 +10460,16 @@
               playbackRevision: message.playbackRevision });
           }
           presentationSpans = presentationSpans.slice(-2048);
+          presentationClockLookupGeneration += 1;
+          presentationSourceTimeCache = null;
+          presentationVisualStateCache = null;
           return true;
         }
 
         function sourceFrameToAudioTime(clock, sourceFrame) {
           if (!clock || !Number.isFinite(clock.sampleRate) || clock.sampleRate <= 0 || !Array.isArray(clock.segments)) return null;
           for (let i = Math.min(clock.segments.length, 128) - 1; i >= 0; i--) {
+            recordPresentationLookupStat("sourceClockSegmentsScanned");
             const segment = clock.segments[i];
             if (!segment || ![segment.sourceFrameStart, segment.sourceFrameEnd, segment.audioFrameStart, segment.audioFrameEnd]
                 .every((value) => Number.isSafeInteger(value) && value >= 0)) continue;
@@ -10404,14 +10483,63 @@
 
         function getPresentedSourceAudioTime(nowMs = getLfoVisualNow()) {
           const route = window._playbackMode;
+          const sourceClock = lastMirroredState?.transport?.sourceAudioClock;
+          const nativeAudio = route === "native"
+            ? document.getElementById("native-stream-audio") || document.getElementById("cast-media-element")
+            : null;
+          const activeAudio = nativeAudio && !nativeAudio.paused && !nativeAudio.seeking && nativeAudio.readyState >= 3
+            ? nativeAudio
+            : route === "native"
+              ? document.getElementById("cast-media-element")
+              : null;
+          const pcmAnchor = route === "pcm_fallback" ? pcmPresentationPosition : null;
+          const lookupKey = {
+            nowMs,
+            route,
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: lastPlaybackRevision,
+            generation: presentationClockLookupGeneration,
+            nativeGeneration: nativePresentationGeneration,
+            nativeAttempt: nativeStartupAttemptId,
+            nativeActive: nativeStreamActive,
+            nativePaused: nativeStreamPaused,
+            mediaElement: activeAudio,
+            mediaTime: Number.isFinite(activeAudio?.currentTime) ? activeAudio.currentTime : null,
+            mediaPaused: activeAudio ? activeAudio.paused : null,
+            mediaSeeking: activeAudio ? activeAudio.seeking : null,
+            mediaReadyState: activeAudio ? activeAudio.readyState : null,
+            sourceSessionId: sourceClock?.sessionId ?? null,
+            sourceCaptureSequence: lastMirroredState?.transport?.captureSequence ?? null,
+            pcmMediaFrame: pcmAnchor?.mediaFrame ?? null,
+            pcmAudioTime: pcmAnchor?.audioTime ?? null,
+            pcmPlaying: pcmAnchor?.playing ?? null,
+            pcmPlaybackEpoch: pcmAnchor?.playbackEpoch ?? null,
+            pcmPlaybackRevision: pcmAnchor?.playbackRevision ?? null,
+            pcmSessionId: pcmAnchor?.sessionId ?? null,
+            audioContextState: route === "pcm_fallback" ? audioCtx?.state ?? null : null,
+            audioContextSampleRate: route === "pcm_fallback" ? audioCtx?.sampleRate ?? null : null,
+            audioContextBaseLatency: route === "pcm_fallback" ? audioCtx?.baseLatency ?? null : null,
+            audioContextOutputLatency: route === "pcm_fallback" ? audioCtx?.outputLatency ?? null : null,
+            sourceClock,
+          };
+          recordPresentationLookupStat("sourceTimeCalls");
+          if (samePresentationClockLookupKey(presentationSourceTimeCache?.key, lookupKey)) {
+            recordPresentationLookupStat("sourceTimeCacheHits");
+            return presentationSourceTimeCache.value;
+          }
+          recordPresentationLookupStat("sourceTimeResolutions");
+          const cacheResult = (value) => {
+            presentationSourceTimeCache = { key: lookupKey, value };
+            return value;
+          };
+          const outputTimestamp = route === "pcm_fallback" ? audioCtx?.getOutputTimestamp?.() : null;
           let mediaFrame = null;
           let mediaEstimate = null;
           if (route === "native" && nativeStreamActive && !nativeStreamPaused) {
-            const audio = document.getElementById("native-stream-audio") || document.getElementById("cast-media-element");
-            const activeAudio = audio && !audio.paused && audio.readyState >= 3 ? audio : document.getElementById("cast-media-element");
             if (activeAudio && !activeAudio.paused && !activeAudio.seeking && activeAudio.readyState >= 3 && Number.isFinite(activeAudio.currentTime)) {
               let span = null;
               for (let i = presentationSpans.length - 1; i >= 0; i--) {
+                recordPresentationLookupStat("presentationSpanEntriesScanned");
                 const item = presentationSpans[i];
                 if (item.route === "native" && item.playbackEpoch === lastPlaybackEpoch && item.playbackRevision === lastPlaybackRevision) {
                   span = item;
@@ -10419,7 +10547,7 @@
                 }
               }
               if (span) {
-                const identity = `${nativeStartupAttemptId}:${nativePresentationGeneration}:${lastPlaybackEpoch}:${lastPlaybackRevision}:${lastMirroredState?.transport?.sourceAudioClock?.sessionId}:${span.mediaRate}`;
+                const identity = `${nativeStartupAttemptId}:${nativePresentationGeneration}:${lastPlaybackEpoch}:${lastPlaybackRevision}:${sourceClock?.sessionId}:${span.mediaRate}`;
                 mediaEstimate = projectNativePresentationClock(activeAudio, identity, nowMs);
                 if (mediaEstimate) mediaFrame = mediaEstimate.mediaSec * span.mediaRate;
               }
@@ -10428,35 +10556,34 @@
             }
           } else if (route === "pcm_fallback" && pcmPresentationPosition && audioCtx?.state === "running") {
             const anchor = pcmPresentationPosition;
-            const timestamp = audioCtx.getOutputTimestamp?.();
-            const audible = timestamp && timestamp.contextTime > 0 && timestamp.performanceTime > 0
-              ? timestamp.contextTime + (nowMs - timestamp.performanceTime) / 1000
+            const audible = outputTimestamp && outputTimestamp.contextTime > 0 && outputTimestamp.performanceTime > 0
+              ? outputTimestamp.contextTime + (nowMs - outputTimestamp.performanceTime) / 1000
               : audioCtx.currentTime - (audioCtx.baseLatency || 0) - (audioCtx.outputLatency || 0);
             const elapsed = audible - anchor.audioTime;
             if (elapsed >= -0.25 && elapsed <= 0.25 && anchor.playing &&
                 anchor.playbackEpoch === lastPlaybackEpoch && anchor.playbackRevision === lastPlaybackRevision &&
-                anchor.sessionId === lastMirroredState?.transport?.sourceAudioClock?.sessionId) mediaFrame = anchor.mediaFrame + elapsed * audioCtx.sampleRate;
+                anchor.sessionId === sourceClock?.sessionId) mediaFrame = anchor.mediaFrame + elapsed * audioCtx.sampleRate;
           }
           if (mediaFrame === null) {
             if (route !== "native" || nativeStreamPaused || !nativeStreamActive) nativePresentationClock = null;
-            return null;
+            return cacheResult(null);
           }
-          const clock = lastMirroredState?.transport?.sourceAudioClock;
           for (let i = presentationSpans.length - 1; i >= 0; i--) {
+            recordPresentationLookupStat("presentationSpanEntriesScanned");
             const span = presentationSpans[i];
             if (span.route !== route || span.playbackEpoch !== lastPlaybackEpoch || span.playbackRevision !== lastPlaybackRevision ||
-                span.sessionId !== clock?.sessionId || mediaFrame < Number(span.mediaFrameStart) || mediaFrame > Number(span.mediaFrameEnd)) continue;
+                span.sessionId !== sourceClock?.sessionId || mediaFrame < Number(span.mediaFrameStart) || mediaFrame > Number(span.mediaFrameEnd)) continue;
             const ratio = (mediaFrame - Number(span.mediaFrameStart)) / (Number(span.mediaFrameEnd) - Number(span.mediaFrameStart));
             const sourceFrame = Number(span.sourceFrameStart) + ratio * (Number(span.sourceFrameEnd) - Number(span.sourceFrameStart));
-            const audioSec = sourceFrameToAudioTime(clock, sourceFrame);
-            if (audioSec === null) return null;
-            return { audioSec, sourceFrame, route, uncertaintyMs: (Number(span.uncertaintyFrames) || 0) * 1000 / span.sourceRate,
+            const audioSec = sourceFrameToAudioTime(sourceClock, sourceFrame);
+            if (audioSec === null) return cacheResult(null);
+            return cacheResult({ audioSec, sourceFrame, route, uncertaintyMs: (Number(span.uncertaintyFrames) || 0) * 1000 / span.sourceRate,
               uncertaintyBasis: "source_frame_mapping_only", acousticOffsetMs: null, mediaClockResolutionMs: null,
               ...mediaEstimate,
-              playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision };
+              playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision });
           }
           if (route === "native") nativePresentationClock = null;
-          return null;
+          return cacheResult(null);
         }
 
         function sampleLfoTimeline(model, audioSec) {
@@ -11369,6 +11496,17 @@
               ? performance.now()
               : Date.now();
           const phaseStartedAt = phaseClock();
+          const presentationLookupStats = {
+            sourceTimeCalls: 0,
+            sourceTimeResolutions: 0,
+            sourceTimeCacheHits: 0,
+            presentationStateCalls: 0,
+            presentationStateCacheHits: 0,
+            presentationSpanEntriesScanned: 0,
+            sourceClockSegmentsScanned: 0,
+            presentationHistoryEntriesScanned: 0,
+          };
+          activeRenderLookupStats = presentationLookupStats;
           const stateTrackCount = Math.max(
             1,
             Math.floor(Number(s.trackCount) || s.tracks?.length || mirroredTrackCount || 4),
@@ -11428,7 +11566,9 @@
               qaMs: 0,
               totalMs: Math.max(0, phaseClock() - phaseStartedAt),
               effectOptions: summarizeEffectOptionRendering(),
+              presentationLookups: { ...presentationLookupStats },
             };
+            activeRenderLookupStats = null;
             return "throttled";
           }
           lastRenderTime = now;
@@ -11798,16 +11938,20 @@
               qaMs: Math.max(0, qaFinishedAt - tracksFinishedAt),
               totalMs: Math.max(0, qaFinishedAt - phaseStartedAt),
               effectOptions: summarizeEffectOptionRendering(),
+              presentationLookups: { ...presentationLookupStats },
             };
           } catch (e) {
             lastGuiRenderPhaseStats = {
               ...lastGuiRenderPhaseStats,
               failed: true,
               totalMs: Math.max(0, phaseClock() - phaseStartedAt),
+              presentationLookups: { ...presentationLookupStats },
             };
+            activeRenderLookupStats = null;
             console.error("❌ Receiver Render Error:", e);
             return false;
           }
+          activeRenderLookupStats = null;
           if (typeof scheduleGuiPaintOpportunity === "function") scheduleGuiPaintOpportunity(guiRevision);
           return true;
         }
@@ -12612,6 +12756,7 @@
             // accepted. ACK the committed revision without rendering twice.
             if (guiControlWS && guiControlWS.readyState === WebSocket.OPEN) {
               try {
+                const receiverAckSentAtMonotonicMs = getLfoVisualNow();
                 const ackSent = sendReceiverBridgeMessage({
                   type: "GUI_ACK",
                   transport: "gui",
@@ -12621,6 +12766,16 @@
                   channel: "gui",
                   guiRevision: revision,
                   ...timelineAckDetails,
+                  receiverMessageStartedAtMonotonicMs: messageStartedAt,
+                  receiverAckSentAtMonotonicMs,
+                  senderMonotonicEstimateAtReceiverMessageStartMs:
+                    mapReceiverToSenderMonotonic(messageStartedAt),
+                  senderMonotonicEstimateAtReceiverAckSentMs:
+                    mapReceiverToSenderMonotonic(receiverAckSentAtMonotonicMs),
+                  senderMonotonicEstimateUncertaintyMs:
+                    Number.isFinite(guiClockSyncEstimate?.uncertaintyMs)
+                      ? guiClockSyncEstimate.uncertaintyMs
+                      : null,
                   guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
                   rawCount: guiRawMessageCount,
                   rejectedCount: guiRejectedCount,
@@ -12629,11 +12784,7 @@
                   renderedRevision: guiLastRenderedRevision,
                   renderResult: "duplicate",
                   renderTimeMs: 0,
-                  receiverProcessingMs: Math.max(0,
-                    (typeof performance !== "undefined" && typeof performance.now === "function"
-                      ? performance.now()
-                      : Date.now()) - messageStartedAt,
-                  ),
+                  receiverProcessingMs: Math.max(0, receiverAckSentAtMonotonicMs - messageStartedAt),
                   payloadBytes: 0,
                 }, "gui", true);
                 if (!ackSent) throw new Error("GUI ACK socket write failed");
@@ -12799,11 +12950,8 @@
                   });
                 }
               }
-              const receiverProcessingMs = Math.max(0,
-                (typeof performance !== "undefined" && typeof performance.now === "function"
-                  ? performance.now()
-                  : Date.now()) - messageStartedAt,
-              );
+              const receiverAckSentAtMonotonicMs = getLfoVisualNow();
+              const receiverProcessingMs = Math.max(0, receiverAckSentAtMonotonicMs - messageStartedAt);
               const ackSent = sendReceiverBridgeMessage({
                 type: "GUI_ACK",
                 transport: "gui",
@@ -12813,6 +12961,16 @@
                 channel: "gui",
                 guiRevision: acceptedRevision,
                 ...timelineAckDetails,
+                receiverMessageStartedAtMonotonicMs: messageStartedAt,
+                receiverAckSentAtMonotonicMs,
+                senderMonotonicEstimateAtReceiverMessageStartMs:
+                  mapReceiverToSenderMonotonic(messageStartedAt),
+                senderMonotonicEstimateAtReceiverAckSentMs:
+                  mapReceiverToSenderMonotonic(receiverAckSentAtMonotonicMs),
+                senderMonotonicEstimateUncertaintyMs:
+                  Number.isFinite(guiClockSyncEstimate?.uncertaintyMs)
+                    ? guiClockSyncEstimate.uncertaintyMs
+                    : null,
                 guiInteractionRevision: Number(envelope.guiInteractionRevision ?? -1),
                 rawCount: guiRawMessageCount,
                 rejectedCount: guiRejectedCount,
