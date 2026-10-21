@@ -1,4 +1,4 @@
-/* Receiver build: pruned 9 Studio-only modal/session CSS blocks. */
+/* Receiver build: pruned 8 Studio-only modal/session CSS blocks. */
 /* 04-ui-modules.css - All specific UI modules, modals, and dialogs */
 
 
@@ -460,22 +460,6 @@ input[type="range"]::-webkit-slider-thumb {
   margin: 0 auto;
 }
 
-.knob-label-group {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  cursor: pointer;
-  font-size: 0.825em;
-  font-weight: 720;
-  padding-right: 5px;
-}
-
-.knob-label-group label {
-  color: var(--gold);
-  pointer-events: none;
-}
-
 /* Removed conflicting .lfo-assign and .param-value styles */
 
 
@@ -642,36 +626,6 @@ button[id^="t-rev-"].reverse-failed {
 .fx-chain-checkbox {
   display: none;
   /* Hide actual checkbox */
-}
-
-.fx-chain-slot-label {
-  flex: 1;
-  text-align: center;
-  background: #222;
-  border: 1px solid #444;
-  color: #666;
-  margin: 0 2px;
-  cursor: pointer;
-  font-size: 0.75em;
-  border-radius: 3px;
-  padding: 2px 0;
-}
-
-.fx-chain-slot-label.selected {
-  border-color: var(--gold);
-  color: var(--gold);
-  background: #333;
-}
-.fx-chain-slot-label.audition-tab { background: #444; }
-.fx-chain-slot-label.audition-tab.selected {
-  border-color: var(--gold);
-  color: var(--gold);
-  background: #333;
-}
-.fx-chain-checkbox:checked + .fx-chain-slot-label {
-  background: var(--green);
-  color: white;
-  border-color: var(--green);
 }
 
 .fx-controls {
@@ -953,16 +907,6 @@ select option {
   margin: 0 auto;
 }
 
-.stereo-meter-wrapper {
-  display: flex;
-  width: 80%;
-  gap: 4px;
-}
-
-.stereo-meter-wrapper .meter-container {
-  flex: 1;
-}
-
 .status-indicator {
   text-align: center;
   border-radius: 55px;
@@ -1144,76 +1088,6 @@ select option {
     background-color 0.2s ease,
     color 0.2s ease,
     border-color 0.2s ease;
-}
-
-.custom-audio-player {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background-color: var(--dark-green-transparent);
-  border-radius: 5px;
-  padding: 5px 10px;
-  border: 1px solid var(--gold);
-  height: 25px;
-  box-sizing: border-box;
-  width: 72%;
-}
-
-.play-pause-btn {
-  /* Aggressive reset */
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  background: transparent;
-  border: none !important;
-  outline: none;
-  cursor: pointer;
-
-  /* Desired styles */
-  background-color: var(--dark-green-transparent);
-  /* Button interior background is green */
-  border-radius: 3px;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 0;
-  /* No whitespace */
-  margin: 0;
-  /* No whitespace */
-  line-height: 1;
-  /* Control vertical spacing */
-  color: var(--gold);
-  /* Unicode character color is gold */
-  font-size: 13px;
-  /* Default size for pause icon */
-  font-family: "Courier New", Courier, monospace;
-}
-
-.play-pause-btn.playing {
-  background-color: var(--dark-green-transparent);
-  /* Still green background when playing */
-  border: none !important;
-  /* Remove border when playing */
-  color: var(--gold);
-  /* Unicode character color is gold */
-}
-
-.progress-bar-container {
-  flex-grow: 1;
-  background-color: var(--off-black);
-  border-radius: 5px;
-  height: 8px;
-  cursor: pointer;
-  overflow: hidden;
-  border: 1px solid var(--gold);
-}
-
-.recording-action-select {
-  width: auto;
-  margin: 0;
 }
 
 .recording-actions {
@@ -1995,6 +1869,16 @@ select option {
   box-shadow: 0 0 0 2px var(--gold), 0 0 8px var(--gold);
 }
 
+.fx-chain-slot-label.audition-tab {
+  background-color: #444;
+}
+
+.fx-chain-slot-label.audition-tab.selected {
+  border-color: var(--gold);
+  color: var(--gold);
+  background-color: #333;
+}
+
 .fx-chain-arrow {
   background-color: var(--green);
   color: var(--gold);
@@ -2333,6 +2217,9 @@ select option {
     0 0 0 3px var(--green),
     0 0 0 6px var(--gold),
     0 0 0 9px var(--red);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .audio-files-modal-content h2 {
@@ -2389,28 +2276,6 @@ select option {
   color: var(--gold);
   font-size: 0.85em;
   border-bottom: 1px solid var(--mid-gray);
-}
-
-#close-audio-files-modal {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  z-index: 100;
-  background: var(--gold);
-  color: var(--red);
-  border: 3px solid var(--green);
-  border-radius: 6px;
-  font-weight: bold;
-  font-size: 1.1em;
-  width: 35px;
-  height: 35px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  cursor: pointer;
-  line-height: 1;
-  font-family: "Courier New", Courier, monospace;
 }
 
 #close-audio-files-modal {
@@ -2776,55 +2641,6 @@ select option {
 
 .close-modal:hover {
   color: var(--red);
-}
-
-.close-modal {
-  position: absolute;
-  top: 10px;
-  right: 15px;
-  color: var(--text-color);
-  font-size: 24px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.close-modal:hover {
-  color: var(--red);
-}
-
-.cast-options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.cast-option-btn {
-  background-color: var(--mid-gray);
-  color: var(--text-color);
-  border: 1px solid var(--gold);
-  padding: 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 1.1em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  transition: all 0.2s ease;
-}
-
-.cast-option-btn:hover {
-  background-color: var(--gold);
-  color: var(--off-black);
-  transform: translateY(-2px);
-}
-
-.cast-status {
-  margin-top: 15px;
-  font-size: 0.9em;
-  color: var(--gold);
-  min-height: 20px;
 }
 
 .main-controls {
@@ -4238,20 +4054,6 @@ select option {
   color: #ff4444;
   font-size: 24px;
   cursor: pointer;
-}
-
-#close-cast-button {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  background: var(--red);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  cursor: pointer;
-  z-index: 10;
 }
 
 .cast-device-list {
@@ -6151,6 +5953,9 @@ body.receiver-mode .unlock-button:focus {
 .dialog-control-group { padding: 10px; }
 .dialog-control-group-mt { padding: 10px; margin-top: 10px; }
 .dialog-label { color: var(--gold); display: block; margin-bottom: 5px; }
+.dialog-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.dialog-header-row .dialog-label { margin-bottom: 0; }
+.dialog-btn-compact { font-size: 0.68em; padding: 2px 8px; cursor: pointer; }
 .dialog-select { width: 100%; background: #333; color: var(--gold); border: 1px solid var(--gold); padding: 5px; }
 .dialog-help-text { font-size: 0.8em; color: #888; margin-top: 5px; }
 
@@ -6469,48 +6274,6 @@ body.receiver-mode .unlock-button:focus {
   padding: 8px 16px;
 }
 
-/* Input Prompt (Modals.js showInputPrompt) */
-.input-prompt-dialog {
-  width: 320px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  background: #181818;
-}
-.input-prompt-dialog h3 {
-  margin-bottom: 15px;
-  font-size: 1.1em;
-  font-weight: 600;
-}
-.input-prompt-dialog input[type="text"] {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 18px;
-  background: #111111;
-  border: 1px solid #444444;
-  color: #ffffff;
-  border-radius: 4px;
-  box-sizing: border-box;
-  font-size: 1em;
-  outline: none;
-}
-.input-prompt-dialog input[type="text"]:focus {
-  border-color: var(--gold);
-}
-.input-prompt-dialog .btn-row {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-.input-prompt-dialog .btn-ok {
-  padding: 8px 16px;
-  background: var(--gold);
-  border: none;
-  color: #000000;
-  font-weight: bold;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9em;
-}
-
 /* Cast Dialog Status Colors (Modals.js L395) */
 .cast-status-success { color: var(--green); }
 .cast-status-error { color: var(--red); }
@@ -6525,11 +6288,6 @@ body.receiver-mode .unlock-button:focus {
   max-width: 80vw;
   max-height: 80vh;
   overflow-y: auto;
-}
-.audio-files-modal-content {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 .audio-files-modal .close-btn {
   position: absolute;

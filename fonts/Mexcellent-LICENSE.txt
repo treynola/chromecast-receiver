@@ -1,0 +1,10 @@
+Copyright (c) 2000-2024 Typodermic Fonts Inc. (https://typodermicfonts.com)
+Font Family: Mexcellent (Mexcellent-Regular, Mexcellent3d)
+Designer: Ray Larabie
+Trademark: Mexcellent is a trademark of Typodermic Fonts Inc.
+
+Licensed for desktop and web embedding use under Typodermic Fonts Free License Agreement:
+This Font Software is free to use for personal, desktop, and commercial applications.
+Embedding and bundling within software applications and distributed packages is permitted
+provided that this copyright notice, trademark acknowledgement, and permission grant
+are preserved in associated documentation.

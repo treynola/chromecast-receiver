@@ -2,16 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script src="build_identity.js?v=13.9.509-157017e3fa07"></script>
+    <script src="build_identity.js?v=13.9.509-c4ae9ca19aa9"></script>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MXS-004 Studio Mirror v13.9.509</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-9b0f6dff47ba" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-9b0f6dff47ba" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-9b0f6dff47ba" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-9b0f6dff47ba" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-32c51123498c" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-32c51123498c" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-32c51123498c" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-32c51123498c" />
     <link rel="stylesheet" href="css/icons.css?v=13.9.509" />
   </head>
   <body class="app-loading receiver-mode">
@@ -116,7 +116,7 @@
           <div class="master-item master-bottom-item">
             <div class="master-rec-row">
               <div class="master-rec-col-left">
-                <button id="master-record-button" class="rec-btn" style="background-color: var(--red); color: white;">REC</button>
+                <button type="button" id="master-record-button" class="track-rec-button rec-btn" data-action="record">REC</button>
               </div>
               <div class="master-rec-col-right">
                 <select id="record-as-select" class="app-select">
@@ -130,7 +130,7 @@
           >
             <div class="lfo-column">
               <div class="master-item lfo-button-item">
-                <button id="lfo-toggle" data-action="toggle-lfo-1" class="lfo-toggle-btn">
+                <button type="button" id="lfo-toggle" data-action="toggle-lfo-1" class="lfo-toggle-btn">
                   LFO 1
                 </button>
               </div>
@@ -163,6 +163,7 @@
             <div class="lfo-column">
               <div class="master-item lfo-button-item">
                 <button
+                  type="button"
                   id="lfo2-toggle"
                   data-action="toggle-lfo-2"
                   class="lfo-toggle-btn"
