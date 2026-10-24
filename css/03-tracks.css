@@ -384,7 +384,7 @@ button.track-header:hover,
   font-size: 13px !important;
   font-weight: 720 !important;
   color: var(--gold) !important;
-  margin-left: 2px !important;
+  margin-left: 6px !important;
 }
 
 .track-bottom-layout .effect-type-select {
