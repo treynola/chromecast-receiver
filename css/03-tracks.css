@@ -284,6 +284,12 @@ button.track-header:hover,
 .track .main-controls .knob-label-group[data-param-label="bass"] label,
 .track-bottom-layout label {
   font-size: 13px !important;
+  text-transform: uppercase !important;
+}
+
+.track-input-layout label,
+.track-input-gain-group label {
+  text-transform: uppercase !important;
 }
 
 /* Completely remove borders, background, and padding to save maximum vertical space */

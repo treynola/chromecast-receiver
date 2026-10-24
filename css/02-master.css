@@ -205,6 +205,11 @@
   margin: 0;
 }
 
+.master-volume-aligned label,
+.lfo-column .lfo-sweep-control label {
+  text-transform: uppercase !important;
+}
+
 /* Generalized Row Layout for Master Items (Loop, Vol) */
 .master-row-layout {
   flex-direction: row !important;
