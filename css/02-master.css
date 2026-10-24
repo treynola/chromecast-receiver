@@ -206,6 +206,7 @@
 }
 
 .master-volume-aligned label,
+.master-row-layout label,
 .lfo-column .lfo-sweep-control label {
   text-transform: uppercase !important;
 }

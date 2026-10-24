@@ -380,10 +380,19 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
   background: transparent;
   border: none;
   color: var(--gold);
-  font-size: 21px;
+  font-size: 24px;
   cursor: pointer;
-  padding: 2px 5px;
+  padding: 1px 4px;
   transition: color 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#cast-btn i,
+#cast-btn .fa-chromecast {
+  width: 24px;
+  height: 24px;
 }
 
 #cast-btn:hover {

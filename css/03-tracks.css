@@ -274,7 +274,7 @@ button.track-header:hover,
   white-space: nowrap;
 }
 
-/* [V14.0.0] Track Tone (Treble, Mid, Bass), Vol, Pitch, and Effects titles 1px larger */
+/* [V14.0.0] Track Tone (Treble, Mid, Bass), Vol, Pitch, and Effects titles */
 .track .main-controls .knob-label-group label,
 .track .main-controls .knob-label-group[data-param-label="pitch"] label,
 .track .main-controls .knob-label-group[data-param-label="vol"] label,
@@ -283,7 +283,7 @@ button.track-header:hover,
 .track .main-controls .knob-label-group[data-param-label="mid_gain"] label,
 .track .main-controls .knob-label-group[data-param-label="bass"] label,
 .track-bottom-layout label {
-  font-size: 13px !important;
+  font-size: 12px !important;
   text-transform: uppercase !important;
 }
 
@@ -387,7 +387,7 @@ button.track-header:hover,
   flex: 1 !important;
   max-width: fit-content !important;
   white-space: nowrap !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   font-weight: 720 !important;
   color: var(--gold) !important;
   margin-left: 6px !important;
