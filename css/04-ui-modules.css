@@ -94,7 +94,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.75em;
+  font-size: 12px;
   font-weight: bold;
   color: var(--gold);
   margin-bottom: 2px;
@@ -123,7 +123,7 @@
 
 .waveform-label-external-top,
 .waveform-label-external {
-  font-size: 0.6em !important;
+  font-size: 8px !important;
   color: var(--gold) !important;
   font-weight: bold !important;
 }
@@ -176,7 +176,7 @@
   color: var(--text-color);
   border: 1px solid var(--mid-gray);
   border-radius: 3px;
-  font-size: 0.8em;
+  font-size: 13px;
   padding: 2px;
 }
 
@@ -268,7 +268,7 @@ img {
 
 .control-group label {
   margin: 0;
-  font-size: 0.75em;
+  font-size: 12px;
   /* Reduced by one size */
   color: var(--green);
   font-weight: bold;
@@ -281,8 +281,8 @@ img {
 
 #loop-time-display {
   color: var(--gold);
-  font-size: 1.1rem;
-  min-height: 2rem;
+  font-size: 18px;
+  min-height: 32px;
   font-family: "Courier New", Courier, monospace;
 }
 
@@ -291,7 +291,7 @@ img {
 #lfo-time-value,
 #lfo2-time-value {
   color: var(--gold) !important;
-  font-size: 0.7em;
+  font-size: 11px;
   font-weight: 720;
 }
 
@@ -340,7 +340,7 @@ img {
   justify-content: space-between;
   width: 100%;
   cursor: pointer;
-  font-size: 0.75em;
+  font-size: 12px;
   font-weight: 720;
   padding: 0 2px;
   min-height: 16px;
@@ -407,7 +407,7 @@ img {
 }
 
 .param-value {
-  font-size: 0.72em;
+  font-size: 11px;
   color: var(--gold);
   min-width: 45px;
   text-align: center;
@@ -475,7 +475,7 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9em;
+  font-size: 14px;
   /* Default font size */
   border: 2px solid;
 }
@@ -485,7 +485,7 @@ input[type="range"]::-webkit-slider-thumb {
 /* Shared REC component used by the Master Column and every Track. */
 .track-rec-button {
   height: 24px !important;
-  font-size: 0.75em !important;
+  font-size: 12px !important;
   padding: 2px 4px !important;
   box-sizing: border-box !important;
   display: flex !important;
@@ -495,7 +495,7 @@ input[type="range"]::-webkit-slider-thumb {
   font-weight: 720 !important;
   border-radius: 4px !important;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   background-color: var(--red) !important;
   color: var(--gold) !important;
   border: 1px solid var(--gold) !important;
@@ -638,7 +638,7 @@ button[id^="t-rev-"].reverse-failed {
   background: var(--dark-gray);
   color: var(--gold);
   border: 1px solid var(--gold);
-  font-size: 0.8em;
+  font-size: 13px;
   border-radius: 3px;
 }
 
@@ -647,7 +647,7 @@ button[id^="t-rev-"].reverse-failed {
   border: 1px solid var(--mid-gray);
   color: var(--gold);
   cursor: pointer;
-  font-size: 0.8em;
+  font-size: 13px;
   padding: 2px 6px;
 }
 
@@ -821,7 +821,7 @@ button[id^="t-rev-"].playing-reverse {
   height: 24px;
   line-height: 24px;
   font-family: sans-serif !important;
-  font-size: 0.72em !important;
+  font-size: 11px !important;
   font-weight: normal !important;
   text-transform: none;
   box-sizing: border-box;
@@ -910,7 +910,7 @@ select option {
 .status-indicator {
   text-align: center;
   border-radius: 55px;
-  font-size: 0.9em;
+  font-size: 14px;
   background-color: var(--off-black);
   position: relative;
   overflow: hidden;
@@ -942,7 +942,7 @@ select option {
 .status-ready {
   color: var(--green);
   font-weight: bold;
-  font-size: 0.8em;
+  font-size: 13px;
 }
 
 .status-recording {
@@ -1019,7 +1019,7 @@ select option {
   font-weight: bold;
   margin-bottom: 2px;
   padding-bottom: 2px;
-  font-size: 1em;
+  font-size: 16px;
 }
 
 #import-files-button:hover {
@@ -1099,7 +1099,7 @@ select option {
 }
 
 .recording-item .info {
-  font-size: 0.7em;
+  font-size: 11px;
   color: var(--gold);
   font-weight: bold;
   text-align: center;
@@ -1107,7 +1107,7 @@ select option {
 }
 
 .recording-item-checkbox-label {
-  font-size: 0.7em;
+  font-size: 11px;
   font-weight: bold;
   text-align: center;
   cursor: pointer;
@@ -1164,7 +1164,7 @@ select option {
   padding: 5px;
   font-family: "Courier New", Courier, monospace;
   font-weight: bold;
-  font-size: 0.9em;
+  font-size: 14px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1255,7 +1255,7 @@ select option {
 
 .time-display {
   color: var(--gold);
-  font-size: 0.8em;
+  font-size: 13px;
   font-weight: bold;
   min-width: 80px;
   text-align: center;
@@ -1309,7 +1309,7 @@ select option {
 }
 
 .effect-control-group .effect-param-title label {
-  font-size: 0.76em;
+  font-size: 12px;
   line-height: 1;
   color: var(--gold);
   font-weight: bold;
@@ -1345,7 +1345,7 @@ select option {
   left: auto;
   top: auto;
   font-family: monospace;
-  font-size: 0.72em;
+  font-size: 11px;
   line-height: 1;
   color: var(--green);
   font-weight: bold;
@@ -1378,8 +1378,8 @@ select option {
   border-radius: 3px;
   background: #10130f;
   color: var(--green, #b7e47a);
-  font: 700 1.3rem/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
-  letter-spacing: 0.14em;
+  font: 700 21px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 2px;
   text-align: center;
   text-shadow: 0 0 7px rgba(183, 228, 122, 0.4);
   font-variant-numeric: tabular-nums;
@@ -1397,7 +1397,7 @@ select option {
 }
 
 .program-counter-step {
-  font-size: 1.15rem;
+  font-size: 18px;
   font-weight: 700;
 }
 
@@ -1409,23 +1409,23 @@ select option {
   border-radius: 3px;
   background: #171717;
   color: #f4f1e8;
-  font: 600 0.85rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 600 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center;
 }
 
 .program-counter-name {
-  min-height: 1.1em;
+  min-height: 18px;
   color: #ddd;
-  font-size: 0.72rem;
+  font-size: 11px;
   line-height: 1.15;
   text-align: center;
   overflow-wrap: anywhere;
 }
 
 .program-counter-status {
-  min-height: 1.15em;
+  min-height: 18px;
   color: var(--green, #b7e47a);
-  font-size: 0.66rem;
+  font-size: 11px;
   line-height: 1.15;
   text-align: center;
 }
@@ -1443,13 +1443,13 @@ select option {
 
 .program-counter-action {
   padding: 2px 6px;
-  font-size: 0.64rem;
+  font-size: 10px;
   line-height: 1.2;
 }
 
 .program-counter-edited {
   color: #b8b8b8;
-  font: 700 0.62rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-transform: uppercase;
 }
 
@@ -1520,9 +1520,9 @@ select option {
 
 .effect-params-grid.rackmount-parameter-layout .effect-param-title label {
   color: #e0c674;
-  font-size: 0.74rem;
+  font-size: 12px;
   line-height: 1.2;
-  letter-spacing: 0.035em;
+  letter-spacing: 0.5px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .slider-wrapper {
@@ -1542,7 +1542,7 @@ select option {
 
 .effect-params-grid.rackmount-parameter-layout .param-value {
   color: #b7e47a;
-  font-size: 0.78rem;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1561,9 +1561,9 @@ select option {
   min-height: 28px;
   color: #e0c674;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.045em;
+  letter-spacing: 0.6px;
   list-style: none;
   text-transform: uppercase;
 }
@@ -1575,7 +1575,7 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .rackmount-control-section > summary::after {
   content: "+";
   color: #b7e47a;
-  font: 700 1rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 16px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-control-section[open] {
@@ -1634,8 +1634,8 @@ select option {
   padding: 5px 8px;
   border-color: #70865a;
   border-radius: 6px;
-  font-size: 1.45rem;
-  letter-spacing: 0.16em;
+  font-size: 23px;
+  letter-spacing: 2.5px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-step,
@@ -1648,14 +1648,14 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .program-counter-input {
   grid-area: input;
   padding: 4px 8px;
-  font-size: 0.95rem;
+  font-size: 15px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-position {
   grid-area: position;
   min-width: 0;
   color: #b7e47a;
-  font: 600 0.7rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -1672,7 +1672,7 @@ select option {
   background: #11140f;
   color: #f0ead9;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-candidate-choice[hidden] {
@@ -1680,14 +1680,14 @@ select option {
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-name {
-  min-height: 1.2em;
+  min-height: 19px;
   color: #f0ead9;
-  font-size: 0.8rem;
+  font-size: 13px;
   text-align: left;
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-status {
-  min-height: 1em;
+  min-height: 16px;
   text-align: left;
 }
 
@@ -1703,12 +1703,12 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .program-counter-action {
   padding: 4px 10px;
   color: #e8d58d;
-  font-size: 0.72rem;
+  font-size: 11px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .program-counter-edited {
   margin-right: auto;
-  font-size: 0.67rem;
+  font-size: 11px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-program-browser {
@@ -1721,7 +1721,7 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .rackmount-program-browser-details > summary {
   color: #e0c674;
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1743,7 +1743,7 @@ select option {
   background: #11140f;
   color: #f0ead9;
   font: inherit;
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .rackmount-browser-status {
@@ -1767,7 +1767,7 @@ select option {
   border-radius: 4px;
   background: #171717;
   color: var(--green, #b7e47a);
-  font: 700 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-transform: uppercase;
   cursor: pointer;
 }
@@ -1779,9 +1779,9 @@ select option {
 }
 
 .effect-param-trigger-status {
-  min-height: 1em;
+  min-height: 16px;
   color: #c8d8b6;
-  font-size: 0.62rem;
+  font-size: 10px;
   line-height: 1.15;
   text-align: center;
 }
@@ -1802,7 +1802,7 @@ select option {
   font-weight: normal;
   text-align: center;
   width: 100%;
-  font-size: 1.2em;
+  font-size: 19px;
   line-height: 24px;
   padding: 5px 0 0;
   box-sizing: border-box;
@@ -1841,7 +1841,7 @@ select option {
   cursor: pointer;
   font-family: "Courier New", Courier, monospace;
   font-weight: 720;
-  font-size: 0.7em;
+  font-size: 11px;
   text-align: center;
   padding: 1px;
   transition:
@@ -1986,7 +1986,7 @@ select option {
   background-color: var(--green);
   color: var(--gold);
   font-family: "Courier New", Courier, monospace;
-  font-size: 1.1em;
+  font-size: 18px;
   line-height: 1.2;
   white-space: pre-wrap;
   word-break: break-word;
@@ -2016,7 +2016,7 @@ select option {
 #docs-dialog .section-header {
   display: block;
   font-weight: bold;
-  margin: 0.5em 0 0.2em 0;
+  margin: 8px 0 3px 0;
 }
 
 #docs-dialog div {
@@ -2043,7 +2043,7 @@ select option {
   border: 2px solid var(--red);
   border-radius: 5px;
   font-weight: 720;
-  font-size: 1em;
+  font-size: 16px;
   width: 24px;
   height: 24px;
   display: flex;
@@ -2089,7 +2089,7 @@ select option {
   border-bottom: 1px solid var(--gold);
   padding-bottom: 5px;
   margin: 0 0 10px 0;
-  font-size: 1.1em;
+  font-size: 18px;
 }
 
 .qa-effect-item {
@@ -2130,7 +2130,7 @@ select option {
 
 .qa-effect-item label {
   color: var(--text-color);
-  font-size: 0.9em;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -2267,14 +2267,14 @@ select option {
   margin-left: 8px;
   cursor: pointer;
   color: #fff;
-  font-size: 0.85em;
+  font-size: 14px;
   word-break: break-all;
 }
 
 .audio-files-scan-status {
   padding: 5px 10px;
   color: var(--gold);
-  font-size: 0.85em;
+  font-size: 14px;
   border-bottom: 1px solid var(--mid-gray);
 }
 
@@ -2288,7 +2288,7 @@ select option {
   border: 3px solid var(--green);
   border-radius: 6px;
   font-weight: bold;
-  font-size: 1.1em;
+  font-size: 18px;
   width: 35px;
   height: 35px;
   display: flex;
@@ -2391,7 +2391,7 @@ select option {
   border: 3px solid var(--green);
   border-radius: 6px;
   font-weight: bold;
-  font-size: 1.2em;
+  font-size: 19px;
   width: 35px;
   height: 35px;
   display: flex;
@@ -2481,7 +2481,7 @@ select option {
   font-weight: bold;
   text-transform: uppercase;
   font-family: "Courier New", Courier, monospace;
-  font-size: 0.8em;
+  font-size: 13px;
   width: 15px;
   text-align: center;
 }
@@ -2551,7 +2551,7 @@ select option {
   padding: 12px 20px;
   border-radius: 5px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2586,7 +2586,7 @@ select option {
 }
 
 .cast-option-btn i {
-  font-size: 1.2em;
+  font-size: 19px;
   color: var(--gold);
 }
 
@@ -2594,8 +2594,8 @@ select option {
   color: var(--green);
   margin: 15px 0;
   font-family: "Courier New", monospace;
-  font-size: 0.9em;
-  min-height: 1.2em;
+  font-size: 14px;
+  min-height: 19px;
   white-space: pre-wrap;
 }
 
@@ -2626,14 +2626,14 @@ select option {
 
 .device-item .device-ip {
   color: var(--mid-gray);
-  font-size: 0.8em;
+  font-size: 13px;
 }
 
 .close-modal {
   position: absolute;
   right: 15px;
   top: 10px;
-  font-size: 1.5em;
+  font-size: 24px;
   color: var(--mid-gray);
   cursor: pointer;
   line-height: 1;
@@ -2662,40 +2662,6 @@ select option {
   /* Tighten to exact thumb size */
 }
 
-
-.device-list {
-  margin-top: 15px;
-  max-height: 200px;
-  overflow-y: auto;
-  border-top: 1px solid #333;
-  padding-top: 10px;
-}
-
-.device-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #222;
-  padding: 10px;
-  margin-bottom: 5px;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.device-item:hover {
-  background: #333;
-}
-
-.device-item span {
-  font-size: 0.9em;
-  color: #eee;
-}
-
-.device-item .device-ip {
-  font-size: 0.8em;
-  color: #888;
-}
 
 /* Effect Parameter Dialogs (vNewStrategy) */
 .effect-dialogs-container {
@@ -2986,7 +2952,7 @@ select option {
 }
 
 .dialog-header-status {
-  font-size: 0.8em;
+  font-size: 13px;
   color: var(--green);
   font-style: italic;
   margin-left: 8px;
@@ -3179,7 +3145,7 @@ select option {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
   color: var(--gold);
   font-weight: normal;
-  font-size: 1.15em;
+  font-size: 18px;
   line-height: 20px;
   letter-spacing: 0.5px;
   text-align: left;
@@ -3234,7 +3200,7 @@ select option {
   cursor: pointer;
   height: 18px;
   line-height: 12px;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .track-bpm-multiplier-btn:hover {
@@ -3404,7 +3370,7 @@ select option {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
   color: var(--gold);
   font-weight: normal;
-  font-size: 1.15em;
+  font-size: 18px;
   line-height: 20px;
   letter-spacing: 0.5px;
   text-align: left;
@@ -3459,7 +3425,7 @@ select option {
   cursor: pointer;
   height: 18px;
   line-height: 12px;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   user-select: none;
 }
 
@@ -3608,7 +3574,7 @@ select option {
 .effect-params-dialog .dialog-header .dialog-title-top,
 .audition-params-dialog .dialog-header .dialog-title-top {
   display: block;
-  font-size: 1.1em;
+  font-size: 18px;
   color: var(--gold);
   opacity: 0.8;
   letter-spacing: 1px;
@@ -3618,14 +3584,14 @@ select option {
 .effect-params-dialog .dialog-header .dialog-title-bottom,
 .audition-params-dialog .dialog-header .dialog-title-bottom {
   display: block;
-  font-size: 1.15em;
+  font-size: 18px;
   color: var(--green);
   text-transform: uppercase;
 }
 
 .effect-params-dialog .dialog-header .dialog-title-bottom--effect,
 .audition-params-dialog .dialog-header .dialog-title-bottom--effect {
-  font-size: 1.1em;
+  font-size: 18px;
 }
 
 .dialog-header-status--audition {
@@ -3769,7 +3735,7 @@ select option {
   align-items: center;
   gap: 6px;
   color: var(--gold);
-  font-size: 0.78em;
+  font-size: 12px;
 }
 
 .sample-editor-waveform-header select {
@@ -3799,7 +3765,7 @@ select option {
 .sample-editor-dialog .sample-editor-field > span {
   color: var(--gold);
   font-family: inherit;
-  font-size: 0.8em;
+  font-size: 13px;
 }
 
 .sample-editor-dialog .sample-editor-asset-card strong,
@@ -4037,7 +4003,7 @@ select option {
   font-weight: 720;
   font-size: 16px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
 }
 
 .sampler-pad-pick:hover {
@@ -4071,7 +4037,7 @@ select option {
   padding: 12px;
   border-bottom: 1px solid var(--dark-green-transparent);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -4182,7 +4148,7 @@ select option {
   background: none;
   border: none;
   color: var(--gold);
-  font-size: 1.5em;
+  font-size: 24px;
   cursor: pointer;
   font-weight: bold;
   transition: color 0.3s;
@@ -4242,7 +4208,7 @@ select option {
   border: 1px solid #444;
   border-radius: 6px;
   margin-bottom: 6px;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   width: 100%;
   box-sizing: border-box;
 }
@@ -4254,7 +4220,7 @@ select option {
 }
 
 .media-name {
-  font-size: 0.9em;
+  font-size: 14px;
   color: #eee;
   white-space: nowrap;
   overflow: hidden;
@@ -4276,9 +4242,9 @@ select option {
   padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.7em;
+  font-size: 11px;
   font-weight: bold;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   text-transform: uppercase;
 }
 
@@ -4339,10 +4305,10 @@ select option {
   border: 1px solid #444;
   border-radius: 4px;
   padding: 5px 9px;
-  font-size: 0.72em;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -4364,7 +4330,7 @@ select option {
 .media-dialog-tab .tab-badge {
   background: var(--gold);
   color: #000;
-  font-size: 0.85em;
+  font-size: 14px;
   padding: 1px 4px;
   border-radius: 3px;
   margin-left: 4px;
@@ -4420,7 +4386,7 @@ select option {
   background: #1a1a1a;
   border: 1px solid #444;
   color: var(--gold);
-  font-size: 0.9em;
+  font-size: 14px;
   font-weight: 700;
   padding: 4px 8px;
   border-radius: 4px;
@@ -4446,7 +4412,7 @@ select option {
 }
 
 .playlist-mode-label {
-  font-size: 0.7em;
+  font-size: 11px;
   font-weight: 700;
   color: #888;
   text-transform: uppercase;
@@ -4458,10 +4424,10 @@ select option {
   border: 1px solid #444;
   border-radius: 4px;
   padding: 3px 8px;
-  font-size: 0.68em;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
 }
 
 .playlist-mode-btn:hover {
@@ -4477,7 +4443,7 @@ select option {
 }
 
 .playlist-mode-hint {
-  font-size: 0.65em;
+  font-size: 10px;
   color: #777;
   margin-left: auto;
   font-style: italic;
@@ -4497,10 +4463,10 @@ select option {
   border: 1px solid #444;
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 0.68em;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   text-transform: uppercase;
 }
 
@@ -4551,7 +4517,7 @@ select option {
   background: #222;
   border: 1px solid #383838;
   border-radius: 5px;
-  transition: all 0.15s;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   box-sizing: border-box;
 }
 
@@ -4566,7 +4532,7 @@ select option {
 }
 
 .playlist-item-order {
-  font-size: 0.72em;
+  font-size: 11px;
   font-weight: 800;
   color: var(--gold);
   min-width: 22px;
@@ -4575,7 +4541,7 @@ select option {
 
 .playlist-item-name {
   flex: 1;
-  font-size: 0.82em;
+  font-size: 13px;
   color: #eee;
   white-space: nowrap;
   overflow: hidden;
@@ -4585,13 +4551,13 @@ select option {
 
 .playlist-access-summary {
   color: #aaa;
-  font-size: 0.74em;
+  font-size: 12px;
   padding: 3px 2px 7px;
 }
 
 .playlist-item-access {
   flex: 0 0 auto;
-  font-size: 0.56em;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.35px;
   white-space: nowrap;
@@ -4606,7 +4572,7 @@ select option {
 }
 
 .playlist-item-badge {
-  font-size: 0.6em;
+  font-size: 8px;
   font-weight: 800;
   padding: 1px 5px;
   border-radius: 3px;
@@ -4625,10 +4591,10 @@ select option {
   color: #ccc;
   padding: 3px 6px;
   border-radius: 3px;
-  font-size: 0.65em;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   line-height: 1;
 }
 
@@ -4673,7 +4639,7 @@ select option {
   padding: 8px 10px;
   background: #242424;
   border-bottom: 1px solid #383838;
-  font-size: 0.75em;
+  font-size: 12px;
   font-family: monospace;
   user-select: none;
   -webkit-user-select: none;
@@ -4704,7 +4670,7 @@ select option {
 }
 
 .media-picker-count {
-  font-size: 0.85em;
+  font-size: 14px;
   color: #888;
 }
 
@@ -4714,11 +4680,11 @@ select option {
   border: 1px solid #000;
   border-radius: 3px;
   padding: 3px 8px;
-  font-size: 0.9em;
+  font-size: 14px;
   font-weight: 700;
   font-family: monospace;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .media-picker-bulk-add-btn:hover:not(:disabled) {
@@ -4772,7 +4738,7 @@ select option {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 0.8em;
+  font-size: 13px;
   color: #eee;
   font-family: monospace;
 }
@@ -4793,7 +4759,7 @@ select option {
   cursor: pointer;
   margin-left: 8px;
   padding: 0;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
 .media-picker-quick-add-btn:hover {
@@ -4841,7 +4807,7 @@ select option {
   justify-content: center;
   text-align: center;
   pointer-events: none;
-  font-size: 0.68em;
+  font-size: 11px;
   font-weight: 700;
   color: var(--gold);
   font-family: monospace;
@@ -4891,7 +4857,7 @@ select option {
 
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
 .sample-center-container .center-header {
-  font-size: 1.2em;
+  font-size: 19px;
   margin-bottom: 2px !important;
   display: flex;
   align-items: center;
@@ -4916,12 +4882,12 @@ select option {
   border: 1px solid var(--gold, #ffcc00);
   border-radius: 3px;
   font-family: "Cousine", monospace;
-  font-size: 0.72rem;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   padding: 2px 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   user-select: none;
 }
 
@@ -4986,7 +4952,7 @@ select option {
   box-shadow: var(--sampler-pad-border-shadow);
 
   font-family: "Cousine", monospace !important;
-  font-size: 1.1em !important;
+  font-size: 18px !important;
   line-height: 1 !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
@@ -5061,7 +5027,7 @@ select option {
   border: 1px solid var(--gold);
   box-shadow: 0 0 14px rgba(0, 0, 0, 0.6);
   font-family: "Cousine", monospace;
-  font-size: 0.85rem;
+  font-size: 14px;
   text-align: center;
 }
 
@@ -5077,7 +5043,7 @@ select option {
   position: absolute;
   top: 2px;
   right: 5px;
-  font-size: 0.7em;
+  font-size: 11px;
   color: var(--sampler-pad-color);
 }
 
@@ -5085,7 +5051,7 @@ select option {
   background-color: var(--off-black) !important;
   color: var(--green) !important;
   border-color: var(--green) !important;
-  font-size: 0.85em !important; /* Scale down for 3-letter labels */
+  font-size: 14px !important; /* Scale down for 3-letter labels */
   font-weight: 900 !important;
 }
 
@@ -5139,7 +5105,7 @@ select option {
 .loop-controls label {
   color: var(--green) !important;
   /* Green */
-  font-size: 0.65em !important;
+  font-size: 10px !important;
   /* Size match */
   font-weight: bold;
   text-transform: uppercase;
@@ -5152,7 +5118,7 @@ select option {
   transform: none;
   margin-left: auto;
   text-align: right;
-  font-size: 0.75em;
+  font-size: 12px;
   /* Match value size */
 }
 
@@ -5188,7 +5154,7 @@ select option {
 }
 
 .loop-control-header label {
-  font-size: 0.7em !important;
+  font-size: 11px !important;
   /* Match FX Chain Title */
   color: var(--green) !important;
   font-weight: normal;
@@ -5208,7 +5174,7 @@ select option {
   display: block !important;
   text-align: left;
   color: var(--gold);
-  font-size: 0.8em;
+  font-size: 13px;
   font-family: monospace;
 }
 
@@ -5251,6 +5217,14 @@ select option {
   height: 12px;
   background-color: currentColor !important;
   color: var(--gold) !important;
+  -webkit-mask-image: url("../icons/scissors.svg") !important;
+  mask-image: url("../icons/scissors.svg") !important;
+  -webkit-mask-position: center !important;
+  mask-position: center !important;
+  -webkit-mask-repeat: no-repeat !important;
+  mask-repeat: no-repeat !important;
+  -webkit-mask-size: contain !important;
+  mask-size: contain !important;
 }
 
 /* Scissors Hover - Red Background, White Icon */
@@ -5282,7 +5256,7 @@ select option {
 }
 
 .loop-line-1 label {
-  font-size: 0.65em;
+  font-size: 10px;
   /* Match LFO label size */
   color: var(--green);
   font-weight: bold;
@@ -5317,7 +5291,7 @@ select option {
 }
 
 .loop-line-3 .param-value {
-  font-size: 0.75em;
+  font-size: 12px;
   /* Match LFO value size */
   color: var(--gold);
   font-family: monospace;
@@ -5495,7 +5469,7 @@ body.receiver-mode cast-media-player {
   border: 1px solid #333;
   border-radius: 4px;
   font-family: "Cousine", monospace;
-  font-size: 0.7em;
+  font-size: 11px;
   line-height: 1.25;
   z-index: 2147483000 !important;
   margin: 0 !important;
@@ -5666,12 +5640,12 @@ body.receiver-mode .gui-dialog-mirror.gui-dialog-mediaSessions {
 body.receiver-mode .gui-dialog-mirror h3 {
   margin: 0;
   color: var(--gold);
-  font-size: 0.9em;
+  font-size: 14px;
 }
 body.receiver-mode .gui-dialog-mirror p {
   margin: 0;
   color: #ddd;
-  font-size: 0.7em;
+  font-size: 11px;
 }
 body.receiver-mode .gui-dialog-mirror-control {
   display: grid;
@@ -5679,7 +5653,7 @@ body.receiver-mode .gui-dialog-mirror-control {
   align-items: center;
   gap: 6px;
   color: var(--gold);
-  font-size: 0.7em;
+  font-size: 11px;
 }
 body.receiver-mode .gui-dialog-mirror-control input {
   min-width: 0;
@@ -5695,7 +5669,7 @@ body.receiver-mode .gui-dialog-mirror-control input[type="range"] {
 body.receiver-mode .gui-dialog-mirror-value {
   min-width: 36px;
   color: #fff;
-  font-size: 0.72em;
+  font-size: 11px;
   text-align: right;
 }
 body.receiver-mode .track-buttons button.mirrored-active,
@@ -5797,7 +5771,7 @@ body.receiver-mode .sample-btn {
   min-height: 0 !important;
   aspect-ratio: auto !important;
   font-family: "Cousine", monospace !important;
-  font-size: 1.1em !important;
+  font-size: 18px !important;
   line-height: 1 !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
@@ -5818,7 +5792,7 @@ body.receiver-mode .scrolling-text-wrapper {
 }
 body.receiver-mode .scrolling-text {
   display: inline-block;
-  font-size: 0.7em;
+  font-size: 11px;
 }
 body.receiver-mode .scrolling-text.active-scrolling {
   padding-left: 0;
@@ -5826,7 +5800,7 @@ body.receiver-mode .scrolling-text.active-scrolling {
 body.receiver-mode .track-buttons button {
   flex: 1;
   height: 24px;
-  font-size: 0.75em;
+  font-size: 12px;
   font-family: "Cousine", monospace;
   font-weight: 720;
   cursor: pointer;
@@ -5889,7 +5863,7 @@ body.receiver-mode .unlock-card {
   animation: pulse-border 2s infinite alternate;
 }
 body.receiver-mode .unlock-icon {
-  font-size: 4em;
+  font-size: 64px;
   color: #d4af37;
   margin-bottom: 20px;
   animation: float-icon 3s ease-in-out infinite alternate;
@@ -5897,7 +5871,7 @@ body.receiver-mode .unlock-icon {
 body.receiver-mode .unlock-title {
   font-family: "Mexcellent", sans-serif;
   color: #d4af37;
-  font-size: 2em;
+  font-size: 32px;
   margin: 0 0 15px 0;
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -5905,13 +5879,13 @@ body.receiver-mode .unlock-title {
 body.receiver-mode .unlock-text {
   font-family: "Cousine", monospace;
   color: #fff;
-  font-size: 1.1em;
+  font-size: 18px;
   margin: 0 0 25px 0;
   line-height: 1.5;
 }
 body.receiver-mode .unlock-button {
   font-family: "Cousine", monospace;
-  font-size: 1.2em;
+  font-size: 19px;
   font-weight: 700;
   color: #000;
   background: #d4af37;
@@ -5919,7 +5893,7 @@ body.receiver-mode .unlock-button {
   padding: 12px 30px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease, opacity 0.3s ease;
   text-transform: uppercase;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
@@ -5955,12 +5929,12 @@ body.receiver-mode .unlock-button:focus {
 .dialog-label { color: var(--gold); display: block; margin-bottom: 5px; }
 .dialog-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .dialog-header-row .dialog-label { margin-bottom: 0; }
-.dialog-btn-compact { font-size: 0.68em; padding: 2px 8px; cursor: pointer; }
+.dialog-btn-compact { font-size: 11px; padding: 2px 8px; cursor: pointer; }
 .dialog-select { width: 100%; background: #333; color: var(--gold); border: 1px solid var(--gold); padding: 5px; }
-.dialog-help-text { font-size: 0.8em; color: #888; margin-top: 5px; }
+.dialog-help-text { font-size: 13px; color: #888; margin-top: 5px; }
 
 .dialog-range { width: 100%; }
-.dialog-gain-label { text-align: right; font-size: 0.8em; color: white; }
+.dialog-gain-label { text-align: right; font-size: 13px; color: white; }
 
 /* ==========================================================================
    [v13.9.600] CSS MIGRATION — Phase 1 & 2
@@ -6084,7 +6058,7 @@ body.receiver-mode .unlock-button:focus {
   flex: 0 0 auto !important;
   min-width: 26px !important;
   text-align: right !important;
-  font-size: 0.6em !important;
+  font-size: 8px !important;
   color: var(--green) !important;
   font-weight: 720 !important;
   white-space: nowrap !important;
@@ -6125,7 +6099,7 @@ body.receiver-mode .unlock-button:focus {
 
 /* Track Labels Font Size (TrackView.js — global rule replaces 6 inline fontSize) */
 .track label {
-  font-size: 0.72em;
+  font-size: 11px;
 }
 
 /* Loop Grid Layout (TrackView.js L235-268 — replaces redundant inline styles) */
@@ -6193,7 +6167,7 @@ body.receiver-mode .unlock-button:focus {
 /* Slot Assign Button States (EffectUI.js L62, Interactions.js L324/L377) */
 .slot-assign-btn {
   padding: 2px 6px;
-  font-size: 0.8em;
+  font-size: 13px;
   background: #444;
   border: 1px solid #666;
   color: white;
@@ -6208,18 +6182,18 @@ body.receiver-mode .unlock-button:focus {
 }
 
 .audition-step-btn {
-  min-width: 1.8rem;
+  min-width: 29px;
   padding: 4px 8px;
-  font-size: 0.8em;
+  font-size: 13px;
   height: auto !important;
   line-height: normal !important;
   cursor: pointer;
 }
 
 .audition-slot-assign-btn {
-  min-width: 2.1rem;
+  min-width: 34px;
   padding: 4px 8px;
-  font-size: 0.8em;
+  font-size: 13px;
   background: #444;
   border: 1px solid #666;
   color: white;
@@ -6297,7 +6271,7 @@ body.receiver-mode .unlock-button:focus {
 .scan-status {
   padding: 5px 10px;
   color: var(--gold);
-  font-size: 0.85em;
+  font-size: 14px;
   border-bottom: 1px solid #333;
 }
 .audio-file-list {
@@ -6316,7 +6290,7 @@ body.receiver-mode .unlock-button:focus {
   margin-left: 8px;
   cursor: pointer;
   color: #fff;
-  font-size: 0.85em;
+  font-size: 14px;
   word-break: break-all;
 }
 
@@ -6409,7 +6383,7 @@ dialog.input-prompt-dialog {
 .input-prompt-dialog h3 {
   margin-top: 0;
   margin-bottom: 15px;
-  font-size: 1.1em;
+  font-size: 18px;
   font-weight: 600;
   color: var(--gold, #ffd700);
 }
@@ -6422,7 +6396,7 @@ dialog.input-prompt-dialog {
   color: #ffffff;
   border-radius: 4px;
   box-sizing: border-box;
-  font-size: 1em;
+  font-size: 16px;
   outline: none;
 }
 .input-prompt-input:focus {
@@ -6440,7 +6414,7 @@ dialog.input-prompt-dialog {
   color: #ffffff;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: 14px;
 }
 .input-prompt-ok {
   padding: 8px 16px;
@@ -6450,7 +6424,7 @@ dialog.input-prompt-dialog {
   font-weight: bold;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: 14px;
 }
 
 /* Modals.js - cast-dialog overrides */
@@ -6490,12 +6464,12 @@ dialog.input-prompt-dialog {
   margin-bottom: 5px;
 }
 .cast-live-stats {
-  font-size: 0.8em;
+  font-size: 13px;
   font-family: monospace;
   color: #aaa;
 }
 .cast-audio-only {
-  font-size: 0.7em;
+  font-size: 11px;
   color: #888;
   margin-top: 5px;
 }
@@ -6517,7 +6491,7 @@ dialog.input-prompt-dialog {
   margin-top: 10px;
 }
 .cast-manual-ip-title {
-  font-size: 0.8em;
+  font-size: 13px;
   color: #888;
   margin-bottom: 5px;
 }
@@ -6535,7 +6509,7 @@ dialog.input-prompt-dialog {
 }
 .cast-manual-ip-btn {
   padding: 5px 10px;
-  font-size: 0.8em;
+  font-size: 13px;
   background: #444 !important;
 }
 
@@ -6784,7 +6758,7 @@ dialog.input-prompt-dialog {
 .vertical-slot-tabs .fx-chain-slot-label:hover {
   border-color: var(--green) !important;
   transform: translateX(3px);
-  transition: all 0.15s ease-in-out;
+  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, transform 0.15s ease-in-out, opacity 0.15s ease-in-out;
 }
 
 .vertical-tab-slot {
@@ -6847,7 +6821,7 @@ dialog.input-prompt-dialog {
   font-size: 10px;
   font-weight: bold;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7034,12 +7008,12 @@ dialog.input-prompt-dialog {
   border-bottom: none;
   border-radius: 4px 4px 0 0;
   font-family: "Cousine", monospace;
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 700;
   padding: 4px 9px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   user-select: none;
 }
 
@@ -7088,21 +7062,21 @@ dialog.input-prompt-dialog {
 
 .pad-fx-summary-title {
   font-family: "Cousine", monospace;
-  font-size: 0.82rem;
+  font-size: 13px;
   font-weight: 700;
   color: var(--gold, #ffcc00);
 }
 
 .pad-fx-summary-status {
   font-family: "Cousine", monospace;
-  font-size: 0.78rem;
+  font-size: 12px;
   color: var(--green, #00ff66);
 }
 
 .pad-fx-summary-meta {
   display: flex;
   gap: 16px;
-  font-size: 0.72rem;
+  font-size: 11px;
   color: #aaa;
 }
 
@@ -7179,15 +7153,15 @@ dialog.input-prompt-dialog {
   padding-top: 4px;
   color: var(--gold) !important;
   font-family: inherit;
-  font-size: 0.8em;
+  font-size: 13px;
   font-weight: bold;
-  letter-spacing: 0.08em;
+  letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .pad-dialog-pad-title {
   color: var(--gold);
-  font-size: 1.08em;
+  font-size: 17px;
   font-weight: bold;
 }
 
@@ -7214,9 +7188,9 @@ dialog.input-prompt-dialog {
   border: 1px solid #444 !important;
   border-radius: 4px !important;
   font-family: monospace;
-  font-size: 0.9em;
+  font-size: 14px;
   font-weight: bold;
-  transition: all 0.15s ease-in-out;
+  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, transform 0.15s ease-in-out, opacity 0.15s ease-in-out;
   cursor: pointer;
 }
 
@@ -7270,10 +7244,10 @@ dialog.input-prompt-dialog {
 }
 
 .pad-settings-group-header {
-  font-size: 0.8rem;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.8px;
   color: var(--gold, #f39c12);
   background: rgba(255, 255, 255, 0.04);
   border-left: 3px solid var(--gold, #f39c12);
@@ -7302,7 +7276,7 @@ dialog.input-prompt-dialog {
   min-width: 54px;
   color: var(--gold);
   font-family: monospace;
-  font-size: 0.9em;
+  font-size: 14px;
   font-weight: normal;
   text-align: right;
   white-space: nowrap;
@@ -7357,7 +7331,7 @@ dialog.input-prompt-dialog {
   min-width: 0;
   color: var(--gold);
   font-family: inherit;
-  font-size: 0.75em;
+  font-size: 12px;
   font-weight: 720;
   padding: 0 2px;
   min-height: 16px;
@@ -7426,7 +7400,7 @@ select.app-select {
   min-height: 24px !important;
   line-height: 24px !important;
   font-family: sans-serif !important;
-  font-size: 0.72em !important;
+  font-size: 11px !important;
   font-weight: normal !important;
   text-transform: none !important;
   box-sizing: border-box !important;
@@ -7444,7 +7418,7 @@ select.app-select:hover {
 
 select.app-select option {
   font-family: sans-serif !important;
-  font-size: 0.72em !important;
+  font-size: 11px !important;
   font-weight: normal !important;
 }
 
@@ -7485,7 +7459,7 @@ body.receiver-mode #waveform-render-status {
   color: #b9f6ca;
   background: rgba(8, 8, 8, 0.78);
   border: 1px solid rgba(185, 246, 202, 0.45);
-  font-size: 0.62rem;
+  font-size: 10px;
   pointer-events: none;
 }
 
@@ -7500,7 +7474,7 @@ body.receiver-mode #gui-dialog-registry-root[hidden] {
 body.receiver-mode #gui-dialog-registry-root > h2 {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 15px;
 }
 
 body.receiver-mode .gui-dialog-registry-entry {
@@ -7515,13 +7489,13 @@ body.receiver-mode .gui-dialog-registry-entry {
 body.receiver-mode .gui-dialog-registry-entry h3 {
   margin: 0;
   color: var(--gold, #ffcc00);
-  font-size: 0.75rem;
+  font-size: 12px;
 }
 
 body.receiver-mode .gui-dialog-registry-entry small,
 body.receiver-mode .gui-dialog-registry-control,
 body.receiver-mode .gui-dialog-registry-menu {
-  font-size: 0.62rem;
+  font-size: 10px;
 }
 
 body.receiver-mode .gui-dialog-registry-control {

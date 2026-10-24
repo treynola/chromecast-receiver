@@ -175,7 +175,7 @@ input[type="range"]:focus {
 }
 
 .font-small {
-  font-size: 0.8em !important;
+  font-size: 13px !important;
 }
 
 .bold {
@@ -346,7 +346,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
 
 .header h1 {
   font-family: "Mexcellent 3D", sans-serif;
-  font-size: 1.6em;
+  font-size: 26px;
   font-weight: normal;
   margin: 0;
   color: var(--gold);
@@ -355,7 +355,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
 
 .header h2 {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif !important;
-  font-size: 0.85em !important;
+  font-size: 14px !important;
   margin: 0;
   color: var(--green);
   letter-spacing: 0.5px;
@@ -376,7 +376,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
   background: transparent;
   border: none;
   color: var(--gold);
-  font-size: 1.3em;
+  font-size: 21px;
   cursor: pointer;
   padding: 2px 5px;
   transition: color 0.2s ease;

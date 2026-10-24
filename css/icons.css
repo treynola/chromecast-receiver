@@ -4,9 +4,9 @@
 .fas {
   --mxs-icon: none;
   display: inline-block;
-  width: 1em;
-  height: 1em;
-  vertical-align: -0.125em;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
   background-color: currentColor;
   -webkit-mask-image: var(--mxs-icon);
   mask-image: var(--mxs-icon);

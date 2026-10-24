@@ -83,7 +83,7 @@
 
 .track-header {
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
-  font-size: 1.2em;
+  font-size: 19px;
   color: var(--gold);
   margin-bottom: 5px;
   text-align: center;
@@ -130,7 +130,7 @@ button.track-header:hover,
 .track-buttons button,
 .track-btn {
   height: 24px !important;
-  font-size: 0.75em !important;
+  font-size: 12px !important;
   padding: 2px 4px !important;
   box-sizing: border-box !important;
   display: flex !important;
@@ -140,17 +140,17 @@ button.track-header:hover,
   font-weight: 720 !important;
   border-radius: 4px !important;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
   border: 1px solid var(--gold);
 }
 
 .track-transport-row .track-btn {
   font-family: "Courier New", Courier, monospace !important;
   font-weight: bold !important;
-  font-size: 0.8em !important;
+  font-size: 13px !important;
   border-radius: 4px !important;
   padding: 2px !important;
-  transition: all 0.15s ease-in-out !important;
+  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, color 0.15s ease-in-out, box-shadow 0.15s ease-in-out, filter 0.15s ease-in-out !important;
   background-color: var(--green) !important;
   color: var(--gold) !important;
   border: 1px solid var(--gold) !important;
@@ -177,7 +177,7 @@ button.track-header:hover,
 
 .track-buttons button,
 .track-time-display {
-  font-size: 0.9em;
+  font-size: 14px;
   color: var(--green);
   font-weight: bold;
   text-align: center;
@@ -220,7 +220,7 @@ button.track-header:hover,
   color: var(--green);
   border: 1px solid #00ff00 !important;
   border-radius: 4px !important;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .track-buttons button[data-action="stop"]:hover,
@@ -269,6 +269,17 @@ button.track-header:hover,
 .track .control-group label {
   color: var(--gold);
   white-space: nowrap;
+}
+
+/* [V14.0.0] Track Tone (Treble, Mid, Bass), Vol, and Pitch titles 1px larger */
+.track .main-controls .knob-label-group label,
+.track .main-controls .knob-label-group[data-param-label="pitch"] label,
+.track .main-controls .knob-label-group[data-param-label="vol"] label,
+.track .main-controls .knob-label-group[data-param-label="treble"] label,
+.track .main-controls .knob-label-group[data-param-label="mid_freq"] label,
+.track .main-controls .knob-label-group[data-param-label="mid_gain"] label,
+.track .main-controls .knob-label-group[data-param-label="bass"] label {
+  font-size: 13px !important;
 }
 
 /* Completely remove borders, background, and padding to save maximum vertical space */
@@ -321,7 +332,7 @@ button.track-header:hover,
 
 
 .pa-mic-value {
-  font-size: 0.7em !important;
+  font-size: 11px !important;
   color: var(--green) !important;
   font-weight: 720 !important;
 }
