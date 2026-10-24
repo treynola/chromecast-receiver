@@ -4852,7 +4852,7 @@ select option {
   background-color: #222222 !important;
   border: none !important;
   border-radius: 10px;
-  padding: 2px;
+  padding: 4px;
 }
 
 /* Sample Station Title Styling - Match Track 1 Title (.track-header standard) */
@@ -4923,7 +4923,7 @@ select option {
   grid-auto-flow: row;
   grid-auto-columns: minmax(0, 1fr);
   row-gap: 2px;
-  column-gap: 2px;
+  column-gap: 4px;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
@@ -4952,19 +4952,19 @@ select option {
   box-shadow: var(--sampler-pad-border-shadow);
 
   font-family: "Cousine", monospace !important;
-  font-size: 18px !important;
+  font-size: 13px !important;
   line-height: 1 !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
 
-  width: calc(100% - 2px);
-  height: calc(100% - 4px);
+  width: calc(100% - 8px);
+  height: calc(100% - 12px);
   min-height: 0;
   aspect-ratio: auto;
   box-sizing: border-box;
   padding: 1px;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   display: flex;
   align-items: center;
@@ -4972,8 +4972,8 @@ select option {
   text-shadow: none;
   position: relative;
   z-index: 5;
-  justify-self: stretch;
-  align-self: stretch;
+  justify-self: center;
+  align-self: center;
   text-transform: uppercase;
 }
 
@@ -5051,7 +5051,7 @@ select option {
   background-color: var(--off-black) !important;
   color: var(--green) !important;
   border-color: var(--green) !important;
-  font-size: 14px !important; /* Scale down for 3-letter labels */
+  font-size: 12px !important; /* Scale down for 3-letter labels */
   font-weight: 900 !important;
 }
 
@@ -5210,25 +5210,14 @@ select option {
   margin: 0 4px;
 }
 
-.loop-controls .slice-trigger-btn i,
-.loop-controls .slice-trigger-btn svg {
+.loop-controls .slice-trigger-btn i {
   display: inline-block !important;
   flex: 0 0 12px;
   width: 12px;
   height: 12px;
+  background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  fill: currentColor !important;
-}
-
-.loop-controls .slice-trigger-btn svg {
-  background-color: transparent !important;
-  -webkit-mask-image: none !important;
-  mask-image: none !important;
-}
-
-.loop-controls .slice-trigger-btn i {
-  background-color: currentColor !important;
   -webkit-mask-image: url("../icons/scissors.svg") !important;
   mask-image: url("../icons/scissors.svg") !important;
   -webkit-mask-position: center !important;
@@ -5237,6 +5226,19 @@ select option {
   mask-repeat: no-repeat !important;
   -webkit-mask-size: contain !important;
   mask-size: contain !important;
+}
+
+.loop-controls .slice-trigger-btn svg {
+  display: inline-block !important;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+  color: var(--gold) !important;
+  fill: currentColor !important;
+  background-color: transparent !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
 }
 
 /* Scissors Hover - Red Background, White Icon */
@@ -5762,26 +5764,26 @@ body.receiver-mode .sample-grid {
   grid-auto-flow: row !important;
   grid-auto-columns: minmax(0, 1fr) !important;
   row-gap: 2px !important;
-  column-gap: 2px !important;
+  column-gap: 4px !important;
   margin-top: 2px !important;
 }
 body.receiver-mode .sample-btn {
-  width: calc(100% - 2px) !important;
-  height: calc(100% - 4px) !important;
+  width: calc(100% - 8px) !important;
+  height: calc(100% - 12px) !important;
   min-height: 0 !important;
   aspect-ratio: auto !important;
   font-family: "Cousine", monospace !important;
-  font-size: 18px !important;
+  font-size: 14px !important;
   line-height: 1 !important;
   font-weight: 720 !important;
   letter-spacing: 0.5px !important;
-  border-radius: 12px !important;
+  border-radius: 10px !important;
   border-width: 2px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  justify-self: stretch !important;
-  align-self: stretch !important;
+  justify-self: center !important;
+  align-self: center !important;
   text-transform: uppercase;
 }
 body.receiver-mode .scrolling-text-wrapper {
