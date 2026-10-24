@@ -265,6 +265,10 @@ input[type="range"]:focus {
   align-items: center !important;
   flex-direction: row !important;
   justify-content: space-between !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
 }
 
 /* TrackView Compatibility Styles */

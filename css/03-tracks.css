@@ -61,6 +61,9 @@
   border-top: none !important;
   margin: 0 !important;
   background: transparent !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 #tracks-container,
@@ -271,14 +274,15 @@ button.track-header:hover,
   white-space: nowrap;
 }
 
-/* [V14.0.0] Track Tone (Treble, Mid, Bass), Vol, and Pitch titles 1px larger */
+/* [V14.0.0] Track Tone (Treble, Mid, Bass), Vol, Pitch, and Effects titles 1px larger */
 .track .main-controls .knob-label-group label,
 .track .main-controls .knob-label-group[data-param-label="pitch"] label,
 .track .main-controls .knob-label-group[data-param-label="vol"] label,
 .track .main-controls .knob-label-group[data-param-label="treble"] label,
 .track .main-controls .knob-label-group[data-param-label="mid_freq"] label,
 .track .main-controls .knob-label-group[data-param-label="mid_gain"] label,
-.track .main-controls .knob-label-group[data-param-label="bass"] label {
+.track .main-controls .knob-label-group[data-param-label="bass"] label,
+.track-bottom-layout label {
   font-size: 13px !important;
 }
 
@@ -289,6 +293,10 @@ button.track-header:hover,
   padding: 2px 0 !important;
   margin: 0 !important;
   background: transparent !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
 }
 
 .track-input-gain-group {
@@ -344,24 +352,39 @@ button.track-header:hover,
   align-items: center !important;
   justify-content: space-between !important;
   width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   gap: 5px !important;
+  min-width: 0 !important;
 }
 
 .track-input-layout label {
   flex: 1 !important;
+  max-width: fit-content !important;
   white-space: nowrap !important;
   color: var(--green) !important;
+  margin-left: 2px !important;
 }
 
 .track-input-layout .input-source {
   flex: 2 !important;
   width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   margin: 0 !important;
+  text-overflow: ellipsis !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
 }
 
 .track-bottom-layout label {
   flex: 1 !important;
+  max-width: fit-content !important;
   white-space: nowrap !important;
+  font-size: 13px !important;
+  font-weight: 720 !important;
+  color: var(--gold) !important;
+  margin-left: 2px !important;
 }
 
 .track-bottom-layout .effect-type-select {
@@ -369,5 +392,8 @@ button.track-header:hover,
   width: auto !important;
   margin: 0 !important;
   min-width: 0 !important;
+  max-width: 100% !important;
   text-overflow: ellipsis !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
 }
