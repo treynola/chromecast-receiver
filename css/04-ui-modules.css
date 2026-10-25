@@ -6884,6 +6884,12 @@ dialog.input-prompt-dialog {
   transform: none;
 }
 
+.pad-settings-dialog::backdrop {
+  display: none !important;
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
 .pad-fx-editor-dialog {
   position: fixed !important;
   top: 50px;
@@ -6943,6 +6949,40 @@ dialog.input-prompt-dialog {
   justify-content: space-between;
   width: 100%;
   min-height: 18px;
+}
+
+.pad-dialog-audition-btn {
+  height: 20px !important;
+  font-size: 11px !important;
+  font-weight: 720 !important;
+  font-family: "Cousine", monospace !important;
+  padding: 1px 8px !important;
+  margin-left: auto !important;
+  margin-right: 8px !important;
+  background-color: #222 !important;
+  color: var(--gold) !important;
+  border: 1px solid #444 !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  transition: all 0.15s ease !important;
+}
+
+.pad-dialog-audition-btn:hover {
+  background-color: var(--dark-gray) !important;
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+  box-shadow: 0 0 6px rgba(0, 255, 128, 0.3) !important;
+}
+
+.pad-dialog-audition-btn.playing,
+.pad-dialog-audition-btn.active {
+  background-color: var(--green) !important;
+  color: var(--off-black) !important;
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 8px var(--green) !important;
 }
 
 .pad-dialog-title-row {
