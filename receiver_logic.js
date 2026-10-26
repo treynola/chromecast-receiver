@@ -4798,9 +4798,8 @@
               delete element._mxsPrewarmFadeTimerId;
             }
             if (element._mxsVolumeBeforePrewarm === undefined) {
-              element._mxsVolumeBeforePrewarm = Number.isFinite(element.volume)
-                ? element.volume
-                : 1;
+              const currentVol = Number.isFinite(element.volume) ? Number(element.volume) : 1;
+              element._mxsVolumeBeforePrewarm = currentVol > 0.001 ? currentVol : 1;
             }
             element.muted = true;
             element.volume = 0;
@@ -4834,15 +4833,18 @@
               return;
             }
             try {
-              const targetVolume = element._mxsVolumeBeforePrewarm === undefined
-                ? 1
-                : Math.max(0, Math.min(1, Number(element._mxsVolumeBeforePrewarm)));
+              const candidate = element._mxsVolumeBeforePrewarm !== undefined
+                ? Number(element._mxsVolumeBeforePrewarm)
+                : getNativeResumeVolume(element);
+              const targetVolume = Number.isFinite(candidate) && candidate > 0.001
+                ? Math.max(0, Math.min(1, candidate))
+                : 1;
               rememberNativeAudibleVolume(element, targetVolume);
               // Set the requested gain while the element is still muted, then
               // release mute in the same task. Fading from volume=0 made CAF
               // publish a transient ~0.0575 level and allowed the first real
               // PCM to be perceived as silence on physical receivers.
-              element.volume = Number.isFinite(targetVolume) ? targetVolume : 1;
+              element.volume = targetVolume;
               element.muted = false;
               delete element._mxsVolumeBeforePrewarm;
               delete element._mxsPrewarmMuted;
