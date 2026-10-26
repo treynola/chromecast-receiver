@@ -380,7 +380,7 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
   background: transparent;
   border: none;
   color: var(--gold);
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
   padding: 1px 4px;
   transition: color 0.2s ease;
@@ -391,8 +391,8 @@ body:not(.app-loading):not(.receiver-mode) #studio-root {
 
 #cast-btn i,
 #cast-btn .fa-chromecast {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 #cast-btn:hover {
