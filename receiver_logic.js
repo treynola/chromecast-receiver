@@ -4828,6 +4828,7 @@
         }
 
         function releaseNativeStreamPrewarmMute() {
+          let unmutedAny = false;
           getNativeStreamElements().forEach(function (element) {
             if (!element || !element._mxsPrewarmMuted) {
               return;
@@ -4848,15 +4849,18 @@
               element.muted = false;
               delete element._mxsVolumeBeforePrewarm;
               delete element._mxsPrewarmMuted;
+              unmutedAny = true;
             } catch (e) {}
           });
-          logReceiverStartupTiming("native_prewarm_unmuted", {
-            nativeAttemptId: nativeStartupAttemptId,
-            playbackRequested: !!lastPlaybackStartSignalAt,
-            prewarmReady: nativeStreamPrewarmReady,
-            volumeRestoreMode: "atomic",
-            fadeMs: 0,
-          });
+          if (unmutedAny) {
+            logReceiverStartupTiming("native_prewarm_unmuted", {
+              nativeAttemptId: nativeStartupAttemptId,
+              playbackRequested: !!lastPlaybackStartSignalAt,
+              prewarmReady: nativeStreamPrewarmReady,
+              volumeRestoreMode: "atomic",
+              fadeMs: 0,
+            });
+          }
         }
 
         function activateNativeStream(modeReason, logMessage, attemptId) {
