@@ -14690,10 +14690,75 @@
           }
         }
 
+        let hardwareMediaSource = null;
+        let hardwareSourceBuffer = null;
+        let hardwareChunkQueue = [];
+
+        function handleHardwareVideoChunk(chunk) {
+          const video = document.getElementById("mirror-video");
+          if (!video) return;
+
+          if (!hardwareMediaSource) {
+            try {
+              if ("MediaSource" in window && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42e01f"')) {
+                hardwareMediaSource = new MediaSource();
+                video.src = URL.createObjectURL(hardwareMediaSource);
+                if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
+                video.muted = false;
+                video.volume = 1.0;
+
+                hardwareMediaSource.addEventListener("sourceopen", function() {
+                  try {
+                    hardwareSourceBuffer = hardwareMediaSource.addSourceBuffer('video/mp4; codecs="avc1.42e01f"');
+                    hardwareSourceBuffer.mode = "sequence";
+                    hardwareSourceBuffer.addEventListener("updateend", function() {
+                      if (hardwareChunkQueue.length > 0 && !hardwareSourceBuffer.updating) {
+                        const next = hardwareChunkQueue.shift();
+                        try {
+                          hardwareSourceBuffer.appendBuffer(next);
+                        } catch (_) {}
+                      }
+                    });
+                    if (hardwareChunkQueue.length > 0) {
+                      const first = hardwareChunkQueue.shift();
+                      hardwareSourceBuffer.appendBuffer(first);
+                    }
+                    video.play().catch(function(_) {});
+                  } catch (sbErr) {
+                    console.warn("⚠️ Receiver: addSourceBuffer error:", sbErr);
+                  }
+                });
+              }
+            } catch (msErr) {
+              console.warn("⚠️ Receiver: MediaSource error:", msErr);
+            }
+          }
+
+          if (!chunk || !chunk.bytes) return;
+          const uint8 = new Uint8Array(chunk.bytes);
+
+          if (hardwareSourceBuffer && !hardwareSourceBuffer.updating && hardwareChunkQueue.length === 0) {
+            try {
+              hardwareSourceBuffer.appendBuffer(uint8);
+            } catch (_) {
+              hardwareChunkQueue.push(uint8);
+            }
+          } else {
+            hardwareChunkQueue.push(uint8);
+            if (hardwareChunkQueue.length > 3) {
+              hardwareChunkQueue.shift();
+            }
+          }
+        }
+
         async function handleScreenMirrorSignal(data, replyFn) {
           if (!data) return;
           activatePureScreenMirrorViewport();
           const signal = data.signal || data;
+          if (signal.type === "HARDWARE_VIDEO_CHUNK" && signal.chunk) {
+            handleHardwareVideoChunk(signal.chunk);
+            return;
+          }
           if (signal.type === "offer" && signal.offer) {
             if (mirrorPeerConnection) {
               try { mirrorPeerConnection.close(); } catch (_) {}
