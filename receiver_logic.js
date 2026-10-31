@@ -14707,8 +14707,17 @@
             pc.ontrack = function (event) {
               relayLogToStudio("🎥 Receiver: Screen mirror video track received (" + event.track.kind + ")");
               activatePureScreenMirrorViewport();
+              if (event.receiver) {
+                try {
+                  if ("playoutDelayHint" in event.receiver) event.receiver.playoutDelayHint = 0.0;
+                  if ("jitterBufferDelayHint" in event.receiver) event.receiver.jitterBufferDelayHint = 0.0;
+                } catch (_) {}
+              }
               const video = document.getElementById("mirror-video");
               if (video && event.streams && event.streams[0]) {
+                try {
+                  if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
+                } catch (_) {}
                 video.srcObject = event.streams[0];
                 video.play().catch(function(err) {
                   relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
