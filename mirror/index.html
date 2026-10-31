@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>MXS-004 Screen Mirror</title>
+  <!-- Google Cast Application Framework (CAF) v3 -->
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0c0e;
+      --panel-bg: #12161b;
+      --card-bg: rgba(18, 22, 27, 0.94);
+      --gold: #d4af37;
+      --gold-dim: #8c7324;
+      --teal-border: #1a2a32;
+      --teal-graticule: #223a43;
+      --text-main: #f0f3f6;
+      --text-muted: #8b949e;
+      --green: #00e676;
+      --red: #ff3333;
+      --cyan: #00ffff;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text-main);
+    }
+    .monitor-container {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at center, #10151a 0%, #080a0c 100%);
+      padding: 12px 18px;
+      gap: 10px;
+    }
+    /* Top HUD Header */
+    .monitor-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 48px;
+      padding: 0 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--teal-border);
+      border-radius: 6px;
+    }
+    .monitor-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--gold);
+      text-transform: uppercase;
+    }
+    .brand-tag {
+      font-size: 11px;
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      letter-spacing: 1px;
+    }
+    .monitor-center-stats {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .stat-pill {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--cyan);
+      background: rgba(0, 255, 255, 0.08);
+      border: 1px solid rgba(0, 255, 255, 0.2);
+      padding: 4px 10px;
+      border-radius: 12px;
+      letter-spacing: 1px;
+    }
+    .hud-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(212, 175, 55, 0.12);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .hud-status-badge.connected {
+      background: rgba(0, 230, 118, 0.15);
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: var(--gold);
+      box-shadow: 0 0 6px var(--gold);
+      animation: pulse 1.6s infinite ease-in-out;
+    }
+    .hud-status-badge.connected .pulse-dot {
+      background-color: var(--green);
+      box-shadow: 0 0 6px var(--green);
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(0.9); }
+      50% { opacity: 1.0; transform: scale(1.15); }
+    }
+    /* Main Viewport Section */
+    .monitor-viewport-section {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      border: 2px solid var(--teal-graticule);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.9), 0 8px 30px rgba(0, 0, 0, 0.6);
+    }
+    .video-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    #mirror-video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    .unmute-btn {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      background: var(--gold);
+      color: #000;
+      border: none;
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(212, 175, 55, 0.4);
+      z-index: 5;
+    }
+    /* Overlay HUD */
+    .status-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 12, 14, 0.88);
+      backdrop-filter: blur(8px);
+      z-index: 10;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    .status-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .hud-card {
+      background: var(--card-bg);
+      border: 1px solid var(--gold-dim);
+      border-radius: 8px;
+      padding: 28px 40px;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+      max-width: 520px;
+    }
+    .hud-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--gold);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .hud-subtitle {
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      font-family: monospace;
+    }
+    .hud-info {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-top: 14px;
+    }
+    .hud-badge-sdk {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #57606a;
+      letter-spacing: 0.5px;
+      font-family: monospace;
+    }
+    /* Bottom HUD Footer */
+    .monitor-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 42px;
+      padding: 0 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--teal-border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    .footer-left, .footer-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .footer-label {
+      color: var(--text-muted);
+    }
+    .footer-val {
+      color: var(--gold);
+      font-weight: 600;
+    }
+    .meter-bar-container {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: 220px;
+    }
+    .meter-channel {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .meter-ch-lbl {
+      font-size: 9px;
+      color: var(--text-muted);
+      width: 8px;
+    }
+    .meter-bg {
+      flex: 1;
+      height: 4px;
+      background: #19242a;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .meter-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00e676 0%, #ffea00 75%, #ff3333 100%);
+      width: 0%;
+      transition: width 0.08s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="monitor-container" id="mirror-monitor-root">
+    <!-- Top HUD Header -->
+    <header class="monitor-header">
+      <div class="monitor-brand">
+        <span class="brand-title">NOWMULTIMEDIA MXS-004</span>
+        <span class="brand-tag">SCREEN MIRROR</span>
+      </div>
+      <div class="monitor-center-stats">
+        <span class="stat-pill" id="monitor-bpm-badge">BPM: 120.0</span>
+        <span class="stat-pill" id="monitor-timecode">00:00:00:00</span>
+      </div>
+      <div class="monitor-status-cluster">
+        <div id="status-badge" class="hud-status-badge">
+          <span class="pulse-dot"></span>
+          <span id="status-text">WAITING FOR SENDER STREAM…</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Section Viewport -->
+    <main class="monitor-viewport-section" id="video-viewport-section">
+      <div id="video-container" class="video-container">
+        <video id="mirror-video" autoplay playsinline></video>
+        <button type="button" id="btn-unmute-mirror" class="unmute-btn" style="display: none;">
+          🔊 Click to Unmute Audio
+        </button>
+      </div>
+
+      <div id="status-overlay" class="status-overlay">
+        <div class="hud-card">
+          <div class="hud-title">MXS-004 STUDIO</div>
+          <div class="hud-subtitle">PURE SCREEN &amp; AUDIO MIRROR</div>
+          <div class="hud-status-badge">
+            <span class="pulse-dot"></span>
+            <span id="overlay-status-text">READY FOR STREAM</span>
+          </div>
+          <p class="hud-info" id="status-detail">
+            Zero-Authentication Direct LAN WebRTC Screen Mirror Pipeline.
+          </p>
+          <div class="hud-badge-sdk">
+            100% LOCAL LAN • 60 FPS • 48 kHz STEREO
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom HUD Footer -->
+    <footer class="monitor-footer">
+      <div class="footer-left">
+        <span class="footer-label">STREAM:</span>
+        <span class="footer-val" id="monitor-stream-quality">1080p @ 60 FPS</span>
+      </div>
+      <div class="footer-center">
+        <div class="meter-bar-container">
+          <div class="meter-channel"><span class="meter-ch-lbl">L</span><div class="meter-bg"><div id="meter-fill-l" class="meter-fill" style="width: 0%;"></div></div></div>
+          <div class="meter-channel"><span class="meter-ch-lbl">R</span><div class="meter-bg"><div id="meter-fill-r" class="meter-fill" style="width: 0%;"></div></div></div>
+        </div>
+      </div>
+      <div class="footer-right">
+        <span class="footer-label">SIGNAL:</span>
+        <span class="footer-val" id="monitor-webrtc-state">STANDBY</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const videoEl = document.getElementById("mirror-video");
+      const overlayEl = document.getElementById("status-overlay");
+      const statusBadge = document.getElementById("status-badge");
+      const statusText = document.getElementById("status-text");
+      const statusDetail = document.getElementById("status-detail");
+      const overlayStatusText = document.getElementById("overlay-status-text");
+      const btnUnmute = document.getElementById("btn-unmute-mirror");
+      const webrtcStateEl = document.getElementById("monitor-webrtc-state");
+      const streamQualityEl = document.getElementById("monitor-stream-quality");
+      const meterFillL = document.getElementById("meter-fill-l");
+      const meterFillR = document.getElementById("meter-fill-r");
+
+      function updateStatus(text, detail, isConnected = false) {
+        if (statusText) statusText.textContent = text;
+        if (overlayStatusText) overlayStatusText.textContent = text;
+        if (detail && statusDetail) statusDetail.textContent = detail;
+        if (statusBadge) {
+          if (isConnected) {
+            statusBadge.classList.add("connected");
+          } else {
+            statusBadge.classList.remove("connected");
+          }
+        }
+      }
+
+      function showOverlay() {
+        if (overlayEl) overlayEl.classList.remove("hidden");
+      }
+
+      function hideOverlay() {
+        if (overlayEl) overlayEl.classList.add("hidden");
+      }
+
+      // Audio Unmute Helper for TV Browsers requiring click/key interaction
+      if (btnUnmute) {
+        btnUnmute.addEventListener("click", function () {
+          if (videoEl) {
+            videoEl.muted = false;
+            videoEl.play().catch(function (e) { console.warn("Unmute play failed:", e); });
+            btnUnmute.style.display = "none";
+          }
+        });
+      }
+
+      videoEl.addEventListener("playing", function () {
+        console.log("🎬 Mirror Receiver: Video stream playing actively");
+        hideOverlay();
+        if (videoEl.videoWidth && videoEl.videoHeight && streamQualityEl) {
+          streamQualityEl.textContent = `${videoEl.videoWidth}x${videoEl.videoHeight} @ 60 FPS`;
+        }
+      });
+
+      videoEl.addEventListener("pause", function () {
+        console.log("⏸️ Mirror Receiver: Video stream paused");
+        showOverlay();
+      });
+
+      videoEl.addEventListener("ended", function () {
+        console.log("⏹️ Mirror Receiver: Video stream ended");
+        updateStatus("STREAM ENDED", "Ready for new screen mirror session", false);
+        showOverlay();
+      });
+
+      // WebRTC PeerConnection Management
+      let peerConnection = null;
+      const rtcConfig = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" }
+        ]
+      };
+
+      function initPeerConnection(sendSignalingMessage) {
+        if (peerConnection) {
+          try { peerConnection.close(); } catch (_) {}
+          peerConnection = null;
+        }
+
+        peerConnection = new RTCPeerConnection(rtcConfig);
+
+        peerConnection.ontrack = function (event) {
+          console.log("📹 Mirror Receiver: Incoming MediaStreamTrack received:", event.track.kind);
+          if (event.streams && event.streams[0]) {
+            videoEl.srcObject = event.streams[0];
+            videoEl.muted = false;
+            videoEl.play().catch(function () {
+              // Autoplay with audio was blocked; offer user unmute button
+              videoEl.muted = true;
+              videoEl.play();
+              if (btnUnmute) btnUnmute.style.display = "block";
+            });
+            updateStatus("STREAM CONNECTED", "Rendering 60 FPS direct screen mirror", true);
+          }
+        };
+
+        peerConnection.onicecandidate = function (event) {
+          if (event.candidate && typeof sendSignalingMessage === "function") {
+            sendSignalingMessage({
+              type: "candidate",
+              candidate: event.candidate
+            });
+          }
+        };
+
+        peerConnection.onconnectionstatechange = function () {
+          console.log("🔗 Mirror Receiver WebRTC state:", peerConnection.connectionState);
+          if (webrtcStateEl) webrtcStateEl.textContent = String(peerConnection.connectionState).toUpperCase();
+          if (peerConnection.connectionState === "connected") {
+            updateStatus("STREAM ACTIVE", "Screen mirroring in progress", true);
+          } else if (peerConnection.connectionState === "disconnected" || peerConnection.connectionState === "failed") {
+            updateStatus("STREAM DISCONNECTED", "Waiting for reconnection…", false);
+            showOverlay();
+          }
+        };
+
+        return peerConnection;
+      }
+
+      // Audio Peak Meter Simulation from track/WebAudio if available
+      function updatePeakMeters(lVal, rVal) {
+        if (meterFillL) meterFillL.style.width = `${Math.min(100, Math.max(0, lVal * 100))}%`;
+        if (meterFillR) meterFillR.style.width = `${Math.min(100, Math.max(0, rVal * 100))}%`;
+      }
+
+      // Google Cast Application Framework (CAF) v3 Lifecycle Validation
+      if (typeof cast !== "undefined" && cast.framework) {
+        console.log("📡 Initializing Google Cast CAF v3 for Mirror Receiver...");
+        const context = cast.framework.CastReceiverContext.getInstance();
+        const options = new cast.framework.CastReceiverOptions();
+        options.disableIdleTimeout = true;
+        options.statusText = "MXS-004 Screen Mirror";
+
+        const NAMESPACES = [
+          "urn:x-cast:com.nowmultimedia.mxs.mirror",
+          "urn:x-cast:com.nowmultimedia.mxs004",
+        ];
+
+        function sendCastMessage(msg) {
+          try {
+            const senderId = context.getSenders()[0]?.id;
+            if (senderId) {
+              NAMESPACES.forEach((ns) => {
+                try { context.sendCustomMessage(ns, senderId, msg); } catch (_) {}
+              });
+            }
+          } catch (e) {
+            console.warn("Could not send Cast custom message:", e);
+          }
+        }
+
+        async function handleSignalingPayload(data, replyFn) {
+          if (!data) return;
+          if (data.type === "SCREEN_MIRROR_SIGNAL" && data.signal) {
+            data = data.signal;
+          }
+          if (data.type === "offer") {
+            const pc = initPeerConnection(replyFn);
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              replyFn({ type: "answer", answer: answer });
+            } catch (err) {
+              console.error("Error setting offer / creating answer:", err);
+            }
+          } else if (data.type === "candidate" && data.candidate && peerConnection) {
+            try {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (err) {
+              console.warn("Failed to add ICE candidate:", err);
+            }
+          } else if (data.type === "telemetry" && data.meters) {
+            updatePeakMeters(data.meters.l || 0, data.meters.r || 0);
+          }
+        }
+
+        NAMESPACES.forEach((ns) => {
+          context.addCustomMessageListener(ns, async function (event) {
+            console.log("📨 Mirror Receiver received message on " + ns + ":", event.data);
+            const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+            handleSignalingPayload(data, sendCastMessage);
+          });
+        });
+
+        context.addEventListener(cast.framework.system.EventType.READY, function () {
+          console.log("✅ Mirror Receiver CAF Ready");
+          updateStatus("READY FOR STREAM", "Receiver active and listening on LAN/Cast", false);
+        });
+
+        context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, function (event) {
+          console.log("🔗 Sender connected to Mirror Receiver:", event);
+          updateStatus("SENDER CONNECTED", "Preparing screen mirror stream…", true);
+        });
+
+        context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, function (event) {
+          console.log("🔌 Sender disconnected from Mirror Receiver:", event);
+          updateStatus("WAITING FOR SENDER STREAM…", "Ready for new session", false);
+          if (videoEl.srcObject) {
+            videoEl.srcObject.getTracks().forEach(t => t.stop());
+            videoEl.srcObject = null;
+          }
+          showOverlay();
+        });
+
+        try {
+          context.start(options);
+          console.log("🚀 CastReceiverContext started successfully in Mirror Receiver");
+        } catch (err) {
+          console.error("⚠️ CastReceiverContext start failed:", err);
+        }
+      } else {
+        console.warn("⚠️ Cast SDK not available; operating in standalone browser preview mode.");
+      }
+
+      // Expose diagnostic handle for automated test contracts
+      window.__MXS_MIRROR_RECEIVER__ = {
+        updateStatus,
+        showOverlay,
+        hideOverlay,
+        initPeerConnection,
+        updatePeakMeters,
+        videoElement: videoEl,
+        overlayElement: overlayEl
+      };
+    })();
+  </script>
+</body>
+</html>

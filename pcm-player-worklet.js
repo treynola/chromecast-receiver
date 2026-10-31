@@ -151,9 +151,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
 
         let packetMetadata = null;
         let payload = message;
+        let byteOffset = 0;
+        let byteLength = null;
         if (message && message.type === "PCM_PACKET") {
           packetMetadata = message.metadata || null;
           payload = message.payload;
+          byteOffset = message.byteOffset || 0;
+          byteLength = message.byteLength || null;
+        }
+        if (ArrayBuffer.isView(payload)) {
+          byteOffset = payload.byteOffset;
+          byteLength = payload.byteLength;
         }
         const arrayBuffer = this._extractArrayBuffer(payload);
         if (!arrayBuffer) return;
@@ -161,7 +169,7 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         this._lastPacketWallMs = typeof Date !== "undefined" ? Date.now() : 0;
         this._lastPacketMetadata = packetMetadata;
         const startFrame = this._totalWritten / 2;
-        this._writePcm(arrayBuffer);
+        this._writePcm(arrayBuffer, byteOffset, byteLength);
         const sourceFrame = packetMetadata?.sourceFrame == null ? NaN : Number(packetMetadata.sourceFrame);
         if (Number.isSafeInteger(sourceFrame)) {
           this._presentationPackets.push({ startFrame, endFrame: this._totalWritten / 2,
@@ -195,14 +203,16 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
     return null;
   }
 
-  _writePcm(arrayBuffer) {
+  _writePcm(arrayBuffer, byteOffset = 0, byteLength = null) {
+    const offset = Number.isInteger(byteOffset) && byteOffset >= 0 ? byteOffset : 0;
     if (this._bitDepth === 24) {
-      const bytes = new Uint8Array(arrayBuffer);
+      const length = Number.isInteger(byteLength) && byteLength >= 0 ? byteLength : (arrayBuffer.byteLength - offset);
+      const bytes = new Uint8Array(arrayBuffer, offset, length);
       const usableBytes = bytes.length - (bytes.length % 6);
       const numSamples = usableBytes / 3;
       for (let i = 0; i < numSamples; i++) {
-        const offset = i * 3;
-        let value = bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+        const o = i * 3;
+        let value = bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16);
         if (value & 0x800000) value |= 0xff000000;
         this._ringBuffer[this._writePtr] = value >> 8;
         this._writePtr = (this._writePtr + 1) % this._ringLen;
@@ -211,7 +221,10 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
       return;
     }
 
-    const pcm16 = new Int16Array(arrayBuffer);
+    const sampleCount = Number.isInteger(byteLength) && byteLength >= 0
+      ? Math.floor(byteLength / 2)
+      : Math.floor((arrayBuffer.byteLength - offset) / 2);
+    const pcm16 = new Int16Array(arrayBuffer, offset, sampleCount);
     const len = pcm16.length & ~1;
     if (this._writePtr + len <= this._ringLen) {
       this._ringBuffer.set(pcm16.subarray(0, len), this._writePtr);

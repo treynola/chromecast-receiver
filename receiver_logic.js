@@ -3189,6 +3189,8 @@
           let lastReportAt = 0;
           let fastReportWindowUntilMs = 0;
           let continuousAudibleStartedAt = 0;
+          let latencyReportTransportDropCount = 0;
+          let lastLatencyReportDropDiagnosticAt = 0;
           window._nativeLatencyIntervalId = setInterval(() => {
             // Prewarm and paused media can have a large progressive-WAV tail,
             // but neither path is audible. Reporting either one as receiver
@@ -3241,6 +3243,8 @@
               lastReportAt = 0;
               fastReportWindowUntilMs = progressNow + NATIVE_LATENCY_FAST_REPORT_WINDOW_MS;
               continuousAudibleStartedAt = progressNow;
+              latencyReportTransportDropCount = 0;
+              lastLatencyReportDropDiagnosticAt = 0;
             }
             // Report the observed transport buffer only. Seeking the live media
             // element to chase a moving latency target creates an audible jump,
@@ -3369,7 +3373,10 @@
             lastReportAt = progressNow;
 
             if (binaryWS && binaryWS.readyState === WebSocket.OPEN) {
-              sendReceiverBridgeMessage({
+              // Latency is a sampled observation, not replayable control state.
+              // A queued report would retain its old sampleAgeMs across a GUI
+              // outage and appear fresh when flushed after reconnect.
+              const reportSent = sendReceiverBridgeMessage({
                   type: "NATIVE_LATENCY_REPORT",
                   latency: medianLatency,
                   syncComponents: {
@@ -3407,7 +3414,36 @@
                     playbackRevision: lastPlaybackRevision,
                     startupAttemptId: nativeStartupAttemptId,
                   },
-                });
+                }, "gui", true);
+              if (!reportSent) {
+                latencyReportTransportDropCount += 1;
+                if (
+                  latencyReportTransportDropCount === 1 ||
+                  progressNow - lastLatencyReportDropDiagnosticAt >= 5000
+                ) {
+                  lastLatencyReportDropDiagnosticAt = progressNow;
+                  console.warn(JSON.stringify({
+                    type: "NATIVE_LATENCY_REPORT_TRANSPORT",
+                    action: "dropped",
+                    reason: !guiControlWS || guiControlWS.readyState !== WebSocket.OPEN
+                      ? "gui_control_unavailable"
+                      : "gui_control_send_failed",
+                    consecutiveDrops: latencyReportTransportDropCount,
+                    mediaSocketState: binaryWS?.readyState ?? null,
+                    guiSocketState: guiControlWS?.readyState ?? null,
+                    reportAtEpochMs: progressNow,
+                  }));
+                }
+              } else if (latencyReportTransportDropCount > 0) {
+                console.info(JSON.stringify({
+                  type: "NATIVE_LATENCY_REPORT_TRANSPORT",
+                  action: "recovered",
+                  consecutiveDrops: latencyReportTransportDropCount,
+                  reportAtEpochMs: progressNow,
+                }));
+                latencyReportTransportDropCount = 0;
+                lastLatencyReportDropDiagnosticAt = 0;
+              }
             }
           }, NATIVE_LATENCY_SAMPLE_INTERVAL_MS);
         }
@@ -5906,7 +5942,13 @@
             typeof frozenJitterTarget === "undefined" || !!frozenJitterTarget;
           if (workletNode && workletReady && targetReady) {
             const message = packet && packet.payload
-              ? { type: "PCM_PACKET", payload: buffer, metadata: packet.metadata }
+              ? {
+                  type: "PCM_PACKET",
+                  payload: buffer,
+                  byteOffset: packet.byteOffset || 0,
+                  byteLength: packet.byteLength || buffer.byteLength,
+                  metadata: packet.metadata,
+                }
               : buffer;
             try {
               workletNode.port.postMessage(message, [buffer]);
@@ -6049,7 +6091,7 @@
           pcmV2Telemetry.binaryPackets++;
           try {
             if (!window.MXSPcmV2) throw new Error("protocol_unavailable");
-            const decoded = window.MXSPcmV2.decode(buffer);
+            const decoded = window.MXSPcmV2.decode(buffer, { zeroCopy: true });
             const header = decoded.header;
             window.MXSPcmV2.assertFormat(header, window.MXSPcmV2.OUTPUT_FORMAT);
 
@@ -6104,6 +6146,8 @@
             pcmV2Telemetry.inputFrames += header.frameCount;
             return {
               payload: decoded.payload,
+              byteOffset: decoded.payloadByteOffset || 0,
+              byteLength: decoded.payloadByteLength || decoded.payload.byteLength,
               metadata: {
                 protocolVersion: header.version,
                 sessionId: header.sessionId.toString(),
@@ -6526,6 +6570,7 @@
           }
           mirroredTrackCount = normalizedTrackCount;
           updateScale();
+          initReceiverLfoWaveforms();
         }
 
         function prepareReceiverUi() {
@@ -6537,6 +6582,7 @@
             studioRoot.dataset.guiAudioPath = "pcm-native-locked";
           }
           bindReceiverGuiInteractions();
+          initReceiverLfoWaveforms();
           markReceiverBoot("gui_structurally_ready");
         }
 
@@ -7497,11 +7543,12 @@
 
         function calculateMirroredWaveformVisualGain(peak) {
           const value = Math.max(0, Number(peak) || 0);
-          if (value < 0.01) return 20;
-          if (value < 0.05) return 10;
-          if (value < 0.15) return 5;
-          if (value < 0.5) return 2;
-          return 1;
+          if (value <= 0.000001 || value >= 0.75) return 1;
+          const targetPeak = Math.min(
+            0.75,
+            Math.max(value, Math.pow(value / 0.75, 0.55) * 0.75),
+          );
+          return Math.min(8, Math.max(1, targetPeak / value));
         }
 
         function interpolateMirroredWaveform(previous, next, progress) {
@@ -7589,30 +7636,42 @@
             return true;
           }
 
-          // 2. Discrete Lofi MPC Vertical Column Bars with Green -> Yellow -> Red Dynamic Palette
+          // 2. Discrete Lofi MPC Vertical Column Bars with True-dBFS Green -> Yellow -> Red Palette
           const visualGain = calculateMirroredWaveformVisualGain(peak);
           const grad = context.createLinearGradient(0, 0, 0, height);
-          grad.addColorStop(0.00, "#ff3333"); // Top peak red
-          grad.addColorStop(0.08, "#ffea00"); // High yellow
-          grad.addColorStop(0.20, "#00e676"); // Safe green
-          grad.addColorStop(0.50, "#00e676"); // Centerline green
-          grad.addColorStop(0.80, "#00e676"); // Safe green
-          grad.addColorStop(0.92, "#ffea00"); // High yellow
-          grad.addColorStop(1.00, "#ff3333"); // Bottom peak red
+          if (peak >= 0.89) {
+            grad.addColorStop(0.00, "#ff3333"); // True clipping red (>= -1 dBFS)
+            grad.addColorStop(0.08, "#ffea00"); // High yellow
+            grad.addColorStop(0.20, "#00e676"); // Safe green
+            grad.addColorStop(0.50, "#00e676"); // Centerline green
+            grad.addColorStop(0.80, "#00e676"); // Safe green
+            grad.addColorStop(0.92, "#ffea00"); // High yellow
+            grad.addColorStop(1.00, "#ff3333"); // True clipping red
+          } else if (peak >= 0.50) {
+            grad.addColorStop(0.00, "#ffea00"); // Headroom warning yellow (-6..-1 dBFS)
+            grad.addColorStop(0.16, "#00e676"); // Safe green
+            grad.addColorStop(0.50, "#00e676"); // Centerline green
+            grad.addColorStop(0.84, "#00e676"); // Safe green
+            grad.addColorStop(1.00, "#ffea00"); // Headroom warning yellow
+          } else {
+            grad.addColorStop(0.00, "#00e676"); // Nominal green (< -6 dBFS, never false red/yellow)
+            grad.addColorStop(0.50, "#00e676");
+            grad.addColorStop(1.00, "#00e676");
+          }
 
           context.fillStyle = grad;
 
           const pointCount = (waveform.points && waveform.points.length) || (waveform.line && waveform.line.length) || 0;
           if (pointCount > 0) {
             const stepX = width / pointCount;
-            const colWidth = Math.max(1, Math.floor(stepX));
+            const colWidth = Math.max(1, Math.ceil(stepX));
 
             for (let i = 0; i < pointCount; i++) {
               let minVal = 0;
               let maxVal = 0;
               if (waveform.points && waveform.points[i]) {
-                minVal = (Number(waveform.points[i][0]) || 0) * visualGain;
-                maxVal = (Number(waveform.points[i][1]) || 0) * visualGain;
+                minVal = Math.min(0, (Number(waveform.points[i][0]) || 0) * visualGain);
+                maxVal = Math.max(0, (Number(waveform.points[i][1]) || 0) * visualGain);
               } else if (waveform.line && waveform.line[i] !== undefined) {
                 const v = Math.abs(Number(waveform.line[i]) || 0) * visualGain;
                 minVal = -v;
@@ -7626,8 +7685,9 @@
               const yBottom = Math.ceil(((1 - clampedMin) * height) / 2);
               const barHeight = Math.max(1, yBottom - yTop);
               const x = Math.floor(i * stepX);
+              if (x >= width) continue;
 
-              context.fillRect(x, yTop, colWidth, barHeight);
+              context.fillRect(x, yTop, Math.min(colWidth, width - x), barHeight);
             }
           }
           return true;
@@ -10181,13 +10241,262 @@
         const LFO_VISUAL_PHASE_CORRECTION_MS = 180;
         const LFO_VISUAL_TWO_PI = Math.PI * 2;
         const smoothLfoClocks = {
-          1: { active: false, phase: null, correction: 0, period: 1.8, lastFrameMs: 0 },
-          2: { active: false, phase: null, correction: 0, period: 1.8, lastFrameMs: 0 },
+          1: { active: false, phase: null, correction: 0, period: 1.8, lastFrameMs: 0, waveformType: "sine", dutyCycle: 0.5 },
+          2: { active: false, phase: null, correction: 0, period: 1.8, lastFrameMs: 0, waveformType: "sine", dutyCycle: 0.5 },
         };
         let smoothLfoFrameHandle = null;
         let smoothLfoFrameUsesTimeout = false;
         let lastSmoothLfoPaintMs = 0;
         let presentationSpans = [];
+
+        function computeReceiverLfoWaveformValue(phase, waveformType = "sine", dutyCycle = 0.5) {
+          if (phase === null || !Number.isFinite(phase)) return 0;
+          const p = ((phase / LFO_VISUAL_TWO_PI) % 1 + 1) % 1;
+          // Audio evaluates a repeating buffer over one cycle, including the
+          // fractional-frequency beat envelope. Keep every trig term in that cycle.
+          phase = p * LFO_VISUAL_TWO_PI;
+          dutyCycle = dutyCycle != null && Number.isFinite(Number(dutyCycle))
+            ? Math.max(0.001, Math.min(0.999, Number(dutyCycle))) : 0.5;
+          if (!waveformType || waveformType === "sine") return Math.sin(phase);
+          switch (waveformType) {
+            // --- Golden 10 Core Waveforms ---
+            case "sine":
+              return Math.sin(phase);
+            case "triangle":
+              return 1 - 4 * Math.abs(p - 0.5);
+            case "square":
+              return p < dutyCycle ? 1 : -1;
+            case "pulse":
+              return p < (dutyCycle !== 0.5 ? dutyCycle : 0.25) ? 1 : -1;
+            case "sawtooth_up":
+            case "sawtooth":
+            case "rising_ramp":
+            case "ramp_up":
+              return p * 2 - 1;
+            case "sawtooth_down":
+            case "falling_ramp":
+            case "ramp_down":
+            case "ramp":
+              return 1 - p * 2;
+            case "exponential_rise":
+            case "expo_rise":
+              return ((Math.exp(3 * p) - 1) / (Math.exp(3) - 1)) * 2 - 1;
+            case "exponential_decay":
+            case "expo_decay":
+              return ((Math.exp(-3 * p) - Math.exp(-3)) / (1 - Math.exp(-3))) * 2 - 1;
+            case "damped_ring":
+            case "damped_oscillation":
+            case "damped_osc":
+              return Math.exp(-3.5 * p) * Math.cos(p * LFO_VISUAL_TWO_PI * 4);
+            case "sample_hold":
+            case "random_sh": {
+              const step = Math.floor(p * 16);
+              const val = (((Math.sin(step * 12.9898 + 78.233) * 43758.5453) % 1) + 1) % 1;
+              return val * 2 - 1;
+            }
+
+            // --- The New Seven Advanced Modulation Suite ---
+            case "sine_beats":
+            case "acoustic_beats":
+              return Math.sin(phase) * Math.cos(phase * 0.0625);
+            case "am_flutter":
+              return Math.sin(phase * 8) * (0.5 + 0.5 * Math.sin(phase));
+            case "fm_chirp":
+              return Math.sin(LFO_VISUAL_TWO_PI * (p + 1.5 * p * p));
+            case "noisy_sine": {
+              const prng = (((Math.sin(p * 9381.123 + 43.12) * 43758.5453) % 1) + 1) % 1 * 2 - 1;
+              return 0.8 * Math.sin(phase) + 0.2 * prng;
+            }
+            case "ringing_pulse": {
+              const basePulse = p < 0.5 ? 1 : -1;
+              const edgePhase = (p % 0.5) / 0.5;
+              const ring = Math.exp(-10 * edgePhase) * Math.sin(edgePhase * Math.PI * 16);
+              return Math.max(-1, Math.min(1, basePulse * 0.8 + ring * 0.35));
+            }
+            case "damped_pluck": {
+              const decay = Math.exp(-4 * p);
+              const ring = Math.cos(p * LFO_VISUAL_TWO_PI * 5);
+              const pluckNoise = (((Math.sin(p * 4827.1 + 12.3) * 43758.5453) % 1) + 1) % 1 * 2 - 1;
+              return Math.max(-1, Math.min(1, decay * (ring * 0.85 + pluckNoise * 0.15)));
+            }
+            case "poly_pulse": {
+              const pulse1 = p < 0.5 ? 1 : -1;
+              const p2 = ((p * 1.375) % 1 + 1) % 1;
+              const pulse2 = p2 < 0.5 ? 1 : -1;
+              return pulse1 * 0.5 + pulse2 * 0.5;
+            }
+
+            // --- Compatibility Aliases ---
+            case "cosine":
+              return Math.cos(phase);
+            case "rectangular":
+              return p < (dutyCycle !== 0.5 ? dutyCycle : 0.75) ? 1 : -1;
+            case "step": {
+              const steps = 4;
+              return (Math.floor(p * steps) / (steps - 1)) * 2 - 1;
+            }
+            case "staircase": {
+              const steps = 8;
+              return (Math.floor(p * steps) / (steps - 1)) * 2 - 1;
+            }
+            case "noise": {
+              const seed = Math.floor(p * 64);
+              const val = (((Math.sin(seed * 12.9898 + 78.233) * 43758.5453) % 1) + 1) % 1;
+              return val * 2 - 1;
+            }
+            case "random_smooth":
+            case "drift": {
+              const t = p * 16;
+              const i0 = Math.floor(t);
+              const frac = t - i0;
+              const getVal = (s) => ((((Math.sin(((s % 16 + 16) % 16) * 12.9898 + 78.233) * 43758.5453) % 1) + 1) % 1) * 2 - 1;
+              const v0 = getVal(i0);
+              const v1 = getVal(i0 + 1);
+              const smooth = (1 - Math.cos(frac * Math.PI)) * 0.5;
+              return v0 + (v1 - v0) * smooth;
+            }
+            default:
+              return Math.sin(phase);
+          }
+        }
+
+        function normalizeReceiverLfoGateValue(value) {
+          if (value === null || value === undefined) return 1;
+          const numeric = Number(value);
+          if (!Number.isFinite(numeric)) return 1;
+          return Math.max(0, Math.min(1, numeric));
+        }
+
+        function drawReceiverLfoWaveform(canvas, lfoIndex, clock) {
+          if (!canvas) return false;
+          const width = canvas.clientWidth || canvas._mxsLfoLogicalWidth || 112;
+          const height = canvas.clientHeight || canvas._mxsLfoLogicalHeight || 26;
+          canvas._mxsLfoLogicalWidth = width;
+          canvas._mxsLfoLogicalHeight = height;
+          const pixelRatio = Math.max(1, Math.min(4, Number(window.devicePixelRatio) || 1));
+          const backingWidth = Math.max(1, Math.round(width * pixelRatio));
+          const backingHeight = Math.max(1, Math.round(height * pixelRatio));
+          if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+            canvas.width = backingWidth;
+            canvas.height = backingHeight;
+          }
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return false;
+          ctx.imageSmoothingEnabled = false;
+          ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+          const gate = normalizeReceiverLfoGateValue(clock?.gateValue);
+          const active = Boolean(clock && clock.active && gate > 0.001);
+          canvas.dataset.waveformActive = active ? "true" : "false";
+          canvas.dataset.waveformPaintMode = "lfo_traveling";
+          canvas.dataset.waveformPixelRatio = String(pixelRatio);
+          canvas.dataset.waveformPainted = "true";
+
+          // 1. Hardware LCD dark teal background & zero-crossing centerline
+          ctx.clearRect(0, 0, width, height);
+          ctx.fillStyle = "#132227";
+          ctx.fillRect(0, 0, width, height);
+
+          const centerY = Math.floor(height / 2);
+          ctx.fillStyle = "#223a43";
+          ctx.fillRect(0, centerY, width, 1);
+
+          // Subtle oscilloscope quarter-division grid marks
+          ctx.fillStyle = "rgba(34, 58, 67, 0.4)";
+          ctx.fillRect(0, Math.floor(height * 0.25), width, 1);
+          ctx.fillRect(0, Math.floor(height * 0.75), width, 1);
+          ctx.fillRect(Math.floor(width / 2), 0, 1, height);
+
+          const waveformType = clock?.waveformType || "sine";
+          const evalFn = computeReceiverLfoWaveformValue;
+          const dutyCycle = Number.isFinite(clock?.dutyCycle) ? clock.dutyCycle : 0.5;
+          const pointCount = 48;
+          const stepX = width / pointCount;
+          const colWidth = Math.max(1, Math.ceil(stepX) - 1);
+
+          const isPaused = Boolean(clock && clock.paused);
+          if (!active && !isPaused) {
+            // 2. Idle / Resting State: Vivid, crystal-clear oscilloscope trace previewing wave shape
+            ctx.fillStyle = "rgba(0, 230, 118, 0.55)";
+            ctx.strokeStyle = "#00e676";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+
+            for (let i = 0; i < pointCount; i++) {
+              const pOffset = (i / pointCount) * (Math.PI * 2);
+              const restingVal = Math.max(-1, Math.min(1, evalFn(pOffset, waveformType, dutyCycle) * 0.75));
+              const clampedMax = Math.max(0, restingVal);
+              const clampedMin = Math.min(0, restingVal);
+              const yTop = Math.floor(((1 - clampedMax) * height) / 2);
+              const yBottom = Math.ceil(((1 - clampedMin) * height) / 2);
+              const barH = Math.max(1, yBottom - yTop);
+              const x = Math.floor(i * stepX);
+              const traceY = Math.floor(((1 - restingVal) * height) / 2);
+
+              ctx.fillRect(x, yTop, Math.min(colWidth, width - x), barH);
+              if (i === 0) ctx.moveTo(x + colWidth / 2, traceY);
+              else ctx.lineTo(x + colWidth / 2, traceY);
+            }
+            ctx.stroke();
+            return true;
+          }
+
+          // 3. Active / Paused Traveling Waveform with True-dBFS Gradient & Moving Oscilloscope Beam
+          const basePhase = Number(clock?.phase) || 0;
+          const grad = ctx.createLinearGradient(0, 0, 0, height);
+          grad.addColorStop(0.00, "#ff3333");
+          grad.addColorStop(0.12, "#ffea00");
+          grad.addColorStop(0.28, "#00e676");
+          grad.addColorStop(0.50, "#00e676");
+          grad.addColorStop(0.72, "#00e676");
+          grad.addColorStop(0.88, "#ffea00");
+          grad.addColorStop(1.00, "#ff3333");
+          ctx.fillStyle = grad;
+
+          ctx.strokeStyle = isPaused ? "#ffea00" : "#00ffff";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+
+          let latestVal = 0;
+          for (let i = 0; i < pointCount; i++) {
+            const pOffset = (i / pointCount) * (Math.PI * 2);
+            const samplePhase = basePhase + pOffset;
+            const val = Math.max(-1, Math.min(1, evalFn(samplePhase, waveformType, dutyCycle) * gate));
+            latestVal = val;
+
+            const clampedMax = Math.max(0, val);
+            const clampedMin = Math.min(0, val);
+            const yTop = Math.floor(((1 - clampedMax) * height) / 2);
+            const yBottom = Math.ceil(((1 - clampedMin) * height) / 2);
+            const barH = Math.max(2, yBottom - yTop);
+            const x = Math.floor(i * stepX);
+            if (x >= width) continue;
+
+            ctx.fillRect(x, yTop, Math.min(colWidth, width - x), barH);
+            const traceY = Math.floor(((1 - val) * height) / 2);
+            if (i === 0) ctx.moveTo(x + colWidth / 2, traceY);
+            else ctx.lineTo(x + colWidth / 2, traceY);
+          }
+          ctx.stroke();
+
+          // 4. Oscilloscope Leading-Edge Playhead Indicator
+          const playheadY = Math.floor(((1 - latestVal) * height) / 2);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(width - 3, Math.max(1, playheadY - 2), 3, 5);
+
+          return true;
+        }
+
+        function initReceiverLfoWaveforms() {
+          const canvas1 = getEl("lfo-waveform-1");
+          const canvas2 = getEl("lfo-waveform-2");
+          if (canvas1) {
+            drawReceiverLfoWaveform(canvas1, 1, smoothLfoClocks[1]);
+          }
+          if (canvas2) {
+            drawReceiverLfoWaveform(canvas2, 2, smoothLfoClocks[2]);
+          }
+        }
         let lastSubmittedLfoProof = null;
         let lastLfoTelemetryReportAtMs = 0;
         let lfoFrameMeasurements = { lastAt: null, lastSource: null, frames: 0, gaps: 0,
@@ -10364,7 +10673,9 @@
               meters: track.meters, timeline: track.timeline, lfoBindings: track.lfoBindings,
               manualKnobInteraction: track.manualKnobInteraction, lfoIndicators: track.lfoIndicators,
               lfoAssigns: track.lfoAssigns, paramDisplays: track.paramDisplays })) });
-          presentationVisualHistory = presentationVisualHistory.slice(-256);
+          if (presentationVisualHistory.length > 256) {
+            presentationVisualHistory.splice(0, presentationVisualHistory.length - 256);
+          }
           presentationClockLookupGeneration += 1;
           presentationSourceTimeCache = null;
           presentationVisualStateCache = null;
@@ -10471,7 +10782,9 @@
               route: native ? "native" : "pcm_fallback", playbackEpoch: message.playbackEpoch,
               playbackRevision: message.playbackRevision });
           }
-          presentationSpans = presentationSpans.slice(-2048);
+          if (presentationSpans.length > 2048) {
+            presentationSpans.splice(0, presentationSpans.length - 2048);
+          }
           presentationClockLookupGeneration += 1;
           presentationSourceTimeCache = null;
           presentationVisualStateCache = null;
@@ -10861,6 +11174,11 @@
           if (Number.isFinite(sampledAtMs) && Number.isFinite(clock.lastSampledAtMonotonicMs) &&
               sampledAtMs < clock.lastSampledAtMonotonicMs) return;
           if (Number.isFinite(sampledAtMs)) clock.lastSampledAtMonotonicMs = sampledAtMs;
+          // Timeline models take the early return below, so waveform metadata
+          // must be applied before selecting the clock source.
+          clock.waveformType = state?.waveformType || state?.type || "sine";
+          clock.dutyCycle = state?.dutyCycle != null && Number.isFinite(Number(state.dutyCycle))
+            ? Math.max(0.001, Math.min(0.999, Number(state.dutyCycle))) : 0.5;
           if (Array.isArray(state?.rateTimeline) && Number.isFinite(state.sampledAtAudioSec)) {
             clock.model = { ...state, rateTimeline: state.rateTimeline.slice(-512), gateTimeline: state.gateTimeline?.slice(-128) || [] };
             clock.modelReceivedAtMs = nowMs;
@@ -10868,6 +11186,9 @@
             advanceSmoothLfoClock(clock, nowMs);
             return;
           }
+          clock.model = null;
+          clock.presentationAvailable = false;
+          clock.previewAvailable = false;
           advanceSmoothLfoClock(clock, nowMs);
           const wasActive = clock.active;
           const nextActive = Boolean(state?.active);
@@ -10883,6 +11204,7 @@
             );
           }
           clock.active = nextActive;
+          clock.gateValue = nextActive ? 1 : 0;
           if (!nextActive) {
             clock.correction = 0;
             if (sampledPhase !== null) clock.phase = sampledPhase;
@@ -11038,6 +11360,9 @@
               phase: null,
               correction: 0,
               period: 1.8,
+              waveformType: "sine",
+              dutyCycle: 0.5,
+              gateValue: 0,
               lastFrameMs: 0,
               lastSampledAtMonotonicMs: null,
               model: null,
@@ -11066,11 +11391,15 @@
             recordLfoFrameMeasurement(nowMs);
             [1, 2].forEach((index) => {
               if (!canRenderSmoothLfo(index)) return;
-              const signedValue = Math.sin(smoothLfoClocks[index].phase) * (smoothLfoClocks[index].gateValue ?? 1);
+              const signedValue = computeReceiverLfoWaveformValue(smoothLfoClocks[index].phase, smoothLfoClocks[index].waveformType, smoothLfoClocks[index].dutyCycle) * (smoothLfoClocks[index].gateValue ?? 1);
               updateStyleWidth(
                 index === 1 ? "lfo-meter-bar" : "lfo2-meter-bar",
                 `${Math.abs(signedValue) * 100}%`,
               );
+              const canvas = getEl(index === 1 ? "lfo-waveform-1" : "lfo-waveform-2");
+              if (canvas) {
+                drawReceiverLfoWaveform(canvas, index, smoothLfoClocks[index]);
+              }
             });
             const presentedVisual = getPresentationVisualState(lastMirroredState, nowMs);
             if (presentedVisual && presentedVisual.transport.captureSequence !== lastPresentationVisualSequence) {
@@ -11097,7 +11426,9 @@
                 maximum,
                 maximum,
               );
-              let signedValue = Math.sin(smoothLfoClocks[binding.index].phase);
+              let signedValue = smoothLfoClocks[binding.index].waveformType === "sine"
+                ? Math.sin(smoothLfoClocks[binding.index].phase)
+                : computeReceiverLfoWaveformValue(smoothLfoClocks[binding.index].phase, smoothLfoClocks[binding.index].waveformType, smoothLfoClocks[binding.index].dutyCycle);
               if (binding.reversed) signedValue = -signedValue;
               const modulated =
                 ((signedValue + 1) / 2) * (rangeMaximum - rangeMinimum) + rangeMinimum;
@@ -11312,17 +11643,21 @@
             };
           }
           if (Array.isArray(patch.tracks) && Array.isArray(nextState.tracks)) {
+            const trackPatchByIndex = new Map();
+            const trackPatchById = new Map();
+            for (let i = 0; i < patch.tracks.length; i++) {
+              const candidate = patch.tracks[i];
+              if (!candidate || typeof candidate !== "object") continue;
+              if (Number.isInteger(Number(candidate.index))) {
+                trackPatchByIndex.set(Number(candidate.index), candidate);
+              }
+              if (candidate.trackId != null) {
+                trackPatchById.set(String(candidate.trackId), candidate);
+              }
+            }
             nextState.tracks = nextState.tracks.map((previousTrack, index) => {
-              const trackPatch = patch.tracks.find((candidate) => {
-                if (!candidate || typeof candidate !== "object") return false;
-                if (Number.isInteger(Number(candidate.index))) {
-                  return Number(candidate.index) === index;
-                }
-                return (
-                  candidate.trackId != null &&
-                  String(candidate.trackId) === String(previousTrack?.trackId)
-                );
-              });
+              const trackPatch = trackPatchByIndex.get(index) ||
+                (previousTrack?.trackId != null ? trackPatchById.get(String(previousTrack.trackId)) : null);
               if (!trackPatch) return previousTrack;
               return {
                 ...previousTrack,
@@ -11365,14 +11700,21 @@
             });
           }
           if (Array.isArray(patch.sampler) && Array.isArray(nextState.sampler)) {
+            const padPatchById = new Map();
+            const padPatchByIndex = new Map();
+            for (let i = 0; i < patch.sampler.length; i++) {
+              const candidate = patch.sampler[i];
+              if (!candidate || typeof candidate !== "object") continue;
+              if (candidate.id != null) {
+                padPatchById.set(String(candidate.id), candidate);
+              }
+              if (Number.isInteger(Number(candidate.index))) {
+                padPatchByIndex.set(Number(candidate.index), candidate);
+              }
+            }
             nextState.sampler = nextState.sampler.map((previousPad, index) => {
-              const padPatch = patch.sampler.find((candidate) => {
-                if (!candidate || typeof candidate !== "object") return false;
-                if (candidate.id != null && previousPad?.id != null) {
-                  return String(candidate.id) === String(previousPad.id);
-                }
-                return Number(candidate.index) === index;
-              });
+              const padPatch = (previousPad?.id != null ? padPatchById.get(String(previousPad.id)) : null) ||
+                padPatchByIndex.get(index);
               return padPatch ? { ...previousPad, ...padPatch } : previousPad;
             });
           }
@@ -11621,6 +11963,19 @@
                   `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo1?.value) || 0))) * 100}%`,
                 );
               }
+              const canvas1 = getEl("lfo-waveform-1");
+              if (canvas1) {
+                const clock1 = smoothLfoClocks[1];
+                const state1 = {
+                  active: s.master.lfo1?.active === true,
+                  phase: clock1.phase !== null ? clock1.phase : Number(s.master.lfo1?.phase) || 0,
+                  waveformType: s.master.lfo1?.waveformType || clock1.waveformType || "sine",
+                  dutyCycle: s.master.lfo1?.dutyCycle ?? clock1.dutyCycle ?? 0.5,
+                  gateValue: s.master.lfo1?.gateValue ?? clock1.gateValue ?? 1,
+                  paused: s.master.lfo1?.paused ?? clock1.paused ?? false,
+                };
+                drawReceiverLfoWaveform(canvas1, 1, state1);
+              }
               applyMirroredParameterDisplay(
                 "lfo-time",
                 "lfo-time-value",
@@ -11636,6 +11991,19 @@
                   "lfo2-meter-bar",
                   `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo2?.value) || 0))) * 100}%`,
                 );
+              }
+              const canvas2 = getEl("lfo-waveform-2");
+              if (canvas2) {
+                const clock2 = smoothLfoClocks[2];
+                const state2 = {
+                  active: s.master.lfo2?.active === true,
+                  phase: clock2.phase !== null ? clock2.phase : Number(s.master.lfo2?.phase) || 0,
+                  waveformType: s.master.lfo2?.waveformType || clock2.waveformType || "sine",
+                  dutyCycle: s.master.lfo2?.dutyCycle ?? clock2.dutyCycle ?? 0.5,
+                  gateValue: s.master.lfo2?.gateValue ?? clock2.gateValue ?? 1,
+                  paused: s.master.lfo2?.paused ?? clock2.paused ?? false,
+                };
+                drawReceiverLfoWaveform(canvas2, 2, state2);
               }
               updateButtonState(
                 "master-record-button",
@@ -12563,7 +12931,7 @@
               const rangeMinimum = binding.authoritative ? binding.min : markerValueFromPercent(binding.minMarker, minimum, maximum, minimum);
               const rangeMaximum = binding.authoritative ? binding.max : markerValueFromPercent(binding.maxMarker, minimum, maximum, maximum);
               const phaseAvailable = Number.isFinite(clock?.phase) && clock.phase !== null;
-              let signedValue = phaseAvailable ? Math.sin(clock.phase) : null;
+              let signedValue = phaseAvailable ? computeReceiverLfoWaveformValue(clock.phase, clock.waveformType, clock.dutyCycle) : null;
               if (binding.reversed && signedValue !== null) signedValue = -signedValue;
               const modulated = signedValue === null ? null : (signedValue + 1) * 0.5 * (rangeMaximum - rangeMinimum) + rangeMinimum;
               const gate = clock?.gateValue ?? 1;
@@ -14039,6 +14407,20 @@
                   ) {
                     preloadPcmWorklet("handshake_ack");
                   }
+                } else if (d.type === "SCREEN_MIRROR_SIGNAL" || d.type === "offer" || d.type === "candidate") {
+                  handleScreenMirrorSignal(d, function(reply) {
+                    if (typeof cast !== "undefined" && cast.framework) {
+                      try {
+                        const ctx = getCastReceiverContext();
+                        const senders = ctx?.getSenders ? ctx.getSenders() : [];
+                        if (ctx && senders.length > 0) {
+                          ctx.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, reply);
+                        }
+                      } catch (_) {}
+                    }
+                    sendReceiverBridgeMessage(reply, "gui");
+                  });
+                  return;
                 } else if (d.type === "BRIDGE_CONFIG") {
                   sendReceiverBootDiagnostic("bridge_config_received", {
                     source: "websocket",
@@ -14063,6 +14445,11 @@
                   }
                   if (typeof d.guiSessionNonce !== "string" || d.guiSessionNonce.length < 8 || d.guiSessionNonce.length > 128) {
                     relayLogToStudio("⚠️ Receiver: BRIDGE_CONFIG missing a valid GUI session nonce.");
+                    return;
+                  }
+                  if (d.castMode === "MIRROR_CAST" && !window.location.pathname.endsWith("/mirror/") && !window.location.pathname.endsWith("/mirror/index.html")) {
+                    relayLogToStudio("🪞 Receiver: Routing to Screen Mirror receiver interface...");
+                    window.location.replace("mirror/index.html");
                     return;
                   }
                   applyReceiverBridgeConfig(d, "websocket", {
@@ -14263,14 +14650,98 @@
           }
         }
 
+        let mirrorPeerConnection = null;
+
+        async function handleScreenMirrorSignal(data, replyFn) {
+          if (!data) return;
+          const signal = data.signal || data;
+          if (signal.type === "offer" && signal.offer) {
+            if (mirrorPeerConnection) {
+              try { mirrorPeerConnection.close(); } catch (_) {}
+              mirrorPeerConnection = null;
+            }
+            const pc = new RTCPeerConnection({
+              iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+            });
+            mirrorPeerConnection = pc;
+
+            pc.ontrack = function (event) {
+              relayLogToStudio("🎥 Receiver: Screen mirror video track received (" + event.track.kind + ")");
+              const video = document.getElementById("mirror-video");
+              if (video && event.streams && event.streams[0]) {
+                video.srcObject = event.streams[0];
+                video.play().catch(function(err) {
+                  relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
+                });
+              }
+            };
+
+            pc.onicecandidate = function (event) {
+              if (event.candidate && typeof replyFn === "function") {
+                replyFn({
+                  type: "SCREEN_MIRROR_SIGNAL",
+                  signal: {
+                    type: "candidate",
+                    candidate: event.candidate
+                  }
+                });
+              }
+            };
+
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              if (typeof replyFn === "function") {
+                replyFn({
+                  type: "SCREEN_MIRROR_SIGNAL",
+                  signal: {
+                    type: "answer",
+                    answer: answer
+                  }
+                });
+              }
+            } catch (err) {
+              relayLogToStudio("❌ Receiver: Error handling screen mirror offer: " + err.message);
+            }
+          } else if (signal.type === "candidate" && signal.candidate && mirrorPeerConnection) {
+            try {
+              await mirrorPeerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+            } catch (err) {
+              relayLogToStudio("⚠️ Receiver: Error adding ICE candidate: " + err.message);
+            }
+          }
+        }
+
         function handleInboundData(data) {
           if (window._receiverShutdownInProgress) return;
           try {
             const d = parseCastPayload(data);
             if (!d) return;
 
+            if (d.type === "SCREEN_MIRROR_SIGNAL" || d.type === "offer" || d.type === "candidate") {
+              handleScreenMirrorSignal(d, function(reply) {
+                if (typeof cast !== "undefined" && cast.framework) {
+                  try {
+                    const ctx = getCastReceiverContext();
+                    const senders = ctx?.getSenders ? ctx.getSenders() : [];
+                    if (ctx && senders.length > 0) {
+                      ctx.sendCustomMessage(CUSTOM_NAMESPACE, senders[0].id, reply);
+                    }
+                  } catch (_) {}
+                }
+                sendReceiverBridgeMessage(reply, "gui");
+              });
+              return;
+            }
+
             // 1. Hardware Alignment
             if (d.type === "BRIDGE_CONFIG") {
+              if (d.castMode === "MIRROR_CAST" && !window.location.pathname.endsWith("/mirror/") && !window.location.pathname.endsWith("/mirror/index.html")) {
+                relayLogToStudio("🪞 Receiver: Routing to Screen Mirror receiver interface...");
+                window.location.replace("mirror/index.html");
+                return;
+              }
               sendReceiverBootDiagnostic("bridge_config_received", {
                 source: "cast_channel",
                 hasBuildIdentity: !!d.buildIdentity,
@@ -14403,12 +14874,14 @@
                 },
               );
 
-              context.addCustomMessageListener(CUSTOM_NAMESPACE, (event) => {
-                if (window._receiverShutdownInProgress) return;
-                if (event.data) {
-                  const msgData = parseCastPayload(event.data);
-                  handleInboundData(msgData);
-                }
+              [CUSTOM_NAMESPACE, "urn:x-cast:com.nowmultimedia.mxs.mirror"].forEach((ns) => {
+                context.addCustomMessageListener(ns, (event) => {
+                  if (window._receiverShutdownInProgress) return;
+                  if (event.data) {
+                    const msgData = parseCastPayload(event.data);
+                    handleInboundData(msgData);
+                  }
+                });
               });
 
               configureCastDebugLogger(context);

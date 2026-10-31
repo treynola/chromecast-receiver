@@ -2,19 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script src="build_identity.js?v=13.9.509-37edcc4b3c42"></script>
+    <script src="build_identity.js?v=13.9.509-7f5735be26b5"></script>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MXS-004 Studio Mirror v13.9.509</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-d766a0164eab" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-d766a0164eab" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-d766a0164eab" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-d766a0164eab" />
-    <link rel="stylesheet" href="css/icons.css?v=13.9.509-d766a0164eab" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-625d48ae7260" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-625d48ae7260" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-625d48ae7260" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-625d48ae7260" />
+    <link rel="stylesheet" href="css/icons.css?v=13.9.509-625d48ae7260" />
   </head>
   <body class="app-loading receiver-mode">
+    <!-- Plain HTML Screen Mirror Viewport (1 Page, 1 Embed) -->
+    <div id="screen-mirror-wrapper" style="position: fixed; inset: 0; width: 100vw; height: 100vh; background: #000; z-index: 100000; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+      <video id="mirror-video" autoplay playsinline style="width: 100vw; height: 100vh; object-fit: contain; background: #000;"></video>
+    </div>
     <div class="container" id="studio-root">
       <div id="cursor-mirror"></div>
       <div class="header">
@@ -134,23 +138,31 @@
                   LFO 1
                 </button>
               </div>
-              <div class="master-item lfo-meter-item">
-                <div class="meter-container lfo-meter">
-                  <div id="lfo-meter-bar" class="meter-bar"></div>
+              <div class="master-item lfo-waveform-item">
+                <div class="waveform-canvas-container lfo-waveform-container">
+                  <canvas
+                    id="lfo-waveform-1"
+                    class="waveform-canvas lfo-waveform-canvas"
+                    width="112"
+                    height="26"
+                  ></canvas>
                 </div>
+                <!-- Legacy meter element retained hidden for telemetry/receiver contracts -->
+                <div id="lfo-meter-bar" class="meter-bar lfo-meter-bar-hidden" style="display: none;"></div>
               </div>
               <div class="master-item lfo-sweep-control">
-                <label for="lfo-time" class="master-label sweep-label"
-                  >SWEEP 1</label
-                ><input
+                <input
                   type="range"
                   id="lfo-time"
                   min="0.1"
                   max="20"
                   step="0.1"
                   value="1.8"
+                  autocomplete="off"
                   title="Increment: 0.1"
-                /><span
+                  aria-label="LFO 1 Sweep Time"
+                />
+                <span
                   id="lfo-time-value"
                   class="master-value sweep-value"
                   >1.8s</span
@@ -171,23 +183,31 @@
                   LFO 2
                 </button>
               </div>
-              <div class="master-item lfo-meter-item">
-                <div class="meter-container lfo-meter">
-                  <div id="lfo2-meter-bar" class="meter-bar"></div>
+              <div class="master-item lfo-waveform-item">
+                <div class="waveform-canvas-container lfo-waveform-container">
+                  <canvas
+                    id="lfo-waveform-2"
+                    class="waveform-canvas lfo-waveform-canvas"
+                    width="112"
+                    height="26"
+                  ></canvas>
                 </div>
+                <!-- Legacy meter element retained hidden for telemetry/receiver contracts -->
+                <div id="lfo2-meter-bar" class="meter-bar lfo-meter-bar-hidden" style="display: none;"></div>
               </div>
               <div class="master-item lfo-sweep-control">
-                <label for="lfo2-time" class="master-label sweep-label"
-                  >SWEEP 2</label
-                ><input
+                <input
                   type="range"
                   id="lfo2-time"
                   min="0.1"
                   max="20"
                   step="0.1"
                   value="1.8"
+                  autocomplete="off"
                   title="Increment: 0.1"
-                /><span
+                  aria-label="LFO 2 Sweep Time"
+                />
+                <span
                   id="lfo2-time-value"
                   class="master-value sweep-value"
                   >1.8s</span
@@ -241,7 +261,7 @@
           <div
             class="master-bottom-buttons"
           >
-            <button type="button" id="import-files-button">IMPORT</button
+            <button type="button" id="lfo-settings-button">LFO</button
             ><button type="button" id="show-docs-button">DOCS</button
             ><button type="button" id="sample-station-button">MEDIA</button
             ><button type="button" id="settings-button">SETTINGS</button>
@@ -303,8 +323,8 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-e5ee06887865"></script>
-    <script src="cast-gui-action-catalog.js?v=13.9.509-e5ee06887865"></script>
-    <script src="receiver_logic.js?v=13.9.509-e5ee06887865"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-87b91f36c669"></script>
+    <script src="cast-gui-action-catalog.js?v=13.9.509-87b91f36c669"></script>
+    <script src="receiver_logic.js?v=13.9.509-87b91f36c669"></script>
   </body>
 </html>

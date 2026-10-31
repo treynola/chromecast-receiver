@@ -97,7 +97,7 @@
     if (payloadBytes !== header.payloadBytes) fail("payload_length_mismatch");
   }
 
-  function encode({
+  function writeFrame({
     sessionId,
     sequence,
     sourceFrame,
@@ -105,7 +105,7 @@
     sampleRate,
     payload,
     format = INPUT_FORMAT,
-  }) {
+  }, targetBuffer = null) {
     const bytes = asBytes(payload);
     const payloadFormat = normalizeFormat(format);
     if (
@@ -123,8 +123,12 @@
     const normalizedSourceFrame = asU64(sourceFrame, "source_frame");
     const normalizedCaptureTimeUs = asU64(captureTimeUs, "capture_time");
 
-    const output = new Uint8Array(HEADER_BYTES + bytes.byteLength);
-    const view = new DataView(output.buffer);
+    const totalBytes = HEADER_BYTES + bytes.byteLength;
+    const output =
+      targetBuffer instanceof ArrayBuffer && targetBuffer.byteLength >= totalBytes
+        ? new Uint8Array(targetBuffer, 0, totalBytes)
+        : new Uint8Array(totalBytes);
+    const view = new DataView(output.buffer, output.byteOffset, output.byteLength);
     view.setUint32(0, MAGIC, true);
     view.setUint8(4, VERSION);
     view.setUint8(5, HEADER_BYTES);
@@ -141,10 +145,18 @@
     view.setUint8(55, payloadFormat.bitDepth);
     view.setBigUint64(56, 0n, true);
     output.set(bytes, HEADER_BYTES);
-    return output.buffer;
+    return output;
   }
 
-  function decode(input) {
+  function encode(params) {
+    return writeFrame(params, null).buffer;
+  }
+
+  function encodeInto(params, targetBuffer) {
+    return writeFrame(params, targetBuffer);
+  }
+
+  function decode(input, options) {
     const bytes = asBytes(input);
     if (bytes.byteLength < HEADER_BYTES) fail("truncated_header");
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -166,6 +178,14 @@
       reserved: view.getBigUint64(56, true),
     };
     validateHeader(header, bytes.byteLength - HEADER_BYTES);
+    if (options && options.zeroCopy === true) {
+      return {
+        header,
+        payload: bytes.buffer,
+        payloadByteOffset: bytes.byteOffset + HEADER_BYTES,
+        payloadByteLength: header.payloadBytes,
+      };
+    }
     return { header, payload: bytes.slice(HEADER_BYTES).buffer };
   }
 
@@ -248,6 +268,7 @@
     assertFormat,
     normalizeFormat,
     encode,
+    encodeInto,
     decode,
     SequenceValidator,
   });
