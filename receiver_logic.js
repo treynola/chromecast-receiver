@@ -14652,8 +14652,47 @@
 
         let mirrorPeerConnection = null;
 
+        function activatePureScreenMirrorViewport() {
+          try {
+            if (document.body) {
+              document.body.classList.add("pure-screen-mirror-mode");
+            }
+            const wrapper = document.getElementById("screen-mirror-wrapper");
+            if (wrapper) {
+              wrapper.style.display = "flex";
+              wrapper.style.position = "fixed";
+              wrapper.style.inset = "0";
+              wrapper.style.width = "100vw";
+              wrapper.style.height = "100vh";
+              wrapper.style.zIndex = "999999";
+              wrapper.style.background = "#000";
+            }
+            const video = document.getElementById("mirror-video");
+            if (video) {
+              video.style.display = "block";
+              video.style.position = "fixed";
+              video.style.inset = "0";
+              video.style.width = "100vw";
+              video.style.height = "100vh";
+              video.style.objectFit = "contain";
+              video.style.background = "#000";
+            }
+            const hideIds = ["tv-console", "studio-root", "audio-unlock-overlay", "qa-overlay-root", "cursor-mirror"];
+            hideIds.forEach(function(id) {
+              const el = document.getElementById(id);
+              if (el) {
+                el.style.display = "none";
+                el.style.visibility = "hidden";
+              }
+            });
+          } catch (e) {
+            console.warn("Could not activate pure screen mirror viewport:", e);
+          }
+        }
+
         async function handleScreenMirrorSignal(data, replyFn) {
           if (!data) return;
+          activatePureScreenMirrorViewport();
           const signal = data.signal || data;
           if (signal.type === "offer" && signal.offer) {
             if (mirrorPeerConnection) {
@@ -14667,6 +14706,7 @@
 
             pc.ontrack = function (event) {
               relayLogToStudio("🎥 Receiver: Screen mirror video track received (" + event.track.kind + ")");
+              activatePureScreenMirrorViewport();
               const video = document.getElementById("mirror-video");
               if (video && event.streams && event.streams[0]) {
                 video.srcObject = event.streams[0];
@@ -14737,10 +14777,9 @@
 
             // 1. Hardware Alignment
             if (d.type === "BRIDGE_CONFIG") {
-              if (d.castMode === "MIRROR_CAST" && !window.location.pathname.endsWith("/mirror/") && !window.location.pathname.endsWith("/mirror/index.html")) {
-                relayLogToStudio("🪞 Receiver: Routing to Screen Mirror receiver interface...");
-                window.location.replace("mirror/index.html");
-                return;
+              if (d.castMode === "MIRROR_CAST") {
+                relayLogToStudio("🪞 Receiver: Activating 1-Page 1-Embed Screen Mirror Viewport (Zero HUD/Telemetry)...");
+                activatePureScreenMirrorViewport();
               }
               sendReceiverBootDiagnostic("bridge_config_received", {
                 source: "cast_channel",

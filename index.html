@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script src="build_identity.js?v=13.9.509-87fbe8749e98"></script>
+    <script src="build_identity.js?v=13.9.509-fb344bf71da4"></script>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
@@ -13,11 +13,46 @@
     <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-625d48ae7260" />
     <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-625d48ae7260" />
     <link rel="stylesheet" href="css/icons.css?v=13.9.509-625d48ae7260" />
+    <style>
+      #screen-mirror-wrapper {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background: #000 !important;
+        z-index: 2147483647 !important;
+        display: none;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+      }
+      #mirror-video {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        object-fit: contain !important;
+        background: #000 !important;
+      }
+      body.pure-screen-mirror-mode #screen-mirror-wrapper {
+        display: flex !important;
+      }
+      body.pure-screen-mirror-mode #tv-console,
+      body.pure-screen-mirror-mode #studio-root,
+      body.pure-screen-mirror-mode #audio-unlock-overlay,
+      body.pure-screen-mirror-mode #qa-overlay-root,
+      body.pure-screen-mirror-mode #cursor-mirror {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    </style>
   </head>
   <body class="app-loading receiver-mode">
     <!-- Plain HTML Screen Mirror Viewport (1 Page, 1 Embed) -->
-    <div id="screen-mirror-wrapper" style="position: fixed; inset: 0; width: 100vw; height: 100vh; background: #000; z-index: 100000; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-      <video id="mirror-video" autoplay playsinline style="width: 100vw; height: 100vh; object-fit: contain; background: #000;"></video>
+    <div id="screen-mirror-wrapper">
+      <video id="mirror-video" autoplay playsinline></video>
     </div>
     <div class="container" id="studio-root">
       <div id="cursor-mirror"></div>
@@ -323,8 +358,8 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-87b91f36c669"></script>
-    <script src="cast-gui-action-catalog.js?v=13.9.509-87b91f36c669"></script>
-    <script src="receiver_logic.js?v=13.9.509-87b91f36c669"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-8fed9a84753b"></script>
+    <script src="cast-gui-action-catalog.js?v=13.9.509-8fed9a84753b"></script>
+    <script src="receiver_logic.js?v=13.9.509-8fed9a84753b"></script>
   </body>
 </html>
