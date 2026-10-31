@@ -583,11 +583,13 @@
         context.addEventListener(cast.framework.system.EventType.READY, function () {
           console.log("✅ Mirror Receiver CAF Ready");
           updateStatus("READY FOR STREAM", "Receiver active and listening on LAN/Cast", false);
+          sendCastMessage({ type: "RECEIVER_READY", role: "mirror_receiver" });
         });
 
         context.addEventListener(cast.framework.system.EventType.SENDER_CONNECTED, function (event) {
           console.log("🔗 Sender connected to Mirror Receiver:", event);
           updateStatus("SENDER CONNECTED", "Preparing screen mirror stream…", true);
+          sendCastMessage({ type: "RECEIVER_READY", role: "mirror_receiver" });
         });
 
         context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, function (event) {
