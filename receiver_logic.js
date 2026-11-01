@@ -14784,6 +14784,8 @@
                   if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
                 } catch (_) {}
                 video.srcObject = event.streams[0];
+                video.muted = false;
+                video.volume = 1.0;
                 video.play().catch(function(err) {
                   relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
                 });
