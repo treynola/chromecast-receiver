@@ -478,15 +478,27 @@
 
         peerConnection.ontrack = function (event) {
           console.log("📹 Mirror Receiver: Incoming MediaStreamTrack received:", event.track.kind);
+          if (event.receiver) {
+            try {
+              if ("playoutDelayHint" in event.receiver) event.receiver.playoutDelayHint = 0.0;
+              if ("jitterBufferDelayHint" in event.receiver) event.receiver.jitterBufferDelayHint = 0.0;
+            } catch (_) {}
+          }
           if (event.streams && event.streams[0]) {
-            videoEl.srcObject = event.streams[0];
-            videoEl.muted = false;
-            videoEl.play().catch(function () {
-              // Autoplay with audio was blocked; offer user unmute button
-              videoEl.muted = true;
-              videoEl.play();
-              if (btnUnmute) btnUnmute.style.display = "block";
-            });
+            if (videoEl.srcObject !== event.streams[0]) {
+              videoEl.srcObject = event.streams[0];
+              try {
+                if ("playoutDelayHint" in videoEl) videoEl.playoutDelayHint = 0.0;
+              } catch (_) {}
+              videoEl.muted = false;
+              videoEl.volume = 1.0;
+              videoEl.play().catch(function () {
+                // Autoplay with audio was blocked; offer user unmute button
+                videoEl.muted = true;
+                videoEl.play().catch(function () {});
+                if (btnUnmute) btnUnmute.style.display = "block";
+              });
+            }
             updateStatus("STREAM CONNECTED", "Rendering 60 FPS direct screen mirror", true);
           }
         };
@@ -555,7 +567,20 @@
             const pc = initPeerConnection(replyFn);
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-              const answer = await pc.createAnswer();
+              let answer = await pc.createAnswer();
+              if (answer && answer.sdp) {
+                let sdp = answer.sdp;
+                const fmtpParams = "stereo=1;sprop-stereo=1;maxaveragebitrate=510000;cbr=1;usedtx=0";
+                if (/a=fmtp:\d+[^\r\n]*/i.test(sdp)) {
+                  sdp = sdp.replace(/a=fmtp:(\d+)[^\r\n]*/gi, "a=fmtp:$1 " + fmtpParams);
+                } else {
+                  sdp = sdp.replace(
+                    /(a=rtpmap:(\d+) opus\/48000\/2[^\r\n]*)/gi,
+                    "$1\r\na=fmtp:$2 " + fmtpParams
+                  );
+                }
+                answer = { type: answer.type, sdp: sdp };
+              }
               await pc.setLocalDescription(answer);
               replyFn({ type: "answer", answer: answer });
             } catch (err) {

@@ -14806,7 +14806,20 @@
 
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
-              const answer = await pc.createAnswer();
+              let answer = await pc.createAnswer();
+              if (answer && answer.sdp) {
+                let sdp = answer.sdp;
+                const fmtpParams = "stereo=1;sprop-stereo=1;maxaveragebitrate=510000;cbr=1;usedtx=0";
+                if (/a=fmtp:\d+[^\r\n]*/i.test(sdp)) {
+                  sdp = sdp.replace(/a=fmtp:(\d+)[^\r\n]*/gi, "a=fmtp:$1 " + fmtpParams);
+                } else {
+                  sdp = sdp.replace(
+                    /(a=rtpmap:(\d+) opus\/48000\/2[^\r\n]*)/gi,
+                    "$1\r\na=fmtp:$2 " + fmtpParams
+                  );
+                }
+                answer = { type: answer.type, sdp: sdp };
+              }
               await pc.setLocalDescription(answer);
               if (typeof replyFn === "function") {
                 replyFn({
