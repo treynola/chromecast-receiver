@@ -14651,6 +14651,32 @@
         }
 
         let mirrorPeerConnection = null;
+        let activeMirrorSessionId = null;
+        let activeMirrorSessionSequence = 0;
+
+        function acceptMirrorSession(sessionId, sessionSequence) {
+          const sequence = sessionSequence;
+          if (typeof sessionId !== "string" || !sessionId || typeof sequence !== "number" ||
+              !Number.isSafeInteger(sequence) || sequence <= 0) return false;
+          let storedSequence = 0;
+          let storedSessionId = null;
+          try {
+            const saved = String(window.localStorage.getItem("mxs004.receiverMirrorSession") || "");
+            const separator = saved.indexOf(":");
+            if (separator > 0) {
+              storedSequence = Number(saved.slice(0, separator)) || 0;
+              storedSessionId = saved.slice(separator + 1) || null;
+            }
+          } catch (_) {}
+          const latestSequence = Math.max(activeMirrorSessionSequence, storedSequence);
+          const latestSessionId = activeMirrorSessionSequence >= storedSequence
+            ? activeMirrorSessionId
+            : storedSessionId;
+          if (sequence < latestSequence) return false;
+          if (sequence === latestSequence && latestSessionId !== sessionId) return false;
+          try { window.localStorage.setItem("mxs004.receiverMirrorSession", sequence + ":" + sessionId); } catch (_) {}
+          return true;
+        }
 
         function activatePureScreenMirrorViewport() {
           try {
@@ -14755,11 +14781,27 @@
           if (!data) return;
           activatePureScreenMirrorViewport();
           const signal = data.signal || data;
-          if (signal.type === "HARDWARE_VIDEO_CHUNK" && signal.chunk) {
+          if (signal.type === "HARDWARE_VIDEO_CHUNK" && signal.chunk &&
+              signal.sessionId === activeMirrorSessionId &&
+              signal.sessionSequence === activeMirrorSessionSequence) {
             handleHardwareVideoChunk(signal.chunk);
             return;
           }
           if (signal.type === "offer" && signal.offer) {
+            if (!acceptMirrorSession(signal.sessionId, signal.sessionSequence)) return;
+            const sessionId = signal.sessionId;
+            const sessionSequence = signal.sessionSequence;
+            if (mirrorPeerConnection && activeMirrorSessionId === sessionId &&
+                activeMirrorSessionSequence === sessionSequence) {
+              if (mirrorPeerConnection.localDescription?.type === "answer" && typeof replyFn === "function") {
+                replyFn({ type: "SCREEN_MIRROR_SIGNAL", signal: {
+                  type: "answer", answer: mirrorPeerConnection.localDescription, sessionId, sessionSequence,
+                } });
+              }
+              return;
+            }
+            activeMirrorSessionId = sessionId;
+            activeMirrorSessionSequence = sessionSequence;
             if (mirrorPeerConnection) {
               try { mirrorPeerConnection.close(); } catch (_) {}
               mirrorPeerConnection = null;
@@ -14770,6 +14812,7 @@
             mirrorPeerConnection = pc;
 
             pc.ontrack = function (event) {
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId) return;
               relayLogToStudio("🎥 Receiver: Screen mirror video track received (" + event.track.kind + ")");
               activatePureScreenMirrorViewport();
               if (event.receiver) {
@@ -14793,12 +14836,16 @@
             };
 
             pc.onicecandidate = function (event) {
-              if (event.candidate && typeof replyFn === "function") {
+              if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
+                  activeMirrorSessionSequence === sessionSequence && event.candidate &&
+                  typeof replyFn === "function") {
                 replyFn({
                   type: "SCREEN_MIRROR_SIGNAL",
                   signal: {
                     type: "candidate",
-                    candidate: event.candidate
+                    candidate: event.candidate,
+                    sessionId: sessionId,
+                    sessionSequence: sessionSequence
                   }
                 });
               }
@@ -14806,34 +14853,66 @@
 
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId) return;
               let answer = await pc.createAnswer();
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId) return;
               if (answer && answer.sdp) {
                 let sdp = answer.sdp;
-                const fmtpParams = "stereo=1;sprop-stereo=1;maxaveragebitrate=510000;cbr=1;usedtx=0";
-                if (/a=fmtp:\d+[^\r\n]*/i.test(sdp)) {
-                  sdp = sdp.replace(/a=fmtp:(\d+)[^\r\n]*/gi, "a=fmtp:$1 " + fmtpParams);
-                } else {
-                  sdp = sdp.replace(
-                    /(a=rtpmap:(\d+) opus\/48000\/2[^\r\n]*)/gi,
-                    "$1\r\na=fmtp:$2 " + fmtpParams
-                  );
+                const opusRtpMap = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000\/2[^\r\n]*/i);
+                if (opusRtpMap) {
+                  const payloadType = opusRtpMap[1];
+                  const opusFmtp = new RegExp("^a=fmtp:" + payloadType + "[ \\t]+([^\\r\\n]*)", "im");
+                  const requiredParams = ["stereo=1", "sprop-stereo=1", "maxaveragebitrate=510000", "cbr=1", "usedtx=0"];
+                  const existingFmtp = sdp.match(opusFmtp);
+                  if (existingFmtp) {
+                    const params = existingFmtp[1].split(";").map(function (value) { return value.trim(); }).filter(Boolean);
+                    requiredParams.forEach(function (required) {
+                      const key = required.slice(0, required.indexOf("=")).toLowerCase();
+                      let replaced = false;
+                      const merged = [];
+                      params.forEach(function (param) {
+                        if (param.split("=", 1)[0].trim().toLowerCase() !== key) {
+                          merged.push(param);
+                        } else if (!replaced) {
+                          merged.push(required);
+                          replaced = true;
+                        }
+                      });
+                      if (!replaced) merged.push(required);
+                      params.length = 0;
+                      Array.prototype.push.apply(params, merged);
+                    });
+                    sdp = sdp.replace(opusFmtp, "a=fmtp:" + payloadType + " " + params.join(";"));
+                  } else {
+                    sdp = sdp.replace(opusRtpMap[0], opusRtpMap[0] + "\r\na=fmtp:" + payloadType + " " + requiredParams.join(";"));
+                  }
                 }
                 answer = { type: answer.type, sdp: sdp };
               }
               await pc.setLocalDescription(answer);
-              if (typeof replyFn === "function") {
+              if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
+                  activeMirrorSessionSequence === sessionSequence && typeof replyFn === "function") {
                 replyFn({
                   type: "SCREEN_MIRROR_SIGNAL",
                   signal: {
                     type: "answer",
-                    answer: answer
+                    answer: answer,
+                    sessionId: sessionId,
+                    sessionSequence: sessionSequence
                   }
                 });
               }
             } catch (err) {
               relayLogToStudio("❌ Receiver: Error handling screen mirror offer: " + err.message);
+              if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
+                  activeMirrorSessionSequence === sessionSequence) {
+                try { pc.close(); } catch (_) {}
+                mirrorPeerConnection = null;
+              }
             }
-          } else if (signal.type === "candidate" && signal.candidate && mirrorPeerConnection) {
+          } else if (signal.type === "candidate" && signal.candidate && mirrorPeerConnection &&
+              signal.sessionId === activeMirrorSessionId &&
+              signal.sessionSequence === activeMirrorSessionSequence) {
             try {
               await mirrorPeerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
             } catch (err) {
