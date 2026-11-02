@@ -487,6 +487,22 @@
         try { videoEl.load(); } catch (_) {}
       }
 
+      function teardownPeerSession() {
+        const previousPeerConnection = peerConnection;
+        // Invalidate the signaling owner before close() can dispatch state
+        // callbacks, so no callback from the disconnected sender can revive UI.
+        peerConnection = null;
+        peerSessionId = null;
+        peerRemoteDescriptionReady = false;
+        pendingIceCandidatesBySession.clear();
+        if (previousPeerConnection) {
+          try { previousPeerConnection.close(); } catch (_) {}
+        }
+        // Keep peerSessionSequence as the anti-replay floor. New offers must
+        // advance it, and delayed offers/candidates for this session stay stale.
+        resetVideoForPeerSessionReplacement();
+      }
+
       function isPeerSessionSignalNotStale(sessionId, sessionSequence) {
         if (typeof sessionId !== "string" || !sessionId || typeof sessionSequence !== "number" ||
             !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0) return false;
@@ -784,10 +800,7 @@
         context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, function (event) {
           console.log("🔌 Sender disconnected from Mirror Receiver:", event);
           updateStatus("WAITING FOR SENDER STREAM…", "Ready for new session", false);
-          if (videoEl.srcObject) {
-            videoEl.srcObject.getTracks().forEach(t => t.stop());
-            videoEl.srcObject = null;
-          }
+          teardownPeerSession();
           showOverlay();
         });
 

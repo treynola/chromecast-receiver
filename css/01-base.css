@@ -6,7 +6,7 @@
 
 @font-face {
   font-family: "Mexcellent";
-  src: url("../fonts/MexcellentRg.otf?v=13.9.509-325b1b1e43dc") format("opentype");
+  src: url("../fonts/MexcellentRg.otf?v=13.9.509-25530c610b8f") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -14,7 +14,7 @@
 
 @font-face {
   font-family: "Mexcellent 3D";
-  src: url("../fonts/Mexcellent3d.otf?v=13.9.509-325b1b1e43dc") format("opentype");
+  src: url("../fonts/Mexcellent3d.otf?v=13.9.509-25530c610b8f") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -22,7 +22,7 @@
 
 @font-face {
   font-family: "Cousine";
-  src: url("../fonts/Cousine-Regular.ttf?v=13.9.509-325b1b1e43dc") format("truetype");
+  src: url("../fonts/Cousine-Regular.ttf?v=13.9.509-25530c610b8f") format("truetype");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -30,7 +30,7 @@
 
 @font-face {
   font-family: "Cousine";
-  src: url("../fonts/Cousine-Bold.ttf?v=13.9.509-325b1b1e43dc") format("truetype");
+  src: url("../fonts/Cousine-Bold.ttf?v=13.9.509-25530c610b8f") format("truetype");
   font-style: normal;
   font-weight: 700;
   font-display: swap;

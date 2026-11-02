@@ -415,3 +415,28 @@ button.track-header:hover,
   overflow: hidden !important;
   box-sizing: border-box !important;
 }
+
+/* Explicit type and title levels retain native keyboard/menu indexing. */
+.track-bottom-layout .effect-selector-levels {
+  display: flex;
+  flex: 2;
+  min-width: 0;
+  gap: 4px;
+}
+.effect-selector-levels .effect-category-select {
+  flex: 0 1 36%;
+  min-width: 0;
+  width: 36%;
+}
+.effect-selector-levels .effect-title-select {
+  flex: 1 1 64%;
+  min-width: 0;
+  width: 64%;
+}
+.effect-selector-levels .app-select {
+  margin: 0;
+  text-overflow: ellipsis;
+}
+.effect-type-select[hidden] {
+  display: none !important;
+}
