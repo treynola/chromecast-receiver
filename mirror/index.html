@@ -464,10 +464,32 @@
       let peerConnection = null;
       let peerSessionId = null;
       let peerSessionSequence = 0;
-      function acceptPeerSession(sessionId, sessionSequence) {
-        const sequence = sessionSequence;
-        if (typeof sessionId !== "string" || !sessionId || typeof sequence !== "number" ||
-            !Number.isSafeInteger(sequence) || sequence <= 0) return false;
+      const MAX_PENDING_ICE_CANDIDATES_PER_SESSION = 64;
+      const MAX_PENDING_ICE_SESSIONS = 4;
+      let peerRemoteDescriptionReady = false;
+      let pendingIceCandidatesBySession = new Map();
+
+      function peerSessionKey(sessionId, sessionSequence) {
+        return JSON.stringify([sessionId, sessionSequence]);
+      }
+
+      function resetVideoForPeerSessionReplacement() {
+        const previousStream = videoEl ? videoEl.srcObject : null;
+        if (!videoEl) return;
+        try { videoEl.pause(); } catch (_) {}
+        if (previousStream && typeof previousStream.getTracks === "function") {
+          previousStream.getTracks().forEach(function (track) {
+            try { track.stop(); } catch (_) {}
+          });
+        }
+        try { videoEl.srcObject = null; } catch (_) {}
+        try { videoEl.removeAttribute("src"); } catch (_) {}
+        try { videoEl.load(); } catch (_) {}
+      }
+
+      function isPeerSessionSignalNotStale(sessionId, sessionSequence) {
+        if (typeof sessionId !== "string" || !sessionId || typeof sessionSequence !== "number" ||
+            !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0) return false;
         let storedSequence = 0;
         let storedSessionId = null;
         try {
@@ -480,8 +502,29 @@
         } catch (_) {}
         const latestSequence = Math.max(peerSessionSequence, storedSequence);
         const latestSessionId = peerSessionSequence >= storedSequence ? peerSessionId : storedSessionId;
-        if (sequence < latestSequence) return false;
-        if (sequence === latestSequence && latestSessionId !== sessionId) return false;
+        return sessionSequence > latestSequence ||
+          (sessionSequence === latestSequence && latestSessionId === sessionId);
+      }
+
+      function queuePeerIceCandidate(sessionId, sessionSequence, candidate) {
+        const key = peerSessionKey(sessionId, sessionSequence);
+        let queue = pendingIceCandidatesBySession.get(key);
+        if (!queue) {
+          if (pendingIceCandidatesBySession.size >= MAX_PENDING_ICE_SESSIONS) {
+            const oldestKey = pendingIceCandidatesBySession.keys().next().value;
+            pendingIceCandidatesBySession.delete(oldestKey);
+          }
+          queue = [];
+          pendingIceCandidatesBySession.set(key, queue);
+        }
+        if (queue.length >= MAX_PENDING_ICE_CANDIDATES_PER_SESSION) return false;
+        queue.push(candidate);
+        return true;
+      }
+
+      function acceptPeerSession(sessionId, sessionSequence) {
+        const sequence = sessionSequence;
+        if (!isPeerSessionSignalNotStale(sessionId, sequence)) return false;
         try { window.localStorage.setItem("mxs004.receiverMirrorSession", sequence + ":" + sessionId); } catch (_) {}
         return true;
       }
@@ -520,6 +563,8 @@
               videoEl.muted = false;
               videoEl.volume = 1.0;
               videoEl.play().catch(function () {
+                if (peerConnection !== currentPeerConnection || peerSessionId !== sessionId ||
+                    peerSessionSequence !== sessionSequence) return;
                 // Autoplay with audio was blocked; offer user unmute button
                 videoEl.muted = true;
                 videoEl.play().catch(function () {});
@@ -605,12 +650,38 @@
               }
               return;
             }
+            const sessionKey = peerSessionKey(sessionId, sessionSequence);
+            const queuedCandidates = pendingIceCandidatesBySession.get(sessionKey) || [];
+            pendingIceCandidatesBySession.clear();
+            if (queuedCandidates.length) pendingIceCandidatesBySession.set(sessionKey, queuedCandidates);
+            peerRemoteDescriptionReady = false;
+            // Release the previous session's rendered stream before binding
+            // the replacement peer. This runs synchronously before the new PC
+            // is created, and old ontrack callbacks are fenced by PC identity.
+            resetVideoForPeerSessionReplacement();
             const pc = initPeerConnection(replyFn, sessionId, sessionSequence);
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-              if (peerConnection !== pc || peerSessionId !== sessionId) return;
+              if (peerConnection !== pc || peerSessionId !== sessionId ||
+                  peerSessionSequence !== sessionSequence) return;
+              const sessionCandidates = pendingIceCandidatesBySession.get(sessionKey) || [];
+              while (sessionCandidates.length > 0) {
+                if (peerConnection !== pc || peerSessionId !== sessionId ||
+                    peerSessionSequence !== sessionSequence) return;
+                const queuedCandidate = sessionCandidates.shift();
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate));
+                } catch (candidateError) {
+                  console.warn("Failed to add queued ICE candidate:", candidateError);
+                }
+              }
+              if (peerConnection !== pc || peerSessionId !== sessionId ||
+                  peerSessionSequence !== sessionSequence) return;
+              pendingIceCandidatesBySession.delete(sessionKey);
+              peerRemoteDescriptionReady = true;
               let answer = await pc.createAnswer();
-              if (peerConnection !== pc || peerSessionId !== sessionId) return;
+              if (peerConnection !== pc || peerSessionId !== sessionId ||
+                  peerSessionSequence !== sessionSequence) return;
               if (answer && answer.sdp) {
                 let sdp = answer.sdp;
                 const opusRtpMap = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000\/2[^\r\n]*/i);
@@ -653,14 +724,37 @@
                   peerSessionSequence === sessionSequence) {
                 try { pc.close(); } catch (_) {}
                 peerConnection = null;
+                peerRemoteDescriptionReady = false;
+                pendingIceCandidatesBySession.delete(sessionKey);
               }
             }
-          } else if (data.type === "candidate" && data.candidate && peerConnection &&
-              data.sessionId === peerSessionId && data.sessionSequence === peerSessionSequence) {
+          } else if (data.type === "candidate" && data.candidate &&
+              isPeerSessionSignalNotStale(data.sessionId, data.sessionSequence)) {
+            const matchesActiveSession = data.sessionId === peerSessionId &&
+              data.sessionSequence === peerSessionSequence;
+            if (!matchesActiveSession) {
+              if (!queuePeerIceCandidate(data.sessionId, data.sessionSequence, data.candidate)) {
+                console.warn("Dropped ICE candidate because its pending session queue is full.");
+              }
+              return;
+            }
+            if (!peerConnection) return;
+            if (!peerRemoteDescriptionReady) {
+              if (!queuePeerIceCandidate(data.sessionId, data.sessionSequence, data.candidate)) {
+                console.warn("Dropped ICE candidate because its pending session queue is full.");
+              }
+              return;
+            }
+            const pc = peerConnection;
+            const sessionId = peerSessionId;
+            const sessionSequence = peerSessionSequence;
             try {
-              await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
             } catch (err) {
-              console.warn("Failed to add ICE candidate:", err);
+              if (peerConnection === pc && peerSessionId === sessionId &&
+                  peerSessionSequence === sessionSequence) {
+                console.warn("Failed to add ICE candidate:", err);
+              }
             }
           } else if (data.type === "telemetry" && data.meters) {
             updatePeakMeters(data.meters.l || 0, data.meters.r || 0);

@@ -2288,12 +2288,11 @@
             return workletCapabilityPromise;
           }
           // Cobalt rejects query parameters on AudioWorklet.addModule(). The
-          // probe is intentionally tiny and immutable; use its plain
-          // same-origin path and keep the capability result keyed by the
-          // receiver build/generation in localStorage instead of URL-busting
-          // the AudioWorklet request.
+          // probe uses a content-addressed same-origin path because Cobalt
+          // rejects query strings on AudioWorklet.addModule(). Keep the
+          // capability result keyed by receiver build/generation in localStorage.
           const probeUrl = new URL(
-            "pcm-capability-probe.js",
+            "pcm-capability-probe-b1d8e1d8fe17fa27f26034d7bbccc6cfa7ff0b6e7367d0042bcc02e45edb3601.js",
             window.location.href,
           ).href;
           workletCapabilityPromise = (async function runCapabilityProbe() {
@@ -6744,7 +6743,7 @@
                 return true;
               }
 
-            let workletUrl = "pcm-player-worklet-v13.9.509.js";
+            let workletUrl = "pcm-player-worklet-919e83c1ad145e6a32e1c9047865a0a9bf5bf59f70b0707d5f2816c277f05339.js";
             // The hosted receiver is HTTPS, so an HTTP Studio bridge is mixed
             // content and Chromecast/Cobalt reports its AudioWorklet rejection
             // as the misleading `AbortError`. Only use the bridge on local HTTP
@@ -6819,7 +6818,7 @@
             }
 
             relayLogToStudio(`📡 Receiver: Preflighting PCM worklet module: ${absWorkletUrl}`);
-            await preflightWorkletModule(absWorkletUrl, "versioned");
+            await preflightWorkletModule(absWorkletUrl, "content-addressed");
             const productionStartedAt = Date.now();
             try {
               notifyPlayoutSelecting("production_module", "capability_probe_passed");
@@ -10387,7 +10386,9 @@
 
           const gate = normalizeReceiverLfoGateValue(clock?.gateValue);
           const active = Boolean(clock && clock.active && gate > 0.001);
+          const isPaused = Boolean(clock && clock.paused);
           canvas.dataset.waveformActive = active ? "true" : "false";
+          canvas.dataset.waveformPaused = isPaused ? "true" : "false";
           canvas.dataset.waveformPaintMode = "lfo_traveling";
           canvas.dataset.waveformPixelRatio = String(pixelRatio);
           canvas.dataset.waveformPainted = "true";
@@ -10413,8 +10414,8 @@
           const pointCount = 48;
           const stepX = width / pointCount;
           const colWidth = Math.max(1, Math.ceil(stepX) - 1);
+          const basePhase = Number(clock?.phase) || 0;
 
-          const isPaused = Boolean(clock && clock.paused);
           if (!active && !isPaused) {
             // 2. Idle / Resting State: Vivid, crystal-clear oscilloscope trace previewing wave shape
             ctx.fillStyle = "rgba(0, 230, 118, 0.55)";
@@ -10442,7 +10443,6 @@
           }
 
           // 3. Active / Paused Traveling Waveform with True-dBFS Gradient & Moving Oscilloscope Beam
-          const basePhase = Number(clock?.phase) || 0;
           const grad = ctx.createLinearGradient(0, 0, 0, height);
           grad.addColorStop(0.00, "#ff3333");
           grad.addColorStop(0.12, "#ffea00");
@@ -10457,11 +10457,12 @@
           ctx.lineWidth = 1.5;
           ctx.beginPath();
 
+          const visualAmp = isPaused ? 0.85 : (active ? Math.max(0.75, gate) : 0.85);
           let latestVal = 0;
           for (let i = 0; i < pointCount; i++) {
             const pOffset = (i / pointCount) * (Math.PI * 2);
             const samplePhase = basePhase + pOffset;
-            const val = Math.max(-1, Math.min(1, evalFn(samplePhase, waveformType, dutyCycle) * gate));
+            const val = Math.max(-1, Math.min(1, evalFn(samplePhase, waveformType, dutyCycle) * visualAmp));
             latestVal = val;
 
             const clampedMax = Math.max(0, val);
@@ -10481,7 +10482,7 @@
 
           // 4. Oscilloscope Leading-Edge Playhead Indicator
           const playheadY = Math.floor(((1 - latestVal) * height) / 2);
-          ctx.fillStyle = "#ffffff";
+          ctx.fillStyle = isPaused ? "#ffea00" : "#ffffff";
           ctx.fillRect(width - 3, Math.max(1, playheadY - 2), 3, 5);
 
           return true;
@@ -12139,7 +12140,7 @@
                   t.trackId, t.fileName, t.isPlaying, t.isPaused, t.isRecording,
                   t.buttons?.record, t.buttons?.stop, t.buttons?.play, t.buttons?.reverse,
                   t.effectSelection, s.effectOptionsCatalogSignature, t.effectiveBpm ?? t.bpm, t.baseBpm,
-                  t.isMaster, t.isFollower, t.syncAll, t.syncButtons, t.syncWith, t.playlist,
+                  t.bpmDetectionStatus, t.isMaster, t.isFollower, t.syncAll, t.syncButtons, t.syncWith, t.playlist,
                 ]);
                 if (valCache[trackMetadataKey] !== trackMetadataSignature) {
                   valCache[trackMetadataKey] = trackMetadataSignature;
@@ -12176,26 +12177,57 @@
                   t.effectSelection,
                   s.effectOptionsCatalogSignature,
                 );
-                const bpmVal = Number.isFinite(Number(t.effectiveBpm ?? t.bpm))
-                  ? Number(t.effectiveBpm ?? t.bpm).toFixed(1)
-                  : "120.0";
+                const bpmStatus = ["analyzing", "waiting", "unknown", "detected", "idle"]
+                  .includes(t.bpmDetectionStatus) ? t.bpmDetectionStatus : null;
+                const bpmStatusLabel = bpmStatus === "analyzing"
+                  ? "Measuring BPM…"
+                  : bpmStatus === "waiting"
+                    ? "Play to measure BPM"
+                    : bpmStatus === "unknown"
+                      ? "No stable beat detected"
+                      : "";
+                const bpmPending = ["analyzing", "waiting", "unknown"].includes(bpmStatus);
+                const readPositiveBpm = (value) => {
+                  if ((typeof value !== "number" && typeof value !== "string") ||
+                      String(value).trim() === "") return null;
+                  const number = Number(value);
+                  return Number.isFinite(number) && number > 0 ? number : null;
+                };
+                const bpmNumber = readPositiveBpm(t.effectiveBpm ?? t.bpm);
+                const bpmVal = bpmNumber === null ? null : bpmNumber.toFixed(1);
                 const counterInput = getEl(`t-bpm-counter-${i}`);
-                if (counterInput && counterInput.value !== bpmVal) {
-                  counterInput.value = bpmVal;
+                if (counterInput) {
+                  if (bpmPending) {
+                    counterInput.value = "";
+                    counterInput.placeholder = bpmStatus === "analyzing" ? "…" : "—";
+                    counterInput.title = bpmStatusLabel;
+                  } else if (bpmVal !== null) {
+                    if (counterInput.value !== bpmVal) counterInput.value = bpmVal;
+                    counterInput.placeholder = "";
+                    counterInput.title = `Current track tempo: ${bpmVal} BPM`;
+                  } else if (bpmStatusLabel) {
+                    counterInput.title = bpmStatusLabel;
+                  }
                 }
-                const baseBpmVal = Number.isFinite(Number(t.baseBpm))
-                  ? Number(t.baseBpm).toFixed(1)
-                  : "120.0";
+                const baseBpmNumber = readPositiveBpm(t.baseBpm);
+                const baseBpmVal = baseBpmNumber === null ? null : baseBpmNumber.toFixed(1);
                 const baseBadge = getEl(`t-bpm-base-badge-${i}`);
                 if (baseBadge) {
-                  const badgeText = `Base: ${baseBpmVal}`;
-                  if (baseBadge.textContent !== badgeText) {
-                    baseBadge.textContent = badgeText;
+                  if (bpmPending) {
+                    const badgeText = bpmStatus === "analyzing" ? "BPM …" : "BPM —";
+                    if (baseBadge.textContent !== badgeText) baseBadge.textContent = badgeText;
+                    baseBadge.title = bpmStatusLabel;
+                    baseBadge.setAttribute("aria-label", `Base BPM: ${bpmStatusLabel}`);
+                  } else if (baseBpmVal !== null) {
+                    const badgeText = `Base: ${baseBpmVal}`;
+                    if (baseBadge.textContent !== badgeText) baseBadge.textContent = badgeText;
+                    baseBadge.title = "Original unpitched track tempo";
+                    baseBadge.setAttribute("aria-label", badgeText);
                   }
-                  baseBadge.title = "Original unpitched track tempo";
-                  baseBadge.setAttribute("aria-label", badgeText);
                   baseBadge.setAttribute("aria-live", "polite");
                   baseBadge.setAttribute("aria-atomic", "true");
+                  if (bpmStatus) baseBadge.dataset.bpmStatus = bpmStatus;
+                  else delete baseBadge.dataset.bpmStatus;
                 }
                 const bpmModule = getEl(`t-bpm-module-${i}`);
                 if (bpmModule) {
@@ -14653,11 +14685,18 @@
         let mirrorPeerConnection = null;
         let activeMirrorSessionId = null;
         let activeMirrorSessionSequence = 0;
+        const MAX_MIRROR_PENDING_ICE_CANDIDATES = 64;
+        const MAX_MIRROR_PENDING_ICE_SESSIONS = 4;
+        let mirrorRemoteDescriptionReady = false;
+        let mirrorPendingIceCandidatesBySession = new Map();
 
-        function acceptMirrorSession(sessionId, sessionSequence) {
-          const sequence = sessionSequence;
-          if (typeof sessionId !== "string" || !sessionId || typeof sequence !== "number" ||
-              !Number.isSafeInteger(sequence) || sequence <= 0) return false;
+        function mirrorSessionKey(sessionId, sessionSequence) {
+          return JSON.stringify([sessionId, sessionSequence]);
+        }
+
+        function isMirrorSessionSignalNotStale(sessionId, sessionSequence) {
+          if (typeof sessionId !== "string" || !sessionId || typeof sessionSequence !== "number" ||
+              !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0) return false;
           let storedSequence = 0;
           let storedSessionId = null;
           try {
@@ -14672,8 +14711,29 @@
           const latestSessionId = activeMirrorSessionSequence >= storedSequence
             ? activeMirrorSessionId
             : storedSessionId;
-          if (sequence < latestSequence) return false;
-          if (sequence === latestSequence && latestSessionId !== sessionId) return false;
+          return sessionSequence > latestSequence ||
+            (sessionSequence === latestSequence && latestSessionId === sessionId);
+        }
+
+        function queueMirrorIceCandidate(sessionId, sessionSequence, candidate) {
+          const key = mirrorSessionKey(sessionId, sessionSequence);
+          let queue = mirrorPendingIceCandidatesBySession.get(key);
+          if (!queue) {
+            if (mirrorPendingIceCandidatesBySession.size >= MAX_MIRROR_PENDING_ICE_SESSIONS) {
+              const oldestKey = mirrorPendingIceCandidatesBySession.keys().next().value;
+              mirrorPendingIceCandidatesBySession.delete(oldestKey);
+            }
+            queue = [];
+            mirrorPendingIceCandidatesBySession.set(key, queue);
+          }
+          if (queue.length >= MAX_MIRROR_PENDING_ICE_CANDIDATES) return false;
+          queue.push(candidate);
+          return true;
+        }
+
+        function acceptMirrorSession(sessionId, sessionSequence) {
+          const sequence = sessionSequence;
+          if (!isMirrorSessionSignalNotStale(sessionId, sequence)) return false;
           try { window.localStorage.setItem("mxs004.receiverMirrorSession", sequence + ":" + sessionId); } catch (_) {}
           return true;
         }
@@ -14719,39 +14779,162 @@
         let hardwareMediaSource = null;
         let hardwareSourceBuffer = null;
         let hardwareChunkQueue = [];
+        let hardwareInFlightEntry = null;
+        let hardwareMediaSourceUrl = null;
+        let hardwareMediaSourceGeneration = 0;
+        let hardwareInitSegment = null;
+        let hardwareInitSegmentSessionSequence = null;
+        let hardwareVideoFailedSessionSequence = null;
+        const MAX_HARDWARE_CHUNK_BYTES = 8 * 1024 * 1024;
+
+        function resetHardwareMirrorMediaSource(clearInitSegment) {
+          hardwareMediaSourceGeneration += 1;
+          const previousMediaSource = hardwareMediaSource;
+          const previousUrl = hardwareMediaSourceUrl;
+          hardwareMediaSource = null;
+          hardwareSourceBuffer = null;
+          hardwareChunkQueue = [];
+          hardwareInFlightEntry = null;
+          hardwareMediaSourceUrl = null;
+          if (clearInitSegment) {
+            hardwareInitSegment = null;
+            hardwareInitSegmentSessionSequence = null;
+          }
+          const video = document.getElementById("mirror-video");
+          if (video) {
+            try { video.pause(); } catch (_) {}
+            try { video.srcObject = null; } catch (_) {}
+            try { video.removeAttribute("src"); } catch (_) {}
+            try { video.load(); } catch (_) {}
+          }
+          if (previousMediaSource?.readyState === "open") {
+            try { previousMediaSource.endOfStream(); } catch (_) {}
+          }
+          if (previousUrl) {
+            try { URL.revokeObjectURL(previousUrl); } catch (_) {}
+          }
+        }
+
+        function queueHardwareChunk(bytes, isInit) {
+          hardwareChunkQueue.push({ bytes: bytes, isInit: isInit === true });
+          while (hardwareChunkQueue.length > 3) {
+            const discardIndex = hardwareChunkQueue.findIndex(function (entry) { return !entry.isInit; });
+            hardwareChunkQueue.splice(discardIndex >= 0 ? discardIndex : 0, 1);
+          }
+        }
+
+        function recoverHardwareAppendFailure(mediaSource, generation, failedEntry) {
+          if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource) return;
+          const failedAppend = failedEntry || hardwareInFlightEntry;
+          if (failedAppend?.isInit) {
+            // A deterministic init parse failure cannot recover by rebuilding
+            // the same MSE and replaying the same bytes. Quarantine this
+            // session until a newly accepted mirror session arrives.
+            hardwareVideoFailedSessionSequence = activeMirrorSessionSequence;
+            resetHardwareMirrorMediaSource(false);
+            return;
+          }
+          const queued = hardwareChunkQueue.slice();
+          const queuedInit = queued.find(function (entry) { return entry.isInit; });
+          const retainedInitIsCurrent = hardwareInitSegment &&
+            hardwareInitSegmentSessionSequence === activeMirrorSessionSequence;
+          const initEntry = failedEntry?.isInit
+            ? failedEntry
+            : queuedInit || (retainedInitIsCurrent
+              ? { bytes: hardwareInitSegment.slice(), isInit: true }
+              : null);
+
+          resetHardwareMirrorMediaSource(false);
+          const recovered = [];
+          if (initEntry) recovered.push(initEntry);
+          // Drop the failed media fragment. Replaying a deterministic parse
+          // failure only recreates the same broken SourceBuffer indefinitely.
+          queued.forEach(function (entry) {
+            if (!entry.isInit) recovered.push(entry);
+          });
+          // Preserve chronological order among retained entries and discard
+          // the newest excess queued media under pressure.
+          hardwareChunkQueue = recovered.slice(0, 3);
+        }
 
         function handleHardwareVideoChunk(chunk) {
           const video = document.getElementById("mirror-video");
           if (!video) return;
+          if (hardwareVideoFailedSessionSequence === activeMirrorSessionSequence) return;
+          if (!chunk || !Array.isArray(chunk.bytes) || chunk.bytes.length === 0 ||
+              chunk.bytes.length > MAX_HARDWARE_CHUNK_BYTES) return;
+          const uint8 = new Uint8Array(chunk.bytes);
+          const isInit = chunk.isInit === true;
+          if (isInit) {
+            hardwareInitSegment = uint8.slice();
+            hardwareInitSegmentSessionSequence = activeMirrorSessionSequence;
+          }
 
+          const needsMediaSource = !hardwareMediaSource;
           if (!hardwareMediaSource) {
             try {
               if ("MediaSource" in window && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42e01f"')) {
-                hardwareMediaSource = new MediaSource();
-                video.src = URL.createObjectURL(hardwareMediaSource);
+                const generation = ++hardwareMediaSourceGeneration;
+                const mediaSource = new MediaSource();
+                hardwareMediaSource = mediaSource;
+                hardwareMediaSourceUrl = URL.createObjectURL(mediaSource);
+                video.src = hardwareMediaSourceUrl;
                 if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
                 video.muted = false;
                 video.volume = 1.0;
 
-                hardwareMediaSource.addEventListener("sourceopen", function() {
+                mediaSource.addEventListener("sourceopen", function() {
+                  if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource) return;
+                  let attemptedEntry = null;
                   try {
-                    hardwareSourceBuffer = hardwareMediaSource.addSourceBuffer('video/mp4; codecs="avc1.42e01f"');
-                    hardwareSourceBuffer.mode = "sequence";
-                    hardwareSourceBuffer.addEventListener("updateend", function() {
-                      if (hardwareChunkQueue.length > 0 && !hardwareSourceBuffer.updating) {
+                    const sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42e01f"');
+                    hardwareSourceBuffer = sourceBuffer;
+                    sourceBuffer.mode = "sequence";
+                    sourceBuffer.addEventListener("error", function (event) {
+                      if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource ||
+                          hardwareSourceBuffer !== sourceBuffer) return;
+                      console.warn("⚠️ Receiver: SourceBuffer error:", event);
+                      recoverHardwareAppendFailure(mediaSource, generation, hardwareInFlightEntry);
+                    });
+                    sourceBuffer.addEventListener("abort", function (event) {
+                      if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource ||
+                          hardwareSourceBuffer !== sourceBuffer) return;
+                      console.warn("⚠️ Receiver: SourceBuffer append aborted:", event);
+                      recoverHardwareAppendFailure(mediaSource, generation, hardwareInFlightEntry);
+                    });
+                    sourceBuffer.addEventListener("updateend", function() {
+                      if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource ||
+                          hardwareSourceBuffer !== sourceBuffer) return;
+                      hardwareInFlightEntry = null;
+                      if (hardwareChunkQueue.length > 0 && !sourceBuffer.updating) {
                         const next = hardwareChunkQueue.shift();
+                        hardwareInFlightEntry = next;
                         try {
-                          hardwareSourceBuffer.appendBuffer(next);
-                        } catch (_) {}
+                          sourceBuffer.appendBuffer(next.bytes);
+                        } catch (appendError) {
+                          console.warn("⚠️ Receiver: queued media append failed:", appendError);
+                          recoverHardwareAppendFailure(mediaSource, generation, next);
+                        }
                       }
                     });
                     if (hardwareChunkQueue.length > 0) {
-                      const first = hardwareChunkQueue.shift();
-                      hardwareSourceBuffer.appendBuffer(first);
+                      attemptedEntry = hardwareChunkQueue.shift();
+                      hardwareInFlightEntry = attemptedEntry;
+                      sourceBuffer.appendBuffer(attemptedEntry.bytes);
                     }
                     video.play().catch(function(_) {});
                   } catch (sbErr) {
                     console.warn("⚠️ Receiver: addSourceBuffer error:", sbErr);
+                    // Tear down only this failed generation. A later chunk can
+                    // then create a fresh MediaSource; stale sourceopen
+                    // callbacks cannot clear a replacement session's source.
+                    if (generation === hardwareMediaSourceGeneration && hardwareMediaSource === mediaSource) {
+                      if (attemptedEntry) {
+                        recoverHardwareAppendFailure(mediaSource, generation, attemptedEntry);
+                      } else {
+                        recoverHardwareAppendFailure(mediaSource, generation, null);
+                      }
+                    }
                   }
                 });
               }
@@ -14760,20 +14943,30 @@
             }
           }
 
-          if (!chunk || !chunk.bytes) return;
-          const uint8 = new Uint8Array(chunk.bytes);
+          // A failed MSE generation drops its pending chunks. Seed a fresh
+          // generation with the retained init segment before the next media
+          // fragment, while preserving the three-entry queue bound.
+          if (needsMediaSource && !isInit && hardwareInitSegment &&
+              hardwareInitSegmentSessionSequence === activeMirrorSessionSequence &&
+              !hardwareChunkQueue.some(function (entry) { return entry.isInit; })) {
+            queueHardwareChunk(hardwareInitSegment.slice(), true);
+          }
 
-          if (hardwareSourceBuffer && !hardwareSourceBuffer.updating && hardwareChunkQueue.length === 0) {
+          if (hardwareSourceBuffer && hardwareMediaSource && !hardwareSourceBuffer.updating && hardwareChunkQueue.length === 0) {
+            const entry = { bytes: uint8, isInit };
+            hardwareInFlightEntry = entry;
             try {
               hardwareSourceBuffer.appendBuffer(uint8);
-            } catch (_) {
-              hardwareChunkQueue.push(uint8);
+            } catch (appendError) {
+              console.warn("⚠️ Receiver: direct media append failed:", appendError);
+              recoverHardwareAppendFailure(
+                hardwareMediaSource,
+                hardwareMediaSourceGeneration,
+                entry,
+              );
             }
           } else {
-            hardwareChunkQueue.push(uint8);
-            if (hardwareChunkQueue.length > 3) {
-              hardwareChunkQueue.shift();
-            }
+            queueHardwareChunk(uint8, isInit);
           }
         }
 
@@ -14802,6 +14995,13 @@
             }
             activeMirrorSessionId = sessionId;
             activeMirrorSessionSequence = sessionSequence;
+            hardwareVideoFailedSessionSequence = null;
+            mirrorRemoteDescriptionReady = false;
+            const sessionKey = mirrorSessionKey(sessionId, sessionSequence);
+            const queuedCandidates = mirrorPendingIceCandidatesBySession.get(sessionKey) || [];
+            mirrorPendingIceCandidatesBySession.clear();
+            if (queuedCandidates.length) mirrorPendingIceCandidatesBySession.set(sessionKey, queuedCandidates);
+            resetHardwareMirrorMediaSource(true);
             if (mirrorPeerConnection) {
               try { mirrorPeerConnection.close(); } catch (_) {}
               mirrorPeerConnection = null;
@@ -14853,9 +15053,26 @@
 
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
-              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId) return;
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                  activeMirrorSessionSequence !== sessionSequence) return;
+              const sessionCandidates = mirrorPendingIceCandidatesBySession.get(sessionKey) || [];
+              while (sessionCandidates.length > 0) {
+                if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                    activeMirrorSessionSequence !== sessionSequence) return;
+                const queuedCandidate = sessionCandidates.shift();
+                try {
+                  await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate));
+                } catch (candidateError) {
+                  relayLogToStudio("⚠️ Receiver: Error adding queued ICE candidate: " + candidateError.message);
+                }
+              }
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                  activeMirrorSessionSequence !== sessionSequence) return;
+              mirrorPendingIceCandidatesBySession.delete(sessionKey);
+              mirrorRemoteDescriptionReady = true;
               let answer = await pc.createAnswer();
-              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId) return;
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                  activeMirrorSessionSequence !== sessionSequence) return;
               if (answer && answer.sdp) {
                 let sdp = answer.sdp;
                 const opusRtpMap = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000\/2[^\r\n]*/i);
@@ -14908,15 +15125,37 @@
                   activeMirrorSessionSequence === sessionSequence) {
                 try { pc.close(); } catch (_) {}
                 mirrorPeerConnection = null;
+                mirrorRemoteDescriptionReady = false;
+                mirrorPendingIceCandidatesBySession.delete(sessionKey);
               }
             }
-          } else if (signal.type === "candidate" && signal.candidate && mirrorPeerConnection &&
-              signal.sessionId === activeMirrorSessionId &&
-              signal.sessionSequence === activeMirrorSessionSequence) {
+          } else if (signal.type === "candidate" && signal.candidate &&
+              isMirrorSessionSignalNotStale(signal.sessionId, signal.sessionSequence)) {
+            const matchesActiveSession = signal.sessionId === activeMirrorSessionId &&
+              signal.sessionSequence === activeMirrorSessionSequence;
+            if (!matchesActiveSession) {
+              if (!queueMirrorIceCandidate(signal.sessionId, signal.sessionSequence, signal.candidate)) {
+                relayLogToStudio("⚠️ Receiver: Dropped mirror ICE candidate because its pending session queue is full.");
+              }
+              return;
+            }
+            if (!mirrorPeerConnection) return;
+            if (!mirrorRemoteDescriptionReady) {
+              if (!queueMirrorIceCandidate(signal.sessionId, signal.sessionSequence, signal.candidate)) {
+                relayLogToStudio("⚠️ Receiver: Dropped mirror ICE candidate because its pending session queue is full.");
+              }
+              return;
+            }
+            const pc = mirrorPeerConnection;
+            const sessionId = activeMirrorSessionId;
+            const sessionSequence = activeMirrorSessionSequence;
             try {
-              await mirrorPeerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+              await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
             } catch (err) {
-              relayLogToStudio("⚠️ Receiver: Error adding ICE candidate: " + err.message);
+              if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
+                  activeMirrorSessionSequence === sessionSequence) {
+                relayLogToStudio("⚠️ Receiver: Error adding ICE candidate: " + err.message);
+              }
             }
           }
         }
