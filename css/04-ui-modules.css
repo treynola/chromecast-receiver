@@ -5230,8 +5230,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-c12329fa8166") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-c12329fa8166") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-325b1b1e43dc") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-325b1b1e43dc") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;

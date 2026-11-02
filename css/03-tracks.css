@@ -75,13 +75,18 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border: 1px solid var(--green);
+  border: 1px solid rgba(0, 128, 0, 0.36);
   border-radius: 8px;
   padding: 4px;
   background-color: var(--dark-gray);
   overflow: visible; /* QA: was 'hidden' — was clipping the slider thumb */
   position: relative;
   min-width: 0;
+  transition: border-color 0.72s ease-in;
+}
+
+.track.is-selected {
+  border-color: var(--green);
 }
 
 .track-header {
@@ -112,15 +117,22 @@ button.track-header,
   cursor: pointer;
   width: 100%;
   font-family: "Mexcellent", "Mexcellent 3D", sans-serif;
-  transition: color 0.15s ease, filter 0.15s ease;
+  opacity: 0.36;
+  transition: color 0.15s ease, filter 0.15s ease, opacity 0.72s ease-in;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.track.is-selected button.track-header,
+.track.is-selected .track-header-btn {
+  opacity: 1;
 }
 
 button.track-header:hover,
 .track-header-btn:hover {
   filter: brightness(1.25);
   color: #fff;
+  opacity: 1;
 }
 
 .track-buttons {
