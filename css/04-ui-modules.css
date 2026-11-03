@@ -2991,7 +2991,7 @@ select option {
   justify-content: center;
   width: 100%;
   min-width: 0;
-  margin-top: -1px;
+  margin-top: -3px;
   margin-bottom: 0px;
 }
 
@@ -5219,9 +5219,9 @@ select option {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-width: 16px;
-  min-height: 15px;
-  height: 15px;
+  min-width: 18px;
+  min-height: 16px;
+  height: 16px;
   background-color: var(--green) !important;
   border: 1px solid var(--gold) !important;
   color: var(--gold) !important;
@@ -5229,7 +5229,7 @@ select option {
   box-shadow: none !important;
   transform: none !important;
   cursor: pointer;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   padding: 1px 3px;
   border-radius: 3px;
@@ -5238,14 +5238,14 @@ select option {
 
 .loop-controls .slice-trigger-btn i {
   display: inline-block !important;
-  flex: 0 0 9px;
-  width: 9px;
-  height: 9px;
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-01c2f9fc5b35") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-01c2f9fc5b35") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-faf1532c8cd1") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-faf1532c8cd1") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -5256,9 +5256,9 @@ select option {
 
 .loop-controls .slice-trigger-btn svg {
   display: inline-block !important;
-  flex: 0 0 9px;
-  width: 9px;
-  height: 9px;
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
   vertical-align: middle;
   color: var(--gold) !important;
   fill: currentColor !important;
@@ -6779,7 +6779,7 @@ dialog.input-prompt-dialog {
   top: 0;
   left: calc(100% + 4px);
   right: auto;
-  width: 22px;
+  width: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6802,9 +6802,9 @@ dialog.input-prompt-dialog {
   visibility: visible !important;
   opacity: 1 !important;
   margin: 0 auto;
-  width: 18px;
-  height: 18px !important;
-  line-height: 18px !important;
+  width: 20px;
+  height: 20px !important;
+  line-height: 20px !important;
   padding: 0 !important;
   box-sizing: border-box;
   border-radius: 3px;
@@ -6837,20 +6837,20 @@ dialog.input-prompt-dialog {
 
 .vertical-tab-slot {
   margin-bottom: 0;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
 }
 
 .vertical-tab-slot .fx-chain-slot-label {
-  width: 18px;
-  height: 18px !important;
-  line-height: 18px !important;
+  width: 20px;
+  height: 20px !important;
+  line-height: 20px !important;
   padding: 0;
   margin: 0;
   font-family: "Courier New", Courier, monospace;
   font-weight: 700;
-  font-size: 11px !important;
+  font-size: 12px !important;
   letter-spacing: -0.5px;
   text-align: center;
   box-sizing: border-box;
