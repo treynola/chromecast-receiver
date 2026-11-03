@@ -2991,7 +2991,7 @@ select option {
   justify-content: center;
   width: 100%;
   min-width: 0;
-  margin-top: -5px;
+  margin-top: 2px;
   margin-bottom: 2px;
 }
 
@@ -3606,14 +3606,14 @@ select option {
 .effect-params-dialog .dialog-header .dialog-title-bottom,
 .audition-params-dialog .dialog-header .dialog-title-bottom {
   display: block;
-  font-size: 18px;
+  font-size: 16px;
   color: var(--green);
   text-transform: uppercase;
 }
 
 .effect-params-dialog .dialog-header .dialog-title-bottom--effect,
 .audition-params-dialog .dialog-header .dialog-title-bottom--effect {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .dialog-header-status--audition {
@@ -5241,8 +5241,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-6af709773823") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-6af709773823") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-ac4309cbaf22") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-ac4309cbaf22") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
