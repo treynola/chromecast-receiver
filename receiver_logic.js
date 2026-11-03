@@ -6369,13 +6369,16 @@
         function writeMirroredDisplayDescriptor(element, descriptor, confirmedDisplay) {
           if (!element) return;
           if (descriptor && typeof descriptor === "object") {
-            element.dataset.castDisplayDescriptor = JSON.stringify(descriptor);
-            element.dataset.parameterKey = String(descriptor.parameterKey || "");
+            const serialized = JSON.stringify(descriptor);
+            if (element.dataset.castDisplayDescriptor !== serialized) element.dataset.castDisplayDescriptor = serialized;
+            const key = String(descriptor.parameterKey || "");
+            if (element.dataset.parameterKey !== key) element.dataset.parameterKey = key;
           }
           if (confirmedDisplay !== undefined) {
-            element.dataset.confirmedDisplay = String(confirmedDisplay);
+            const display = String(confirmedDisplay);
+            if (element.dataset.confirmedDisplay !== display) element.dataset.confirmedDisplay = display;
           }
-          delete element.dataset.optimisticDisplay;
+          if (element.dataset.optimisticDisplay !== undefined) delete element.dataset.optimisticDisplay;
         }
 
         function applyMirroredParameterDisplay(controlId, outputId, descriptor, rawValue) {
@@ -10368,8 +10371,25 @@
 
         function drawReceiverLfoWaveform(canvas, lfoIndex, clock) {
           if (!canvas) return false;
-          const width = canvas.clientWidth || canvas._mxsLfoLogicalWidth || 112;
-          const height = canvas.clientHeight || canvas._mxsLfoLogicalHeight || 26;
+          // Measure once; ResizeObserver supplies later geometry without forcing
+          // layout after each control mutation or animation frame.
+          if (!canvas._mxsLfoSizeObserved) {
+            canvas._mxsLfoSizeObserved = true;
+            canvas._mxsLfoLogicalWidth = canvas.clientWidth || 112;
+            canvas._mxsLfoLogicalHeight = canvas.clientHeight || 26;
+            if (typeof ResizeObserver === "function") {
+              canvas._mxsLfoResizeObserver = new ResizeObserver((entries) => {
+                const rect = entries[0]?.contentRect;
+                if (rect?.width > 0 && rect?.height > 0) {
+                  canvas._mxsLfoLogicalWidth = rect.width;
+                  canvas._mxsLfoLogicalHeight = rect.height;
+                }
+              });
+              canvas._mxsLfoResizeObserver.observe(canvas);
+            }
+          }
+          const width = canvas._mxsLfoLogicalWidth || 112;
+          const height = canvas._mxsLfoLogicalHeight || 26;
           canvas._mxsLfoLogicalWidth = width;
           canvas._mxsLfoLogicalHeight = height;
           const pixelRatio = Math.max(1, Math.min(4, Number(window.devicePixelRatio) || 1));
@@ -11965,7 +11985,7 @@
                 );
               }
               const canvas1 = getEl("lfo-waveform-1");
-              if (canvas1) {
+              if (canvas1 && !canRenderSmoothLfo(1)) {
                 const clock1 = smoothLfoClocks[1];
                 const state1 = {
                   active: s.master.lfo1?.active === true,
@@ -11994,7 +12014,7 @@
                 );
               }
               const canvas2 = getEl("lfo-waveform-2");
-              if (canvas2) {
+              if (canvas2 && !canRenderSmoothLfo(2)) {
                 const clock2 = smoothLfoClocks[2];
                 const state2 = {
                   active: s.master.lfo2?.active === true,
@@ -14880,9 +14900,9 @@
                 hardwareMediaSourceUrl = URL.createObjectURL(mediaSource);
                 video.src = hardwareMediaSourceUrl;
                 if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
-                const losslessAudioOwnsPlayback = pcmPathOwnsAudio() || activeAudioPathOwner === "pcm_v2" || activeAudioPathOwner === "native_caf";
-                video.muted = losslessAudioOwnsPlayback;
-                video.volume = losslessAudioOwnsPlayback ? 0.0 : 1.0;
+                // Mirror video never owns audio; the authenticated PCM/CAF path does.
+                video.muted = true;
+                video.volume = 0.0;
 
                 mediaSource.addEventListener("sourceopen", function() {
                   if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource) return;
@@ -15028,9 +15048,9 @@
                   if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
                 } catch (_) {}
                 video.srcObject = event.streams[0];
-                const losslessAudioOwnsPlayback = pcmPathOwnsAudio() || activeAudioPathOwner === "pcm_v2" || activeAudioPathOwner === "native_caf";
-                video.muted = losslessAudioOwnsPlayback;
-                video.volume = losslessAudioOwnsPlayback ? 0.0 : 1.0;
+                // Mirror video never owns audio; the authenticated PCM/CAF path does.
+                video.muted = true;
+                video.volume = 0.0;
                 video.play().catch(function(err) {
                   relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
                 });
