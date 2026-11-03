@@ -2697,7 +2697,7 @@ select option {
     0 0 0 2px var(--gold),
     0 0 0 4px var(--red),
     0 8px 32px rgba(0, 0, 0, 0.9);
-  margin: 4px;
+  margin: 0;
   max-width: calc(100vw - 58px);
   height: auto;
   max-height: 82vh;
@@ -2708,11 +2708,19 @@ select option {
   flex-direction: column;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  transform: none !important;
+  transform-origin: 0 0;
+  opacity: 1 !important;
 }
 
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
   display: flex;
+  margin: 0;
+  animation: none !important;
+  transform: none !important;
+  transform-origin: 0 0;
+  opacity: 1 !important;
 }
 
 .effect-params-dialog.has-rackmount-parameters {
@@ -5230,8 +5238,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-25530c610b8f") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-25530c610b8f") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-02ed75fdc9f8") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-02ed75fdc9f8") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -6637,7 +6645,8 @@ dialog.input-prompt-dialog {
 
 .mxs-dialog.effect-params-dialog[open],
 .mxs-dialog.audition-params-dialog[open] {
-  animation: dialog-open 0.3s ease-out forwards;
+  animation: none !important;
+  transform: none !important;
 }
 
 .mxs-dialog::backdrop {
