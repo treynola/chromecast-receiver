@@ -1965,9 +1965,7 @@ select option {
   }
 }
 
-#docs-dialog,
-.effect-params-dialog,
-.audition-params-dialog {
+#docs-dialog{
   background-color: transparent;
   border: none;
   padding: 0;
@@ -1979,16 +1977,12 @@ select option {
   opacity: 0;
 }
 
-#docs-dialog[open],
-.effect-params-dialog[open],
-.audition-params-dialog[open] {
+#docs-dialog[open]{
   animation: dialog-open 1.44s ease-in-out forwards;
 }
 
 /* Ensure backdrop is consistent */
-#docs-dialog::backdrop,
-.effect-params-dialog::backdrop,
-.audition-params-dialog::backdrop {
+#docs-dialog::backdrop{
   background: rgba(0, 0, 0, 0.7);
 }
 
@@ -2692,13 +2686,15 @@ select option {
   border: 1px solid var(--green);
   border-radius: 12px;
   padding: 0;
-  width: 410px;
+  width: 410px !important;
+  min-width: 410px !important;
+  max-width: min(410px, calc(100vw - 24px)) !important;
+  box-sizing: border-box !important;
   box-shadow:
     0 0 0 2px var(--gold),
     0 0 0 4px var(--red),
     0 8px 32px rgba(0, 0, 0, 0.9);
-  margin: 0;
-  max-width: calc(100vw - 58px);
+  margin: 0 !important;
   height: auto;
   max-height: 82vh;
   min-height: 72px;
@@ -2711,16 +2707,23 @@ select option {
   transform: none !important;
   transform-origin: 0 0;
   opacity: 1 !important;
+  animation: none !important;
+  transition: none !important;
 }
 
 .effect-params-dialog[open],
 .audition-params-dialog[open] {
-  display: flex;
-  margin: 0;
+  display: flex !important;
+  margin: 0 !important;
+  width: 410px !important;
+  min-width: 410px !important;
+  max-width: min(410px, calc(100vw - 24px)) !important;
+  box-sizing: border-box !important;
   animation: none !important;
   transform: none !important;
   transform-origin: 0 0;
   opacity: 1 !important;
+  transition: none !important;
 }
 
 .effect-params-dialog.has-rackmount-parameters {
@@ -5238,8 +5241,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-02ed75fdc9f8") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-02ed75fdc9f8") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-6af709773823") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-6af709773823") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
