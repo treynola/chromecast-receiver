@@ -3606,14 +3606,14 @@ select option {
 .effect-params-dialog .dialog-header .dialog-title-bottom,
 .audition-params-dialog .dialog-header .dialog-title-bottom {
   display: block;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--green);
   text-transform: uppercase;
 }
 
 .effect-params-dialog .dialog-header .dialog-title-bottom--effect,
 .audition-params-dialog .dialog-header .dialog-title-bottom--effect {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .dialog-header-status--audition {
@@ -5241,8 +5241,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-ac4309cbaf22") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-ac4309cbaf22") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-47dbda916454") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-47dbda916454") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -6776,7 +6776,7 @@ dialog.input-prompt-dialog {
   top: 0;
   left: calc(100% + 4px);
   right: auto;
-  width: 34px;
+  width: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6799,6 +6799,12 @@ dialog.input-prompt-dialog {
   visibility: visible !important;
   opacity: 1 !important;
   margin: 0 auto;
+  width: 16px;
+  height: 16px !important;
+  line-height: 16px !important;
+  padding: 0 !important;
+  box-sizing: border-box;
+  border-radius: 3px;
 }
 
 .audition-panel {
@@ -6828,22 +6834,24 @@ dialog.input-prompt-dialog {
 
 .vertical-tab-slot {
   margin-bottom: 0;
-  width: 30px;
-  height: 26px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
 }
 
 .vertical-tab-slot .fx-chain-slot-label {
-  width: 30px;
-  height: 26px !important;
-  line-height: 26px !important;
+  width: 16px;
+  height: 16px !important;
+  line-height: 16px !important;
   padding: 0;
   margin: 0;
   font-family: "Courier New", Courier, monospace;
   font-weight: 700;
-  font-size: 15px !important;
-  letter-spacing: -0.7px;
+  font-size: 9px !important;
+  letter-spacing: -0.5px;
   text-align: center;
+  box-sizing: border-box;
+  border-radius: 3px;
   box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
 }
 

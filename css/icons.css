@@ -20,10 +20,10 @@
   forced-color-adjust: none;
 }
 
-.fa-chromecast { --mxs-icon: url("../icons/chromecast.svg?v=13.9.509-ac4309cbaf22"); }
-.fa-tv { --mxs-icon: url("../icons/tv.svg?v=13.9.509-ac4309cbaf22"); }
-.fa-volume-xmark { --mxs-icon: url("../icons/volume-xmark.svg?v=13.9.509-ac4309cbaf22"); }
-.fa-scissors { --mxs-icon: url("../icons/scissors.svg?v=13.9.509-ac4309cbaf22"); }
-.fa-play { --mxs-icon: url("../icons/play.svg?v=13.9.509-ac4309cbaf22"); }
-.fa-download { --mxs-icon: url("../icons/download.svg?v=13.9.509-ac4309cbaf22"); }
-.fa-chevron-right { --mxs-icon: url("../icons/chevron-right.svg?v=13.9.509-ac4309cbaf22"); }
+.fa-chromecast { --mxs-icon: url("../icons/chromecast.svg?v=13.9.509-47dbda916454"); }
+.fa-tv { --mxs-icon: url("../icons/tv.svg?v=13.9.509-47dbda916454"); }
+.fa-volume-xmark { --mxs-icon: url("../icons/volume-xmark.svg?v=13.9.509-47dbda916454"); }
+.fa-scissors { --mxs-icon: url("../icons/scissors.svg?v=13.9.509-47dbda916454"); }
+.fa-play { --mxs-icon: url("../icons/play.svg?v=13.9.509-47dbda916454"); }
+.fa-download { --mxs-icon: url("../icons/download.svg?v=13.9.509-47dbda916454"); }
+.fa-chevron-right { --mxs-icon: url("../icons/chevron-right.svg?v=13.9.509-47dbda916454"); }
