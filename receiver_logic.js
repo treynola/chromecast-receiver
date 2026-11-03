@@ -14479,10 +14479,9 @@
                     relayLogToStudio("⚠️ Receiver: BRIDGE_CONFIG missing a valid GUI session nonce.");
                     return;
                   }
-                  if (d.castMode === "MIRROR_CAST" && !window.location.pathname.endsWith("/mirror/") && !window.location.pathname.endsWith("/mirror/index.html")) {
-                    relayLogToStudio("🪞 Receiver: Routing to Screen Mirror receiver interface...");
-                    window.location.replace("mirror/index.html");
-                    return;
+                  if (d.castMode === "MIRROR_CAST") {
+                    relayLogToStudio("🪞 Receiver: Activating in-place Screen Mirror viewport with lossless audio bridge...");
+                    activatePureScreenMirrorViewport();
                   }
                   applyReceiverBridgeConfig(d, "websocket", {
                     announceGuiReady: true,
@@ -14860,6 +14859,7 @@
         function handleHardwareVideoChunk(chunk) {
           const video = document.getElementById("mirror-video");
           if (!video) return;
+          if (mirrorPeerConnection && mirrorPeerConnection.connectionState === "connected" && video.srcObject) return;
           if (hardwareVideoFailedSessionSequence === activeMirrorSessionSequence) return;
           if (!chunk || !Array.isArray(chunk.bytes) || chunk.bytes.length === 0 ||
               chunk.bytes.length > MAX_HARDWARE_CHUNK_BYTES) return;
@@ -14880,8 +14880,9 @@
                 hardwareMediaSourceUrl = URL.createObjectURL(mediaSource);
                 video.src = hardwareMediaSourceUrl;
                 if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
-                video.muted = false;
-                video.volume = 1.0;
+                const losslessAudioOwnsPlayback = pcmPathOwnsAudio() || activeAudioPathOwner === "pcm_v2" || activeAudioPathOwner === "native_caf";
+                video.muted = losslessAudioOwnsPlayback;
+                video.volume = losslessAudioOwnsPlayback ? 0.0 : 1.0;
 
                 mediaSource.addEventListener("sourceopen", function() {
                   if (generation !== hardwareMediaSourceGeneration || hardwareMediaSource !== mediaSource) return;
@@ -15027,8 +15028,9 @@
                   if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
                 } catch (_) {}
                 video.srcObject = event.streams[0];
-                video.muted = false;
-                video.volume = 1.0;
+                const losslessAudioOwnsPlayback = pcmPathOwnsAudio() || activeAudioPathOwner === "pcm_v2" || activeAudioPathOwner === "native_caf";
+                video.muted = losslessAudioOwnsPlayback;
+                video.volume = losslessAudioOwnsPlayback ? 0.0 : 1.0;
                 video.play().catch(function(err) {
                   relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
                 });
