@@ -266,7 +266,16 @@
         this.bad = 0; this.good = 0; return { action: "hold", status: "unknown" };
       }
       const pending = number(v?.framesPendingDecodeEstimate);
-      const overloaded = decoded < received * 0.8 || (pending !== null && pending > received * 0.5);
+      const presentation = data?.presentation;
+      const composed = number(presentation?.measuredComposedFps);
+      const droppedRatio = number(presentation?.droppedFrameRatio);
+      const levelRates = this.profile === "detail1080" ? [15, 15, 15, 10] :
+        this.profile === "detail720" ? [15, 12, 12, 10] : [30, 24, 15, 15];
+      const targetFps = levelRates[this.level] || 15;
+      const decodeOverload = decoded < received * 0.8 || (pending !== null && pending > received * 0.5);
+      const presentationOverload = (composed !== null && composed < targetFps * 0.8) ||
+        (droppedRatio !== null && droppedRatio > 0.15);
+      const overloaded = decodeOverload || presentationOverload;
       this.bad = overloaded ? this.bad + 1 : 0;
       this.good = overloaded ? 0 : this.good + 1;
       if (now - this.lastChange < 10000) return { action: "hold", status: overloaded ? "overloaded" : "observed" };
