@@ -5841,6 +5841,7 @@
             return;
           }
           window._receiverShutdownInProgress = true;
+          stopMirrorDiagnostics();
           clearReceiverSessionCaches("cast_stopped");
           suppressBinaryReconnect = true;
           clearBinaryReconnectTimer();
@@ -13882,6 +13883,7 @@
           }
           switch (d.type) {
             case "RECEIVER_SHUTDOWN":
+              stopMirrorDiagnostics();
               shutdownReceiver(d.reason || "signal");
               return true;
             case "CAST_SESSION_HEARTBEAT":
@@ -14701,6 +14703,80 @@
           }
         }
 
+        let mirrorDiagnosticsState = null;
+        function stopMirrorDiagnostics() {
+          const state = mirrorDiagnosticsState;
+          mirrorDiagnosticsState = null;
+          if (!state) return;
+          clearInterval(state.timer);
+          if (state.frameHandle !== null && typeof state.video.cancelVideoFrameCallback === "function") {
+            try { state.video.cancelVideoFrameCallback(state.frameHandle); } catch (_) {}
+          }
+        }
+
+        function startMirrorDiagnostics(pc, video, sessionId, sessionSequence) {
+          stopMirrorDiagnostics();
+          const helper = window.MXSMirrorDiagnostics;
+          const state = { pc, video, sampler: helper ? new helper.Sampler() : null,
+            timer: null, frameHandle: null, frame: null, frameCallbacks: 0, inFlight: false };
+          mirrorDiagnosticsState = state;
+          const current = () => mirrorDiagnosticsState === state && mirrorPeerConnection === pc &&
+            activeMirrorSessionId === sessionId && activeMirrorSessionSequence === sessionSequence;
+          const presented = (now, metadata) => {
+            if (!current()) return;
+            state.frameCallbacks++;
+            state.frame = helper?.frameObservation(now, metadata) ?? null;
+            try { state.frameHandle = video.requestVideoFrameCallback(presented); }
+            catch (_) { state.frameHandle = null; }
+          };
+          if (typeof video.requestVideoFrameCallback === "function") {
+            try { state.frameHandle = video.requestVideoFrameCallback(presented); } catch (_) {}
+          }
+          state.timer = setInterval(async () => {
+            if (!current() || state.inFlight) return;
+            state.inFlight = true;
+            try {
+              let stats = { status: "getStats_unavailable", video: null, network: null };
+              if (state.sampler && typeof pc.getStats === "function") {
+                try { stats = state.sampler.sample(await pc.getStats(), "inbound-rtp"); }
+                catch (error) { stats.status = "getStats_rejected"; stats.errorName = String(error?.name || "Error").slice(0, 64); }
+              }
+              if (!current()) return;
+              let quality = null;
+              try {
+                const q = video.getVideoPlaybackQuality?.();
+                if (q) quality = { totalVideoFrames: q.totalVideoFrames ?? null, droppedVideoFrames: q.droppedVideoFrames ?? null };
+              } catch (_) {}
+              const now = getLfoVisualNow();
+              let pcmRuntimeQualified = null;
+              try { pcmRuntimeQualified = localStorage.getItem(PCM_RUNTIME_QUALIFICATION_KEY) === "true"; } catch (_) {}
+              sendReceiverBridgeMessage({
+                type: "GUI_CHANNEL_TELEMETRY", event: "mirror_video_diagnostics", version: 1,
+                guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION, guiSessionNonce, side: "receiver",
+                sessionId, sessionSequence, monotonicMs: now, connectionState: pc.connectionState,
+                ...stats, playbackQuality: quality,
+                frameCallbackSupported: typeof video.requestVideoFrameCallback === "function",
+                frameCallbacks: state.frameCallbacks, latestFrame: state.frame,
+                latestFrameObservationAgeMs: state.frame ? now - state.frame.observedAtMonotonicMs : null,
+                display: { videoWidth: video.videoWidth || null, videoHeight: video.videoHeight || null,
+                  viewportWidth: window.innerWidth || null, viewportHeight: window.innerHeight || null,
+                  devicePixelRatio: window.devicePixelRatio || null },
+                audio: { playbackMode: window._playbackMode || "unknown", pathOwner: activeAudioPathOwner,
+                  playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision,
+                  preference: receiverPlayoutPreference, pcmDegraded: window._pcmDegraded === true,
+                  pcmRuntimeQualified, workletConstructorAvailable: typeof AudioWorkletNode === "function",
+                  workletModuleApiAvailable: audioCtx ? typeof audioCtx.audioWorklet?.addModule === "function" : null },
+                acousticOffsetMs: null,
+                timingLimit: "composition_metadata_is_not_physical_display_or_acoustic_alignment",
+              }, "gui", true);
+              if (pc.connectionState === "closed" || pc.connectionState === "failed") stopMirrorDiagnostics();
+            } catch (_) {
+              // Optional observations must never interrupt playout or video.
+            } finally { state.inFlight = false; }
+          }, 5000);
+        }
+        if (typeof window.addEventListener === "function") window.addEventListener("pagehide", stopMirrorDiagnostics);
+
         let mirrorPeerConnection = null;
         let activeMirrorSessionId = null;
         let activeMirrorSessionSequence = 0;
@@ -15022,6 +15098,7 @@
             const queuedCandidates = mirrorPendingIceCandidatesBySession.get(sessionKey) || [];
             mirrorPendingIceCandidatesBySession.clear();
             if (queuedCandidates.length) mirrorPendingIceCandidatesBySession.set(sessionKey, queuedCandidates);
+            stopMirrorDiagnostics();
             resetHardwareMirrorMediaSource(true);
             if (mirrorPeerConnection) {
               try { mirrorPeerConnection.close(); } catch (_) {}
@@ -15051,6 +15128,7 @@
                 // Mirror video never owns audio; the authenticated PCM/CAF path does.
                 video.muted = true;
                 video.volume = 0.0;
+                startMirrorDiagnostics(pc, video, sessionId, sessionSequence);
                 video.play().catch(function(err) {
                   relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
                 });
@@ -15145,6 +15223,7 @@
               relayLogToStudio("❌ Receiver: Error handling screen mirror offer: " + err.message);
               if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
                   activeMirrorSessionSequence === sessionSequence) {
+                stopMirrorDiagnostics();
                 try { pc.close(); } catch (_) {}
                 mirrorPeerConnection = null;
                 mirrorRemoteDescriptionReady = false;
@@ -15322,6 +15401,7 @@
                 cast.framework.events.EventType.SENDER_DISCONNECTED,
                 () => {
                   if (window._receiverShutdownInProgress) return;
+                  stopMirrorDiagnostics();
                   buildIdentityAccepted = false;
                   window._buildIdentityAccepted = false;
                   playoutPathLogged = false;
