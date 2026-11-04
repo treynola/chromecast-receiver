@@ -196,13 +196,18 @@
     const m = metadata || {};
     const capture = number(m.captureTime), presentation = number(m.presentationTime);
     const age = capture !== null && presentation !== null ? presentation - capture : null;
+    const receiveToCompositionRaw = number(m.receiveTime) !== null && presentation !== null ? presentation - m.receiveTime : null;
+    const receiveTimingStatus = receiveToCompositionRaw === null ? "unavailable" :
+      receiveToCompositionRaw >= -250 && receiveToCompositionRaw <= 10000 ? "plausible" : "clock_or_timestamp_mismatch";
     return {
       observedAtMonotonicMs: number(now), width: number(m.width), height: number(m.height),
       mediaTimeSec: number(m.mediaTime), presentedFrames: number(m.presentedFrames), rtpTimestamp: number(m.rtpTimestamp),
       captureToCompositionEstimateMs: age,
       captureClockBasis: capture === null ? "unavailable" : "browser_estimated_remote_capture_in_receiver_clock",
       captureClockEstimateNonnegative: age === null ? null : age >= 0,
-      receiveToCompositionMs: number(m.receiveTime) !== null && presentation !== null ? presentation - m.receiveTime : null,
+      receiveToCompositionMs: receiveTimingStatus === "plausible" ? receiveToCompositionRaw : null,
+      receiveToCompositionRawMs: receiveToCompositionRaw,
+      receiveTimingStatus,
       processingDurationMs: duration(m.processingDuration),
       expectedDisplayTimeMs: number(m.expectedDisplayTime),
       evidenceStage: "submitted_for_composition_not_physical_display_or_acoustic_sync",
