@@ -14472,7 +14472,7 @@
                         }
                       } catch (_) {}
                     }
-                    sendReceiverBridgeMessage(reply, "gui");
+                    sendReceiverBridgeMessage(reply, "media");
                   });
                   return;
                 } else if (d.type === "BRIDGE_CONFIG") {
@@ -14751,9 +14751,10 @@
               let pcmRuntimeQualified = null;
               try { pcmRuntimeQualified = localStorage.getItem(PCM_RUNTIME_QUALIFICATION_KEY) === "true"; } catch (_) {}
               sendReceiverBridgeMessage({
-                type: "GUI_CHANNEL_TELEMETRY", event: "mirror_video_diagnostics", version: 1,
+                type: "GUI_CHANNEL_TELEMETRY", transport: "gui", event: "mirror_video_diagnostics", version: 1,
                 guiProtocolVersion: CAST_GUI_PROTOCOL_VERSION, guiSessionNonce, side: "receiver",
                 sessionId, sessionSequence, monotonicMs: now, connectionState: pc.connectionState,
+                capabilities: helper?.capabilities(window.RTCRtpReceiver, "receive") ?? [],
                 ...stats, playbackQuality: quality,
                 frameCallbackSupported: typeof video.requestVideoFrameCallback === "function",
                 frameCallbacks: state.frameCallbacks, latestFrame: state.frame,
@@ -15278,7 +15279,7 @@
                     }
                   } catch (_) {}
                 }
-                sendReceiverBridgeMessage(reply, "gui");
+                sendReceiverBridgeMessage(reply, "media");
               });
               return;
             }
