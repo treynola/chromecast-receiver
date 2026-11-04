@@ -8578,6 +8578,26 @@
           const renderStartedAt = Date.now();
           let firstPaintTimeMs = null;
           const list = Array.isArray(dialogs) ? dialogs : [];
+          if (document.body?.classList.contains("pure-screen-mirror-mode")) {
+            const suppressedState = "__pure_screen_mirror_suppressed__";
+            if (lastDialogMirrorState === suppressedState && root.hidden && root.children.length === 0) return;
+            root.querySelectorAll("dialog[open]").forEach((dialog) => {
+              try { dialog.close(); } catch (_) {}
+            });
+            root.replaceChildren();
+            root.hidden = true;
+            root.setAttribute("aria-hidden", "true");
+            lastDialogMirrorState = suppressedState;
+            lastDialogMirrorLayoutState = suppressedState;
+            lastDialogRenderStats = {
+              mode: "suppressed_for_pure_screen_mirror",
+              renderTimeMs: Math.max(0, Date.now() - renderStartedAt),
+              firstPaintTimeMs: null,
+              dialogCount: 0,
+              domNodeCount: 0,
+            };
+            return;
+          }
           root.hidden = list.length === 0;
           root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
           const finishDialogRender = (mode) => {
@@ -14866,7 +14886,7 @@
               video.style.objectFit = "contain";
               video.style.background = "#000";
             }
-            const hideIds = ["tv-console", "studio-root", "audio-unlock-overlay", "qa-overlay-root", "cursor-mirror"];
+            const hideIds = ["tv-console", "studio-root", "audio-unlock-overlay", "qa-overlay-root", "cursor-mirror", "gui-dialog-mirror-root", "gui-dialog-registry-root"];
             hideIds.forEach(function(id) {
               const el = document.getElementById(id);
               if (el) {
