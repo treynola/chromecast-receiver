@@ -58,6 +58,9 @@
           qpPerEncodedFrame: perFrame("qpSum", "framesEncoded", 1),
           jitterBufferMsPerEmittedFrame: perFrame("jitterBufferDelay", "jitterBufferEmittedCount", 1000),
           framesEncoded: number(video.framesEncoded), framesDecoded: number(video.framesDecoded),
+          framesReceived: number(video.framesReceived),
+          framesPendingDecodeEstimate: [video.framesReceived, video.framesDecoded, video.framesDropped].every(v => number(v) !== null)
+            ? Math.max(0, video.framesReceived - video.framesDecoded - video.framesDropped) : null,
           framesDropped: number(video.framesDropped), freezeCount: number(video.freezeCount),
           totalFreezesDurationSec: number(video.totalFreezesDuration),
           packetsLost: number(video.packetsLost ?? remote?.packetsLost),
@@ -116,7 +119,7 @@
       // A required codec removes alternative primary codecs so it cannot silently fall back.
       const avcFallback = requested === "VP9" && !required ? rows.filter((c) => codecName(c.mimeType) === "H264" && !selected.includes(c)) : [];
       const remainder = rows.filter((c) => !selected.includes(c) && !avcFallback.includes(c) &&
-        (!(required || profile === "h264") || /^video\/(?:rtx|red|ulpfec|flexfec-03)$/i.test(c.mimeType)));
+        /^video\/(?:rtx|red|ulpfec|flexfec-03)$/i.test(c.mimeType));
       transceiver.setCodecPreferences([...selected, ...avcFallback, ...remainder]);
       result.preferenceApplied = true;
     } catch (_) {
@@ -198,22 +201,86 @@
     const age = capture !== null && presentation !== null ? presentation - capture : null;
     const receiveToCompositionRaw = number(m.receiveTime) !== null && presentation !== null ? presentation - m.receiveTime : null;
     const receiveTimingStatus = receiveToCompositionRaw === null ? "unavailable" :
-      receiveToCompositionRaw >= -250 && receiveToCompositionRaw <= 10000 ? "plausible" : "clock_or_timestamp_mismatch";
+      receiveToCompositionRaw < 0 ? "negative_delta_unvalidated" :
+      receiveToCompositionRaw > 10000 ? "unvalidated_large_delta" : "browser_reported_unvalidated";
     return {
       observedAtMonotonicMs: number(now), width: number(m.width), height: number(m.height),
       mediaTimeSec: number(m.mediaTime), presentedFrames: number(m.presentedFrames), rtpTimestamp: number(m.rtpTimestamp),
       captureToCompositionEstimateMs: age,
       captureClockBasis: capture === null ? "unavailable" : "browser_estimated_remote_capture_in_receiver_clock",
       captureClockEstimateNonnegative: age === null ? null : age >= 0,
-      receiveToCompositionMs: receiveTimingStatus === "plausible" ? receiveToCompositionRaw : null,
+      receiveToCompositionMs: receiveToCompositionRaw !== null && receiveToCompositionRaw >= 0 ? receiveToCompositionRaw : null,
       receiveToCompositionRawMs: receiveToCompositionRaw,
       receiveTimingStatus,
+      receiveTimeMs: number(m.receiveTime), presentationTimeMs: presentation,
+      captureTimeMs: capture, timingUnits: "receiver_browser_monotonic_milliseconds",
+      physicalTimingValidated: false,
       processingDurationMs: duration(m.processingDuration),
       expectedDisplayTimeMs: number(m.expectedDisplayTime),
       evidenceStage: "submitted_for_composition_not_physical_display_or_acoustic_sync",
     };
   }
 
+  class PresentationSampler {
+    constructor() { this.previous = null; }
+    sample(now, callbacks, quality, frame) {
+      const old = this.previous;
+      const intervalMs = old ? difference(now, old.now) : null;
+      const composed = old ? difference(callbacks, old.callbacks) : null;
+      const dropped = old ? difference(quality?.droppedVideoFrames, old.dropped) : null;
+      const total = old ? difference(quality?.totalVideoFrames, old.total) : null;
+      const raw = number(frame?.receiveToCompositionRawMs);
+      const frameAgeMs = number(frame?.observedAtMonotonicMs) === null ? null : now - frame.observedAtMonotonicMs;
+      const fresh = frameAgeMs !== null && frameAgeMs >= 0 && frameAgeMs <= 1500;
+      this.previous = { now, callbacks, dropped: quality?.droppedVideoFrames, total: quality?.totalVideoFrames, raw: fresh ? raw : null };
+      return { intervalMs, measuredComposedFps: intervalMs > 0 && composed !== null ? composed * 1000 / intervalMs : null,
+        droppedFramesDelta: dropped, totalFramesDelta: total,
+        droppedFrameRatio: total > 0 && dropped !== null ? dropped / total : null,
+        receiveToCompositionTrendMs: fresh && raw !== null && number(old?.raw) !== null ? raw - old.raw : null,
+        frameAgeMs, frameFresh: fresh, physicalTimingValidated: false };
+    }
+  }
+
+  // One controller per video generation. Rates are interval measurements, never
+  // capability advertisements. Large unvalidated timestamps cannot trigger action.
+  class WorkloadController {
+    constructor(profile = "motion720") { this.profile = ["motion720", "detail720", "detail1080"].includes(profile) ? profile : "motion720"; this.level = 0; this.bad = 0; this.good = 0; this.lastChange = -Infinity; this.lastObservation = -Infinity; }
+    limits(track = {}) {
+      const profiles = this.profile === "detail1080" ? [[1920, 1080, 15], [1280, 720, 15], [960, 540, 15], [960, 540, 10]] :
+        this.profile === "detail720" ? [[1280, 720, 15], [1280, 720, 12], [960, 540, 12], [960, 540, 10]] :
+        [[1280, 720, 30], [1280, 720, 24], [1280, 720, 15], [960, 540, 15]];
+      const [width, height, fps] = profiles[this.level];
+      const known = number(track.width) > 0 && number(track.height) > 0;
+      return { maxFramerate: fps, maxBitrate: 3000000,
+        scaleResolutionDownBy: known ? Math.max(1, track.width / width, track.height / height) : 1,
+        dimensionsKnown: known, maxWidth: width, maxHeight: height, qualityProfile: this.profile };
+    }
+    observe(data, now) {
+      const v = data?.video, interval = number(data?.intervalMs);
+      const received = number(v?.measuredReceivedFps), decoded = number(v?.measuredDecodedFps);
+      const elapsed = now - this.lastObservation;
+      this.lastObservation = now;
+      if (!Number.isFinite(now) || !interval || interval < 500 || interval > 10000 ||
+          elapsed < 500 ||
+          received === null || decoded === null || received < 5 || decoded < 0) {
+        this.bad = 0; this.good = 0; return { action: "hold", status: "unknown" };
+      }
+      const pending = number(v?.framesPendingDecodeEstimate);
+      const overloaded = decoded < received * 0.8 || (pending !== null && pending > received * 0.5);
+      this.bad = overloaded ? this.bad + 1 : 0;
+      this.good = overloaded ? 0 : this.good + 1;
+      if (now - this.lastChange < 10000) return { action: "hold", status: overloaded ? "overloaded" : "observed" };
+      if (this.bad >= 2) {
+        this.bad = 0;
+        return { action: this.level < 3 ? "reduce" : "recover", status: "receiver_decode_overload" };
+      }
+      // Upward promotion is left to a fresh owner profile trial. Automatic
+      // promotion during one session can repeatedly overload this receiver.
+      return { action: "hold", status: overloaded ? "overloaded" : "observed" };
+    }
+    commit(now) { this.level = Math.min(3, this.level + 1); this.lastChange = now; this.bad = 0; }
+  }
+
   root.MXSMirrorDiagnostics = Object.freeze({ Sampler, senderParameters, trackSettings, frameObservation,
-    codecName, codecProfile, capabilities, preferCodec, CodecTracker });
+    codecName, codecProfile, capabilities, preferCodec, CodecTracker, PresentationSampler, WorkloadController });
 })(typeof window !== "undefined" ? window : globalThis);

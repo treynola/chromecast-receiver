@@ -1504,6 +1504,8 @@
               ? Number(mediaElement.networkState)
               : null,
             paused: mediaElement?.paused === true,
+            muted: typeof mediaElement?.muted === "boolean" ? mediaElement.muted : null,
+            volume: Number.isFinite(mediaElement?.volume) ? mediaElement.volume : null,
             playerState,
             nativeAttemptId: nativeStartupAttemptId,
           };
@@ -14718,6 +14720,7 @@
           stopMirrorDiagnostics();
           const helper = window.MXSMirrorDiagnostics;
           const state = { pc, video, sampler: helper ? new helper.Sampler() : null,
+            presentationSampler: helper ? new helper.PresentationSampler() : null,
             timer: null, frameHandle: null, frame: null, frameCallbacks: 0, inFlight: false };
           mirrorDiagnosticsState = state;
           const current = () => mirrorDiagnosticsState === state && mirrorPeerConnection === pc &&
@@ -14756,6 +14759,7 @@
                 sessionId, sessionSequence, monotonicMs: now, connectionState: pc.connectionState,
                 capabilities: helper?.capabilities(window.RTCRtpReceiver, "receive") ?? [],
                 ...stats, playbackQuality: quality,
+                presentation: state.presentationSampler?.sample(now, state.frameCallbacks, quality, state.frame) ?? null,
                 frameCallbackSupported: typeof video.requestVideoFrameCallback === "function",
                 frameCallbacks: state.frameCallbacks, latestFrame: state.frame,
                 latestFrameObservationAgeMs: state.frame ? now - state.frame.observedAtMonotonicMs : null,
@@ -14763,6 +14767,9 @@
                   viewportWidth: window.innerWidth || null, viewportHeight: window.innerHeight || null,
                   devicePixelRatio: window.devicePixelRatio || null },
                 audio: { playbackMode: window._playbackMode || "unknown", pathOwner: activeAudioPathOwner,
+                  media: readNativeResumeMediaState(), nativeStreamActive: Boolean(nativeStreamActive),
+                  readiness: activeAudioPathOwner === "pcm_v2" ? "pcm_requires_audible_verification" :
+                    !nativeStreamActive ? "inactive_or_starting" : nativeStreamPaused ? "paused" : "playing_requires_audible_verification",
                   playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision,
                   preference: receiverPlayoutPreference, pcmDegraded: window._pcmDegraded === true,
                   pcmRuntimeQualified, workletConstructorAvailable: typeof AudioWorkletNode === "function",
