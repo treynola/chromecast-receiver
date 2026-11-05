@@ -12943,6 +12943,37 @@
           schedulePlaybackRecoveryRetry();
         }
 
+        function handlePlaybackResumeCommand(d) {
+          if (!acceptPlaybackRevision(d, "PLAYBACK_RESUME")) return;
+          noteOrderedPlaybackAction("PLAYBACK_RESUME");
+          if (desiredPlaybackState !== "paused") {
+            relayLogToStudio("⚠️ Receiver: PLAYBACK_RESUME rejected because playback was not paused.");
+            acknowledgePlaybackRevision(d, "playback_resume_rejected");
+            return;
+          }
+          desiredPlaybackState = "playing";
+          markPlaybackStartSignal();
+          playbackPaused = false;
+          setPcmAudioPriority(pcmPathOwnsAudio(), "playback_resume");
+          if (workletNode?.port) {
+            try { workletNode.port.postMessage({ type: "RESUME", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision }); } catch (e) {}
+          }
+          const immediateState = buildImmediatePlaybackState(d.trackId);
+          if (immediateState) {
+            renderState(immediateState, true);
+            lastMirroredState = immediateState;
+          }
+          const revision = Number(d.playbackRevision);
+          restartUnavailableNativeResume("playback_resume", revision);
+          const resumingNative = nativeStreamActive && nativeStreamPaused;
+          requestNativePlaybackStart("playback_resume");
+          if (resumingNative) startNativeResumeProgressProbe(revision);
+          if (nativeStreamActive) publishMxsPlaybackStatus("PLAYING", "playback_resume");
+          else if (!resumingNative) publishMxsPlaybackStatus("STARTING", "playback_resume");
+          acknowledgePlaybackRevision(d, "playback_resume");
+          schedulePlaybackRecoveryRetry();
+        }
+
         function summarizeLfoVisualState(state) {
           const summary = {
             lfoAssignmentCount: 0,
@@ -13760,14 +13791,14 @@
         function handleReceiverCommand(d, source) {
           if (
             d &&
-            (d.type === "PLAYBACK_START" || d.type === "PLAYBACK_PAUSE" || d.type === "PLAYBACK_STOP") &&
+            (d.type === "PLAYBACK_START" || d.type === "PLAYBACK_RESUME" || d.type === "PLAYBACK_PAUSE" || d.type === "PLAYBACK_STOP") &&
             !Number.isFinite(Number(d._receiverReceivedAtEpochMs))
           ) {
             d._receiverReceivedAtEpochMs = Date.now();
           }
           if (
             d &&
-            (d.type === "PLAYBACK_START" || d.type === "PLAYBACK_PAUSE" || d.type === "PLAYBACK_STOP") &&
+            (d.type === "PLAYBACK_START" || d.type === "PLAYBACK_RESUME" || d.type === "PLAYBACK_PAUSE" || d.type === "PLAYBACK_STOP") &&
             !Number.isFinite(Number(d._receiverReceivedAtMonotonicMs))
           ) {
             d._receiverReceivedAtMonotonicMs = getLfoVisualNow();
@@ -13858,6 +13889,7 @@
           ].includes(d.type);
           const requiresAuthenticatedAudio = [
             "PLAYBACK_START",
+            "PLAYBACK_RESUME",
             "PLAYBACK_STOP",
             "PLAYBACK_PAUSE",
             "PCM_RELAY",
@@ -13965,6 +13997,9 @@
               return true;
             case "PLAYBACK_START":
               handlePlaybackStartCommand(d, "playback_start");
+              return true;
+            case "PLAYBACK_RESUME":
+              handlePlaybackResumeCommand(d);
               return true;
             case "PLAYBACK_STOP":
               handlePlaybackStopCommand(d);
@@ -14276,6 +14311,7 @@
               const rate = (audioCtx && audioCtx.sampleRate) || window._hwRate || hwRate || 48000;
               const handshake = {
                 type: "HANDSHAKE",
+                playbackCommands: ["PLAYBACK_START", "PLAYBACK_PAUSE", "PLAYBACK_STOP", "PLAYBACK_RESUME"],
                 config: {
                   sampleRate: rate,
                   bitDepth: 16,
