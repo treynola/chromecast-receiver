@@ -5244,8 +5244,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-faf1532c8cd1") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-faf1532c8cd1") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-f5efa02c9429") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-f5efa02c9429") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -5632,6 +5632,12 @@ body.receiver-mode .gui-dialog-mirror.mxs-dialog {
     0 0 0 4px var(--red),
     0 8px 32px rgba(0, 0, 0, 0.9);
   pointer-events: auto;
+}
+/* Receiver dialogs represent already-issued app state. Replaying the local
+   300 ms opening animation delays visibility on every mirrored rebuild. */
+body.receiver-mode .gui-dialog-mirror.mxs-dialog[open] {
+  animation: none !important;
+  opacity: 1;
 }
 body.receiver-mode .gui-dialog-mirror.mxs-dialog.error-dialog {
   border-color: var(--red);

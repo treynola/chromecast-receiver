@@ -8087,7 +8087,7 @@
           // painting this catalog made every sampler/effect menu appear at once.
           root.hidden = true;
           root.setAttribute("aria-hidden", "true");
-          root.dataset.registry = JSON.stringify(list);
+          root.dataset.registry = signature;
         }
 
         const MIRRORED_DIALOG_DYNAMIC_CLASS_TOKENS = new Set([
@@ -12074,6 +12074,7 @@
             }
             const masterFinishedAt = phaseClock();
             renderDialogRegistry(s.dialogRegistry);
+            const registryFinishedAt = phaseClock();
             renderDialogMirrors(s.dialogs);
             const dialogsFinishedAt = phaseClock();
             if (s.sampler) {
@@ -12431,6 +12432,10 @@
               preludePhases,
               masterMs: Math.max(0, masterFinishedAt - preludeFinishedAt),
               dialogsMs: Math.max(0, dialogsFinishedAt - masterFinishedAt),
+              dialogPhases: {
+                registryMs: Math.max(0, registryFinishedAt - masterFinishedAt),
+                mirrorsMs: Math.max(0, dialogsFinishedAt - registryFinishedAt),
+              },
               samplerMs: Math.max(0, samplerFinishedAt - dialogsFinishedAt),
               tracksMs: Math.max(0, tracksFinishedAt - samplerFinishedAt),
               qaMs: Math.max(0, qaFinishedAt - tracksFinishedAt),
