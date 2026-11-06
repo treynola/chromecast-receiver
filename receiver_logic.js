@@ -1968,6 +1968,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
             root.removeAttribute("aria-hidden");
           }
           document.body.classList.remove("app-loading");
+          window.dispatchEvent(new Event("cast-receiver-ui-revealed"));
           markReceiverBoot("gui_revealed", { reason: reason || "unspecified" });
           relayLogToStudio(
             "✅ Receiver: Receiver UI revealed (app-loading removed" +

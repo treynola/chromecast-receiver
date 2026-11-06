@@ -163,7 +163,9 @@ window.MXSCreateMirrorReceiver = function (shared) {
               video.style.height = "100vh";
               video.style.objectFit = "contain";
               video.style.background = "#000";
-              video.style.filter = "contrast(1.08) brightness(0.96) saturate(1.05)";
+              // Keep pixels neutral until a controlled device calibration
+              // establishes a measured color correction.
+              video.style.filter = "none";
             }
             const hideIds = ["tv-console", "studio-root", "audio-unlock-overlay", "qa-overlay-root", "cursor-mirror", "gui-dialog-mirror-root", "gui-dialog-registry-root"];
             hideIds.forEach(function(id) {

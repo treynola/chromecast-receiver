@@ -249,7 +249,7 @@
   class WorkloadController {
     constructor(profile = "motion720") { this.profile = ["motion720", "detail720", "detail1080"].includes(profile) ? profile : "motion720"; this.level = 0; this.bad = 0; this.good = 0; this.lastChange = -Infinity; this.lastObservation = -Infinity; }
     limits(track = {}) {
-      const profiles = this.profile === "detail1080" ? [[1920, 1080, 30], [1600, 900, 24], [1440, 810, 20], [1280, 720, 15]] :
+      const profiles = this.profile === "detail1080" ? [[1920, 1080, 24], [1600, 900, 20], [1440, 810, 17], [1280, 720, 15]] :
         this.profile === "detail720" ? [[1280, 720, 24], [1280, 720, 20], [1280, 720, 17], [1280, 720, 15]] :
         [[1280, 720, 30], [1280, 720, 24], [1280, 720, 20], [1280, 720, 15]];
       const [width, height, fps] = profiles[this.level];
@@ -272,7 +272,7 @@
       const presentation = data?.presentation;
       const composed = number(presentation?.measuredComposedFps);
       const droppedRatio = number(presentation?.droppedFrameRatio);
-      const levelRates = this.profile === "detail1080" ? [30, 24, 20, 15] :
+      const levelRates = this.profile === "detail1080" ? [24, 20, 17, 15] :
         this.profile === "detail720" ? [24, 20, 17, 15] : [30, 24, 20, 15];
       const targetFps = levelRates[this.level] || 15;
       const decodeOverload = decoded < received * 0.8 || (pending !== null && pending > received * 0.5);

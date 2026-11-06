@@ -11,6 +11,7 @@
     ? window.crypto.randomUUID()
     : `root-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const emitted = new Set();
+  const pendingReports = [];
   let sequence = 0;
   let routing = false;
   let context = null;
@@ -39,14 +40,35 @@
     emitted.add(key);
     if (emitted.size > 64) emitted.delete(emitted.values().next().value);
     try { console.info("[CAST_BOOT_DIAGNOSTIC]", JSON.stringify(event)); } catch (_) {}
-    try {
-      if (context && typeof context.sendCustomMessage === "function") {
-        context.sendCustomMessage(namespace, "sender-0", event);
-      }
-    } catch (error) {
-      try { console.warn("[CAST_BOOT_DIAGNOSTIC] native report failed", phase, String(error).slice(0, 160)); } catch (_) {}
+    if (pendingReports.length >= 16) pendingReports.shift();
+    pendingReports.push({ event, attempts: 0 });
+    flushReports();
+  }
+
+  function flushReports() {
+    if (!context || typeof context.sendCustomMessage !== "function") return;
+    for (const item of pendingReports) {
+      if (item.attempts >= 3 || item.inFlight || item.delivered) continue;
+      item.attempts += 1;
+      try {
+        item.inFlight = true;
+        Promise.resolve(context.sendCustomMessage(namespace, "sender-0", item.event))
+          .then(() => { item.delivered = true; })
+          .catch(() => {})
+          .finally(() => { item.inFlight = false; });
+      } catch (_) { item.inFlight = false; }
+    }
+    for (let i = pendingReports.length - 1; i >= 0; i -= 1) {
+      if (pendingReports[i].delivered) pendingReports.splice(i, 1);
+    }
+    if (pendingReports.some((item) => item.attempts < 3) && !reportRetryTimer && typeof setTimeout === "function") {
+      reportRetryTimer = setTimeout(() => {
+        reportRetryTimer = null;
+        flushReports();
+      }, 500);
     }
   }
+  let reportRetryTimer = null;
 
   function setStatus(message) {
     if (typeof document === "undefined") return;
