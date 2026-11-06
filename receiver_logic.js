@@ -3936,7 +3936,7 @@
                   : null,
                 source: request?.media?.customData?.source || null,
               });
-              if (!request || !request.media) {
+              if (!request || !request.media || !identityAllowsAudio()) {
                 const error = new cast.framework.messages.ErrorData(
                   cast.framework.messages.ErrorType.LOAD_FAILED,
                 );
@@ -3948,7 +3948,15 @@
                 const streamUrl =
                   (request.media.customData && request.media.customData.streamUrl) ||
                   request.media.contentUrl;
-                if (!streamUrl) {
+                let validStream = false;
+                try {
+                  const target = new URL(streamUrl);
+                  const expected = new URL(`http://${currentBridgeIp}:${currentBridgePort}/stream.wav`);
+                  validStream = target.origin === expected.origin && target.pathname === "/stream.wav" &&
+                    !target.username && !target.password && !target.hash &&
+                    target.searchParams.get("token") === currentBridgeStreamToken && !!currentBridgeStreamToken;
+                } catch (_) {}
+                if (!validStream) {
                   const error = new cast.framework.messages.ErrorData(
                     cast.framework.messages.ErrorType.LOAD_FAILED,
                   );
@@ -3973,8 +3981,9 @@
                 }
                 writeCastDebug("warn", "Mapped mxs-native-stream LOAD to " + redactBridgeUrl(streamUrl));
               } else {
-                const contentId = request && request.media ? request.media.contentId : "unknown";
-                writeCastDebug("debug", "Passing through LOAD request contentId=" + contentId);
+                const error = new cast.framework.messages.ErrorData(cast.framework.messages.ErrorType.LOAD_FAILED);
+                error.reason = cast.framework.messages.ErrorReason.INVALID_REQUEST;
+                return error;
               }
               return request;
             }, "LOAD");
@@ -6750,26 +6759,7 @@
               }
 
             let workletUrl = "pcm-player-worklet-919e83c1ad145e6a32e1c9047865a0a9bf5bf59f70b0707d5f2816c277f05339.js";
-            // The hosted receiver is HTTPS, so an HTTP Studio bridge is mixed
-            // content and Chromecast/Cobalt reports its AudioWorklet rejection
-            // as the misleading `AbortError`. Only use the bridge on local HTTP
-            // receiver sessions; hosted receivers must load the same-origin,
-            // versioned worklet over HTTPS.
-            const receiverProtocol = String(window.location && window.location.protocol || "").toLowerCase();
-            const canUseHttpBridge = receiverProtocol === "http:";
-            if (canUseHttpBridge && currentBridgeIp && currentBridgePort) {
-              const port = currentBridgePort || "8080";
-              workletUrl = `http://${currentBridgeIp}:${port}/receiver/${workletUrl}`;
-              relayLogToStudio(`📡 Receiver: Loading Worklet from Studio: ${workletUrl}`);
-            } else {
-              if (currentBridgeIp && currentBridgePort && !canUseHttpBridge) {
-                relayLogToStudio(
-                  `🔒 Receiver: Ignoring HTTP Studio worklet bridge on ${receiverProtocol || "unknown"} page; using same-origin worklet.`,
-                );
-              }
-              relayLogToStudio(`📡 Receiver: Loading Worklet relatively: ${workletUrl}`);
-            }
-
+            // Executable modules always belong to the receiver origin.
             // Decide AudioWorklet support once per AudioContext using a tiny,
             // same-origin module. A failed capability probe selects native
             // playout immediately; retrying Blob/versioned/unversioned copies
@@ -8441,8 +8431,9 @@
               }
               syncMirroredElementDataset(actionElement, action.data);
               if (action.label !== undefined) {
-                const content = action.contentClassName
-                  ? actionElement.querySelector(`.${String(action.contentClassName).split(/\s+/)[0]}`)
+                const contentClassName = normalizeMirroredDialogClassName(action.contentClassName);
+                const content = contentClassName
+                  ? actionElement.querySelector(`.${contentClassName.split(/\s+/)[0]}`)
                   : null;
                 if (content) content.textContent = String(action.label);
                 else actionElement.textContent = String(action.label);
@@ -12615,6 +12606,8 @@
         }
 
         function acceptBridgeCredentials(data, source) {
+          // A local launch must bootstrap through its one-use, peer-bound grant.
+          if (LOCAL_BOOTSTRAP_TOKEN && source === "cast_control") return false;
           const receiverToken = data && isValidBridgeCredential(data.token)
             ? data.token
             : "";
@@ -13893,6 +13886,10 @@
             "PLAYBACK_STOP",
             "PLAYBACK_PAUSE",
             "PCM_RELAY",
+            "RELOAD",
+            "RECEIVER_SHUTDOWN",
+            "PCM_V2_JITTER_TARGET",
+            "BUILD_IDENTITY_REJECTED",
           ].includes(d.type);
           const guiIdentityReady = requiresAuthenticatedGui
             ? identityAllowsGui()
@@ -14123,7 +14120,8 @@
             if (generation !== guiControlConnectionGeneration || window._receiverShutdownInProgress) return;
             let data = null;
             try {
-              data = JSON.parse(event.data);
+              data = safeReceiverJsonParse(event.data);
+              if (!data || typeof data !== "object") return;
               data._receiverWireBytes = new TextEncoder().encode(event.data).byteLength;
               handleReceiverCommand(data, "GUI control WebSocket");
             } catch (error) {
@@ -14860,7 +14858,7 @@
 
         function isMirrorSessionSignalNotStale(sessionId, sessionSequence) {
           if (typeof sessionId !== "string" || !sessionId || typeof sessionSequence !== "number" ||
-              !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0) return false;
+              !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0 || sessionSequence > Date.now() + 86400000) return false;
           let storedSequence = 0;
           let storedSessionId = null;
           try {
@@ -14868,6 +14866,7 @@
             const separator = saved.indexOf(":");
             if (separator > 0) {
               storedSequence = Number(saved.slice(0, separator)) || 0;
+              if (!Number.isSafeInteger(storedSequence) || storedSequence > Date.now() + 86400000) storedSequence = 0;
               storedSessionId = saved.slice(separator + 1) || null;
             }
           } catch (_) {}
@@ -15137,7 +15136,7 @@
         }
 
         async function handleScreenMirrorSignal(data, replyFn) {
-          if (!data) return;
+          if (!data || !identityAllowsGui() || !receiverBridgeConfigReady || !window._handshakeAcked) return;
           activatePureScreenMirrorViewport();
           const signal = data.signal || data;
           if (signal.type === "HARDWARE_VIDEO_CHUNK" && signal.chunk &&
@@ -15337,6 +15336,7 @@
             if (!d) return;
 
             if (d.type === "SCREEN_MIRROR_SIGNAL" || d.type === "offer" || d.type === "candidate") {
+              if (!identityAllowsGui() || !receiverBridgeConfigReady || !window._handshakeAcked) return;
               handleScreenMirrorSignal(d, function(reply) {
                 if (typeof cast !== "undefined" && cast.framework) {
                   try {
@@ -15354,10 +15354,6 @@
 
             // 1. Hardware Alignment
             if (d.type === "BRIDGE_CONFIG") {
-              if (d.castMode === "MIRROR_CAST") {
-                relayLogToStudio("🪞 Receiver: Activating 1-Page 1-Embed Screen Mirror Viewport (Zero HUD/Telemetry)...");
-                activatePureScreenMirrorViewport();
-              }
               sendReceiverBootDiagnostic("bridge_config_received", {
                 source: "cast_channel",
                 hasBuildIdentity: !!d.buildIdentity,
@@ -15366,15 +15362,9 @@
                 hasEndpoint: !!(d.ip && d.port && d.token),
                 networkEpoch: Number(d.networkEpoch) || 0,
               });
-              if (!acceptBridgeCredentials(d, "cast_control")) {
-                return;
-              }
-              if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) {
-                // Connect only to report the rejection through the authoritative
-                // sender/backend path; no handshake or audio startup is allowed.
-                if (d.ip) connectBinaryBridge(d.ip, d.port, d.token);
-                return;
-              }
+              if (LOCAL_BOOTSTRAP_TOKEN) return;
+              if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) return;
+              if (!acceptBridgeCredentials(d, "cast_control")) return;
               if (
                 d.pcmProtocol &&
                 !acceptPcmV2ProtocolConfig(d.pcmProtocol, "cast_control")
@@ -15392,6 +15382,7 @@
                 announceGuiReady: false,
               });
               if (applied && d.ip) {
+                if (d.castMode === "MIRROR_CAST" && identityAllowsGui()) activatePureScreenMirrorViewport();
                 connectBinaryBridge(d.ip, d.port, d.token);
                 markReceiverPlayoutPathReady();
               }

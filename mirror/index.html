@@ -469,6 +469,15 @@
       let peerRemoteDescriptionReady = false;
       let pendingIceCandidatesBySession = new Map();
 
+      function safeReceiverJsonParse(value) {
+        try {
+          const text = typeof value === "string" ? value : JSON.stringify(value);
+          if (typeof text !== "string" || text.length > 256 * 1024) return null;
+          return JSON.parse(text,
+          (key, entry) => ["__proto__", "constructor", "prototype"].includes(key) ? undefined : entry); }
+        catch (_) { return null; }
+      }
+
       function peerSessionKey(sessionId, sessionSequence) {
         return JSON.stringify([sessionId, sessionSequence]);
       }
@@ -505,7 +514,7 @@
 
       function isPeerSessionSignalNotStale(sessionId, sessionSequence) {
         if (typeof sessionId !== "string" || !sessionId || typeof sessionSequence !== "number" ||
-            !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0) return false;
+            !Number.isSafeInteger(sessionSequence) || sessionSequence <= 0 || sessionSequence > Date.now() + 86400000) return false;
         let storedSequence = 0;
         let storedSessionId = null;
         try {
@@ -513,6 +522,7 @@
           const separator = saved.indexOf(":");
           if (separator > 0) {
             storedSequence = Number(saved.slice(0, separator)) || 0;
+            if (!Number.isSafeInteger(storedSequence) || storedSequence > Date.now() + 86400000) storedSequence = 0;
             storedSessionId = saved.slice(separator + 1) || null;
           }
         } catch (_) {}
@@ -780,7 +790,8 @@
         NAMESPACES.forEach((ns) => {
           context.addCustomMessageListener(ns, async function (event) {
             console.log("📨 Mirror Receiver received message on " + ns + ":", event.data);
-            const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+            const data = safeReceiverJsonParse(event.data);
+            if (!data) return;
             handleSignalingPayload(data, sendCastMessage);
           });
         });
