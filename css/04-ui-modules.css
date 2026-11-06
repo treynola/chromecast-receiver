@@ -5244,8 +5244,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-f5efa02c9429") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-f5efa02c9429") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-04e3a3099a50") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-04e3a3099a50") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -7798,4 +7798,14 @@ body.receiver-mode .gui-dialog-registry-menu select {
   outline: none;
   border-color: var(--gold);
   box-shadow: 0 0 6px rgba(255, 215, 0, 0.3);
+}
+
+body.pure-screen-mirror-mode #studio-root,
+body.pure-screen-mirror-mode #tv-console,
+body.pure-screen-mirror-mode #qa-overlay-root,
+body.pure-screen-mirror-mode #audio-unlock-overlay {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }

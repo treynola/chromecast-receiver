@@ -2,17 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script src="build_identity.js?v=13.9.509-5674fce1814c"></script>
+    <script src="build_identity.js?v=13.9.509-bcf99f54a7ed"></script>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MXS-004 Studio Mirror v13.9.509</title>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-f5efa02c9429" />
-    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-f5efa02c9429" />
-    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-f5efa02c9429" />
-    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-f5efa02c9429" />
-    <link rel="stylesheet" href="css/icons.css?v=13.9.509-f5efa02c9429" />
+    <link rel="stylesheet" href="css/01-base.css?v=13.9.509-04e3a3099a50" />
+    <link rel="stylesheet" href="css/02-master.css?v=13.9.509-04e3a3099a50" />
+    <link rel="stylesheet" href="css/03-tracks.css?v=13.9.509-04e3a3099a50" />
+    <link rel="stylesheet" href="css/04-ui-modules.css?v=13.9.509-04e3a3099a50" />
+    <link rel="stylesheet" href="css/icons.css?v=13.9.509-04e3a3099a50" />
     <style>
       #screen-mirror-wrapper {
         position: fixed !important;
@@ -52,6 +52,20 @@
     </style>
   </head>
   <body class="app-loading receiver-mode">
+          <!-- Dedicated Cast SDK Media Element to prevent Shadow DOM nesting and enable early AudioContext routing -->
+          <audio
+            id="cast-media-element"
+            class="castMediaElement"
+            crossorigin="anonymous"
+            playsinline
+            autoplay
+          ></audio>
+          <audio
+            id="native-stream-audio"
+            crossorigin="anonymous"
+            playsinline
+            autoplay
+          ></audio>
     <!-- Plain HTML Screen Mirror Viewport (1 Page, 1 Embed) -->
     <div id="screen-mirror-wrapper">
       <video id="mirror-video" autoplay playsinline></video>
@@ -313,20 +327,6 @@
             loop
             class="audio-unlocker"
           ></audio>
-          <!-- Dedicated Cast SDK Media Element to prevent Shadow DOM nesting and enable early AudioContext routing -->
-          <audio
-            id="cast-media-element"
-            class="castMediaElement"
-            crossorigin="anonymous"
-            playsinline
-            autoplay
-          ></audio>
-          <audio
-            id="native-stream-audio"
-            crossorigin="anonymous"
-            playsinline
-            autoplay
-          ></audio>
         </div>
       </div>
     </div>
@@ -360,9 +360,9 @@
 
     <div id="qa-overlay-root" aria-live="polite"></div>
 
-    <script src="pcm-v2-protocol.js?v=13.9.509-217369385b3f"></script>
-    <script src="cast-gui-action-catalog.js?v=13.9.509-217369385b3f"></script>
-    <script src="mirror-diagnostics.js?v=13.9.509-217369385b3f"></script>
-    <script src="receiver_logic.js?v=13.9.509-217369385b3f"></script>
+    <script src="pcm-v2-protocol.js?v=13.9.509-1342ee32d304"></script>
+    <script src="cast-gui-action-catalog.js?v=13.9.509-1342ee32d304"></script>
+    <script src="mirror-diagnostics.js?v=13.9.509-1342ee32d304"></script>
+    <script src="receiver_logic.js?v=13.9.509-1342ee32d304"></script>
   </body>
 </html>

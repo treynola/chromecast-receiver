@@ -98,7 +98,7 @@
   }
 
   function preferCodec(transceiver, api, profile = "auto") {
-    const requested = profile === "h264" ? "H264" : "VP9";
+    const requested = profile === "h264" || profile === "auto" ? "H264" : "VP9";
     const required = profile === "vp9";
     let rows;
     try { rows = api?.getCapabilities?.("video")?.codecs; } catch (_) {}
@@ -107,7 +107,8 @@
       preferenceApplied: false, fallbackReason: null, capabilities: capabilities(api, "send") };
     if (!selected.length && !required && profile !== "h264" && Array.isArray(rows)) {
       result.fallbackReason = "requested_codec_not_advertised";
-      selected = rows.filter((c) => codecName(c.mimeType) === "H264");
+      const fallback = rows.find((c) => ["VP8", "VP9"].includes(codecName(c.mimeType)));
+      if (fallback) selected = rows.filter((c) => codecName(c.mimeType) === codecName(fallback.mimeType));
     }
     if (!selected.length || typeof transceiver?.setCodecPreferences !== "function") {
       result.fallbackReason = !selected.length ? "requested_codec_not_advertised" : "codec_preference_api_unavailable";
@@ -117,10 +118,12 @@
     try {
       // Keep only API-provided objects, including associated repair codecs.
       // A required codec removes alternative primary codecs so it cannot silently fall back.
-      const avcFallback = requested === "VP9" && !required ? rows.filter((c) => codecName(c.mimeType) === "H264" && !selected.includes(c)) : [];
-      const remainder = rows.filter((c) => !selected.includes(c) && !avcFallback.includes(c) &&
+      const fallbackOrder = profile === "auto"
+        ? requested === "H264" ? ["VP8", "VP9"] : ["H264", "VP8"] : [];
+      const codecFallbacks = !required ? fallbackOrder.flatMap((name) => rows.filter((c) => codecName(c.mimeType) === name && !selected.includes(c))) : [];
+      const remainder = rows.filter((c) => !selected.includes(c) && !codecFallbacks.includes(c) &&
         /^video\/(?:rtx|red|ulpfec|flexfec-03)$/i.test(c.mimeType));
-      transceiver.setCodecPreferences([...selected, ...avcFallback, ...remainder]);
+      transceiver.setCodecPreferences([...selected, ...codecFallbacks, ...remainder]);
       result.preferenceApplied = true;
     } catch (_) {
       result.fallbackReason = "codec_preference_rejected";
@@ -246,13 +249,13 @@
   class WorkloadController {
     constructor(profile = "motion720") { this.profile = ["motion720", "detail720", "detail1080"].includes(profile) ? profile : "motion720"; this.level = 0; this.bad = 0; this.good = 0; this.lastChange = -Infinity; this.lastObservation = -Infinity; }
     limits(track = {}) {
-      const profiles = this.profile === "detail1080" ? [[1920, 1080, 15], [1280, 720, 15], [960, 540, 15], [960, 540, 10]] :
-        this.profile === "detail720" ? [[1280, 720, 15], [1280, 720, 12], [960, 540, 12], [960, 540, 10]] :
-        [[1280, 720, 30], [1280, 720, 24], [1280, 720, 15], [960, 540, 15]];
+      const profiles = this.profile === "detail1080" ? [[1920, 1080, 30], [1600, 900, 24], [1440, 810, 20], [1280, 720, 15]] :
+        this.profile === "detail720" ? [[1280, 720, 24], [1280, 720, 20], [1280, 720, 17], [1280, 720, 15]] :
+        [[1280, 720, 30], [1280, 720, 24], [1280, 720, 20], [1280, 720, 15]];
       const [width, height, fps] = profiles[this.level];
       const known = number(track.width) > 0 && number(track.height) > 0;
-      return { maxFramerate: fps, maxBitrate: 3000000,
-        scaleResolutionDownBy: known ? Math.max(1, track.width / width, track.height / height) : 1,
+      return { maxFramerate: fps, maxBitrate: 6000000,
+        scaleResolutionDownBy: this.level === 0 ? 1 : known ? Math.max(1, track.width / width, track.height / height) : 1,
         dimensionsKnown: known, maxWidth: width, maxHeight: height, qualityProfile: this.profile };
     }
     observe(data, now) {
@@ -269,25 +272,29 @@
       const presentation = data?.presentation;
       const composed = number(presentation?.measuredComposedFps);
       const droppedRatio = number(presentation?.droppedFrameRatio);
-      const levelRates = this.profile === "detail1080" ? [15, 15, 15, 10] :
-        this.profile === "detail720" ? [15, 12, 12, 10] : [30, 24, 15, 15];
+      const levelRates = this.profile === "detail1080" ? [30, 24, 20, 15] :
+        this.profile === "detail720" ? [24, 20, 17, 15] : [30, 24, 20, 15];
       const targetFps = levelRates[this.level] || 15;
       const decodeOverload = decoded < received * 0.8 || (pending !== null && pending > received * 0.5);
       const presentationOverload = (composed !== null && composed < targetFps * 0.8) ||
         (droppedRatio !== null && droppedRatio > 0.15);
       const overloaded = decodeOverload || presentationOverload;
+      const decodeMs = number(v?.decodeMsPerFrame ?? presentation?.decodeMsPerFrame);
+      const clean = number(presentation?.droppedFramesDelta) === 0 && decodeMs !== null && decodeMs < 15;
       this.bad = overloaded ? this.bad + 1 : 0;
-      this.good = overloaded ? 0 : this.good + 1;
+      this.good = clean ? this.good + 1 : 0;
+      if (!overloaded && this.level > 0 && this.good >= 3 && now - this.lastChange >= 10000) {
+        return { action: "improve", status: "three_clean_windows" };
+      }
       if (now - this.lastChange < 10000) return { action: "hold", status: overloaded ? "overloaded" : "observed" };
       if (this.bad >= 2) {
         this.bad = 0;
         return { action: this.level < 3 ? "reduce" : "recover", status: "receiver_decode_overload" };
       }
-      // Upward promotion is left to a fresh owner profile trial. Automatic
-      // promotion during one session can repeatedly overload this receiver.
       return { action: "hold", status: overloaded ? "overloaded" : "observed" };
     }
     commit(now) { this.level = Math.min(3, this.level + 1); this.lastChange = now; this.bad = 0; }
+    recover(now) { this.level = Math.max(0, this.level - 1); this.lastChange = now; this.good = 0; }
   }
 
   root.MXSMirrorDiagnostics = Object.freeze({ Sampler, senderParameters, trackSettings, frameObservation,

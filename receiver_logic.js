@@ -1950,9 +1950,9 @@
         }
 
         function revealReceiverUi(reason) {
-          if (!document.body || window._receiverUiRevealed) {
-            return false;
-          }
+          if (!document.body || window._receiverUiRevealed ||
+              document.body.classList.contains("pure-screen-mirror-mode")) return false;
+          if (window._receiverCastMode == null || window._receiverCastMode === "MIRROR_CAST") return false;
           if (!isReceiverUiStructurallyComplete()) {
             relayLogToStudio(
               "⚠️ Receiver: Deferred UI reveal because the complete five-column layout is not ready.",
@@ -4253,9 +4253,12 @@
                         nativeStartupAttemptId,
                       );
                     } else {
-                      relayLogToStudio(
-                        "✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
-                      );
+                      if (nativePrewarmReadyAnnouncedForAttempt !== attemptId) {
+                        nativePrewarmReadyAnnouncedForAttempt = attemptId;
+                        relayLogToStudio(
+                          "✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
+                        );
+                      }
                     }
                   } else {
                     activateNativeStream(
@@ -5674,6 +5677,7 @@
           }
         }
 
+        let nativePrewarmReadyAnnouncedForAttempt = null;
         function startCafStreamPlayout(streamUrl, attemptId) {
           if (typeof cast === "undefined" || !cast.framework || !cast.framework.messages) {
             return false;
@@ -14549,6 +14553,8 @@
                   if (!acceptBuildIdentity(d.buildIdentity, "bridge_config")) {
                     return;
                   }
+                  window._receiverCastMode = d.castMode || "D18A9B3A";
+                  if (window._receiverCastMode === "MIRROR_CAST") activatePureScreenMirrorViewport();
                   if (d.pcmProtocol && !acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
                     return;
                   }
@@ -14913,7 +14919,7 @@
               wrapper.style.inset = "0";
               wrapper.style.width = "100vw";
               wrapper.style.height = "100vh";
-              wrapper.style.zIndex = "999999";
+              wrapper.style.setProperty("z-index", "2147483647", "important");
               wrapper.style.background = "#000";
             }
             const video = document.getElementById("mirror-video");
@@ -14925,13 +14931,15 @@
               video.style.height = "100vh";
               video.style.objectFit = "contain";
               video.style.background = "#000";
+              video.style.filter = "contrast(1.08) brightness(0.96) saturate(1.05)";
             }
             const hideIds = ["tv-console", "studio-root", "audio-unlock-overlay", "qa-overlay-root", "cursor-mirror", "gui-dialog-mirror-root", "gui-dialog-registry-root"];
             hideIds.forEach(function(id) {
               const el = document.getElementById(id);
               if (el) {
-                el.style.display = "none";
-                el.style.visibility = "hidden";
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+                el.style.setProperty("opacity", "0", "important");
               }
             });
           } catch (e) {
@@ -15176,6 +15184,18 @@
               iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
             });
             mirrorPeerConnection = pc;
+            try {
+              const capabilities = RTCRtpReceiver.getCapabilities?.("video")?.codecs || [];
+              if (capabilities.some((codec) => /video\/h264/i.test(codec.mimeType || ""))) {
+                const transceiver = pc.addTransceiver("video", { direction: "recvonly" });
+                const ordered = ["video/h264", "video/vp8", "video/vp9"]
+                  .flatMap((mime) => capabilities.filter((codec) => String(codec.mimeType).toLowerCase() === mime));
+                const repair = capabilities.filter((codec) => /video\/(?:rtx|red|ulpfec|flexfec-03)/i.test(codec.mimeType || ""));
+                if (ordered.length) transceiver.setCodecPreferences([...ordered, ...repair]);
+              }
+            } catch (codecPreferenceError) {
+              console.warn("Receiver could not set mirror codec preference:", codecPreferenceError);
+            }
 
             pc.ontrack = function (event) {
               if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId) return;
@@ -15364,6 +15384,8 @@
               });
               if (LOCAL_BOOTSTRAP_TOKEN) return;
               if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) return;
+              window._receiverCastMode = d.castMode || "D18A9B3A";
+              if (window._receiverCastMode === "MIRROR_CAST") activatePureScreenMirrorViewport();
               if (!acceptBridgeCredentials(d, "cast_control")) return;
               if (
                 d.pcmProtocol &&
