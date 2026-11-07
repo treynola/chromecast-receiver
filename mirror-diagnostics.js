@@ -13,32 +13,33 @@
       const rows = [];
       report.forEach((row) => rows.push(row));
       const candidates = rows.filter((row) => row.type === direction && (row.kind === "video" || row.mediaType === "video") && !row.isRemote && row.active !== false);
+      const streamIdentity = (row) => JSON.stringify([
+        row.ssrc ?? null, row.mid ?? null, row.trackIdentifier ?? null,
+        row.transportId ?? null, row.codecId ?? null,
+      ]);
       const advancing = (row) => {
         const old = this.previous.get(row.id);
         const field = direction === "outbound-rtp" ? "framesEncoded" : "framesDecoded";
-        return old && difference(number(row[field]), old[field]) > 0 ? 1 : 0;
+        if (!old || old.streamIdentity !== streamIdentity(row)) return 0;
+        return difference(number(row[field]), old[field]) > 0 ? 1 : -1;
       };
       const video = candidates.sort((a, b) => advancing(b) - advancing(a) ||
         (b.bytesSent ?? b.bytesReceived ?? 0) - (a.bytesSent ?? a.bytesReceived ?? 0))[0];
       if (!video) return { status: "video_stats_unavailable", video: null, network: null };
       const previous = this.previous.get(video.id);
+      const currentStreamIdentity = streamIdentity(video);
+      const sameStream = previous?.streamIdentity === currentStreamIdentity;
       const counters = {};
       for (const key of ["timestamp", "bytesSent", "bytesReceived", "framesEncoded", "framesDecoded", "framesSent", "framesReceived", "qpSum", "totalEncodeTime", "totalDecodeTime", "jitterBufferDelay", "jitterBufferEmittedCount"]) counters[key] = number(video[key]);
-      for (const row of candidates.slice(0, 8)) {
-        const values = { codecId: row.codecId };
-        for (const key of Object.keys(counters)) values[key] = number(row[key]);
-        this.previous.set(row.id, values);
-      }
-      while (this.previous.size > 8) this.previous.delete(this.previous.keys().next().value);
-      const intervalMs = previous ? difference(counters.timestamp, previous.timestamp) : null;
-      const delta = (key) => previous && previous.codecId === video.codecId ? difference(counters[key], previous[key]) : null;
+      const intervalMs = sameStream ? difference(counters.timestamp, previous.timestamp) : null;
+      const delta = (key) => sameStream ? difference(counters[key], previous[key]) : null;
       const rate = (key, scale) => intervalMs > 0 && delta(key) !== null ? delta(key) * scale / intervalMs : null;
       const perFrame = (sum, frames, scale) => delta(frames) > 0 && delta(sum) !== null ? delta(sum) * scale / delta(frames) : null;
       const codec = report.get?.(video.codecId);
       const transport = report.get?.(video.transportId);
       const pair = report.get?.(transport?.selectedCandidatePairId);
       const remote = report.get?.(video.remoteId);
-      return {
+      const observation = {
         status: "observed", intervalMs,
         video: {
           direction, codec: codecName(codec?.mimeType) ? text(codec.mimeType) : null, profile: codecProfile(codec),
@@ -73,6 +74,13 @@
           basis: pair ? "selected_candidate_pair" : remote ? "remote_inbound_rtp" : "unavailable",
         },
       };
+      for (const row of candidates.slice(0, 8)) {
+        const values = { codecId: row.codecId, streamIdentity: streamIdentity(row) };
+        for (const key of Object.keys(counters)) values[key] = number(row[key]);
+        this.previous.set(row.id, values);
+      }
+      while (this.previous.size > 8) this.previous.delete(this.previous.keys().next().value);
+      return observation;
     }
   }
 
@@ -247,7 +255,11 @@
   // One controller per video generation. Rates are interval measurements, never
   // capability advertisements. Large unvalidated timestamps cannot trigger action.
   class WorkloadController {
-    constructor(profile = "motion720") { this.profile = ["motion720", "detail720", "detail1080"].includes(profile) ? profile : "motion720"; this.level = 0; this.bad = 0; this.good = 0; this.lastChange = -Infinity; this.lastObservation = -Infinity; }
+    constructor(profile = "motion720", initialLevel = 0) {
+      this.profile = ["motion720", "detail720", "detail1080"].includes(profile) ? profile : "motion720";
+      this.level = Number.isSafeInteger(initialLevel) ? Math.max(0, Math.min(3, initialLevel)) : 0;
+      this.bad = 0; this.good = 0; this.lastChange = -Infinity; this.lastObservation = -Infinity;
+    }
     limits(track = {}) {
       const profiles = this.profile === "detail1080" ? [[1920, 1080, 24], [1600, 900, 20], [1440, 810, 17], [1280, 720, 15]] :
         this.profile === "detail720" ? [[1280, 720, 24], [1280, 720, 20], [1280, 720, 17], [1280, 720, 15]] :

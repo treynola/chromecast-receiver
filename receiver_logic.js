@@ -1,5 +1,21 @@
 // Shared authenticated audio/session core; mode ownership is fixed by each entry page.
 const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
+if (typeof window.MXSCastAudioOwnerArbiter !== "function") {
+  throw new Error("The shared Cast audio owner module did not load");
+}
+if (typeof window.MXSCastSessionBinding !== "function") {
+  throw new Error("The shared Cast session binding module did not load");
+}
+if (RECEIVER_BRANCH?.gui && (
+  typeof window.MXSStudioStartupStatus?.dispose !== "function" ||
+  typeof window.MXSCreateStudioStructure !== "function" ||
+  typeof window.MXSStudioParameterDisplay?.format !== "function" ||
+  typeof window.MXSCreateStudioDialogs !== "function" ||
+  typeof window.MXSCreateStudioGuiActions !== "function" ||
+  typeof window.MXSCreateStudioLfoWaveforms !== "function"
+)) {
+  throw new Error("A required Studio presentation module did not load");
+}
 
 
       window.SERVER_PORT = String(window.location.port || "");
@@ -23,93 +39,9 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
             .replace(/([?&]token=)[^&]+/i, "$1<redacted>");
         }
 
-        class CastAudioOwnerArbiter {
-          constructor() {
-            this.owner = "none";
-            this.generation = -1;
-            this.reason = "initial";
-          }
 
-          begin(generation, reason = "bridge_open", { preserveOwner = false } = {}) {
-            const nextGeneration = Number(generation);
-            if (!Number.isSafeInteger(nextGeneration) || nextGeneration < this.generation) {
-              return false;
-            }
-            if (!(preserveOwner && this.owner !== "none")) {
-              this.owner = "none";
-            }
-            this.generation = nextGeneration;
-            this.reason = reason || this.reason;
-            return true;
-          }
 
-          claim(owner, generation, reason = "owner_claim") {
-            const nextGeneration = Number(generation);
-            if (
-              typeof owner !== "string" ||
-              owner === "" ||
-              !Number.isSafeInteger(nextGeneration) ||
-              nextGeneration !== this.generation
-            ) {
-              return false;
-            }
-            if (this.owner !== "none" && this.owner !== owner) {
-              return false;
-            }
-            this.owner = owner;
-            this.reason = reason || this.reason;
-            return true;
-          }
-
-          promote(expectedOwner, nextOwner, generation, reason = "owner_promote") {
-            const nextGeneration = Number(generation);
-            if (
-              typeof expectedOwner !== "string" ||
-              expectedOwner === "" ||
-              typeof nextOwner !== "string" ||
-              nextOwner === "" ||
-              !Number.isSafeInteger(nextGeneration) ||
-              nextGeneration !== this.generation ||
-              this.owner !== expectedOwner
-            ) {
-              return false;
-            }
-            this.owner = nextOwner;
-            this.reason = reason || this.reason;
-            return true;
-          }
-
-          release(owner, generation, reason = "owner_release") {
-            const nextGeneration = Number(generation);
-            if (
-              !Number.isSafeInteger(nextGeneration) ||
-              nextGeneration !== this.generation ||
-              (owner && this.owner !== "none" && this.owner !== owner)
-            ) {
-              return false;
-            }
-            this.owner = "none";
-            this.reason = reason || this.reason;
-            return true;
-          }
-
-          owns(owner, generation) {
-            return (
-              this.owner === owner &&
-              Number(generation) === this.generation
-            );
-          }
-
-          snapshot() {
-            return {
-              owner: this.owner,
-              generation: this.generation,
-              reason: this.reason,
-            };
-          }
-        }
-
-        const castAudioOwnerArbiter = new CastAudioOwnerArbiter();
+        const castAudioOwnerArbiter = new window.MXSCastAudioOwnerArbiter();
         var audioCtx = null;
         var masterGain = null;
         var workletNode = null;
@@ -442,15 +374,13 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
         // ACK and the current BRIDGE_CONFIG must be live on this socket before
         // queued playback or post-handshake work can be released.
         function sendReceiverHandshakeCommit(reason) {
-          if (
-            !binaryWS ||
-            binaryWS.readyState !== WebSocket.OPEN ||
-            !window._handshakeAcked ||
-            !receiverBridgeConfigReady ||
-            !buildIdentityAccepted ||
-            typeof guiSessionNonce !== "string" ||
-            guiSessionNonce.length < 8
-          ) {
+          if (!window.MXSCastSessionBinding.canCommit({
+            socketOpen: !!binaryWS && binaryWS.readyState === WebSocket.OPEN,
+            handshakeAcked: !!window._handshakeAcked,
+            bridgeConfigReady: receiverBridgeConfigReady,
+            buildIdentityAccepted,
+            nonce: guiSessionNonce,
+          })) {
             return false;
           }
           const signature = [
@@ -464,6 +394,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           try {
             binaryWS.send(JSON.stringify({
               type: "RECEIVER_HANDSHAKE_COMMITTED",
+              castMode: RECEIVER_BRANCH.mode,
               handshakeCommitVersion: 2,
               guiSessionNonce,
               socketGeneration: playbackModeSocketGeneration,
@@ -1908,25 +1839,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           RECEIVER_SAMPLER_COLUMNS * RECEIVER_SAMPLER_ROWS;
 
         function lockReceiverSamplerGridLayout(sampleGrid) {
-          if (!sampleGrid) return false;
-          sampleGrid.style.display = "grid";
-          sampleGrid.style.gridTemplateColumns =
-            "repeat(" + RECEIVER_SAMPLER_COLUMNS + ", minmax(0, 1fr))";
-          sampleGrid.style.gridTemplateRows =
-            "repeat(" + RECEIVER_SAMPLER_ROWS + ", minmax(0, 1fr))";
-          sampleGrid.style.gridAutoFlow = "row";
-          sampleGrid.style.gridAutoColumns = "minmax(0, 1fr)";
-          sampleGrid.dataset.samplerColumns = String(RECEIVER_SAMPLER_COLUMNS);
-          sampleGrid.dataset.samplerRows = String(RECEIVER_SAMPLER_ROWS);
-          Array.from(sampleGrid.children).forEach(function positionSamplerPad(pad, index) {
-            const column = (index % RECEIVER_SAMPLER_COLUMNS) + 1;
-            const row = Math.floor(index / RECEIVER_SAMPLER_COLUMNS) + 1;
-            pad.style.gridColumn = String(column);
-            pad.style.gridRow = String(row);
-            pad.dataset.samplerColumn = String(column);
-            pad.dataset.samplerRow = String(row);
-          });
-          return sampleGrid.children.length === RECEIVER_SAMPLER_PAD_COUNT;
+          return studioStructure?.lockSamplerGrid(sampleGrid) || false;
         }
 
         function isReceiverUiStructurallyComplete() {
@@ -2707,6 +2620,9 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
             try {
               sendReceiverBridgeMessage({
                 type: "RECEIVER_READY",
+                castMode: RECEIVER_BRANCH.mode,
+                guiSessionNonce,
+                bridgeConfigRevision: receiverBridgeConfigRevision,
                 reason: "native_recovery_retry",
                 socketGeneration: playbackModeSocketGeneration,
                 lifecycleGeneration: workletLifecycleGeneration,
@@ -2830,14 +2746,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           pendingGuiRenderTimer = null;
           pendingGuiRenderState = null;
           lastCursorRevision = -1;
-          lastDialogMirrorState = "";
-          lastDialogMirrorLayoutState = "";
-          lastDialogRenderStats = {
-            mode: "none",
-            renderTimeMs: 0,
-            dialogCount: 0,
-            domNodeCount: 0,
-          };
+          studioDialogs?.reset();
           resetSmoothLfoVisuals();
           resetGuiClockSync(reason || "gui_revision_gate_reset");
           resetMirroredWaveformVisuals();
@@ -5855,6 +5764,8 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
         }
 
         function shutdownReceiver(reason) {
+          studioDialogs?.dispose();
+          studioGuiActions?.dispose();
           if (window._receiverShutdownInProgress) {
             return;
           }
@@ -6287,91 +6198,8 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           { l: "BASS", p: "bass", min: -12, max: 12, val: 0, u: "dB", s: 0.1 },
         ];
 
-        function formatMirroredLoopTimecode(seconds) {
-          const totalCentiseconds = Math.max(
-            0,
-            Math.round((Number(seconds) || 0) * 100),
-          );
-          const centiseconds = totalCentiseconds % 100;
-          const totalSeconds = Math.floor(totalCentiseconds / 100);
-          const secs = totalSeconds % 60;
-          const totalMinutes = Math.floor(totalSeconds / 60);
-          const mins = totalMinutes % 60;
-          const hours = Math.floor(totalMinutes / 60);
-          const pad = (value) => String(value).padStart(2, "0");
-          return `${pad(hours)}:${pad(mins)}:${pad(secs)}:${pad(centiseconds)}`;
-        }
-
         function formatMirroredParameterDisplay(descriptor, rawValue) {
-          const meta = descriptor && typeof descriptor === "object" ? descriptor : {};
-          const value = Number(rawValue);
-          if (!Number.isFinite(value)) return String(meta.displayValue ?? rawValue ?? "");
-          const formatterKind = String(meta.formatterKind || "observed_numeric_v1");
-          if (formatterKind === "loop_timecode_v1") {
-            return formatMirroredLoopTimecode(value);
-          }
-          if (formatterKind === "effect_tone_v1") {
-            const tone = meta.toneMapping || {};
-            const position = Math.max(0, Math.min(1, value));
-            const percent = `${Number((position * 100).toFixed(1))}%`;
-            if (position === 0.5) return `${percent} · Neutral`;
-            if (tone.kind === "shared") {
-              const gain = (position - 0.5) * 12;
-              return `${percent} · ${gain > 0 ? "+" : ""}${gain.toFixed(1)} dB`;
-            }
-            const minimum = Number(tone.min);
-            const maximum = Number(tone.max);
-            const neutral = Number(tone.neutral);
-            if (![minimum, maximum, neutral].every(Number.isFinite)) return percent;
-            let physical = position <= 0.5
-              ? minimum + (neutral - minimum) * position * 2
-              : neutral + (maximum - neutral) * (position - 0.5) * 2;
-            if (tone.discrete) {
-              const step = Number(tone.step) > 0 ? Number(tone.step) : 1;
-              physical = Math.max(minimum, Math.min(maximum, Math.round(physical / step) * step));
-            }
-            const label = tone.discrete && tone.labels?.[Math.round(physical)];
-            return `${percent} · ${label || Number(physical.toFixed(3))}${label ? "" : String(tone.nativeUnit || "")}`;
-          }
-          if (formatterKind === "exact_numeric_v1") {
-            const normalized = Object.is(value, -0) ? 0 : value;
-            if (normalized === 0 && meta.zeroDisplay !== null && meta.zeroDisplay !== undefined) {
-              return String(meta.zeroDisplay);
-            }
-            const scaled = normalized * (Number(meta.scale) || 1);
-            const numeric = meta.rounding === "round"
-              ? String(Math.round(scaled))
-              : scaled.toFixed(Math.max(0, Math.min(6, Number(meta.decimals) || 0)));
-            const signed = meta.signPolicy === "always" && scaled > 0
-              ? `+${numeric}`
-              : numeric;
-            return `${String(meta.prefix || "")}${signed}${String(meta.suffix || "")}`;
-          }
-          const parameterKey = String(meta.parameterKey || "").toLowerCase();
-          const unit = String(meta.unit || "");
-          let displayValue = Object.is(value, -0) ? 0 : value;
-          let decimals = Math.max(0, Math.min(6, Number(meta.decimals) || 0));
-          let unitSpacing = String(meta.unitSpacing || "");
-          if (formatterKind === "effect_parameter_v1") {
-            const absolute = Math.abs(displayValue);
-            decimals = absolute < 10 && displayValue !== 0 ? 2 : 1;
-            if (absolute < 1 && displayValue !== 0) decimals = 3;
-            if (
-              parameterKey.includes("freq") ||
-              parameterKey === "pitch" ||
-              Number(meta.step) === 1
-            ) {
-              decimals = 0;
-            }
-            if (unit === "%") {
-              displayValue *= 100;
-              decimals = 0;
-            }
-            unitSpacing = "";
-          } else {
-            displayValue *= Number(meta.displayScale) || 1;
-          }
-          return `${displayValue.toFixed(decimals)}${unit ? unitSpacing + unit : ""}`;
+          return window.MXSStudioParameterDisplay?.format(descriptor, rawValue) ?? "";
         }
 
         function readMirroredDisplayDescriptor(element) {
@@ -6484,7 +6312,15 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
 
         let mirroredTrackCount = 0;
 
+        const studioStructure = (!RECEIVER_BRANCH || RECEIVER_BRANCH.gui) && window.MXSCreateStudioStructure
+          ? window.MXSCreateStudioStructure({
+              document, knobConfigs: KNOB_CONFIGS,
+              samplerColumns: RECEIVER_SAMPLER_COLUMNS, samplerRows: RECEIVER_SAMPLER_ROWS,
+              onRemoveElement(id) { delete elCache[id]; delete valCache[id]; },
+            }) : null;
+
         function buildGUI(trackCount = 4) {
+          if (!studioStructure) throw new Error("Studio structure module is unavailable");
           lastQueuedPresentationVisualKey = null;
           _lastAssignmentCache.length = 0;
           _lastParamsCache.length = 0;
@@ -6492,104 +6328,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           Object.keys(valCache).forEach((key) => {
             if (key.startsWith("track-metadata:")) delete valCache[key];
           });
-          const normalizedTrackCount = Math.max(
-            1,
-            Math.min(32, Math.floor(Number(trackCount) || 4)),
-          );
-          if (!document.getElementById("gui-dialog-registry-root")) {
-            const registryRoot = document.createElement("div");
-            registryRoot.id = "gui-dialog-registry-root";
-            registryRoot.setAttribute("aria-live", "polite");
-            const studioRoot = document.getElementById("studio-root");
-            if (studioRoot) studioRoot.appendChild(registryRoot);
-          }
-          if (!document.getElementById("gui-dialog-mirror-root")) {
-            const dialogRoot = document.createElement("div");
-            dialogRoot.id = "gui-dialog-mirror-root";
-            dialogRoot.setAttribute("aria-hidden", "true");
-            document.body.appendChild(dialogRoot);
-          }
-          if (!document.getElementById("waveform-render-status")) {
-            const waveformStatus = document.createElement("div");
-            waveformStatus.id = "waveform-render-status";
-            waveformStatus.setAttribute("role", "status");
-            waveformStatus.setAttribute("aria-live", "polite");
-            const studioRoot = document.getElementById("studio-root");
-            if (studioRoot) studioRoot.appendChild(waveformStatus);
-          }
-          var g = document.getElementById("sample-grid");
-          if (g && g.children.length !== 20) {
-            g.innerHTML = "";
-            for (var p = 1; p <= 20; p++) {
-              var b = document.createElement("button");
-              b.className = "sample-btn";
-              b.id = "sample-" + p;
-              b.dataset.sample = String(p);
-              b.type = "button";
-              b.setAttribute("aria-label", "Sample Pad " + p);
-              b.textContent = p;
-              g.appendChild(b);
-            }
-          }
-          lockReceiverSamplerGridLayout(g);
-          var grid = document.getElementById("main-grid");
-          if (grid) {
-            grid.style.gridTemplateColumns = `repeat(${normalizedTrackCount + 1}, minmax(0, 1fr))`;
-            Array.from(grid.querySelectorAll(".track[data-track-index]")).forEach(
-              (trackNode) => {
-                const index = Number(trackNode.dataset.trackIndex);
-                if (Number.isInteger(index) && index >= normalizedTrackCount) {
-                  [trackNode, ...trackNode.querySelectorAll("[id]")].forEach((element) => {
-                    if (!element.id) return;
-                    delete elCache[element.id];
-                    delete valCache[element.id];
-                  });
-                  trackNode.remove();
-                }
-              },
-            );
-          }
-          for (var i = 0; i < normalizedTrackCount; i++) {
-            var existingTrack = document.getElementById("track-" + i);
-            if (existingTrack) {
-              if (!existingTrack.querySelector(".track-bpm-module")) {
-                const bpmModule = document.createElement("div");
-                bpmModule.className = "track-bpm-module";
-                bpmModule.dataset.trackIndex = String(i);
-                bpmModule.id = `t-bpm-module-${i}`;
-                bpmModule.innerHTML = `<div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div>`;
-                const loopControls = existingTrack.querySelector(".loop-controls");
-                if (loopControls) {
-                  existingTrack.insertBefore(bpmModule, loopControls);
-                } else {
-                  const wfBox = existingTrack.querySelector(".waveform-box");
-                  if (wfBox && wfBox.nextSibling) existingTrack.insertBefore(bpmModule, wfBox.nextSibling);
-                  else existingTrack.appendChild(bpmModule);
-                }
-              }
-              continue;
-            }
-            var t = document.createElement("div");
-            t.className = "track";
-            t.id = "track-" + i;
-            t.dataset.trackIndex = String(i);
-            t.innerHTML = `
-                        <button type="button" class="track-header track-header-btn" id="t-header-btn-${i}" data-action="open-track-playlist" data-track-index="${i}" title="Open Track ${i + 1} Playlist">TRACK ${i + 1}</button>
-                        <div class="track-playlist-nav" id="t-playlist-nav-${i}" style="display: none;"><button id="t-pl-prev-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-prev" data-action="playlist-prev" data-track-index="${i}">&lt;</button><div class="track-playlist-info" id="t-pl-info-${i}"><span class="track-playlist-counter" id="t-pl-counter-${i}">1/1</span></div><button id="t-pl-next-${i}" class="fx-chain-arrow track-playlist-arrow track-playlist-next" data-action="playlist-next" data-track-index="${i}">&gt;</button></div>
-                        <div class="track-time-display" id="t-time-${i}">00:00:00:00</div>
-                        <div class="status-indicator status-ready" id="t-st-${i}"><div class="scrolling-text-wrapper"><span class="scrolling-text" id="t-scroll-${i}">Ready</span></div></div>
-                        <div class="waveform-box"><div class="waveform-labels"><div class="waveform-label-external waveform-label-l">L</div><div class="waveform-label-external waveform-label-r">R</div></div><div class="waveform-canvas-container"><canvas class="waveform-canvas track-waveform-canvas-L" data-waveform-surface="track-${i + 1}-left" id="t-wf-l-${i}" width="238" height="26"></canvas><canvas class="waveform-canvas track-waveform-canvas-R" data-waveform-surface="track-${i + 1}-right" id="t-wf-r-${i}" width="238" height="26"></canvas><div class="loop-marker loop-start-marker" id="t-ls-m-${i}"></div><div class="loop-marker loop-end-marker" id="t-le-m-${i}"></div><div class="play-marker is-at-start" id="t-playhead-${i}"></div></div></div>
-                        <div class="track-bpm-module" data-track-index="${i}" id="t-bpm-module-${i}"><div class="track-bpm-line1"><span class="track-bpm-title">BPM</span><span class="track-bpm-base-badge" id="t-bpm-base-badge-${i}">Base: 120.0</span><div class="track-bpm-counter-container"><input type="text" inputmode="decimal" class="track-bpm-counter" id="t-bpm-counter-${i}" data-action="edit-bpm-counter" data-track-index="${i}" value="120.0" title="Current track tempo in BPM. Enter target BPM to adjust Pitch, or Shift+Enter to calibrate base BPM."><button type="button" class="track-bpm-multiplier-btn track-bpm-half-btn" id="t-bpm-half-${i}" data-action="track-bpm-half" data-track-index="${i}" title="Half tempo (/2)">/2</button><button type="button" class="track-bpm-multiplier-btn track-bpm-double-btn" id="t-bpm-double-${i}" data-action="track-bpm-double" data-track-index="${i}" title="Double tempo (x2)">x2</button></div></div><div class="track-bpm-line2"><label class="track-bpm-sync-all-label"><input type="checkbox" id="t-sync-all-${i}" class="track-bpm-sync-all-chk" data-action="toggle-bpm-sync-all" data-track-index="${i}" title="Lock all tracks to follow this track's tempo."><span class="track-bpm-sync-all-text">SYNC ALL</span></label><div class="track-bpm-sync-with-group"><span class="track-bpm-sync-with-label">SYNC WITH:</span><div class="track-bpm-sync-buttons" role="group" aria-label="Sync Track ${i + 1} with other tracks">${[0, 1, 2, 3].filter((t) => t !== i).map((t) => `<button type="button" class="dialog-track-button track-bpm-sync-btn is-populated" id="t-bpm-sync-${i}-to-${t}" data-action="toggle-bpm-sync-target" data-track-index="${i}" data-target-track="${t}" aria-pressed="false" title="Toggle tempo sync with Track ${t + 1}">${t + 1}</button>`).join("")}</div></div></div></div>
-                        <div class="loop-controls active" id="t-loop-ctrl-${i}" style="display: flex; opacity: 1;"><div class="loop-grid-layout"><div class="loop-line-1" style="display: flex; width: 100%; gap: 4px;"><div style="flex: 1; display: flex; align-items: center; justify-content: flex-start;"><label style="font-size: 11px;">Loop Start</label></div><div style="flex: 1; display: flex; align-items: center; justify-content: space-between;"><label style="font-size: 11px;">Loop End</label><button type="button" class="slice-trigger-btn" id="t-slice-${i}" title="Create sample from loop" aria-label="Create sample from loop"><i class="fa-solid fa-scissors" aria-hidden="true"></i></button></div></div><div class="loop-line-2 slider-wrapper"><input type="range" class="loop-start-slider" data-param="loopStart" id="t-ls-sl-${i}" min="0" max="1" step="0.01"><input type="range" class="loop-end-slider" data-param="loopEnd" id="t-le-sl-${i}" min="0" max="1" step="0.01"></div><div class="loop-line-3"><span class="param-value" data-value-for="loopStart" id="t-ls-val-${i}">00:00:00:00</span><span class="param-value" data-value-for="loopEnd" id="t-le-val-${i}">00:00:01:00</span></div></div></div>
-                        <div class="track-buttons"><button id="t-rec-${i}">REC</button><button id="t-stop-${i}">STOP</button><button id="t-play-${i}">PLAY</button><button id="t-rev-${i}">REV</button></div>
-                        <div class="control-group track-input-group"><div class="track-input-layout"><label>INPUT</label><select id="t-input-${i}" class="input-source app-select" data-action="select-input"><option value="mic" selected>Microphone</option><option value="file">Import File</option><option value="directory">Import Directory</option><option value="mc-pa">MC PA Mode</option><option value="system">System Loopback</option></select></div></div>
-                        <div class="control-group track-input-gain-group master-row-layout pa-mic-adjustment" id="input-gain-group-${i}"><label class="master-label">INPUT GAIN</label><input type="range" class="pa-mic-slider" data-param="inputGain" id="t-gain-sl-${i}" min="-48" max="24" step="0.1" value="0" title="Increment: 0.1"><span class="pa-mic-value" id="t-gain-val-${i}">0.0 dB</span></div>
-                        <div class="fx-chain-container"><div class="fx-chain-title">Effects Chain:</div><div class="fx-chain-controls"><button id="t-fx-left-${i}" class="fx-chain-arrow">&lt;</button>${[0, 1, 2, 3, 4, 5, 6].map((idx) => `<div class="fx-chain-slot"><input type="checkbox" id="t-fx-chk-${i}-${idx}"><label class="fx-chain-slot-label" id="t-fx-lbl-${i}-${idx}" for="t-fx-chk-${i}-${idx}">${idx + 1}</label></div>`).join("")}<button id="t-fx-right-${i}" class="fx-chain-arrow">&gt;</button></div></div>
-                        <div class="control-group track-bottom-layout"><label class="margin-0">EFFECTS</label><select id="t-effect-select-${i}" class="effect-type-select app-select flex-1-no-margin"></select></div>
-                        <div class="main-controls">${KNOB_CONFIGS.map((cfg) => `<div class="knob-container"><div class="knob-label-group" data-param-label="${cfg.p}"><label>${cfg.l}</label><span class="param-value" id="t-${cfg.p}-val-${i}" data-value-for="${cfg.p}">${Number(cfg.val).toFixed(1)}${cfg.u}</span><input type="checkbox" class="lfo-assign" id="t-lfo1-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="1" title="Click to assign ${cfg.l} LFO 1. Double-click to reverse." aria-label="Assign LFO 1 to ${cfg.l}"><input type="checkbox" class="lfo-assign lfo2-assign" id="t-lfo2-chk-${i}-${cfg.p}" data-lfo-assign="${cfg.p}" data-lfo-index="2" title="Click to assign ${cfg.l} LFO 2. Double-click to reverse." aria-label="Assign LFO 2 to ${cfg.l}"></div><div class="slider-wrapper"><input type="range" id="t-${cfg.p}-sl-${i}" data-param="${cfg.p}" min="${cfg.min}" max="${cfg.max}" step="${cfg.s}" value="${cfg.val}" title="Increment: ${cfg.s}"><span class="preset-marker min-preset-marker" id="t-min-marker-${i}-${cfg.p}" data-min-marker-for="${cfg.p}"></span><span class="preset-marker max-preset-marker" id="t-max-marker-${i}-${cfg.p}" data-max-marker-for="${cfg.p}"></span></div></div>`).join("")}</div>`;
-            grid.appendChild(t);
-          }
-          mirroredTrackCount = normalizedTrackCount;
+          mirroredTrackCount = studioStructure.build(trackCount);
           updateScale();
           initReceiverLfoWaveforms();
         }
@@ -7819,15 +7558,6 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           };
         }
 
-        let lastDialogMirrorState = "";
-        let lastDialogMirrorLayoutState = "";
-        let lastDialogRegistryState = "";
-        let lastDialogRenderStats = {
-          mode: "none",
-          renderTimeMs: 0,
-          dialogCount: 0,
-          domNodeCount: 0,
-        };
         let lastGuiRenderPhaseStats = {
           throttled: false,
           buildMs: 0,
@@ -7844,1761 +7574,22 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
             deferredSelectCount: 0,
           },
         };
-        const RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX = 10;
-        function normalizeMirroredDialogClassName(value, fallback = "") {
-          const normalized = String(value || "")
-            .split(/\s+/)
-            .filter((token) => /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(token))
-            .slice(0, 24)
-            .join(" ");
-          return normalized || fallback;
-        }
-        function syncMirroredElementDataset(element, data) {
-          if (!element) return;
-          let previousKeys = [];
-          try {
-            previousKeys = JSON.parse(element.dataset.castMirroredDataKeys || "[]");
-          } catch (_error) {}
-          previousKeys.forEach((key) => {
-            if (/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(key)) delete element.dataset[key];
-          });
-          const nextKeys = [];
-          Object.entries(data || {}).forEach(([key, value]) => {
-            if (!/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(key)) return;
-            if (value === undefined || value === null) return;
-            element.dataset[key] = String(value).slice(0, 128);
-            nextKeys.push(key);
-          });
-          element.dataset.castMirroredDataKeys = JSON.stringify(nextKeys);
-        }
-        function renderMirroredSamplerCanvases(panel, dialog) {
-          if (!panel) return;
-          const envelopeCanvas = panel.querySelector("[data-sampler-envelope]");
-          if (envelopeCanvas) {
-            const read = (label, fallback) => {
-              const value = Number(panel.querySelector(`[aria-label="${label}"]`)?.value);
-              return Number.isFinite(value) ? value : fallback;
-            };
-            const attack = Math.max(0.001, read("Amp Attack", Number(envelopeCanvas.dataset.envelopeAttack) || 0.002));
-            const decay = Math.max(0.001, read("Amp Decay", Number(envelopeCanvas.dataset.envelopeDecay) || 0.1));
-            const sustain = Math.max(0, Math.min(1, read("Amp Sustain", Number(envelopeCanvas.dataset.envelopeSustain) || 0)));
-            const release = Math.max(0.001, read("Amp Release", Number(envelopeCanvas.dataset.envelopeRelease) || 0.01));
-            const context = envelopeCanvas.getContext?.("2d");
-            if (context) {
-              const width = Math.max(1, Math.round(envelopeCanvas.clientWidth || 560));
-              const height = Math.max(1, Math.round(envelopeCanvas.clientHeight || 88));
-              if (envelopeCanvas.width !== width) envelopeCanvas.width = width;
-              if (envelopeCanvas.height !== height) envelopeCanvas.height = height;
-              const hold = Math.max(0.15, (attack + decay + release) * 0.22);
-              const total = attack + decay + hold + release;
-              const x = (time) => 8 + ((width - 16) * time / total);
-              const y = (level) => 8 + ((height - 16) * (1 - level));
-              context.clearRect(0, 0, width, height);
-              context.fillStyle = "#111";
-              context.fillRect(0, 0, width, height);
-              context.strokeStyle = "#ffcc00";
-              context.lineWidth = 2;
-              context.beginPath();
-              context.moveTo(x(0), y(0));
-              context.lineTo(x(attack), y(1));
-              context.lineTo(x(attack + decay), y(sustain));
-              context.lineTo(x(attack + decay + hold), y(sustain));
-              context.lineTo(x(total), y(0));
-              context.stroke();
-            }
-          }
-
-          const canvas = panel.querySelector("[data-sample-editor-waveform]");
-          const waveform = dialog?.sampleEditorVisual?.waveform;
-          if (!canvas || !waveform) return;
-          const startInput = panel.querySelector("[data-sample-editor-start]");
-          const endInput = panel.querySelector("[data-sample-editor-end]");
-          const zoomInput = panel.querySelector("[data-sample-editor-zoom]");
-          const duration = Math.max(0, Number(canvas.dataset.waveformDuration) || Number(endInput?.max) || 0);
-          const start = Math.max(0, Math.min(duration, Number(startInput?.value) || 0));
-          const end = Math.max(start, Math.min(duration, Number(endInput?.value) || duration));
-          const zoom = Math.max(1, Math.min(8, Number(zoomInput?.value) || 1));
-          const viewDuration = duration / zoom;
-          const center = Math.max(viewDuration / 2, Math.min(duration - (viewDuration / 2), (start + end) / 2));
-          const viewStart = Math.max(0, center - (viewDuration / 2));
-          const viewEnd = Math.min(duration, center + (viewDuration / 2));
-          const context = canvas.getContext?.("2d");
-          if (context) {
-            const width = Math.max(1, Math.round(canvas.clientWidth || 720));
-            const height = Math.max(1, Math.round(canvas.clientHeight || 128));
-            if (canvas.width !== width) canvas.width = width;
-            if (canvas.height !== height) canvas.height = height;
-            context.clearRect(0, 0, width, height);
-            context.fillStyle = "#111";
-            context.fillRect(0, 0, width, height);
-            const centerY = height / 2;
-            context.strokeStyle = "rgba(255, 204, 0, 0.22)";
-            context.beginPath();
-            context.moveTo(0, centerY);
-            context.lineTo(width, centerY);
-            context.stroke();
-            const fullCount = Math.min(waveform.mins?.length || 0, waveform.maxs?.length || 0);
-            const firstPeak = fullCount && duration ? Math.max(0, Math.min(fullCount - 1, Math.floor((viewStart / duration) * fullCount))) : 0;
-            const lastPeak = fullCount && duration ? Math.max(firstPeak + 1, Math.min(fullCount, Math.ceil((viewEnd / duration) * fullCount))) : fullCount;
-            const count = Math.max(0, lastPeak - firstPeak);
-            if (count) {
-              context.strokeStyle = "#00c853";
-              context.lineWidth = 1;
-              context.beginPath();
-              for (let index = 0; index < count; index += 1) {
-                const x = (index / Math.max(1, count - 1)) * width;
-                const peakIndex = firstPeak + index;
-                context.moveTo(x, centerY - (Number(waveform.maxs[peakIndex]) || 0) * centerY);
-                context.lineTo(x, centerY - (Number(waveform.mins[peakIndex]) || 0) * centerY);
-              }
-              context.stroke();
-            }
-            const visibleDuration = Math.max(0.000001, viewEnd - viewStart || duration || 1);
-            const startRatio = Math.max(0, Math.min(1, (start - viewStart) / visibleDuration));
-            const endRatio = Math.max(startRatio, Math.min(1, (end - viewStart) / visibleDuration));
-            context.fillStyle = "rgba(255, 204, 0, 0.09)";
-            context.fillRect(startRatio * width, 0, Math.max(1, (endRatio - startRatio) * width), height);
-            [[startRatio, "#00c853"], [endRatio, "#ff3b30"]].forEach(([ratio, color]) => {
-              context.strokeStyle = color;
-              context.lineWidth = 2;
-              context.beginPath();
-              context.moveTo(Number(ratio) * width, 0);
-              context.lineTo(Number(ratio) * width, height);
-              context.stroke();
-            });
-          }
-          canvas.dataset.waveformViewStart = String(viewStart);
-          canvas.dataset.waveformViewEnd = String(viewEnd);
-          if (canvas.dataset.castWaveformBound === "true") return;
-          canvas.dataset.castWaveformBound = "true";
-          let activeMarker = null;
-          const updateMarker = (event, final = false) => {
-            if (!activeMarker) return;
-            const rect = canvas.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min(1, (Number(event.clientX) - rect.left) / Math.max(1, rect.width)));
-            const from = Number(canvas.dataset.waveformViewStart) || 0;
-            const to = Number(canvas.dataset.waveformViewEnd) || duration;
-            const input = activeMarker === "start" ? startInput : endInput;
-            if (!input) return;
-            input.value = String(from + (ratio * Math.max(0, to - from)));
-            input.dispatchEvent(new Event(final ? "change" : "input", { bubbles: true }));
-          };
-          canvas.addEventListener("pointerdown", (event) => {
-            const rect = canvas.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min(1, (Number(event.clientX) - rect.left) / Math.max(1, rect.width)));
-            const from = Number(canvas.dataset.waveformViewStart) || 0;
-            const to = Number(canvas.dataset.waveformViewEnd) || duration;
-            const time = from + (ratio * Math.max(0, to - from));
-            activeMarker = Math.abs(time - Number(startInput?.value)) <= Math.abs(time - Number(endInput?.value)) ? "start" : "end";
-            canvas.setPointerCapture?.(event.pointerId);
-            updateMarker(event);
-          });
-          canvas.addEventListener("pointermove", (event) => updateMarker(event));
-          const finish = (event) => {
-            if (!activeMarker) return;
-            updateMarker(event, true);
-            activeMarker = null;
-            canvas.releasePointerCapture?.(event.pointerId);
-          };
-          canvas.addEventListener("pointerup", finish);
-          canvas.addEventListener("pointercancel", finish);
-        }
-
-        function queueMirroredSamplerCanvasRender(panel, dialog) {
-          const render = () => renderMirroredSamplerCanvases(panel, dialog);
-          if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(render);
-          else setTimeout(render, 0);
-        }
-
-        function queueMirroredEffectTitleMarquee(panel, senderOverflowing = false) {
-          const render = () => {
-            const viewport = panel?.querySelector?.(".effect-dialog-title-viewport");
-            const title = viewport?.querySelector?.(".effect-dialog-title-text");
-            if (!viewport || !title) return;
-            const overflow = Math.max(0, title.scrollWidth - viewport.clientWidth);
-            viewport.classList.toggle("is-overflowing", senderOverflowing || overflow > 1);
-            viewport.style.setProperty("--effect-title-travel", `${overflow}px`);
-            viewport.style.setProperty(
-              "--effect-title-duration",
-              `${Math.max(14, Math.min(36, overflow / 10 + 14)).toFixed(1)}s`,
-            );
-          };
-          if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(render);
-          else setTimeout(render, 0);
-        }
-
-        function applyMirroredDialogPosition(panel, dialog, exactEffectDialog = false) {
-          const geometry = dialog?.geometry;
-          if (geometry?.coordinateSpace === "viewport_css_pixels") {
-            const viewportWidth = Math.max(
-              1,
-              Number(document.documentElement?.clientWidth) || Number(window.innerWidth) || 1,
-            );
-            const viewportHeight = Math.max(
-              1,
-              Number(document.documentElement?.clientHeight) || Number(window.innerHeight) || 1,
-            );
-            const width = Math.max(0, Number(geometry.widthPx) || 0);
-            const height = Math.max(0, Number(geometry.heightPx) || 0);
-            const maxLeft = Math.max(0, viewportWidth - Math.min(width, viewportWidth));
-            const maxTop = Math.max(0, viewportHeight - Math.min(height, viewportHeight));
-            const leftPx = Math.max(0, Math.min(maxLeft, Number(geometry.leftPx) || 0));
-            const topPx = Math.max(0, Math.min(maxTop, Number(geometry.topPx) || 0));
-            panel.style.left = exactEffectDialog
-              ? `${Math.max(0, leftPx - RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX)}px`
-              : `${leftPx}px`;
-            panel.style.top = exactEffectDialog
-              ? `${Math.max(0, topPx - RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX)}px`
-              : `${topPx}px`;
-            return;
-          }
-          const normalizeRatio = (value) => {
-            const numeric = Number(value);
-            return Math.max(0, Math.min(0.85, Number.isFinite(numeric) ? numeric : 0.2));
-          };
-          const left = `${normalizeRatio(dialog?.left) * 100}%`;
-          const top = `${normalizeRatio(dialog?.top) * 100}%`;
-          panel.style.left = exactEffectDialog
-            ? `calc(${left} - ${RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX}px)`
-            : left;
-          panel.style.top = exactEffectDialog
-            ? `calc(${top} - ${RECEIVER_EFFECT_DIALOG_ANCHOR_OFFSET_PX}px)`
-            : top;
-        }
-        function applyMirroredDialogLayoutSize(panel, dialog) {
-          if (dialog?.kind !== "mediaSessions") return;
-          const widthPx = Number(dialog.layoutSize?.widthPx);
-          if (!Number.isFinite(widthPx) || widthPx <= 0) return;
-          panel.style.width = `${Math.min(4096, widthPx)}px`;
-          panel.style.maxWidth = "95vw";
-        }
-        function renderDialogRegistry(registry) {
-          const root = getEl("gui-dialog-registry-root");
-          if (!root) return;
-          const list = Array.isArray(registry) ? registry : [];
-          const signature = JSON.stringify(list);
-          if (signature === lastDialogRegistryState) return;
-          lastDialogRegistryState = signature;
-          root.replaceChildren();
-          // The registry is an action/schema catalog, not a visible dialog.
-          // Active app dialogs are rendered exclusively by renderDialogMirrors;
-          // painting this catalog made every sampler/effect menu appear at once.
-          root.hidden = true;
-          root.setAttribute("aria-hidden", "true");
-          root.dataset.registry = signature;
-        }
-
-        const MIRRORED_DIALOG_DYNAMIC_CLASS_TOKENS = new Set([
-          "active",
-          "playing",
-          "control-error",
-          "cast-interaction-pending",
-          "cast-interaction-confirmed",
-          "is-overflowing",
-          "is-populated",
-          "is-selected",
-          "is-stack-front",
-        ]);
-        const MIRRORED_DIALOG_DYNAMIC_DATA_KEYS = new Set([
-          "actionResult",
-          "actionRoute",
-          "active",
-          "envelopeAttack",
-          "envelopeDecay",
-          "envelopeSustain",
-          "envelopeRelease",
-          "sampleEditorStatus",
-          "waveformDuration",
-          "waveformEnd",
-          "waveformStart",
-          "waveformViewEnd",
-          "waveformViewStart",
-        ]);
-        function normalizeMirroredDialogStructuralClassName(value) {
-          return normalizeMirroredDialogClassName(value)
-            .split(/\s+/)
-            .filter((token) => token && !MIRRORED_DIALOG_DYNAMIC_CLASS_TOKENS.has(token))
-            .join(" ");
-        }
-        function normalizeMirroredDialogStructuralData(data) {
-          const structuralData = {};
-          Object.entries(data || {}).forEach(([key, value]) => {
-            if (!MIRRORED_DIALOG_DYNAMIC_DATA_KEYS.has(key)) structuralData[key] = value;
-          });
-          return structuralData;
-        }
-        function getMirroredDialogManifestLayout(manifest) {
-          const normalizeNode = (node, dynamicText = false) => {
-            if (!node || typeof node !== "object") return null;
-            if (node.nodeType === "text") {
-              return { nodeType: "text", text: dynamicText ? "<dynamic>" : node.text };
-            }
-            const attributes = node.attributes || {};
-            const className = normalizeMirroredDialogStructuralClassName(attributes.className);
-            const data = normalizeMirroredDialogStructuralData(node.data);
-            const nodeHasDynamicText = dynamicText ||
-              (
-                node.actionIndex !== null &&
-                node.actionIndex !== undefined &&
-                Number.isInteger(Number(node.actionIndex))
-              ) ||
-              Object.prototype.hasOwnProperty.call(data, "padSampleName") ||
-              Object.prototype.hasOwnProperty.call(data, "sampleEditorStatus") ||
-              /(?:^|\s)dialog-header-status(?:\s|$)/.test(className) ||
-              String(node.tagName || "") === "output" ||
-              /(?:^|\s)pad-setting-value(?:\s|$)/.test(className);
-            return {
-              nodeType: "element",
-              tagName: node.tagName,
-              attributes: {
-                id: attributes.id,
-                className,
-                role: attributes.role,
-                for: attributes.for,
-                "aria-labelledby": attributes["aria-labelledby"],
-              },
-              data,
-              controlIndex: node.controlIndex,
-              actionIndex: node.actionIndex,
-              children: (node.children || [])
-                .map((child) => normalizeNode(child, nodeHasDynamicText))
-                .filter(Boolean),
-            };
-          };
-          if (!manifest || typeof manifest !== "object") return null;
-          return {
-            schema: manifest.schema,
-            version: manifest.version,
-            nodeCount: manifest.nodeCount,
-            truncated: manifest.truncated,
-            omittedDirectChildren: manifest.omittedDirectChildren || 0,
-            children: (manifest.children || []).map((node) => normalizeNode(node)).filter(Boolean),
-          };
-        }
-        function getDialogMirrorLayoutSignature(dialogs) {
-          const normalizeControl = (control) => ({
-            ...control,
-            value: undefined,
-            rawValue: undefined,
-            defaultValue: undefined,
-            displayValue: undefined,
-            checked: undefined,
-            disabled: undefined,
-            className: normalizeMirroredDialogStructuralClassName(control?.className),
-            title: undefined,
-            ariaLabel: undefined,
-            ariaInvalid: undefined,
-            data: normalizeMirroredDialogStructuralData(control?.data),
-            displayDescriptor: control?.displayDescriptor
-              ? {
-                  ...control.displayDescriptor,
-                  rawValue: undefined,
-                  displayValue: undefined,
-                  defaultValue: undefined,
-                  disabled: undefined,
-                }
-              : undefined,
-            options: (control?.options || []).map((option) => ({
-              ...option,
-              selected: undefined,
-              disabled: undefined,
-            })),
-          });
-          return JSON.stringify((dialogs || []).map((dialog) => {
-            const manifest = (dialog.dialogDomManifest || dialog.samplePadDomManifest)
-              ? getMirroredDialogManifestLayout(
-                  dialog.dialogDomManifest || dialog.samplePadDomManifest,
-                )
-              : null;
-            return {
-              ...dialog,
-              shellClassName: normalizeMirroredDialogStructuralClassName(dialog.shellClassName),
-              title: undefined,
-              geometry: undefined,
-              left: undefined,
-              top: undefined,
-              width: undefined,
-              height: undefined,
-              header: dialog.header
-                ? {
-                    ...dialog.header,
-                    title: undefined,
-                    status: undefined,
-                    titleOverflowing: undefined,
-                    titleLines: (dialog.header.titleLines || []).map((line) => ({
-                      ...line,
-                      text: undefined,
-                    })),
-                  }
-                : undefined,
-              controls: (dialog.controls || []).map(normalizeControl),
-              actions: (dialog.actions || []).map((action) => ({
-                ...action,
-                label: undefined,
-                className: normalizeMirroredDialogStructuralClassName(action?.className),
-                title: undefined,
-                ariaLabel: undefined,
-                ariaInvalid: undefined,
-                ariaPressed: undefined,
-                pressed: undefined,
-                disabled: undefined,
-                data: normalizeMirroredDialogStructuralData(action?.data),
-              })),
-              effectSlotTabs: dialog.effectSlotTabs
-                ? {
-                    ...dialog.effectSlotTabs,
-                    items: (dialog.effectSlotTabs.items || []).map((item) => ({
-                      ...item,
-                      className: normalizeMirroredDialogStructuralClassName(item?.className),
-                      control: item.control ? normalizeControl(item.control) : null,
-                    })),
-                  }
-                : null,
-              samplePadLayout: dialog.samplePadLayout
-                ? { ...dialog.samplePadLayout, sampleNameText: undefined }
-                : null,
-              samplePadDomManifest: manifest,
-              dialogDomManifest: manifest,
-              sampleEditorVisual: dialog.sampleEditorVisual,
-            };
-          }));
-        }
-
-        function patchMirroredDialogState(root, dialogs) {
-          const panels = Array.from(root.children);
-          if (panels.length !== dialogs.length) return false;
-          for (const dialog of dialogs) {
-            const panel = panels.find(
-              (candidate) => candidate.dataset.dialogId === String(dialog.id || ""),
-            );
-            if (!panel) return false;
-            const exactEffectDialog = panel.matches(
-              ".effect-params-dialog, .audition-params-dialog",
-            ) && dialog.kind !== "sampleEditor";
-            const exactSamplePadDialog = dialog.kind === "samplePadSettings" && panel.matches(".pad-settings-dialog");
-            const exactSampleEditorDialog = dialog.kind === "sampleEditor" && panel.matches(".sample-editor-dialog");
-            applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
-            applyMirroredDialogLayoutSize(panel, dialog);
-            panel.className = [
-              "gui-dialog-mirror",
-              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "" : "mxs-dialog",
-              normalizeMirroredDialogClassName(dialog.shellClassName),
-              `gui-dialog-${dialog.kind || "generic"}`,
-            ].filter(Boolean).join(" ");
-            panel.dataset.effectName = String(dialog.identity?.effectName || "").slice(0, 128);
-            panel.dataset.programId = String(dialog.identity?.programId || "").slice(0, 32);
-            panel.dataset.programName = String(dialog.identity?.programName || "").slice(0, 128);
-            panel.dataset.expectedControlCount = String(
-              (dialog.controls || []).length +
-              (dialog.effectSlotTabs?.items || []).filter((item) => item?.control).length,
-            );
-            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog && dialog.kind !== "mediaSessions") {
-              panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
-              panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
-            }
-            if (exactSamplePadDialog) {
-              const activeTab = dialog.samplePadLayout?.activeTab;
-              if (activeTab && panel.dataset.padTab !== activeTab) {
-                panel.dataset.padTab = activeTab;
-                panel.querySelectorAll(".pad-dialog-tab-btn").forEach((btn) => {
-                  const isActive = btn.dataset.padTab === activeTab;
-                  btn.classList.toggle("active", isActive);
-                  btn.setAttribute("aria-selected", String(isActive));
-                });
-              }
-              const padTitle = panel.querySelector(".pad-dialog-pad-title");
-              const sampleName = panel.querySelector("[data-pad-sample-name]");
-              if (padTitle && dialog.samplePadLayout?.padTitleText !== undefined) {
-                padTitle.textContent = String(dialog.samplePadLayout.padTitleText);
-              }
-              if (sampleName && dialog.samplePadLayout?.sampleNameText !== undefined) {
-                sampleName.textContent = String(dialog.samplePadLayout.sampleNameText);
-              }
-              const bpmSetting = (dialog.samplePadLayout?.settings || []).find((s) => s.kind === "bpmModule");
-              if (bpmSetting) {
-                const bpmModuleEl = panel.querySelector(".pad-bpm-module");
-                if (bpmModuleEl) {
-                  const baseBadge = bpmModuleEl.querySelector(".pad-bpm-base-badge");
-                  if (baseBadge && bpmSetting.baseBpmText) {
-                    baseBadge.textContent = bpmSetting.baseBpmText;
-                    baseBadge.title = bpmSetting.baseBpmText;
-                    baseBadge.setAttribute("aria-label", bpmSetting.baseBpmText);
-                  }
-                  (bpmSetting.syncButtons || []).forEach((sBtn) => {
-                    const btn = bpmModuleEl.querySelector(`.pad-bpm-sync-btn[data-track="${sBtn.track}"]`);
-                    if (btn) {
-                      btn.classList.toggle("is-selected", Boolean(sBtn.selected));
-                      btn.classList.toggle("is-populated", Boolean(sBtn.populated));
-                    }
-                  });
-                }
-              }
-            } else if (dialog.header) {
-              const titleLines = Array.from(panel.querySelectorAll(
-                ".dialog-effect-type,.effect-dialog-title-text,.dialog-title-top,.dialog-title-bottom",
-              ));
-              (dialog.header.titleLines || []).forEach((line, index) => {
-                if (titleLines[index] && line?.text !== undefined) {
-                  titleLines[index].textContent = String(line.text);
-                }
-              });
-              if (titleLines.length === 0 && dialog.header.title !== undefined) {
-                const title = panel.querySelector("h1,h2,h3,.dialog-title,.dialog-header-title");
-                if (title) title.textContent = String(dialog.header.title);
-              }
-              const titleViewport = panel.querySelector(".effect-dialog-title-viewport");
-              if (titleViewport) {
-                titleViewport.classList.toggle(
-                  "is-overflowing",
-                  dialog.header.titleOverflowing === true,
-                );
-                queueMirroredEffectTitleMarquee(panel, dialog.header.titleOverflowing === true);
-              }
-              const status = panel.querySelector(
-                ".dialog-header-status,[data-sample-editor-status]",
-              );
-              if (status && dialog.header.status !== undefined) {
-                status.textContent = String(dialog.header.status);
-              }
-            }
-            (dialog.controls || []).forEach((control, controlIndex) => {
-              const resolvedIndex = Number(control.controlIndex ?? controlIndex);
-              const value = panel.querySelector(
-                `input[data-control-index="${resolvedIndex}"], ` +
-                `select[data-control-index="${resolvedIndex}"], ` +
-                `textarea[data-control-index="${resolvedIndex}"]`,
-              );
-              if (!value) return;
-              const pending = value.dataset.castInteractionState === "pending";
-              if (!pending) {
-                if (control.type === "checkbox") value.checked = Boolean(control.checked);
-                else value.value = control.value === null || control.value === undefined
-                  ? ""
-                  : String(control.value);
-              }
-              value.className = normalizeMirroredDialogClassName(control.className);
-              value.disabled = Boolean(control.disabled);
-              value.title = String(control.title || "").slice(0, 256);
-              value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
-              if (control.ariaInvalid === null || control.ariaInvalid === undefined) {
-                value.removeAttribute("aria-invalid");
-              } else {
-                value.setAttribute("aria-invalid", String(control.ariaInvalid));
-              }
-              syncMirroredElementDataset(value, control.data);
-              if (value.tagName === "SELECT" && Array.isArray(control.options)) {
-                Array.from(value.options || []).forEach((option, optionIndex) => {
-                  const optionState = control.options[optionIndex];
-                  if (!optionState) return;
-                  option.disabled = Boolean(optionState.disabled);
-                  option.selected = Boolean(optionState.selected);
-                });
-              }
-              const descriptor = control.displayDescriptor || readMirroredDisplayDescriptor(value);
-              const confirmedDisplay = control.displayValue !== undefined
-                ? String(control.displayValue)
-                : formatMirroredParameterDisplay(descriptor, control.rawValue ?? control.value);
-              if (!pending) {
-                writeMirroredDisplayDescriptor(value, descriptor, confirmedDisplay);
-                const output = value.closest(
-                  ".effect-control-group, .gui-dialog-mirror-control, .pad-setting-field",
-                )?.querySelector(
-                  ".effect-param-value .param-value, .gui-dialog-mirror-value, .pad-setting-value",
-                );
-                if (output) {
-                  output.textContent = confirmedDisplay;
-                  writeMirroredDisplayDescriptor(output, descriptor, confirmedDisplay);
-                }
-              }
-            });
-            (dialog.effectSlotTabs?.items || []).forEach((item) => {
-              if (!item?.control) return;
-              const resolvedIndex = Number(item.control.controlIndex);
-              const input = panel.querySelector(
-                `input[data-control-index="${resolvedIndex}"]`,
-              );
-              if (!input) return;
-              input.checked = Boolean(item.control.checked);
-              input.disabled = Boolean(item.control.disabled);
-            });
-            (dialog.actions || []).forEach((action, actionIndex) => {
-              const resolvedIndex = Number(action.actionIndex ?? actionIndex);
-              const actionElement = panel.querySelector(`[data-action-index="${resolvedIndex}"]`);
-              if (!actionElement) return;
-              if (actionElement.tagName === "BUTTON") {
-                actionElement.disabled = Boolean(action.disabled);
-              }
-              actionElement.className = normalizeMirroredDialogClassName(action.className);
-              actionElement.title = String(action.title || "").slice(0, 256);
-              if (action.ariaLabel) actionElement.setAttribute("aria-label", action.ariaLabel);
-              else actionElement.removeAttribute("aria-label");
-              if (action.ariaInvalid === null || action.ariaInvalid === undefined) {
-                actionElement.removeAttribute("aria-invalid");
-              } else {
-                actionElement.setAttribute("aria-invalid", String(action.ariaInvalid));
-              }
-              syncMirroredElementDataset(actionElement, action.data);
-              if (action.label !== undefined) {
-                const contentClassName = normalizeMirroredDialogClassName(action.contentClassName);
-                const content = contentClassName
-                  ? actionElement.querySelector(`.${contentClassName.split(/\s+/)[0]}`)
-                  : null;
-                if (content) content.textContent = String(action.label);
-                else actionElement.textContent = String(action.label);
-              }
-              if (action.ariaPressed === null || action.ariaPressed === undefined) {
-                actionElement.removeAttribute("aria-pressed");
-              } else {
-                actionElement.setAttribute("aria-pressed", String(action.ariaPressed));
-              }
-            });
-            queueMirroredSamplerCanvasRender(panel, dialog);
-          }
-          root.hidden = dialogs.length === 0;
-          root.setAttribute("aria-hidden", dialogs.length === 0 ? "true" : "false");
-          return true;
-        }
-
-        function getMirroredDialogElementKey(element) {
-          if (!element) return "";
-          const panel = element.closest?.("[data-dialog-id]");
-          const dialogId = element.dataset?.dialogId || panel?.dataset?.dialogId || "";
-          return [
-            dialogId,
-            element.dataset?.controlIndex ?? "",
-            element.dataset?.actionIndex ?? "",
-            element.id || "",
-          ].join("|");
-        }
-
-        function getMirroredDialogScrollKey(element) {
-          if (!element) return "";
-          const panel = element.closest?.("[data-dialog-id]");
-          if (!panel) return "";
-          const dialogId = panel.dataset.dialogId || "";
-          if (element === panel) return `${dialogId}|panel`;
-          const scrollables = Array.from(panel.querySelectorAll(
-            ".pad-dialog-scroll-content,.dialog-content,.media-dialog-view-container",
-          ));
-          const index = scrollables.indexOf(element);
-          return index >= 0 ? `${dialogId}|content|${index}` : "";
-        }
-
-        function captureMirroredDialogInteractionState(root) {
-          const active = document.activeElement;
-          const focusedKey = root.contains?.(active)
-            ? getMirroredDialogElementKey(active)
-            : "";
-          const pending = Array.from(root.querySelectorAll?.(
-            "[data-cast-interaction-state], [data-cast-interaction-revision]",
-          ) || []).map((element) => ({
-            key: getMirroredDialogElementKey(element),
-            state: element.dataset.castInteractionState || "",
-            revision: element.dataset.castInteractionRevision || "",
-            className: element.className || "",
-            ariaBusy: element.getAttribute("aria-busy"),
-            outline: element.style.outline || "",
-            outlineOffset: element.style.outlineOffset || "",
-            boxShadow: element.style.boxShadow || "",
-            previousOutline: element.dataset.castPreviousOutline || "",
-            previousOutlineOffset: element.dataset.castPreviousOutlineOffset || "",
-            previousBoxShadow: element.dataset.castPreviousBoxShadow || "",
-          }));
-          const scrollElements = [
-            ...Array.from(root.children),
-            ...Array.from(root.querySelectorAll(
-              ".pad-dialog-scroll-content,.dialog-content,.media-dialog-view-container",
-            )),
-          ];
-          const scroll = scrollElements.map((element) => ({
-            key: getMirroredDialogScrollKey(element),
-            scrollTop: element.scrollTop || 0,
-            scrollLeft: element.scrollLeft || 0,
-          })).filter((state) => state.key);
-          return {
-            focusedKey,
-            selectionStart: Number.isInteger(active?.selectionStart) ? active.selectionStart : null,
-            selectionEnd: Number.isInteger(active?.selectionEnd) ? active.selectionEnd : null,
-            pending,
-            scroll,
-          };
-        }
-
-        function restoreMirroredDialogInteractionState(root, saved) {
-          if (!root || !saved) return;
-          const elements = Array.from(root.querySelectorAll?.("*") || []);
-          const findByKey = (key) => elements.find(
-            (element) => getMirroredDialogElementKey(element) === key,
-          );
-          (saved.pending || []).forEach((state) => {
-            const element = findByKey(state.key);
-            if (!element) return;
-            if (state.state) element.dataset.castInteractionState = state.state;
-            if (state.revision) element.dataset.castInteractionRevision = state.revision;
-            const exactDialog = element.closest?.(
-              '.pad-settings-dialog[data-dialog-dom-schema="mxs-004.cast-dialog-dom.v1"]',
-            );
-            if (state.className && !exactDialog) element.className = state.className;
-            if (state.ariaBusy === null) element.removeAttribute("aria-busy");
-            else if (state.ariaBusy) element.setAttribute("aria-busy", state.ariaBusy);
-            element.style.outline = state.outline;
-            element.style.outlineOffset = state.outlineOffset;
-            element.style.boxShadow = state.boxShadow;
-            if (state.previousOutline) element.dataset.castPreviousOutline = state.previousOutline;
-            if (state.previousOutlineOffset) element.dataset.castPreviousOutlineOffset = state.previousOutlineOffset;
-            if (state.previousBoxShadow) element.dataset.castPreviousBoxShadow = state.previousBoxShadow;
-          });
-          (saved.scroll || []).forEach((state) => {
-            const element = [root, ...elements].find(
-              (candidate) => getMirroredDialogScrollKey(candidate) === state.key,
-            );
-            if (!element) return;
-            element.scrollTop = state.scrollTop;
-            element.scrollLeft = state.scrollLeft;
-          });
-          const focused = saved.focusedKey ? findByKey(saved.focusedKey) : null;
-          if (!focused || typeof focused.focus !== "function") return;
-          try {
-            focused.focus({ preventScroll: true });
-          } catch (_error) {
-            focused.focus();
-          }
-          if (saved.selectionStart !== null && "selectionStart" in focused) {
-            try {
-              focused.selectionStart = saved.selectionStart;
-              focused.selectionEnd = saved.selectionEnd;
-            } catch (_error) {}
-          }
-        }
-
-        function renderDialogMirrors(dialogs) {
-          const root = getEl("gui-dialog-mirror-root");
-          if (!root) return;
-          const renderStartedAt = Date.now();
-          let firstPaintTimeMs = null;
-          const list = Array.isArray(dialogs) ? dialogs : [];
-          if (document.body?.classList.contains("pure-screen-mirror-mode")) {
-            const suppressedState = "__pure_screen_mirror_suppressed__";
-            if (lastDialogMirrorState === suppressedState && root.hidden && root.children.length === 0) return;
-            root.querySelectorAll("dialog[open]").forEach((dialog) => {
-              try { dialog.close(); } catch (_) {}
-            });
-            root.replaceChildren();
-            root.hidden = true;
-            root.setAttribute("aria-hidden", "true");
-            lastDialogMirrorState = suppressedState;
-            lastDialogMirrorLayoutState = suppressedState;
-            lastDialogRenderStats = {
-              mode: "suppressed_for_pure_screen_mirror",
-              renderTimeMs: Math.max(0, Date.now() - renderStartedAt),
-              firstPaintTimeMs: null,
-              dialogCount: 0,
-              domNodeCount: 0,
-            };
-            return;
-          }
-          root.hidden = list.length === 0;
-          root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
-          const finishDialogRender = (mode) => {
-            lastDialogRenderStats = {
-              mode,
-              renderTimeMs: Math.max(0, Date.now() - renderStartedAt),
-              firstPaintTimeMs,
-              dialogCount: list.length,
-              domNodeCount: root.querySelectorAll?.("*")?.length || 0,
-            };
-          };
-          const signature = JSON.stringify(list);
-          if (
-            signature === lastDialogMirrorState &&
-            root.children.length === list.length &&
-            list.every((dialog) => Array.from(root.children).some(
-              (panel) => panel.dataset.dialogId === String(dialog?.id || ""),
-            ))
-          ) {
-            finishDialogRender("unchanged");
-            return;
-          }
-          lastDialogMirrorState = signature;
-          const layoutSignature = getDialogMirrorLayoutSignature(list);
-          if (
-            layoutSignature === lastDialogMirrorLayoutState &&
-            patchMirroredDialogState(root, list)
-          ) {
-            finishDialogRender("patch");
-            return;
-          }
-          lastDialogMirrorLayoutState = layoutSignature;
-          const preservedInteractionState = captureMirroredDialogInteractionState(root);
-          root.replaceChildren();
-          const normalizeClassName = normalizeMirroredDialogClassName;
-          const applyDataset = syncMirroredElementDataset;
-          const appendMirroredPanel = (panel, useModalTopLayer = false) => {
-            root.appendChild(panel);
-            const recordFirstPaintCommit = () => {
-              // This is the first open DOM commit. The ACK separately reports
-              // computed visibility and viewport intersection; it is not a
-              // compositor or TV panel scan-out measurement.
-              const elapsedMs = Math.max(0, Date.now() - renderStartedAt);
-              panel.dataset.dialogFirstPaintMs = String(elapsedMs);
-              if (firstPaintTimeMs === null) firstPaintTimeMs = elapsedMs;
-            };
-            if (
-              useModalTopLayer &&
-              panel.tagName === "DIALOG" &&
-              typeof panel.showModal === "function"
-            ) {
-              try {
-                panel.showModal();
-                recordFirstPaintCommit();
-                return;
-              } catch (_error) {}
-            }
-            panel.setAttribute("open", "");
-            recordFirstPaintCommit();
-          };
-          const applyControlState = (value, control, dialog, controlIndex) => {
-            const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
-            if (tagName === "input") value.type = control.type || "text";
-            value.className = normalizeClassName(control.className);
-            if (/^[A-Za-z][A-Za-z0-9_:.-]{0,127}$/.test(String(control.id || ""))) {
-              value.id = control.id;
-            }
-            value.name = String(control.name || "").slice(0, 128);
-            value.value = control.value === null || control.value === undefined ? "" : control.value;
-            if (control.type === "checkbox") value.checked = Boolean(control.checked);
-            value.min = control.min ?? "";
-            value.max = control.max ?? "";
-            value.step = control.step ?? "";
-            value.defaultValue = control.defaultValue ?? value.value;
-            value.title = String(control.title || "").slice(0, 256);
-            value.placeholder = String(control.placeholder || "").slice(0, 256);
-            if (Number(control.maxLength) > 0 && "maxLength" in value) {
-              value.maxLength = Number(control.maxLength);
-            }
-            value.disabled = Boolean(control.disabled);
-            value.setAttribute("aria-label", control.ariaLabel || control.label || "Parameter");
-            if (control.ariaInvalid !== null && control.ariaInvalid !== undefined) {
-              value.setAttribute("aria-invalid", String(control.ariaInvalid));
-            }
-            value.dataset.dialogId = dialog.id || "";
-            value.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
-            if (control.parameterKey && !control.id) {
-              value.dataset.parameterKey = String(control.parameterKey);
-            }
-            const displayDescriptor = control.displayDescriptor || (
-              control.formatterKind
-                ? {
-                    parameterKey: control.parameterKey,
-                    displayValue: control.displayValue,
-                    formatterKind: control.formatterKind,
-                    unit: control.unit,
-                    unitSpacing: control.unitSpacing || "",
-                    displayScale: control.displayScale || 1,
-                    decimals: control.decimals || 0,
-                    min: control.min,
-                    max: control.max,
-                    step: control.step,
-                  }
-                : null
-            );
-            if (displayDescriptor) {
-              writeMirroredDisplayDescriptor(
-                value,
-                displayDescriptor,
-                displayDescriptor.displayValue ?? control.displayValue ?? "",
-              );
-            }
-            applyDataset(value, control.data);
-            if (tagName === "select") {
-              const controlOptions = control.optionCatalogRef === "effectOptions"
-                ? effectOptionsCatalog.map((option) => ({
-                    value: option,
-                    label: option === "none" ? "None" : option,
-                    selected: String(option) === String(control.value ?? "none"),
-                    disabled: false,
-                  }))
-                : (control.options || []);
-              controlOptions.forEach((option) => {
-                const item = document.createElement("option");
-                item.value = String(option.value ?? "");
-                item.textContent = option.label || item.value;
-                item.disabled = Boolean(option.disabled);
-                item.selected = Boolean(option.selected);
-                value.appendChild(item);
-              });
-              value.value = control.value === null || control.value === undefined ? "" : control.value;
-            }
-            return value;
-          };
-          list.forEach((dialog) => {
-            const shellClassName = normalizeClassName(dialog.shellClassName);
-            const exactEffectDialog = dialog.dialogLayoutVersion >= 1 &&
-              dialog.kind !== "sampleEditor" &&
-              /(?:^|\s)(?:effect-params-dialog|audition-params-dialog)(?:\s|$)/.test(shellClassName);
-            const exactSamplePadDialog = dialog.dialogLayoutVersion >= 3 &&
-              dialog.kind === "samplePadSettings" &&
-              dialog.samplePadLayout;
-            const exactSampleEditorDialog = dialog.dialogLayoutVersion >= 4 &&
-              dialog.kind === "sampleEditor" &&
-              dialog.samplePadDomManifest;
-            const exactMediaSessionsDialog = dialog.dialogLayoutVersion >= 4 &&
-              dialog.kind === "mediaSessions" &&
-              dialog.samplePadDomManifest;
-            const domManifest = dialog.dialogDomManifest || dialog.samplePadDomManifest;
-            const samplePadManifest = (exactSampleEditorDialog || exactMediaSessionsDialog || (!exactEffectDialog && !exactSamplePadDialog && domManifest))
-              ? domManifest
-              : null;
-            let panel = document.createElement(
-              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog || exactMediaSessionsDialog ? "dialog" : "section",
-            );
-            if (panel.tagName === "SECTION" && samplePadManifest) {
-              panel = document.createElement("dialog");
-            }
-            panel.className = [
-              "gui-dialog-mirror",
-              exactEffectDialog || exactSamplePadDialog || exactSampleEditorDialog ? "" : "mxs-dialog",
-              shellClassName,
-              `gui-dialog-${dialog.kind || "generic"}`,
-            ].filter(Boolean).join(" ");
-            panel.setAttribute("role", dialog.role || "dialog");
-            if (dialog.modal) panel.setAttribute("aria-modal", "true");
-            if (dialog.ariaLabelledby) panel.setAttribute("aria-labelledby", dialog.ariaLabelledby);
-            panel.dataset.dialogId = dialog.id || "";
-            panel.dataset.dialogKind = dialog.kind || "generic";
-            panel.dataset.effectName = String(dialog.identity?.effectName || "").slice(0, 128);
-            panel.dataset.programId = String(dialog.identity?.programId || "").slice(0, 32);
-            panel.dataset.programName = String(dialog.identity?.programName || "").slice(0, 128);
-            panel.dataset.expectedControlCount = String(
-              (dialog.controls || []).length +
-              (dialog.effectSlotTabs?.items || []).filter((item) => item?.control).length,
-            );
-            if (dialog.padId) panel.dataset.padId = String(dialog.padId);
-            applyMirroredDialogPosition(panel, dialog, exactEffectDialog || exactSampleEditorDialog);
-            applyMirroredDialogLayoutSize(panel, dialog);
-            if (!exactEffectDialog && !exactSamplePadDialog && !exactSampleEditorDialog && dialog.kind !== "mediaSessions") {
-              panel.style.width = `${Math.max(0.2, Math.min(0.8, Number(dialog.width) || 0.5)) * 100}%`;
-              panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
-            }
-            const actions = Array.isArray(dialog.actions) ? dialog.actions : [];
-            const isHeaderAction = (action) => /close|pad-nav|fx-chain-arrow|previous|next/i.test(
-              [action?.actionId, action?.className, action?.data?.padNav].filter(Boolean).join(" "),
-            );
-            const actionPlacement = (action) => action?.placement || (isHeaderAction(action) ? "header" : "footer");
-            const renderAction = (action, actionIndex) => {
-              const isLabel = action.tagName === "label";
-              const button = document.createElement(isLabel ? "label" : "button");
-              if (!isLabel) button.type = "button";
-              button.className = normalizeClassName(action.className, "gui-dialog-action-btn");
-              if (action.contentClassName) {
-                const content = document.createElement("span");
-                content.className = normalizeClassName(action.contentClassName);
-                content.textContent = action.label || "Action";
-                button.appendChild(content);
-              } else {
-                button.textContent = action.label || "Action";
-              }
-              button.title = action.title || "";
-              if (!isLabel) button.disabled = Boolean(action.disabled);
-              if (isLabel && action.htmlFor) button.htmlFor = String(action.htmlFor);
-              button.dataset.dialogId = dialog.id || "";
-              button.dataset.actionIndex = String(action.actionIndex ?? actionIndex);
-              button.dataset.actionId = action.actionId || `button-${actionIndex}`;
-              applyDataset(button, action.data);
-              if (action.ariaLabel) button.setAttribute("aria-label", action.ariaLabel);
-              if (action.ariaInvalid !== null && action.ariaInvalid !== undefined) {
-                button.setAttribute("aria-invalid", String(action.ariaInvalid));
-              }
-              if (action.ariaPressed !== null && action.ariaPressed !== undefined) {
-                button.setAttribute("aria-pressed", String(action.ariaPressed));
-              }
-              return button;
-            };
-
-            if (samplePadManifest) {
-              panel.dataset.dialogDomTruncated = String(samplePadManifest.truncated === true);
-              panel.dataset.dialogDomOmittedChildren = String(
-                Math.max(0, Number(samplePadManifest.omittedDirectChildren) || 0),
-              );
-            }
-            if (
-              samplePadManifest?.schema === "mxs-004.cast-dialog-dom.v1" &&
-              samplePadManifest.version === 1 &&
-              (samplePadManifest.truncated !== true || exactMediaSessionsDialog || (Array.isArray(samplePadManifest.children) && samplePadManifest.children.length > 0)) &&
-              Array.isArray(samplePadManifest.children)
-            ) {
-              const allowedTags = new Set([
-                "a",
-                "b",
-                "button",
-                "canvas",
-                "code",
-                "div",
-                "em",
-                "h1",
-                "h2",
-                "h3",
-                "h4",
-                "h5",
-                "h6",
-                "hr",
-                "i",
-                "input",
-                "label",
-                "li",
-                "ol",
-                "option",
-                "output",
-                "p",
-                "pre",
-                "select",
-                "span",
-                "strong",
-                "table",
-                "tbody",
-                "td",
-                "textarea",
-                "th",
-                "thead",
-                "tr",
-                "ul",
-              ]);
-              const controlsByIndex = new Map();
-              (dialog.controls || []).forEach((control, index) => {
-                const controlIndex = Number(control.controlIndex ?? index);
-                if (Number.isInteger(controlIndex) && controlIndex >= 0 && !controlsByIndex.has(controlIndex)) {
-                  controlsByIndex.set(controlIndex, control);
-                }
-              });
-              const actionsByIndex = new Map();
-              actions.forEach((action, index) => {
-                const actionIndex = Number(action.actionIndex ?? index);
-                if (Number.isInteger(actionIndex) && actionIndex >= 0 && !actionsByIndex.has(actionIndex)) {
-                  actionsByIndex.set(actionIndex, action);
-                }
-              });
-              let hydratedNodeCount = 0;
-              const hydrateNode = (node, depth = 0) => {
-                if (!node || depth > 24 || hydratedNodeCount >= 2048) return null;
-                if (node.nodeType === "text") {
-                  hydratedNodeCount += 1;
-                  return document.createTextNode(String(node.text || "").slice(0, 512));
-                }
-                const tagName = String(node.tagName || "").toLowerCase();
-                if (node.nodeType !== "element" || !allowedTags.has(tagName)) return null;
-                hydratedNodeCount += 1;
-                const element = document.createElement(tagName);
-                const attributes = node.attributes || {};
-                element.className = normalizeClassName(attributes.className);
-                if (/^[A-Za-z][A-Za-z0-9_:.-]{0,127}$/.test(String(attributes.id || ""))) {
-                  element.id = String(attributes.id);
-                }
-                Object.entries(attributes).forEach(([name, value]) => {
-                  if (value === undefined || value === null) return;
-                  if (
-                    name.startsWith("data-") ||
-                    name.startsWith("aria-") ||
-                    [
-                      "type", "min", "max", "step", "value", "placeholder", "inputmode",
-                      "name", "disabled", "checked", "selected", "width", "height",
-                      "for", "role", "title"
-                    ].includes(name)
-                  ) {
-                    element.setAttribute(name, String(value).slice(0, 256));
-                  }
-                });
-                if (tagName === "input") {
-                  if (attributes.type) element.type = String(attributes.type);
-                  if (attributes.min !== undefined) element.min = String(attributes.min);
-                  if (attributes.max !== undefined) element.max = String(attributes.max);
-                  if (attributes.step !== undefined) element.step = String(attributes.step);
-                  if (attributes.value !== undefined) element.value = String(attributes.value);
-                  if (attributes.checked !== undefined) element.checked = Boolean(attributes.checked);
-                }
-                if (tagName === "option") {
-                  if (attributes.value !== undefined) element.value = String(attributes.value);
-                  if (attributes.selected) element.selected = true;
-                  if (attributes.disabled) element.disabled = true;
-                }
-                applyDataset(element, node.data);
-
-                const controlIndex = node.controlIndex;
-                if (Number.isInteger(controlIndex) && controlIndex >= 0) {
-                  const control = controlsByIndex.get(controlIndex);
-                  if (control) applyControlState(element, control, dialog, controlIndex);
-                }
-
-                const actionIndex = node.actionIndex;
-                if (Number.isInteger(actionIndex) && actionIndex >= 0) {
-                  const action = actionsByIndex.get(actionIndex);
-                  if (action) {
-                    element.className = normalizeClassName(action.className, "gui-dialog-action-btn");
-                    if (element.tagName === "BUTTON") {
-                      element.type = "button";
-                      element.disabled = Boolean(action.disabled);
-                    }
-                    if (element.tagName === "LABEL" && action.htmlFor) {
-                      element.htmlFor = String(action.htmlFor);
-                    }
-                    element.dataset.dialogId = dialog.id || "";
-                    element.dataset.actionIndex = String(actionIndex);
-                    element.dataset.actionId = action.actionId || `button-${actionIndex}`;
-                    applyDataset(element, action.data);
-                    if (action.title) element.title = String(action.title);
-                    if (action.ariaLabel) element.setAttribute("aria-label", action.ariaLabel);
-                    if (action.ariaInvalid !== null && action.ariaInvalid !== undefined) {
-                      element.setAttribute("aria-invalid", String(action.ariaInvalid));
-                    }
-                    if (action.ariaPressed !== null && action.ariaPressed !== undefined) {
-                      element.setAttribute("aria-pressed", String(action.ariaPressed));
-                    }
-                  }
-                }
-
-                if (tagName !== "input") {
-                  (node.children || []).forEach((child) => {
-                    const hydrated = hydrateNode(child, depth + 1);
-                    if (hydrated) element.appendChild(hydrated);
-                  });
-                }
-                return element;
-              };
-              samplePadManifest.children.forEach((node) => {
-                const hydrated = hydrateNode(node);
-                if (hydrated) panel.appendChild(hydrated);
-              });
-              panel.dataset.dialogDomSchema = samplePadManifest.schema;
-              panel.dataset.dialogDomNodes = String(hydratedNodeCount);
-              appendMirroredPanel(panel, dialog.modal === true);
-              queueMirroredSamplerCanvasRender(panel, dialog);
-              return;
-            }
-
-            if (exactSamplePadDialog) {
-              const layout = dialog.samplePadLayout;
-              const actionByIndex = (index) => actions.find(
-                (action) => Number(action.actionIndex) === Number(index),
-              );
-              const controls = Array.isArray(dialog.controls) ? dialog.controls : [];
-              const controlByIndex = (index) => controls.find(
-                (control, controlIndex) =>
-                  Number(control.controlIndex ?? controlIndex) === Number(index),
-              );
-              const appendActionByIndex = (container, index) => {
-                const action = actionByIndex(index);
-                if (action) container.appendChild(renderAction(action, action.actionIndex));
-              };
-              const appendActionRows = (container, rows) => {
-                (rows || []).forEach((rowState) => {
-                  const row = document.createElement("div");
-                  row.className = normalizeClassName(rowState.className, "pad-control-row");
-                  (rowState.actionIndices || []).forEach((index) => {
-                    appendActionByIndex(row, index);
-                  });
-                  container.appendChild(row);
-                });
-              };
-
-              const headerState = dialog.header || {};
-              const header = document.createElement("div");
-              header.className = normalizeClassName(headerState.className, "dialog-header");
-              if (layout.closeActionIndex !== undefined && layout.closeActionIndex >= 0) {
-                const closeRow = document.createElement("div");
-                closeRow.className = normalizeClassName(
-                  layout.closeRowClassName,
-                  "effect-dialog-close-row pad-dialog-close-row",
-                );
-                const typeBadge = document.createElement("span");
-                typeBadge.className = "dialog-effect-type pad-dialog-type-badge";
-                typeBadge.textContent = layout.dialogEffectType || "SAMPLE PAD:";
-                closeRow.appendChild(typeBadge);
-                appendActionByIndex(closeRow, layout.closeActionIndex);
-                header.appendChild(closeRow);
-              }
-              const headerTop = document.createElement("div");
-              headerTop.className = normalizeClassName(
-                layout.headerTopClassName || headerState.topClassName,
-                "dialog-header-top pad-dialog-title-row effect-dialog-title-row",
-              );
-              const navGroup = document.createElement("div");
-              navGroup.className = normalizeClassName(
-                layout.navGroupClassName,
-                "pad-dialog-nav-group",
-              );
-              appendActionByIndex(navGroup, layout.previousActionIndex);
-              const heading = document.createElement("span");
-              heading.className = normalizeClassName(
-                headerState.titleClassName,
-                "dialog-title effect-dialog-title-text",
-              );
-              if (layout.titleId) heading.id = String(layout.titleId);
-              const padTitle = document.createElement("span");
-              padTitle.className = "pad-dialog-pad-title";
-              padTitle.textContent = layout.padTitleText || `Pad ${dialog.padId || ""}:`;
-              const sampleName = document.createElement("span");
-              sampleName.dataset.padSampleName = "";
-              sampleName.textContent = layout.sampleNameText || "No sample loaded";
-              heading.append(padTitle, document.createTextNode(" "), sampleName);
-              navGroup.appendChild(heading);
-              appendActionByIndex(navGroup, layout.nextActionIndex);
-              headerTop.appendChild(navGroup);
-              if (header.children.length === 0) {
-                appendActionByIndex(headerTop, layout.closeActionIndex);
-              }
-              header.appendChild(headerTop);
-              panel.appendChild(header);
-
-              panel.dataset.padTab = layout.activeTab || "main";
-              const tabsContainer = document.createElement("div");
-              tabsContainer.className = "pad-dialog-tabs";
-              tabsContainer.setAttribute("role", "tablist");
-              tabsContainer.setAttribute("aria-label", "Pad Settings Categories");
-              const tabsList = Array.isArray(layout.tabs) && layout.tabs.length > 0 ? layout.tabs : [
-                { id: "main", label: "MAIN" },
-                { id: "envelope", label: "ENVELOPE" },
-                { id: "tone-dac", label: "TONE & DAC" },
-                { id: "playback", label: "PLAYBACK" },
-                { id: "performance", label: "PERFORMANCE" },
-                { id: "pad-fx", label: "PAD FX" },
-              ];
-              tabsList.forEach((tab) => {
-                const tabBtn = document.createElement("button");
-                tabBtn.type = "button";
-                tabBtn.className = "pad-dialog-tab-btn";
-                const isActive = tab.id === (panel.dataset.padTab || "main");
-                if (isActive) tabBtn.classList.add("active");
-                tabBtn.setAttribute("role", "tab");
-                tabBtn.setAttribute("aria-selected", String(isActive));
-                tabBtn.dataset.padTab = tab.id;
-                const tabAction = actionByIndex(tab.actionIndex);
-                if (tabAction) {
-                  tabBtn.dataset.dialogId = dialog.id || "";
-                  tabBtn.dataset.actionIndex = String(tab.actionIndex);
-                  tabBtn.dataset.actionId = tabAction.actionId || `button-${tab.actionIndex}`;
-                  applyDataset(tabBtn, tabAction.data);
-                }
-                tabBtn.textContent = tab.label;
-                tabBtn.addEventListener("click", () => {
-                  panel.dataset.padTab = tab.id;
-                  tabsContainer.querySelectorAll(".pad-dialog-tab-btn").forEach((b) => {
-                    const active = b.dataset.padTab === tab.id;
-                    b.classList.toggle("active", active);
-                    b.setAttribute("aria-selected", String(active));
-                  });
-                });
-                tabsContainer.appendChild(tabBtn);
-              });
-              panel.appendChild(tabsContainer);
-
-              const content = document.createElement("div");
-              content.className = normalizeClassName(
-                dialog.contentClassName,
-                "dialog-content pad-dialog-content",
-              );
-              const scrollContent = document.createElement("div");
-              scrollContent.className = normalizeClassName(
-                layout.scrollClassName,
-                "pad-dialog-scroll-content",
-              );
-              const primaryRows = document.createElement("div");
-              primaryRows.className = normalizeClassName(
-                layout.primaryRowsClassName,
-                "pad-control-rows",
-              );
-              primaryRows.dataset.tab = "main performance";
-              appendActionRows(primaryRows, layout.primaryRows);
-              scrollContent.appendChild(primaryRows);
-              const bottomControlRows = document.createElement("div");
-              bottomControlRows.className = normalizeClassName(
-                layout.bottomControlRowsClassName,
-                "pad-dialog-bottom-control-rows",
-              );
-              bottomControlRows.dataset.tab = "main performance";
-              appendActionRows(bottomControlRows, layout.bottomControlRows);
-              scrollContent.appendChild(bottomControlRows);
-              const settingsStrip = document.createElement("div");
-              settingsStrip.className = normalizeClassName(
-                layout.settingsStripClassName,
-                "pad-settings-strip",
-              );
-              (layout.settings || []).forEach((item) => {
-                if (item.kind === "bpmModule") {
-                  const bpmField = document.createElement("div");
-                  bpmField.className = normalizeClassName(item.className, "pad-setting-field pad-bpm-module");
-                  bpmField.dataset.tab = "main";
-                  const line1 = document.createElement("div");
-                  line1.className = "pad-bpm-line1";
-                  const title = document.createElement("div");
-                  title.className = "pad-bpm-title";
-                  title.textContent = "BPM";
-                  const baseBadge = document.createElement("span");
-                  baseBadge.className = "pad-bpm-base-badge";
-                  baseBadge.textContent = item.baseBpmText || "Base: 120.0";
-                  baseBadge.title = baseBadge.textContent;
-                  baseBadge.setAttribute("aria-label", baseBadge.textContent);
-                  baseBadge.setAttribute("aria-live", "polite");
-                  baseBadge.setAttribute("aria-atomic", "true");
-                  const counterContainer = document.createElement("div");
-                  counterContainer.className = "pad-bpm-counter-container";
-                  const counterCtrl = controlByIndex(item.counterControlIndex);
-                  if (counterCtrl) {
-                    const input = document.createElement("input");
-                    input.type = "text";
-                    applyControlState(input, counterCtrl, dialog, item.counterControlIndex);
-                    input.className = normalizeClassName(counterCtrl.className, "pad-bpm-counter");
-                    counterContainer.appendChild(input);
-                  }
-                  appendActionByIndex(counterContainer, item.halfActionIndex);
-                  appendActionByIndex(counterContainer, item.doubleActionIndex);
-                  line1.append(title, baseBadge, counterContainer);
-
-                  const line2 = document.createElement("div");
-                  line2.className = "pad-bpm-line2";
-                  const syncAllLabel = document.createElement("label");
-                  syncAllLabel.className = "pad-bpm-sync-all-label";
-                  const syncAllCtrl = controlByIndex(item.syncAllControlIndex);
-                  if (syncAllCtrl) {
-                    const syncAllChk = document.createElement("input");
-                    syncAllChk.type = "checkbox";
-                    applyControlState(syncAllChk, syncAllCtrl, dialog, item.syncAllControlIndex);
-                    syncAllChk.className = normalizeClassName(syncAllCtrl.className, "pad-bpm-sync-all-chk");
-                    syncAllLabel.appendChild(syncAllChk);
-                  }
-                  const syncAllText = document.createElement("span");
-                  syncAllText.className = "pad-bpm-sync-all-text";
-                  syncAllText.textContent = "SYNC ALL";
-                  syncAllLabel.appendChild(syncAllText);
-
-                  const syncWithGroup = document.createElement("div");
-                  syncWithGroup.className = "pad-bpm-sync-with-group";
-                  const syncWithLabel = document.createElement("span");
-                  syncWithLabel.className = "pad-bpm-sync-with-label";
-                  syncWithLabel.textContent = "SYNC";
-                  const syncButtons = document.createElement("div");
-                  syncButtons.className = "pad-bpm-sync-buttons";
-                  (item.syncButtons || []).forEach((sBtn) => {
-                    const btn = document.createElement("button");
-                    btn.type = "button";
-                    btn.className = normalizeClassName(sBtn.className, "pad-bpm-sync-btn");
-                    btn.textContent = String(sBtn.track || "");
-                    btn.dataset.track = String(sBtn.track || "");
-                    if (sBtn.selected) btn.classList.add("is-selected");
-                    if (sBtn.populated) btn.classList.add("is-populated");
-                    if (sBtn.actionIndex >= 0) {
-                      const action = actionByIndex(sBtn.actionIndex);
-                      if (action) {
-                        btn.dataset.dialogId = dialog.id || "";
-                        btn.dataset.actionIndex = String(sBtn.actionIndex);
-                        btn.dataset.actionId = action.actionId || `button-${sBtn.actionIndex}`;
-                        applyDataset(btn, action.data);
-                        if (action.title) btn.title = String(action.title);
-                        if (action.ariaLabel) btn.setAttribute("aria-label", action.ariaLabel);
-                      }
-                    }
-                    syncButtons.appendChild(btn);
-                  });
-                  syncWithGroup.append(syncWithLabel, syncButtons);
-                  line2.append(syncAllLabel, syncWithGroup);
-                  bpmField.append(line1, line2);
-                  settingsStrip.appendChild(bpmField);
-                  return;
-                }
-                const isAction = item.kind === "action";
-                const field = document.createElement(isAction ? "div" : "label");
-                field.className = normalizeClassName(
-                  item.className,
-                  isAction ? "pad-setting-field pad-setting-action-field" : "pad-setting-field",
-                );
-                applyDataset(field, item.data);
-                const caption = document.createElement("span");
-                caption.textContent = item.caption || "Parameter";
-                if (isAction) {
-                  field.appendChild(caption);
-                  appendActionByIndex(field, item.actionIndex);
-                  settingsStrip.appendChild(field);
-                  return;
-                }
-                const control = controlByIndex(item.controlIndex);
-                if (!control) return;
-                const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
-                const value = document.createElement(
-                  tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "input",
-                );
-                applyControlState(value, control, dialog, item.controlIndex);
-                if (control.type === "checkbox") {
-                  field.append(value, caption);
-                } else if (control.type === "range") {
-                  const wrapper = document.createElement("span");
-                  wrapper.className = normalizeClassName(
-                    control.controlWrapperClassName,
-                    "pad-setting-range-control",
-                  );
-                  const output = document.createElement("output");
-                  output.className = normalizeClassName(
-                    control.settingValueClassName,
-                    "pad-setting-value",
-                  );
-                  output.textContent = control.displayValue ?? formatMirroredParameterDisplay(
-                    control.displayDescriptor,
-                    control.rawValue ?? value.value,
-                  );
-                  writeMirroredDisplayDescriptor(output, control.displayDescriptor, output.textContent);
-                  writeMirroredDisplayDescriptor(value, control.displayDescriptor, output.textContent);
-                  wrapper.append(value, output);
-                  field.append(caption, wrapper);
-                } else {
-                  field.append(caption, value);
-                }
-                settingsStrip.appendChild(field);
-              });
-              scrollContent.appendChild(settingsStrip);
-              content.appendChild(scrollContent);
-              panel.appendChild(content);
-
-              const footer = document.createElement("div");
-              footer.className = normalizeClassName(
-                layout.footerClassName,
-                "pad-dialog-bottom-actions",
-              );
-              (layout.footerActionIndices || []).forEach((index) => {
-                appendActionByIndex(footer, index);
-              });
-              panel.appendChild(footer);
-              appendMirroredPanel(panel, dialog.modal === true);
-              return;
-            }
-
-            const headerState = dialog.header || {};
-            const header = document.createElement("div");
-            header.className = normalizeClassName(headerState.className, "dialog-header");
-            const headerTop = document.createElement("div");
-            headerTop.className = normalizeClassName(headerState.topClassName, "dialog-header-top");
-            const titleLines = Array.isArray(headerState.titleLines) ? headerState.titleLines : [];
-            const compactTrackHeader = exactEffectDialog &&
-              dialog.dialogLayoutVersion >= 5 &&
-              titleLines.some((line) => /(?:^|\s)dialog-effect-type(?:\s|$)/.test(line.className || ""));
-            if (compactTrackHeader) {
-              const effectTypeState = titleLines.find((line) =>
-                /(?:^|\s)dialog-effect-type(?:\s|$)/.test(line.className || ""),
-              );
-              const effectTitleState = titleLines.find((line) =>
-                /(?:^|\s)effect-dialog-title-text(?:\s|$)/.test(line.className || ""),
-              );
-              const effectType = document.createElement("span");
-              effectType.className = normalizeClassName(effectTypeState?.className, "dialog-effect-type");
-              effectType.textContent = effectTypeState?.text || "Effect:";
-              const titleViewport = document.createElement("span");
-              titleViewport.className = normalizeClassName(
-                headerState.titleViewportClassName,
-                "effect-dialog-title-viewport",
-              );
-              titleViewport.classList.toggle("is-overflowing", headerState.titleOverflowing === true);
-              const heading = document.createElement("span");
-              heading.className = normalizeClassName(
-                effectTitleState?.className || headerState.titleClassName,
-                "dialog-header-title dialog-title-bottom effect-dialog-title-text",
-              );
-              heading.textContent = effectTitleState?.text || headerState.title || dialog.title || "MXS-004";
-              titleViewport.appendChild(heading);
-              const balance = document.createElement("span");
-              balance.className = normalizeClassName(
-                headerState.titleBalanceClassName,
-                "effect-dialog-title-balance",
-              );
-              balance.setAttribute("aria-hidden", "true");
-              const closeRow = document.createElement("div");
-              closeRow.className = "effect-dialog-close-row";
-              closeRow.appendChild(effectType);
-              actions.forEach((action, actionIndex) => {
-                if (actionPlacement(action) === "header") closeRow.appendChild(renderAction(action, actionIndex));
-              });
-              header.appendChild(closeRow);
-              headerTop.append(titleViewport, balance);
-            } else {
-              actions.forEach((action, actionIndex) => {
-                if (actionPlacement(action) === "header") header.appendChild(renderAction(action, actionIndex));
-              });
-              const heading = document.createElement("span");
-              heading.className = normalizeClassName(headerState.titleClassName, "dialog-header-title");
-              if (titleLines.length) {
-                titleLines.forEach((line) => {
-                  const titleLine = document.createElement("span");
-                  titleLine.className = normalizeClassName(line.className);
-                  titleLine.textContent = line.text || "";
-                  heading.appendChild(titleLine);
-                });
-              } else {
-                heading.textContent = headerState.title || dialog.title || "MXS-004";
-              }
-              headerTop.appendChild(heading);
-            }
-            header.appendChild(headerTop);
-            if (headerState.status) {
-              const status = document.createElement("span");
-              status.className = normalizeClassName(headerState.statusClassName, "dialog-header-status");
-              status.textContent = headerState.status;
-              header.appendChild(status);
-            }
-            const headerActions = actions.filter((action) => actionPlacement(action) === "headerActions");
-            const trackSwitcherActions = actions.filter((action) => actionPlacement(action) === "trackSwitcher");
-            if (compactTrackHeader && (trackSwitcherActions.length || headerActions.length)) {
-              const toolbar = document.createElement("div");
-              toolbar.className = normalizeClassName(
-                headerState.toolbarClassName,
-                "effect-dialog-toolbar-row",
-              );
-              if (trackSwitcherActions.length) {
-                const trackSwitcher = document.createElement("div");
-                trackSwitcher.className = normalizeClassName(
-                  headerState.trackSwitcherClassName,
-                  "dialog-track-switcher",
-                );
-                trackSwitcher.setAttribute("role", "group");
-                trackSwitcher.setAttribute("aria-label", "Open track effect dialogs");
-                const trackLabel = document.createElement("span");
-                trackLabel.className = normalizeClassName(
-                  headerState.trackLabelClassName,
-                  "dialog-track-label",
-                );
-                trackLabel.textContent = headerState.trackLabelText || "Track:";
-                trackSwitcher.appendChild(trackLabel);
-                trackSwitcherActions.forEach((action) => {
-                  trackSwitcher.appendChild(renderAction(action, action.actionIndex));
-                });
-                toolbar.appendChild(trackSwitcher);
-              }
-              if (headerActions.length) {
-                const actionsBar = document.createElement("div");
-                actionsBar.className = normalizeClassName(
-                  headerState.actionsClassName,
-                  "dialog-header-actions-bar",
-                );
-                headerActions.forEach((action) => {
-                  actionsBar.appendChild(renderAction(action, action.actionIndex));
-                });
-                toolbar.appendChild(actionsBar);
-              }
-              header.appendChild(toolbar);
-            } else if (headerActions.length) {
-              const actionsBar = document.createElement("div");
-              actionsBar.className = normalizeClassName(
-                headerState.actionsClassName,
-                "dialog-header-actions-bar",
-              );
-              headerActions.forEach((action) => {
-                actionsBar.appendChild(renderAction(action, action.actionIndex));
-              });
-              header.appendChild(actionsBar);
-            }
-            panel.appendChild(header);
-
-            const content = document.createElement("div");
-            content.className = normalizeClassName(dialog.contentClassName, "dialog-content");
-            (dialog.text || []).forEach((text) => {
-              const help = document.createElement("p");
-              help.textContent = text;
-              content.appendChild(help);
-            });
-            const controls = Array.isArray(dialog.controls) ? dialog.controls : [];
-            const exactEffectLayout = dialog.dialogLayoutVersion >= 1 &&
-              dialog.kind === "effectAudition" && controls.some((control) => control.groupClassName);
-            let controlsRoot = content;
-            if (exactEffectLayout) {
-              const grid = document.createElement("div");
-              grid.className = normalizeClassName(
-                controls.find((control) => control.gridClassName)?.gridClassName,
-                "effect-params-wrapper effect-params-grid",
-              );
-              content.appendChild(grid);
-              controlsRoot = grid;
-            }
-            controls.forEach((control, controlIndex) => {
-              const tagName = control.tagName || (control.type === "select-one" ? "select" : "input");
-              const value = document.createElement(
-                tagName === "textarea" ? "textarea" : tagName === "select" ? "select" : "input",
-              );
-              applyControlState(value, control, dialog, controlIndex);
-              if (exactEffectLayout) {
-                const group = document.createElement("div");
-                group.className = normalizeClassName(
-                  control.groupClassName,
-                  "control-group effect-control-group",
-                );
-                group.dataset.dialogId = dialog.id || "";
-                group.dataset.controlIndex = String(control.controlIndex ?? controlIndex);
-                const title = document.createElement("div");
-                title.className = normalizeClassName(control.titleClassName, "effect-param-title");
-                const label = document.createElement("label");
-                label.textContent = control.label || control.parameterKey || "Parameter";
-                title.appendChild(label);
-                const sliderWrapper = document.createElement("div");
-                sliderWrapper.className = normalizeClassName(
-                  control.sliderWrapperClassName,
-                  "slider-wrapper",
-                );
-                sliderWrapper.appendChild(value);
-                const valueContainer = document.createElement("div");
-                valueContainer.className = normalizeClassName(
-                  control.valueContainerClassName,
-                  "effect-param-value",
-                );
-                const output = document.createElement("span");
-                output.className = normalizeClassName(control.valueClassName, "param-value");
-                output.textContent = control.displayValue || `${control.rawValue ?? ""}${control.unit || ""}`;
-                writeMirroredDisplayDescriptor(output, control.displayDescriptor, output.textContent);
-                writeMirroredDisplayDescriptor(value, control.displayDescriptor, output.textContent);
-                valueContainer.appendChild(output);
-                group.append(title, sliderWrapper, valueContainer);
-                controlsRoot.appendChild(group);
-                return;
-              }
-              const row = document.createElement("label");
-              row.className = ["gui-dialog-mirror-control", control.containerClassName || ""].filter(Boolean).join(" ");
-              row.dataset.controlType = control.type || "text";
-              row.dataset.dialogId = dialog.id || "";
-              row.dataset.controlIndex = String(controlIndex);
-              const label = document.createElement("span");
-              label.textContent = control.label || "Parameter";
-              row.appendChild(label);
-              row.appendChild(value);
-              if (["range", "number"].includes(control.type)) {
-                const output = document.createElement("output");
-                output.textContent = control.displayValue ?? formatMirroredParameterDisplay(
-                  control.displayDescriptor,
-                  control.rawValue ?? value.value,
-                );
-                output.className = "gui-dialog-mirror-value";
-                writeMirroredDisplayDescriptor(output, control.displayDescriptor, output.textContent);
-                writeMirroredDisplayDescriptor(value, control.displayDescriptor, output.textContent);
-                row.appendChild(output);
-              }
-              controlsRoot.appendChild(row);
-            });
-            panel.appendChild(content);
-            const effectSlotTabs = dialog.effectSlotTabs;
-            if (
-              exactEffectDialog &&
-              effectSlotTabs &&
-              Array.isArray(effectSlotTabs.items) &&
-              effectSlotTabs.items.length
-            ) {
-              const tabs = document.createElement("div");
-              tabs.className = normalizeClassName(
-                effectSlotTabs.className,
-                "vertical-slot-tabs",
-              );
-              effectSlotTabs.items.forEach((item) => {
-                if (item?.kind === "action") {
-                  const action = actions.find(
-                    (candidate) => Number(candidate.actionIndex) === Number(item.actionIndex),
-                  );
-                  if (action) tabs.appendChild(renderAction(action, action.actionIndex));
-                  return;
-                }
-                if (item?.kind !== "slot" || !item.control) return;
-                const slot = document.createElement("div");
-                slot.className = normalizeClassName(
-                  item.className,
-                  "fx-chain-slot vertical-tab-slot",
-                );
-                const input = document.createElement("input");
-                applyControlState(
-                  input,
-                  item.control,
-                  dialog,
-                  item.control.controlIndex,
-                );
-                slot.appendChild(input);
-                const labelAction = actions.find(
-                  (candidate) =>
-                    Number(candidate.actionIndex) === Number(item.labelActionIndex),
-                );
-                if (labelAction) slot.appendChild(renderAction(labelAction, labelAction.actionIndex));
-                tabs.appendChild(slot);
-              });
-              panel.appendChild(tabs);
-            }
-            const footer = document.createElement("div");
-            footer.className = "dialog-bottom-actions gui-dialog-actions";
-            actions.forEach((action, actionIndex) => {
-              if (["footer", "content"].includes(actionPlacement(action))) {
-                footer.appendChild(renderAction(action, actionIndex));
-              }
-            });
-            if (footer.childElementCount) panel.appendChild(footer);
-            appendMirroredPanel(panel, false);
-            if (compactTrackHeader) {
-              queueMirroredEffectTitleMarquee(panel, headerState.titleOverflowing === true);
-            }
-          });
-          restoreMirroredDialogInteractionState(root, preservedInteractionState);
-          finishDialogRender("rebuild");
-        }
-
-        function summarizeMirroredDialogVisualState() {
-          const root = getEl("gui-dialog-mirror-root");
-          const viewportWidth = Math.max(1, Number(window.innerWidth) || 1);
-          const viewportHeight = Math.max(1, Number(window.innerHeight) || 1);
-          const panels = Array.from(root?.children || []).slice(0, 4).map((panel) => {
-            const rect = panel.getBoundingClientRect();
-            const style = window.getComputedStyle(panel);
-            const mediaScroll = panel.dataset.dialogKind === "mediaSessions"
-              ? panel.querySelector(".media-dialog-view-container")
-              : null;
-            const intersectionWidth = Math.max(0,
-              Math.min(viewportWidth, rect.right) - Math.max(0, rect.left));
-            const intersectionHeight = Math.max(0,
-              Math.min(viewportHeight, rect.bottom) - Math.max(0, rect.top));
-            let inModalTopLayer = false;
-            try { inModalTopLayer = panel.matches(":modal"); } catch (_error) {}
-            const open = panel.tagName !== "DIALOG" || panel.open === true;
-            const visible = root?.hidden !== true && open &&
-              style.display !== "none" && style.visibility !== "hidden" &&
-              Number(style.opacity || 1) > 0 &&
-              intersectionWidth > 0 && intersectionHeight > 0;
-            return {
-              id: String(panel.dataset.dialogId || "").slice(0, 128),
-              kind: String(panel.dataset.dialogKind || "generic").slice(0, 48),
-              effectName: String(panel.dataset.effectName || "").slice(0, 128) || null,
-              programId: String(panel.dataset.programId || "").slice(0, 32) || null,
-              programName: String(panel.dataset.programName || "").slice(0, 128) || null,
-              firstPaintTimeMs: Number.isFinite(Number(panel.dataset.dialogFirstPaintMs))
-                ? Number(panel.dataset.dialogFirstPaintMs)
-                : null,
-              tag: panel.tagName,
-              open,
-              inModalTopLayer,
-              display: style.display,
-              visibility: style.visibility,
-              opacity: Number(style.opacity || 1),
-              viewportLeftPx: Math.round(rect.left),
-              viewportTopPx: Math.round(rect.top),
-              viewportIntersectionWidthPx: Math.round(intersectionWidth),
-              viewportIntersectionHeightPx: Math.round(intersectionHeight),
-              ...(mediaScroll ? {
-                scrollViewportHeightPx: mediaScroll.clientHeight,
-                scrollContentHeightPx: mediaScroll.scrollHeight,
-                scrollTopPx: mediaScroll.scrollTop,
-              } : {}),
-              contentNodeCount: panel.querySelector(".dialog-content")?.children.length ?? 0,
-              expectedControlCount: Number(panel.dataset.expectedControlCount || 0),
-              renderedControlCount: panel.querySelectorAll("input, select, textarea").length,
-              controlCountMismatch: Math.max(0, Number(panel.dataset.expectedControlCount || 0)) !==
-                panel.querySelectorAll("input, select, textarea").length,
-              manifestNodeCount: Number(panel.dataset.dialogDomNodes || 0),
-              actionCount: panel.querySelectorAll("button, label[data-action]").length,
-              visible,
-            };
-          });
-          return {
-            dialogViewportWidthPx: viewportWidth,
-            dialogViewportHeightPx: viewportHeight,
-            dialogPanelCount: root?.children.length ?? 0,
-            dialogRootHidden: root?.hidden ?? true,
-            dialogVisiblePanelCount: panels.filter((panel) => panel.visible).length,
-            dialogPanels: panels,
-          };
-        }
+        const studioDialogs = (!RECEIVER_BRANCH || RECEIVER_BRANCH.gui) && window.MXSCreateStudioDialogs
+          ? window.MXSCreateStudioDialogs({
+              document, getEl, getEffectOptions: () => effectOptionsCatalog,
+              formatMirroredParameterDisplay, readMirroredDisplayDescriptor, writeMirroredDisplayDescriptor,
+            }) : null;
+        const studioGuiActions = (!RECEIVER_BRANCH || RECEIVER_BRANCH.gui) && window.MXSCreateStudioGuiActions
+          ? window.MXSCreateStudioGuiActions({
+              document,
+              protocolVersion: CAST_GUI_PROTOCOL_VERSION,
+              getSessionNonce: () => guiSessionNonce,
+              confirmInteraction: (revision) => confirmReceiverGuiInteraction(revision),
+              clearInteractionFeedback: (element) => clearReceiverGuiInteractionFeedback(element),
+              emitTelemetry: (type, data) => emitGuiChannelTelemetry(type, data),
+              relayLog: (message) => relayLogToStudio(message),
+            })
+          : null;
 
         let lastRenderTime = 0;
         const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
@@ -10391,143 +8382,15 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           return Math.max(0, Math.min(1, numeric));
         }
 
+        const studioLfoWaveforms = (!RECEIVER_BRANCH || RECEIVER_BRANCH.gui) && window.MXSCreateStudioLfoWaveforms
+          ? window.MXSCreateStudioLfoWaveforms({
+              ResizeObserver: typeof ResizeObserver === "function" ? ResizeObserver : undefined,
+              computeReceiverLfoWaveformValue,
+              normalizeReceiverLfoGateValue,
+            }) : null;
+
         function drawReceiverLfoWaveform(canvas, lfoIndex, clock) {
-          if (!canvas) return false;
-          // Measure once; ResizeObserver supplies later geometry without forcing
-          // layout after each control mutation or animation frame.
-          if (!canvas._mxsLfoSizeObserved) {
-            canvas._mxsLfoSizeObserved = true;
-            canvas._mxsLfoLogicalWidth = canvas.clientWidth || 112;
-            canvas._mxsLfoLogicalHeight = canvas.clientHeight || 26;
-            if (typeof ResizeObserver === "function") {
-              canvas._mxsLfoResizeObserver = new ResizeObserver((entries) => {
-                const rect = entries[0]?.contentRect;
-                if (rect?.width > 0 && rect?.height > 0) {
-                  canvas._mxsLfoLogicalWidth = rect.width;
-                  canvas._mxsLfoLogicalHeight = rect.height;
-                }
-              });
-              canvas._mxsLfoResizeObserver.observe(canvas);
-            }
-          }
-          const width = canvas._mxsLfoLogicalWidth || 112;
-          const height = canvas._mxsLfoLogicalHeight || 26;
-          canvas._mxsLfoLogicalWidth = width;
-          canvas._mxsLfoLogicalHeight = height;
-          const pixelRatio = Math.max(1, Math.min(4, Number(window.devicePixelRatio) || 1));
-          const backingWidth = Math.max(1, Math.round(width * pixelRatio));
-          const backingHeight = Math.max(1, Math.round(height * pixelRatio));
-          if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
-            canvas.width = backingWidth;
-            canvas.height = backingHeight;
-          }
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return false;
-          ctx.imageSmoothingEnabled = false;
-          ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-
-          const gate = normalizeReceiverLfoGateValue(clock?.gateValue);
-          const active = Boolean(clock && clock.active && gate > 0.001);
-          const isPaused = Boolean(clock && clock.paused);
-          canvas.dataset.waveformActive = active ? "true" : "false";
-          canvas.dataset.waveformPaused = isPaused ? "true" : "false";
-          canvas.dataset.waveformPaintMode = "lfo_traveling";
-          canvas.dataset.waveformPixelRatio = String(pixelRatio);
-          canvas.dataset.waveformPainted = "true";
-
-          // 1. Hardware LCD dark teal background & zero-crossing centerline
-          ctx.clearRect(0, 0, width, height);
-          ctx.fillStyle = "#132227";
-          ctx.fillRect(0, 0, width, height);
-
-          const centerY = Math.floor(height / 2);
-          ctx.fillStyle = "#223a43";
-          ctx.fillRect(0, centerY, width, 1);
-
-          // Subtle oscilloscope quarter-division grid marks
-          ctx.fillStyle = "rgba(34, 58, 67, 0.4)";
-          ctx.fillRect(0, Math.floor(height * 0.25), width, 1);
-          ctx.fillRect(0, Math.floor(height * 0.75), width, 1);
-          ctx.fillRect(Math.floor(width / 2), 0, 1, height);
-
-          const waveformType = clock?.waveformType || "sine";
-          const evalFn = computeReceiverLfoWaveformValue;
-          const dutyCycle = Number.isFinite(clock?.dutyCycle) ? clock.dutyCycle : 0.5;
-          const pointCount = 48;
-          const stepX = width / pointCount;
-          const colWidth = Math.max(1, Math.ceil(stepX) - 1);
-          const basePhase = Number(clock?.phase) || 0;
-
-          if (!active && !isPaused) {
-            // 2. Idle / Resting State: Vivid, crystal-clear oscilloscope trace previewing wave shape
-            ctx.fillStyle = "rgba(0, 230, 118, 0.55)";
-            ctx.strokeStyle = "#00e676";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-
-            for (let i = 0; i < pointCount; i++) {
-              const pOffset = (i / pointCount) * (Math.PI * 2);
-              const restingVal = Math.max(-1, Math.min(1, evalFn(pOffset, waveformType, dutyCycle) * 0.75));
-              const clampedMax = Math.max(0, restingVal);
-              const clampedMin = Math.min(0, restingVal);
-              const yTop = Math.floor(((1 - clampedMax) * height) / 2);
-              const yBottom = Math.ceil(((1 - clampedMin) * height) / 2);
-              const barH = Math.max(1, yBottom - yTop);
-              const x = Math.floor(i * stepX);
-              const traceY = Math.floor(((1 - restingVal) * height) / 2);
-
-              ctx.fillRect(x, yTop, Math.min(colWidth, width - x), barH);
-              if (i === 0) ctx.moveTo(x + colWidth / 2, traceY);
-              else ctx.lineTo(x + colWidth / 2, traceY);
-            }
-            ctx.stroke();
-            return true;
-          }
-
-          // 3. Active / Paused Traveling Waveform with True-dBFS Gradient & Moving Oscilloscope Beam
-          const grad = ctx.createLinearGradient(0, 0, 0, height);
-          grad.addColorStop(0.00, "#ff3333");
-          grad.addColorStop(0.12, "#ffea00");
-          grad.addColorStop(0.28, "#00e676");
-          grad.addColorStop(0.50, "#00e676");
-          grad.addColorStop(0.72, "#00e676");
-          grad.addColorStop(0.88, "#ffea00");
-          grad.addColorStop(1.00, "#ff3333");
-          ctx.fillStyle = grad;
-
-          ctx.strokeStyle = isPaused ? "#ffea00" : "#00ffff";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-
-          const visualAmp = isPaused ? 0.85 : (active ? Math.max(0.75, gate) : 0.85);
-          let latestVal = 0;
-          for (let i = 0; i < pointCount; i++) {
-            const pOffset = (i / pointCount) * (Math.PI * 2);
-            const samplePhase = basePhase + pOffset;
-            const val = Math.max(-1, Math.min(1, evalFn(samplePhase, waveformType, dutyCycle) * visualAmp));
-            latestVal = val;
-
-            const clampedMax = Math.max(0, val);
-            const clampedMin = Math.min(0, val);
-            const yTop = Math.floor(((1 - clampedMax) * height) / 2);
-            const yBottom = Math.ceil(((1 - clampedMin) * height) / 2);
-            const barH = Math.max(2, yBottom - yTop);
-            const x = Math.floor(i * stepX);
-            if (x >= width) continue;
-
-            ctx.fillRect(x, yTop, Math.min(colWidth, width - x), barH);
-            const traceY = Math.floor(((1 - val) * height) / 2);
-            if (i === 0) ctx.moveTo(x + colWidth / 2, traceY);
-            else ctx.lineTo(x + colWidth / 2, traceY);
-          }
-          ctx.stroke();
-
-          // 4. Oscilloscope Leading-Edge Playhead Indicator
-          const playheadY = Math.floor(((1 - latestVal) * height) / 2);
-          ctx.fillStyle = isPaused ? "#ffea00" : "#ffffff";
-          ctx.fillRect(width - 3, Math.max(1, playheadY - 2), 3, 5);
-
-          return true;
+          return studioLfoWaveforms?.draw(canvas, lfoIndex, clock) || false;
         }
 
         function initReceiverLfoWaveforms() {
@@ -12072,9 +9935,9 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
               );
             }
             const masterFinishedAt = phaseClock();
-            renderDialogRegistry(s.dialogRegistry);
+            studioDialogs?.registry(s.dialogRegistry);
             const registryFinishedAt = phaseClock();
-            renderDialogMirrors(s.dialogs);
+            studioDialogs?.render(s.dialogs);
             const dialogsFinishedAt = phaseClock();
             if (s.sampler) {
                 s.sampler.forEach((p, i) => {
@@ -12806,26 +10669,18 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
         }
 
         function acceptBridgeNetworkEpoch(value, source) {
-          const nextEpoch = Number(value);
-          const legacyEpoch = value === undefined || value === null || nextEpoch === 0;
-          if (legacyEpoch && currentBridgeNetworkEpoch === 0) return true;
-          if (!Number.isSafeInteger(nextEpoch) || nextEpoch <= 0) {
+          const result = window.MXSCastSessionBinding.networkEpoch(currentBridgeNetworkEpoch, value);
+          if (!result.accepted) {
             relayLogToStudio(
-              `⚠️ Receiver: Rejected BRIDGE_CONFIG with invalid network epoch from ${source || "unknown"}.`,
+              `⚠️ Receiver: Rejected BRIDGE_CONFIG network epoch ${String(value)} from ${source || "unknown"}.`,
             );
             return false;
           }
-          if (currentBridgeNetworkEpoch > 0 && nextEpoch < currentBridgeNetworkEpoch) {
+          if (result.changed) {
             relayLogToStudio(
-              `⚠️ Receiver: Rejected stale BRIDGE_CONFIG epoch ${nextEpoch}; current epoch is ${currentBridgeNetworkEpoch}.`,
+              `🔄 Receiver: Bridge network epoch ${currentBridgeNetworkEpoch} → ${result.next}.`,
             );
-            return false;
-          }
-          if (nextEpoch > currentBridgeNetworkEpoch) {
-            relayLogToStudio(
-              `🔄 Receiver: Bridge network epoch ${currentBridgeNetworkEpoch} → ${nextEpoch}.`,
-            );
-            currentBridgeNetworkEpoch = nextEpoch;
+            currentBridgeNetworkEpoch = result.next;
           }
           return true;
         }
@@ -12836,28 +10691,24 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
         // readiness or manufacture another receiver generation.
         function applyReceiverBridgeConfig(data, source, options) {
           const config = data && typeof data === "object" ? data : {};
-          const nonce = config.guiSessionNonce;
-          if (typeof nonce !== "string" || nonce.length < 8 || nonce.length > 128) {
+          const binding = window.MXSCastSessionBinding.evaluate(
+            config,
+            guiSessionNonce,
+            receiverBridgeConfigRevision,
+            window._studioRate,
+          );
+          if (!binding.valid) {
             relayLogToStudio(
               "⚠️ Receiver: " + (source || "unknown") +
                 " BRIDGE_CONFIG missing a valid GUI session nonce.",
             );
             return false;
           }
-          const previousNonce = guiSessionNonce;
-          guiSessionNonce = nonce;
-          const sessionChanged = previousNonce !== guiSessionNonce;
+          guiSessionNonce = binding.nonce;
+          const sessionChanged = binding.sessionChanged;
           const newRate = config.config ? config.config.sampleRate : null;
-          const configRevision = typeof config.bridgeConfigRevision === "string" && config.bridgeConfigRevision.length > 0
-            ? config.bridgeConfigRevision
-            : [
-                guiSessionNonce,
-                config.credentialGeneration || 0,
-                config.networkEpoch || 0,
-                newRate || window._studioRate || 48000,
-                config.pcmProtocol?.sessionId || "legacy",
-              ].join(":");
-          const duplicateConfig = !sessionChanged && receiverBridgeConfigRevision === configRevision;
+          const configRevision = binding.revision;
+          const duplicateConfig = binding.duplicate;
           receiverBridgeConfigRevision = configRevision;
           if (duplicateConfig) {
             configReceived = true;
@@ -13519,6 +11370,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
                   const waveformProofDue =
                     lastWaveformRenderStats.missing > 0 ||
                     Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
+                  const lastDialogRenderStats = studioDialogs?.getStats() || {};
                   visualTelemetry = {
                     waveformExpected: lastWaveformRenderStats.expected,
                     waveformDrawn: lastWaveformRenderStats.drawn,
@@ -13539,7 +11391,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
                     dialogFirstPaintTimeMs: lastDialogRenderStats.firstPaintTimeMs ?? null,
                     dialogCount: lastDialogRenderStats.dialogCount,
                     dialogDomNodes: lastDialogRenderStats.domNodeCount,
-                    ...summarizeMirroredDialogVisualState(),
+                    ...(studioDialogs?.summarize() || {}),
                     renderPhases: lastGuiRenderPhaseStats,
                     ...summarizeLfoVisualState(normalizedState),
                     ...(captureLfoVisualProof(normalizedState) || {}),
@@ -13804,40 +11656,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
           ) {
             d._receiverReceivedAtMonotonicMs = getLfoVisualNow();
           }
-          if (d && d.type === "GUI_ACTION_RESULT") {
-            if (
-              d.transport !== "gui" ||
-              Number(d.guiProtocolVersion) !== CAST_GUI_PROTOCOL_VERSION ||
-              d.guiSessionNonce !== guiSessionNonce
-            ) {
-              emitGuiChannelTelemetry("rejected", {
-                reason: "unsupported_action_result_envelope",
-                actionId: d?.actionId || null,
-              });
-              return true;
-            }
-            const status = String(d.status || "failed");
-            if (status === "applied" || status === "duplicate") {
-              confirmReceiverGuiInteraction(d.guiInteractionRevision);
-            } else {
-              document.querySelectorAll("[data-cast-interaction-revision]").forEach((element) => {
-                if (Number(element.dataset.castInteractionRevision) !== Number(d.guiInteractionRevision)) return;
-                clearReceiverGuiInteractionFeedback(element);
-                element.dataset.castInteractionState = status;
-              });
-            }
-            emitGuiChannelTelemetry("action_result", {
-              actionId: d.actionId || null,
-              status,
-              reason: d.reason || null,
-              revision: Number(d.guiInteractionRevision ?? -1),
-            });
-            relayLogToStudio(
-              "🖥️ Receiver: GUI action " + String(d.actionId || "legacy") +
-                " -> " + status + (d.reason ? " (" + d.reason + ")" : ""),
-            );
-            return true;
-          }
+          if (studioGuiActions?.handleResult(d)) return true;
           const rawGuiType = d && d.type;
           if (window.MXS_RECEIVER_BRANCH && !window.MXS_RECEIVER_BRANCH.gui && ["GUI_SNAPSHOT", "GUI_PATCH", "GUI_STATE_UPDATE", "GUI_STATE_PATCH", "CURSOR_UPDATE", "GUI_ACTION"].includes(rawGuiType)) return false;
           if (rawGuiType === "NATIVE_PRESENTATION_SPANS" || rawGuiType === "PCM_PRESENTATION_SPANS") {
@@ -14118,6 +11937,9 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
             if (window._handshakeAcked && receiverBridgeConfigReady) {
               sendReceiverBridgeMessage({
                 type: "RECEIVER_READY",
+                castMode: RECEIVER_BRANCH.mode,
+                guiSessionNonce,
+                bridgeConfigRevision: receiverBridgeConfigRevision,
                 reason: "gui_control_channel_connected",
                 socketGeneration: playbackModeSocketGeneration,
                 lifecycleGeneration: workletLifecycleGeneration,
@@ -14318,6 +12140,7 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
               const rate = (audioCtx && audioCtx.sampleRate) || window._hwRate || hwRate || 48000;
               const handshake = {
                 type: "HANDSHAKE",
+                castMode: RECEIVER_BRANCH.mode,
                 playbackCommands: ["PLAYBACK_START", "PLAYBACK_PAUSE", "PLAYBACK_STOP", "PLAYBACK_RESUME"],
                 config: {
                   sampleRate: rate,
@@ -14516,6 +12339,9 @@ const RECEIVER_BRANCH = window.MXS_RECEIVER_BRANCH || null;
                     try {
                       sendReceiverBridgeMessage({
                         type: "RECEIVER_READY",
+                castMode: RECEIVER_BRANCH.mode,
+                guiSessionNonce,
+                bridgeConfigRevision: receiverBridgeConfigRevision,
                         socketGeneration: playbackModeSocketGeneration,
                         lifecycleGeneration: workletLifecycleGeneration,
                       });
