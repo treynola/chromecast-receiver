@@ -12699,11 +12699,16 @@ if (RECEIVER_BRANCH?.gui && (
         // Keep the milestone's direct browser load lifecycle. The current
         // audio and handshake implementation remains unchanged inside it.
         window.addEventListener("error", function (event) {
+          const message = event && event.message ? String(event.message).slice(0, 512) : "window_error";
+          const filename = event && event.filename ? String(event.filename).slice(-256) : null;
+          const opaque = !filename && !event?.error && /^\s*Script error\.?\s*$/i.test(message);
           sendReceiverBootDiagnostic("runtime_error", {
-            message: event && event.message ? String(event.message).slice(0, 512) : "window_error",
-            filename: event && event.filename ? String(event.filename).slice(-256) : null,
+            message,
+            filename,
             line: Number.isFinite(Number(event?.lineno)) ? Number(event.lineno) : null,
             column: Number.isFinite(Number(event?.colno)) ? Number(event.colno) : null,
+            sourceResolution: opaque ? "browser_opaque" : "available",
+            errorName: String(event?.error?.name || "Error").slice(0, 48),
           });
         });
         window.addEventListener("unhandledrejection", function (event) {

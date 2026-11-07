@@ -1,13 +1,16 @@
 /* Register before CAF and the deferred root router so parse/load failures are visible. */
 (function () {
   "use strict";
-  const report = (phase, outcome, details = {}) => {
+  const report = (phase, outcome, details = {}, startupFailure = true, level = "error") => {
     try {
-      console.error("[CAST_BOOT_DIAGNOSTIC]", JSON.stringify({
+      const log = console[level] || console.error;
+      log.call(console, "[CAST_BOOT_DIAGNOSTIC]", JSON.stringify({
         type: "CAST_BOOT_DIAGNOSTIC", phase, outcome, details,
       }));
     } catch (_) {}
-    window.dispatchEvent(new CustomEvent("cast-receiver-startup-failure", { detail: { phase, outcome } }));
+    if (startupFailure) {
+      window.dispatchEvent(new CustomEvent("cast-receiver-startup-failure", { detail: { phase, outcome } }));
+    }
   };
   window.addEventListener("error", (event) => {
     const target = event.target;
@@ -20,7 +23,17 @@
           : "other_script";
       report("asset_load", "failed", { asset });
     } else if (!target || target === window) {
-      const file = String(event.filename || "").split("/").pop().split("?")[0].slice(0, 64);
+      const message = String(event.message || "");
+      const filename = String(event.filename || "");
+      const opaque = !filename && !event.error && /^\s*Script error\.?\s*$/i.test(message);
+      if (opaque) {
+        report("script_runtime_opaque", "unattributed", {
+          sourceResolution: "browser_opaque",
+          errorName: "Error",
+        }, false, "warn");
+        return;
+      }
+      const file = filename.split("/").pop().split("?")[0].slice(0, 64);
       report("script_runtime", "failed", {
         file,
         errorName: String(event.error?.name || "Error").slice(0, 48),
