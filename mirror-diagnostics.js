@@ -202,7 +202,7 @@
   function trackSettings(track) {
     try {
       const s = track?.getSettings?.();
-      return { width: number(s?.width), height: number(s?.height), requestedFrameRate: number(s?.frameRate), contentHint: text(track?.contentHint) };
+      return { width: number(s?.width), height: number(s?.height), frameRate: number(s?.frameRate), contentHint: text(track?.contentHint) };
     } catch (_) { return null; }
   }
 
@@ -305,13 +305,13 @@
       this.bad = 0; this.good = 0; this.lastChange = -Infinity; this.lastObservation = -Infinity;
     }
     limits(track = {}) {
-      const profiles = this.profile === "detail1080" ? [[1920, 1080, 24], [1600, 900, 20], [1440, 810, 17], [1280, 720, 15]] :
+      const profiles = this.profile === "detail1080" ? [[1920, 1080, 30], [1600, 900, 24], [1440, 810, 20], [1280, 720, 15]] :
         this.profile === "detail720" ? [[1280, 720, 24], [1280, 720, 20], [1280, 720, 17], [1280, 720, 15]] :
         [[1280, 720, 30], [1280, 720, 24], [1280, 720, 20], [1280, 720, 15]];
       const [width, height, fps] = profiles[this.level];
       const known = number(track.width) > 0 && number(track.height) > 0;
       return { maxFramerate: fps, maxBitrate: 6000000,
-        scaleResolutionDownBy: this.level === 0 ? 1 : known ? Math.max(1, track.width / width, track.height / height) : 1,
+        scaleResolutionDownBy: known ? Math.max(1, track.width / width, track.height / height) : 1,
         dimensionsKnown: known, maxWidth: width, maxHeight: height, qualityProfile: this.profile };
     }
     observe(data, now) {
@@ -328,7 +328,7 @@
       const presentation = data?.presentation;
       const composed = number(presentation?.measuredComposedFps);
       const droppedRatio = number(presentation?.droppedFrameRatio);
-      const levelRates = this.profile === "detail1080" ? [24, 20, 17, 15] :
+      const levelRates = this.profile === "detail1080" ? [30, 24, 20, 15] :
         this.profile === "detail720" ? [24, 20, 17, 15] : [30, 24, 20, 15];
       const targetFps = levelRates[this.level] || 15;
       const decodeOverload = decoded < received * 0.8 || (pending !== null && pending > received * 0.5);

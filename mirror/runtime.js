@@ -24,7 +24,10 @@ window.MXSCreateMirrorReceiver = function (shared) {
           sendReceiverBridgeMessage({
             type: "GUI_CHANNEL_TELEMETRY", transport: "gui", event: "mirror_presentation_state", version: 1,
             guiProtocolVersion: shared.CAST_GUI_PROTOCOL_VERSION, guiSessionNonce: shared.guiSessionNonce,
-            side: "receiver", sessionId, sessionSequence, monotonicMs: getLfoVisualNow(),
+            side: "receiver", mode: "MIRROR_CAST",
+            buildIdentity: { version: window.MXS_BUILD_IDENTITY?.version ?? null,
+              receiverHtml: window.MXS_BUILD_IDENTITY?.artifacts?.receiverHtml ?? null },
+            sessionId, sessionSequence, monotonicMs: getLfoVisualNow(),
             presentationState, videoTransport,
             details: { trackReadyState: details.trackReadyState || null,
               videoReadyState: Number.isFinite(details.videoReadyState) ? details.videoReadyState : null,
@@ -100,6 +103,9 @@ window.MXSCreateMirrorReceiver = function (shared) {
               sendReceiverBridgeMessage({
                 type: "GUI_CHANNEL_TELEMETRY", transport: "gui", event: "mirror_video_diagnostics", version: 1,
                 guiProtocolVersion: shared.CAST_GUI_PROTOCOL_VERSION, guiSessionNonce: shared.guiSessionNonce, side: "receiver",
+                mode: "MIRROR_CAST",
+                buildIdentity: { version: window.MXS_BUILD_IDENTITY?.version ?? null,
+                  receiverHtml: window.MXS_BUILD_IDENTITY?.artifacts?.receiverHtml ?? null },
                 sessionId, sessionSequence, monotonicMs: now, connectionState,
                 capabilities: helper?.capabilities(window.RTCRtpReceiver, "receive") ?? [],
                 ...stats, playbackQuality: quality,

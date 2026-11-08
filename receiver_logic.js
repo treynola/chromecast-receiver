@@ -7615,9 +7615,9 @@ if (RECEIVER_BRANCH?.gui && (
           : null;
 
         let lastRenderTime = 0;
-        const RENDER_THROTTLE_MS = 50; // Keep mirrored controls interactive without visible catch-up.
-        const PCM_RENDER_THROTTLE_MS = 250; // Protect the audio callback from GUI repaint work.
-        const WAVEFORM_RENDER_THROTTLE_MS = 250;
+        const RENDER_THROTTLE_MS = 1000 / 30; // Studio GUI updates target 30 Hz; sender ACK backpressure bounds load.
+        const PCM_RENDER_THROTTLE_MS = 1000 / 30; // PCM audio callbacks run in the worklet; keep Studio's visual lane at 30 Hz.
+        const WAVEFORM_RENDER_THROTTLE_MS = 1000 / 30;
         const WAVEFORM_VISUAL_FRAME_INTERVAL_MS = 1000 / 30;
         const WAVEFORM_INTERPOLATION_MS = WAVEFORM_RENDER_THROTTLE_MS;
         const mirroredWaveformVisuals = new Map();
@@ -11395,6 +11395,15 @@ if (RECEIVER_BRANCH?.gui && (
                     Date.now() - guiLastWaveformProofAt >= GUI_WAVEFORM_PROOF_INTERVAL_MS;
                   const lastDialogRenderStats = studioDialogs?.getStats() || {};
                   visualTelemetry = {
+                    mode: window._receiverCastMode || "D18A9B3A",
+                    buildIdentity: { version: window.MXS_BUILD_IDENTITY?.version ?? null,
+                      receiverHtml: window.MXS_BUILD_IDENTITY?.artifacts?.receiverHtml ?? null },
+                    viewport: { innerWidth: Number(window.innerWidth) || null,
+                      innerHeight: Number(window.innerHeight) || null,
+                      screenWidth: Number(window.screen?.width) || null,
+                      screenHeight: Number(window.screen?.height) || null,
+                      devicePixelRatio: Number(window.devicePixelRatio) || null,
+                      evidence: "browser_screen_api_not_physical_hdmi_proof" },
                     waveformExpected: lastWaveformRenderStats.expected,
                     waveformDrawn: lastWaveformRenderStats.drawn,
                     waveformMissing: lastWaveformRenderStats.missing,
