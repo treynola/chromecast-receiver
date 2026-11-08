@@ -3,19 +3,22 @@
 <meta charset="UTF-8"><base href="../">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MXS-004 Mirror Receiver</title>
-<script src="mirror/entry.js?v=13.9.509-485e6b4a9102"></script>
-<script src="build_identity.js?v=13.9.509-156c917de71c"></script>
+<script src="mirror/entry.js?v=13.9.509-7967e738caea"></script>
+<script src="build_identity.js?v=13.9.509-4afcbc55caf8"></script>
 <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-<script src="boot-diagnostics.js?v=13.9.509-485e6b4a9102"></script>
-<link rel="stylesheet" href="mirror/viewport.css?v=13.9.509-cfdf2871af2b">
+<script src="boot-diagnostics.js?v=13.9.509-7967e738caea"></script>
+<link rel="stylesheet" href="mirror/viewport.css?v=13.9.509-363540f8aa08">
 </head><body class="receiver-mode pure-screen-mirror-mode">
 <audio id="cast-media-element" class="castMediaElement" crossorigin="anonymous" autoplay playsinline></audio>
 <audio id="native-stream-audio" crossorigin="anonymous" autoplay playsinline></audio>
-<div id="screen-mirror-wrapper"><video id="mirror-video" autoplay playsinline muted></video></div>
-<script src="pcm-v2-protocol.js?v=13.9.509-485e6b4a9102"></script>
-<script src="mirror-diagnostics.js?v=13.9.509-485e6b4a9102"></script>
-<script src="shared/audio/cast-audio-owner-arbiter.js?v=13.9.509-485e6b4a9102"></script>
-<script src="shared/session/cast-session-binding.js?v=13.9.509-485e6b4a9102"></script>
-<script src="mirror/runtime.js?v=13.9.509-485e6b4a9102"></script>
-<script src="receiver_logic.js?v=13.9.509-485e6b4a9102"></script>
+<div id="screen-mirror-wrapper" data-presentation-state="waiting_for_track">
+<video id="mirror-video" autoplay playsinline muted></video>
+<div id="mirror-status" role="status" aria-live="polite">Waiting for the captured screen…</div>
+</div>
+<script src="pcm-v2-protocol.js?v=13.9.509-7967e738caea"></script>
+<script src="mirror-diagnostics.js?v=13.9.509-7967e738caea"></script>
+<script src="shared/audio/cast-audio-owner-arbiter.js?v=13.9.509-7967e738caea"></script>
+<script src="shared/session/cast-session-binding.js?v=13.9.509-7967e738caea"></script>
+<script src="mirror/runtime.js?v=13.9.509-7967e738caea"></script>
+<script src="receiver_logic.js?v=13.9.509-7967e738caea"></script>
 </body></html>

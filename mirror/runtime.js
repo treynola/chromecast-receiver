@@ -3,6 +3,37 @@ window.MXSCreateMirrorReceiver = function (shared) {
   "use strict";
   const { getLfoVisualNow, sendReceiverBridgeMessage, readNativeResumeMediaState, relayLogToStudio, identityAllowsGui } = shared;
         let mirrorDiagnosticsState = null;
+        let lastMirrorPresentationState = null;
+        function applyMirrorPresentationState(presentationState) {
+          if (!/^(waiting_for_track|track_attached_no_decoded_frames|hardware_mse_attached_no_decoded_frames|decoded_no_presented_frames|frames_advancing|frames_stale|video_play_rejected|track_ended|connection_unavailable)$/.test(String(presentationState))) {
+            presentationState = "waiting_for_track";
+          }
+          if (lastMirrorPresentationState === presentationState) return;
+          lastMirrorPresentationState = presentationState;
+          const wrapper = document.getElementById("screen-mirror-wrapper");
+          const status = document.getElementById("mirror-status");
+          if (wrapper) wrapper.dataset.presentationState = presentationState;
+          if (status) {
+            const label = window.MXSMirrorDiagnostics?.presentationStatusLabel?.(presentationState) || "Mirror status unavailable.";
+            status.textContent = label;
+            status.hidden = label.length === 0;
+          }
+        }
+        function reportMirrorPresentationState(sessionId, sessionSequence, presentationState, videoTransport, details = {}) {
+          applyMirrorPresentationState(presentationState);
+          sendReceiverBridgeMessage({
+            type: "GUI_CHANNEL_TELEMETRY", transport: "gui", event: "mirror_presentation_state", version: 1,
+            guiProtocolVersion: shared.CAST_GUI_PROTOCOL_VERSION, guiSessionNonce: shared.guiSessionNonce,
+            side: "receiver", sessionId, sessionSequence, monotonicMs: getLfoVisualNow(),
+            presentationState, videoTransport,
+            details: { trackReadyState: details.trackReadyState || null,
+              videoReadyState: Number.isFinite(details.videoReadyState) ? details.videoReadyState : null,
+              playStatus: details.playStatus || null,
+              connectionState: typeof details.connectionState === "string" ? details.connectionState.slice(0, 32) : null,
+              iceConnectionState: typeof details.iceConnectionState === "string" ? details.iceConnectionState.slice(0, 32) : null },
+            physicalTimingValidated: false,
+          }, "gui", true);
+        }
         function stopMirrorDiagnostics() {
           const state = mirrorDiagnosticsState;
           mirrorDiagnosticsState = null;
@@ -13,12 +44,13 @@ window.MXSCreateMirrorReceiver = function (shared) {
           }
         }
 
-        function startMirrorDiagnostics(pc, video, sessionId, sessionSequence) {
+        function startMirrorDiagnostics(pc, video, sessionId, sessionSequence, initialTransport = "webrtc") {
           stopMirrorDiagnostics();
           const helper = window.MXSMirrorDiagnostics;
           const state = { pc, video, sampler: helper ? new helper.Sampler() : null,
             presentationSampler: helper ? new helper.PresentationSampler() : null,
-            timer: null, frameHandle: null, frame: null, frameCallbacks: 0, inFlight: false };
+            timer: null, frameHandle: null, frame: null, frameCallbacks: 0, lastReportedFrameCallbacks: 0,
+            trackAttached: initialTransport === "webrtc", track: null, playStatus: "starting", inFlight: false };
           mirrorDiagnosticsState = state;
           const current = () => mirrorDiagnosticsState === state && mirrorPeerConnection === pc &&
             activeMirrorSessionId === sessionId && activeMirrorSessionSequence === sessionSequence;
@@ -26,6 +58,7 @@ window.MXSCreateMirrorReceiver = function (shared) {
             if (!current()) return;
             state.frameCallbacks++;
             state.frame = helper?.frameObservation(now, metadata) ?? null;
+            applyMirrorPresentationState("frames_advancing");
             try { state.frameHandle = video.requestVideoFrameCallback(presented); }
             catch (_) { state.frameHandle = null; }
           };
@@ -37,7 +70,7 @@ window.MXSCreateMirrorReceiver = function (shared) {
             state.inFlight = true;
             try {
               let stats = { status: "getStats_unavailable", video: null, network: null };
-              if (state.sampler && typeof pc.getStats === "function") {
+              if (state.sampler && typeof pc?.getStats === "function") {
                 try { stats = state.sampler.sample(await pc.getStats(), "inbound-rtp"); }
                 catch (error) { stats.status = "getStats_rejected"; stats.errorName = String(error?.name || "Error").slice(0, 64); }
               }
@@ -48,18 +81,35 @@ window.MXSCreateMirrorReceiver = function (shared) {
                 if (q) quality = { totalVideoFrames: q.totalVideoFrames ?? null, droppedVideoFrames: q.droppedVideoFrames ?? null };
               } catch (_) {}
               const now = getLfoVisualNow();
+              const presentation = state.presentationSampler?.sample(now, state.frameCallbacks, quality, state.frame) ?? null;
+              const presentedFramesDelta = state.frameCallbacks - state.lastReportedFrameCallbacks;
+              state.lastReportedFrameCallbacks = state.frameCallbacks;
+              const latestFrameObservationAgeMs = state.frame ? now - state.frame.observedAtMonotonicMs : null;
+              const transport = video.srcObject ? "webrtc" : video.src ? "hardware_mse" : "unbound";
+              const connectionState = pc?.connectionState || "not_applicable";
+              const presentationState = helper?.presentationState?.({
+                connectionState, trackAttached: state.trackAttached,
+                trackReadyState: state.track?.readyState, playStatus: state.playStatus,
+                decodedFrames: stats.video?.framesDecoded,
+                decodedFramesAdvanced: stats.video?.framesAdvanced === true,
+                presentedFramesDelta, latestFrameAgeMs: latestFrameObservationAgeMs, videoTransport: transport,
+              }) ?? (state.trackAttached ? "track_attached_no_decoded_frames" : "waiting_for_track");
+              applyMirrorPresentationState(presentationState);
               let pcmRuntimeQualified = null;
               try { pcmRuntimeQualified = localStorage.getItem(shared.PCM_RUNTIME_QUALIFICATION_KEY) === "true"; } catch (_) {}
               sendReceiverBridgeMessage({
                 type: "GUI_CHANNEL_TELEMETRY", transport: "gui", event: "mirror_video_diagnostics", version: 1,
                 guiProtocolVersion: shared.CAST_GUI_PROTOCOL_VERSION, guiSessionNonce: shared.guiSessionNonce, side: "receiver",
-                sessionId, sessionSequence, monotonicMs: now, connectionState: pc.connectionState,
+                sessionId, sessionSequence, monotonicMs: now, connectionState,
                 capabilities: helper?.capabilities(window.RTCRtpReceiver, "receive") ?? [],
                 ...stats, playbackQuality: quality,
-                presentation: state.presentationSampler?.sample(now, state.frameCallbacks, quality, state.frame) ?? null,
+                presentation,
+                presentationState, videoTransport: transport, trackReadyState: state.track?.readyState || null,
+                videoReadyState: Number.isFinite(video.readyState) ? video.readyState : null,
+                videoPlayStatus: state.playStatus,
                 frameCallbackSupported: typeof video.requestVideoFrameCallback === "function",
                 frameCallbacks: state.frameCallbacks, latestFrame: state.frame,
-                latestFrameObservationAgeMs: state.frame ? now - state.frame.observedAtMonotonicMs : null,
+                latestFrameObservationAgeMs,
                 display: { videoWidth: video.videoWidth || null, videoHeight: video.videoHeight || null,
                   viewportWidth: window.innerWidth || null, viewportHeight: window.innerHeight || null,
                   devicePixelRatio: window.devicePixelRatio || null },
@@ -74,11 +124,12 @@ window.MXSCreateMirrorReceiver = function (shared) {
                 acousticOffsetMs: null,
                 timingLimit: "composition_metadata_is_not_physical_display_or_acoustic_alignment",
               }, "gui", true);
-              if (pc.connectionState === "closed" || pc.connectionState === "failed") stopMirrorDiagnostics();
+              if (connectionState === "closed" || connectionState === "failed") stopMirrorDiagnostics();
             } catch (_) {
               // Optional observations must never interrupt playout or video.
             } finally { state.inFlight = false; }
           }, 5000);
+          return state;
         }
         if (typeof window.addEventListener === "function") window.addEventListener("pagehide", stopMirrorDiagnostics);
 
@@ -285,6 +336,10 @@ window.MXSCreateMirrorReceiver = function (shared) {
                 hardwareMediaSource = mediaSource;
                 hardwareMediaSourceUrl = URL.createObjectURL(mediaSource);
                 video.src = hardwareMediaSourceUrl;
+                const presentation = startMirrorDiagnostics(mirrorPeerConnection, video, activeMirrorSessionId,
+                  activeMirrorSessionSequence, "hardware_mse");
+                reportMirrorPresentationState(activeMirrorSessionId, activeMirrorSessionSequence,
+                  "hardware_mse_attached_no_decoded_frames", "hardware_mse", { videoReadyState: video.readyState, playStatus: "starting" });
                 if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
                 // Mirror video never owns audio; the authenticated PCM/CAF path does.
                 video.muted = true;
@@ -329,7 +384,14 @@ window.MXSCreateMirrorReceiver = function (shared) {
                       hardwareInFlightEntry = attemptedEntry;
                       sourceBuffer.appendBuffer(attemptedEntry.bytes);
                     }
-                    video.play().catch(function(_) {});
+                    Promise.resolve(video.play()).then(function() {
+                      if (mirrorDiagnosticsState === presentation) presentation.playStatus = "playing";
+                    }).catch(function(error) {
+                      if (mirrorDiagnosticsState === presentation) presentation.playStatus = "rejected";
+                      reportMirrorPresentationState(activeMirrorSessionId, activeMirrorSessionSequence,
+                        "video_play_rejected", "hardware_mse", { videoReadyState: video.readyState, playStatus: "rejected" });
+                      relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + String(error?.message || "play_rejected"));
+                    });
                   } catch (sbErr) {
                     console.warn("⚠️ Receiver: addSourceBuffer error:", sbErr);
                     // Tear down only this failed generation. A later chunk can
@@ -377,6 +439,77 @@ window.MXSCreateMirrorReceiver = function (shared) {
           }
         }
 
+        async function answerMirrorOffer(pc, sessionId, sessionSequence, offer, replyFn, sessionKey, closeOnFailure) {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                activeMirrorSessionSequence !== sessionSequence) return false;
+            const sessionCandidates = mirrorPendingIceCandidatesBySession.get(sessionKey) || [];
+            while (sessionCandidates.length > 0) {
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                  activeMirrorSessionSequence !== sessionSequence) return false;
+              const queuedCandidate = sessionCandidates.shift();
+              try { await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate)); }
+              catch (candidateError) { relayLogToStudio("⚠️ Receiver: Error adding queued ICE candidate: " + candidateError.message); }
+            }
+            if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                activeMirrorSessionSequence !== sessionSequence) return false;
+            mirrorPendingIceCandidatesBySession.delete(sessionKey);
+            mirrorRemoteDescriptionReady = true;
+            let answer = await pc.createAnswer();
+            if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                activeMirrorSessionSequence !== sessionSequence) return false;
+            if (answer && answer.sdp) {
+              let sdp = answer.sdp;
+              const opusRtpMap = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000\/2[^\r\n]*/i);
+              if (opusRtpMap) {
+                const payloadType = opusRtpMap[1];
+                const opusFmtp = new RegExp("^a=fmtp:" + payloadType + "[ \\t]+([^\\r\\n]*)", "im");
+                const requiredParams = ["stereo=1", "sprop-stereo=1", "maxaveragebitrate=510000", "cbr=1", "usedtx=0"];
+                const existingFmtp = sdp.match(opusFmtp);
+                if (existingFmtp) {
+                  const params = existingFmtp[1].split(";").map(function (value) { return value.trim(); }).filter(Boolean);
+                  requiredParams.forEach(function (required) {
+                    const key = required.slice(0, required.indexOf("=")).toLowerCase();
+                    let replaced = false;
+                    const merged = [];
+                    params.forEach(function (param) {
+                      if (param.split("=", 1)[0].trim().toLowerCase() !== key) merged.push(param);
+                      else if (!replaced) { merged.push(required); replaced = true; }
+                    });
+                    if (!replaced) merged.push(required);
+                    params.length = 0;
+                    Array.prototype.push.apply(params, merged);
+                  });
+                  sdp = sdp.replace(opusFmtp, "a=fmtp:" + payloadType + " " + params.join(";"));
+                } else {
+                  sdp = sdp.replace(opusRtpMap[0], opusRtpMap[0] + "\r\na=fmtp:" + payloadType + " " + requiredParams.join(";"));
+                }
+              }
+              answer = { type: answer.type, sdp };
+            }
+            await pc.setLocalDescription(answer);
+            if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
+                activeMirrorSessionSequence === sessionSequence && typeof replyFn === "function") {
+              replyFn({ type: "SCREEN_MIRROR_SIGNAL", signal: { type: "answer", answer, sessionId, sessionSequence } });
+            }
+            return true;
+          } catch (error) {
+            relayLogToStudio("❌ Receiver: Error handling screen mirror offer: " + error.message);
+            if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
+                activeMirrorSessionSequence === sessionSequence) {
+              mirrorRemoteDescriptionReady = false;
+              mirrorPendingIceCandidatesBySession.delete(sessionKey);
+              if (closeOnFailure) {
+                stopMirrorDiagnostics();
+                try { pc.close(); } catch (_) {}
+                mirrorPeerConnection = null;
+              }
+            }
+            return false;
+          }
+        }
+
         async function handleScreenMirrorSignal(data, replyFn) {
           if (shared.RECEIVER_BRANCH && !shared.RECEIVER_BRANCH.mirror) return;
           if (!data || !identityAllowsGui() || !shared.receiverBridgeConfigReady || !window._handshakeAcked) return;
@@ -394,15 +527,23 @@ window.MXSCreateMirrorReceiver = function (shared) {
             const sessionSequence = signal.sessionSequence;
             if (mirrorPeerConnection && activeMirrorSessionId === sessionId &&
                 activeMirrorSessionSequence === sessionSequence) {
-              if (mirrorPeerConnection.localDescription?.type === "answer" && typeof replyFn === "function") {
+              if (mirrorPeerConnection.remoteDescription?.sdp === signal.offer.sdp &&
+                  mirrorPeerConnection.localDescription?.type === "answer" && typeof replyFn === "function") {
                 replyFn({ type: "SCREEN_MIRROR_SIGNAL", signal: {
                   type: "answer", answer: mirrorPeerConnection.localDescription, sessionId, sessionSequence,
                 } });
+              } else if (mirrorPeerConnection.signalingState === "stable") {
+                mirrorRemoteDescriptionReady = false;
+                reportMirrorPresentationState(sessionId, sessionSequence, "connection_unavailable", "webrtc",
+                  { connectionState: mirrorPeerConnection.connectionState, iceConnectionState: mirrorPeerConnection.iceConnectionState });
+                await answerMirrorOffer(mirrorPeerConnection, sessionId, sessionSequence, signal.offer,
+                  replyFn, mirrorSessionKey(sessionId, sessionSequence), false);
               }
               return;
             }
             activeMirrorSessionId = sessionId;
             activeMirrorSessionSequence = sessionSequence;
+            reportMirrorPresentationState(sessionId, sessionSequence, "waiting_for_track", "webrtc");
             hardwareVideoFailedSessionSequence = null;
             mirrorRemoteDescriptionReady = false;
             const sessionKey = mirrorSessionKey(sessionId, sessionSequence);
@@ -419,6 +560,25 @@ window.MXSCreateMirrorReceiver = function (shared) {
               iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
             });
             mirrorPeerConnection = pc;
+            const reportTransportState = () => {
+              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
+                  activeMirrorSessionSequence !== sessionSequence) return;
+              const video = document.getElementById("mirror-video");
+              const videoTransport = video?.srcObject ? "webrtc" : video?.src ? "hardware_mse" : "unbound";
+              const presentationState = window.MXSMirrorDiagnostics?.presentationState?.({
+                connectionState: pc.connectionState, trackAttached: Boolean(video?.srcObject),
+                trackReadyState: video?.srcObject?.getVideoTracks?.()[0]?.readyState,
+                playStatus: mirrorDiagnosticsState?.playStatus,
+                decodedFrames: null, videoTransport,
+              }) ?? (pc.connectionState === "connected" ? "waiting_for_track" : "connection_unavailable");
+              reportMirrorPresentationState(sessionId, sessionSequence, presentationState, videoTransport, {
+                trackReadyState: video?.srcObject?.getVideoTracks?.()[0]?.readyState,
+                videoReadyState: video?.readyState, playStatus: mirrorDiagnosticsState?.playStatus,
+                connectionState: pc.connectionState, iceConnectionState: pc.iceConnectionState,
+              });
+            };
+            pc.onconnectionstatechange = reportTransportState;
+            pc.oniceconnectionstatechange = reportTransportState;
             try {
               const capabilities = RTCRtpReceiver.getCapabilities?.("video")?.codecs || [];
               if (capabilities.some((codec) => /video\/h264/i.test(codec.mimeType || ""))) {
@@ -448,11 +608,24 @@ window.MXSCreateMirrorReceiver = function (shared) {
                   if ("playoutDelayHint" in video) video.playoutDelayHint = 0.0;
                 } catch (_) {}
                 video.srcObject = event.streams[0];
+                const state = startMirrorDiagnostics(pc, video, sessionId, sessionSequence);
+                state.track = event.track || null;
                 // Mirror video never owns audio; the authenticated PCM/CAF path does.
                 video.muted = true;
                 video.volume = 0.0;
-                startMirrorDiagnostics(pc, video, sessionId, sessionSequence);
-                video.play().catch(function(err) {
+                state.playStatus = "starting";
+                reportMirrorPresentationState(sessionId, sessionSequence, "track_attached_no_decoded_frames", "webrtc",
+                  { trackReadyState: event.track?.readyState, videoReadyState: video.readyState, playStatus: state.playStatus });
+                let playPromise;
+                try { playPromise = video.play(); }
+                catch (err) { playPromise = Promise.reject(err); }
+                Promise.resolve(playPromise).then(function() {
+                  if (mirrorDiagnosticsState !== state || !state.trackAttached) return;
+                  state.playStatus = "playing";
+                }).catch(function(err) {
+                  if (mirrorDiagnosticsState === state) state.playStatus = "rejected";
+                  reportMirrorPresentationState(sessionId, sessionSequence, "video_play_rejected", "webrtc",
+                    { trackReadyState: event.track?.readyState, videoReadyState: video.readyState, playStatus: "rejected" });
                   relayLogToStudio("⚠️ Receiver: mirror-video.play deferred: " + err.message);
                 });
               }
@@ -474,85 +647,7 @@ window.MXSCreateMirrorReceiver = function (shared) {
               }
             };
 
-            try {
-              await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
-              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
-                  activeMirrorSessionSequence !== sessionSequence) return;
-              const sessionCandidates = mirrorPendingIceCandidatesBySession.get(sessionKey) || [];
-              while (sessionCandidates.length > 0) {
-                if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
-                    activeMirrorSessionSequence !== sessionSequence) return;
-                const queuedCandidate = sessionCandidates.shift();
-                try {
-                  await pc.addIceCandidate(new RTCIceCandidate(queuedCandidate));
-                } catch (candidateError) {
-                  relayLogToStudio("⚠️ Receiver: Error adding queued ICE candidate: " + candidateError.message);
-                }
-              }
-              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
-                  activeMirrorSessionSequence !== sessionSequence) return;
-              mirrorPendingIceCandidatesBySession.delete(sessionKey);
-              mirrorRemoteDescriptionReady = true;
-              let answer = await pc.createAnswer();
-              if (mirrorPeerConnection !== pc || activeMirrorSessionId !== sessionId ||
-                  activeMirrorSessionSequence !== sessionSequence) return;
-              if (answer && answer.sdp) {
-                let sdp = answer.sdp;
-                const opusRtpMap = sdp.match(/a=rtpmap:(\d+)\s+opus\/48000\/2[^\r\n]*/i);
-                if (opusRtpMap) {
-                  const payloadType = opusRtpMap[1];
-                  const opusFmtp = new RegExp("^a=fmtp:" + payloadType + "[ \\t]+([^\\r\\n]*)", "im");
-                  const requiredParams = ["stereo=1", "sprop-stereo=1", "maxaveragebitrate=510000", "cbr=1", "usedtx=0"];
-                  const existingFmtp = sdp.match(opusFmtp);
-                  if (existingFmtp) {
-                    const params = existingFmtp[1].split(";").map(function (value) { return value.trim(); }).filter(Boolean);
-                    requiredParams.forEach(function (required) {
-                      const key = required.slice(0, required.indexOf("=")).toLowerCase();
-                      let replaced = false;
-                      const merged = [];
-                      params.forEach(function (param) {
-                        if (param.split("=", 1)[0].trim().toLowerCase() !== key) {
-                          merged.push(param);
-                        } else if (!replaced) {
-                          merged.push(required);
-                          replaced = true;
-                        }
-                      });
-                      if (!replaced) merged.push(required);
-                      params.length = 0;
-                      Array.prototype.push.apply(params, merged);
-                    });
-                    sdp = sdp.replace(opusFmtp, "a=fmtp:" + payloadType + " " + params.join(";"));
-                  } else {
-                    sdp = sdp.replace(opusRtpMap[0], opusRtpMap[0] + "\r\na=fmtp:" + payloadType + " " + requiredParams.join(";"));
-                  }
-                }
-                answer = { type: answer.type, sdp: sdp };
-              }
-              await pc.setLocalDescription(answer);
-              if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
-                  activeMirrorSessionSequence === sessionSequence && typeof replyFn === "function") {
-                replyFn({
-                  type: "SCREEN_MIRROR_SIGNAL",
-                  signal: {
-                    type: "answer",
-                    answer: answer,
-                    sessionId: sessionId,
-                    sessionSequence: sessionSequence
-                  }
-                });
-              }
-            } catch (err) {
-              relayLogToStudio("❌ Receiver: Error handling screen mirror offer: " + err.message);
-              if (mirrorPeerConnection === pc && activeMirrorSessionId === sessionId &&
-                  activeMirrorSessionSequence === sessionSequence) {
-                stopMirrorDiagnostics();
-                try { pc.close(); } catch (_) {}
-                mirrorPeerConnection = null;
-                mirrorRemoteDescriptionReady = false;
-                mirrorPendingIceCandidatesBySession.delete(sessionKey);
-              }
-            }
+            await answerMirrorOffer(pc, sessionId, sessionSequence, signal.offer, replyFn, sessionKey, true);
           } else if (signal.type === "candidate" && signal.candidate &&
               isMirrorSessionSignalNotStale(signal.sessionId, signal.sessionSequence)) {
             const matchesActiveSession = signal.sessionId === activeMirrorSessionId &&
@@ -585,5 +680,6 @@ window.MXSCreateMirrorReceiver = function (shared) {
         }
 
 
-  return Object.freeze({ handleScreenMirrorSignal, activatePureScreenMirrorViewport, stopMirrorDiagnostics });
+  return Object.freeze({ handleScreenMirrorSignal, activatePureScreenMirrorViewport,
+    applyMirrorPresentationState, stopMirrorDiagnostics });
 };

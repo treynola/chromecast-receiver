@@ -232,6 +232,50 @@
     };
   }
 
+  function presentationState(input = {}) {
+    if (input.playStatus === "rejected") return "video_play_rejected";
+    if (["disconnected", "failed", "closed"].includes(input.connectionState)) return "connection_unavailable";
+    if (!input.trackAttached) return input.videoTransport === "hardware_mse"
+      ? "hardware_mse_attached_no_decoded_frames" : "waiting_for_track";
+    if (input.trackReadyState === "ended") return "track_ended";
+    if (number(input.presentedFramesDelta) > 0) return "frames_advancing";
+    if (number(input.latestFrameAgeMs) > 1500) return "frames_stale";
+    if (input.decodedFramesAdvanced === true || number(input.decodedFrames) > 0) return "decoded_no_presented_frames";
+    return "track_attached_no_decoded_frames";
+  }
+
+  function captureRouteEvidence(input = {}) {
+    const preferredProvider = text(input.preferredProvider) || "unknown";
+    const selectedProvider = text(input.selectedProvider) || "unavailable";
+    const nativeCaptureFallbackReason = text(input.nativeCaptureFallbackReason);
+    const displayCaptureFailureReason = text(input.displayCaptureFailureReason);
+    return {
+      preferredProvider,
+      selectedProvider,
+      routeStatus: selectedProvider === "unavailable" ? "unavailable" : "selected",
+      nativeCaptureFallbackReason,
+      displayCaptureFailureReason,
+      // Retained for older log consumers; the explicit fields above identify
+      // which route failed and which route supplied the screen pixels.
+      fallbackReason: nativeCaptureFallbackReason || displayCaptureFailureReason,
+    };
+  }
+
+  function presentationStatusLabel(state) {
+    const labels = {
+      waiting_for_track: "Waiting for the captured screen…",
+      track_attached_no_decoded_frames: "Screen connected. Waiting for video…",
+      hardware_mse_attached_no_decoded_frames: "Screen connected. Waiting for video…",
+      decoded_no_presented_frames: "Video received. Waiting for display…",
+      frames_advancing: "",
+      frames_stale: "Mirror frozen. Waiting for video to resume…",
+      video_play_rejected: "Mirror playback could not start.",
+      track_ended: "Screen capture ended.",
+      connection_unavailable: "Mirror connection lost. Waiting to reconnect…",
+    };
+    return Object.prototype.hasOwnProperty.call(labels, state) ? labels[state] : "Mirror status unavailable.";
+  }
+
   class PresentationSampler {
     constructor() { this.previous = null; }
     sample(now, callbacks, quality, frame) {
@@ -310,5 +354,6 @@
   }
 
   root.MXSMirrorDiagnostics = Object.freeze({ Sampler, senderParameters, trackSettings, frameObservation,
-    codecName, codecProfile, capabilities, preferCodec, CodecTracker, PresentationSampler, WorkloadController });
+    presentationState, presentationStatusLabel, captureRouteEvidence, codecName, codecProfile, capabilities, preferCodec,
+    CodecTracker, PresentationSampler, WorkloadController });
 })(typeof window !== "undefined" ? window : globalThis);

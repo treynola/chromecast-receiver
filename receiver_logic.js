@@ -3958,6 +3958,12 @@ if (RECEIVER_BRANCH?.gui && (
                     publishMxsPlaybackStatus("STARTING", "player_manager_play");
                   }
                 } else if (command === "PAUSE") {
+                  const castMode = String(window._receiverCastMode || RECEIVER_BRANCH.mode || "").toUpperCase();
+                  if (castMode === "D18A9B3A" || castMode === "MIRROR_CAST") {
+                    desiredPlaybackState = "stopped";
+                    stopAllPlayout("player_manager_pause_as_full_stop", "STOPPED", true, false, false);
+                    return;
+                  }
                   playbackPaused = true;
                   if (!pauseNativeStreamPlayout("player_manager_pause", true)) {
                     pauseAllPlayout("player_manager_pause");
@@ -4013,6 +4019,7 @@ if (RECEIVER_BRANCH?.gui && (
             if (!eventType) return;
             try {
               pm.addEventListener(eventType, function (event) {
+                try {
                 const mediaStatus = event && event.mediaStatus ? event.mediaStatus : null;
                 const mediaVolume = mediaStatus && mediaStatus.volume
                   ? mediaStatus.volume
@@ -4203,6 +4210,22 @@ if (RECEIVER_BRANCH?.gui && (
                       startCafStreamPlayout(nativeStreamUrl, reloadAttemptId);
                     }
                   }, 100);
+                }
+                } catch (handlerError) {
+                  const error = handlerError && typeof handlerError === "object" ? handlerError : null;
+                  sendReceiverBootDiagnostic("caf_event_handler_throw", {
+                    eventType: String(eventType || "unknown").slice(0, 96),
+                    errorName: String(error?.name || "Error").slice(0, 48),
+                    message: String(error?.message || handlerError || "caf_event_handler_throw").slice(0, 512),
+                    stack: String(error?.stack || "").slice(0, 2048) || null,
+                    playbackMode: window._playbackMode || "unknown",
+                    nativeStreamActive: Boolean(nativeStreamActive),
+                    nativeStartupAttemptId: nativeStartupAttemptId || null,
+                  });
+                  // Preserve CAF's existing failure behavior while attaching a
+                  // receiver-side stack and event identity before CAF wraps it
+                  // into its generic APP/900 report.
+                  throw handlerError;
                 }
               });
             } catch (e) {}
@@ -11585,6 +11608,13 @@ if (RECEIVER_BRANCH?.gui && (
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_PAUSE");
+          const castMode = String(window._receiverCastMode || RECEIVER_BRANCH.mode || "").toUpperCase();
+          if (castMode === "D18A9B3A" || castMode === "MIRROR_CAST") {
+            desiredPlaybackState = "stopped";
+            stopAllPlayout("studio_mirror_pause_as_full_stop", "STOPPED", false, false, false);
+            acknowledgePlaybackRevision(d, "playback_stop_for_restart");
+            return;
+          }
           desiredPlaybackState = "paused";
           clearPlaybackRecoveryRetry();
           clearNativeOrderedResumeRecovery("playback_pause");
