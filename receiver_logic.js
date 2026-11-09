@@ -3999,6 +3999,20 @@ if (RECEIVER_BRANCH?.gui && (
           relayLogToStudio("✅ Receiver: CAF playback handlers configured for native stream.");
         }
 
+        function acceptCafPrewarmReady(attemptId) {
+          if (!isCurrentNativeAttempt(attemptId) || !nativeStreamStarting || !nativeStreamUrl) return false;
+          nativeStreamPrewarmReady = true;
+          muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
+          if (lastPlaybackStartSignalAt && nativeStreamCompanionForPcm) {
+            activateNativeStream("caf_preplay_ready_after_play",
+              "✅ Receiver: CAF native /stream.wav prewarm became ready after PLAYBACK_START.", attemptId);
+          } else if (nativePrewarmReadyAnnouncedForAttempt !== attemptId) {
+            nativePrewarmReadyAnnouncedForAttempt = attemptId;
+            relayLogToStudio("✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.");
+          }
+          return true;
+        }
+
         function configureCafPlayerDebugEvents() {
           const pm = getCastPlayerManager();
           if (!pm || pm._mxsDebugEventsConfigured || typeof pm.addEventListener !== "function") {
@@ -4021,6 +4035,10 @@ if (RECEIVER_BRANCH?.gui && (
               pm.addEventListener(eventType, function (event) {
                 try {
                 const mediaStatus = event && event.mediaStatus ? event.mediaStatus : null;
+                const eventContentId = mediaStatus?.media?.contentId || pm.getMediaInformation?.()?.contentId;
+                const eventAttemptMatch = /^mxs-native-stream-(\d+)$/.exec(String(eventContentId || ""));
+                const eventAttemptId = eventAttemptMatch ? Number(eventAttemptMatch[1]) : nativeStartupAttemptId;
+                if (!isCurrentNativeAttempt(eventAttemptId)) return;
                 const mediaVolume = mediaStatus && mediaStatus.volume
                   ? mediaStatus.volume
                   : event && event.volume
@@ -4156,7 +4174,6 @@ if (RECEIVER_BRANCH?.gui && (
                     nativeStreamPrewarmBeforePlayback &&
                     (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm)
                   ) {
-                    nativeStreamPrewarmReady = true;
                     logReceiverStartupTiming("caf_prewarm_ready", {
                       nativeAttemptId: nativeStartupAttemptId,
                       playbackRequested: !!lastPlaybackStartSignalAt,
@@ -4164,21 +4181,7 @@ if (RECEIVER_BRANCH?.gui && (
                         ? document.getElementById("cast-media-element").readyState
                         : null,
                     });
-                    muteNativeStreamPrewarmOutput(document.getElementById("cast-media-element"));
-                    if (lastPlaybackStartSignalAt && nativeStreamCompanionForPcm) {
-                      activateNativeStream(
-                        "caf_preplay_ready_after_play",
-                        "✅ Receiver: CAF native /stream.wav prewarm became ready after PLAYBACK_START.",
-                        nativeStartupAttemptId,
-                      );
-                    } else {
-                      if (nativePrewarmReadyAnnouncedForAttempt !== attemptId) {
-                        nativePrewarmReadyAnnouncedForAttempt = attemptId;
-                        relayLogToStudio(
-                          "✅ Receiver: CAF native /stream.wav prewarm ready; waiting for PLAYBACK_START.",
-                        );
-                      }
-                    }
+                    acceptCafPrewarmReady(eventAttemptId);
                   } else {
                     activateNativeStream(
                       "caf_playing",
@@ -7617,7 +7620,7 @@ if (RECEIVER_BRANCH?.gui && (
         let lastRenderTime = 0;
         const RENDER_THROTTLE_MS = 1000 / 30; // Studio GUI updates target 30 Hz; sender ACK backpressure bounds load.
         const PCM_RENDER_THROTTLE_MS = 1000 / 30; // PCM audio callbacks run in the worklet; keep Studio's visual lane at 30 Hz.
-        const WAVEFORM_RENDER_THROTTLE_MS = 1000 / 30;
+        const WAVEFORM_RENDER_THROTTLE_MS = 100; // Expensive new geometry is 10 Hz; visual interpolation remains 30 Hz.
         const WAVEFORM_VISUAL_FRAME_INTERVAL_MS = 1000 / 30;
         const WAVEFORM_INTERPOLATION_MS = WAVEFORM_RENDER_THROTTLE_MS;
         const mirroredWaveformVisuals = new Map();

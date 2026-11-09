@@ -15,7 +15,7 @@
       const candidates = rows.filter((row) => row.type === direction && (row.kind === "video" || row.mediaType === "video") && !row.isRemote && row.active !== false);
       const streamIdentity = (row) => JSON.stringify([
         row.ssrc ?? null, row.mid ?? null, row.trackIdentifier ?? null,
-        row.transportId ?? null, row.codecId ?? null,
+        row.transportId ?? null, row.codecId ?? null, row.frameWidth ?? null, row.frameHeight ?? null,
       ]);
       const advancing = (row) => {
         const old = this.previous.get(row.id);

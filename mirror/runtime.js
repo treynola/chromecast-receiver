@@ -516,7 +516,31 @@ window.MXSCreateMirrorReceiver = function (shared) {
           }
         }
 
+        const mirrorOfferTransactions = new Map();
         async function handleScreenMirrorSignal(data, replyFn) {
+          const signal = data?.signal || data;
+          if (signal?.type !== "offer") return processScreenMirrorSignal(data, replyFn);
+          const key = mirrorSessionKey(signal.sessionId, signal.sessionSequence);
+          let queue = mirrorOfferTransactions.get(key);
+          if (!queue) {
+            if (mirrorOfferTransactions.size >= MAX_MIRROR_PENDING_ICE_SESSIONS) return false;
+            queue = { tail: Promise.resolve(), offers: new Map() };
+            mirrorOfferTransactions.set(key, queue);
+          }
+          const sdp = signal.offer?.sdp;
+          if (queue.offers.has(sdp)) return queue.offers.get(sdp);
+          if (queue.offers.size >= 4) return false;
+          const task = queue.tail.catch(() => {}).then(() => processScreenMirrorSignal(data, replyFn));
+          queue.tail = task;
+          queue.offers.set(sdp, task);
+          try { return await task; }
+          finally {
+            queue.offers.delete(sdp);
+            if (!queue.offers.size && mirrorOfferTransactions.get(key) === queue) mirrorOfferTransactions.delete(key);
+          }
+        }
+
+        async function processScreenMirrorSignal(data, replyFn) {
           if (shared.RECEIVER_BRANCH && !shared.RECEIVER_BRANCH.mirror) return;
           if (!data || !identityAllowsGui() || !shared.receiverBridgeConfigReady || !window._handshakeAcked) return;
           activatePureScreenMirrorViewport();
