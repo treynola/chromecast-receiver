@@ -122,6 +122,11 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         const message = event.data;
         if (["RESET", "PAUSE", "RESUME", "CONFIG"].includes(message?.type) &&
             Number.isSafeInteger(message.playbackEpoch) && Number.isSafeInteger(message.playbackRevision)) {
+          if (this._presentationEpoch !== null &&
+              (message.playbackEpoch < this._presentationEpoch ||
+               (message.playbackEpoch === this._presentationEpoch && message.playbackRevision < this._presentationRevision))) {
+            return;
+          }
           this._presentationEpoch = message.playbackEpoch;
           this._presentationRevision = message.playbackRevision;
         }
@@ -149,6 +154,9 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
           return;
         }
 
+        // No silence or late transport packet may overwrite held musical
+        // frames while paused. The fixed ring remains armed at its read cursor.
+        if (this._paused) return;
         let packetMetadata = null;
         let payload = message;
         let byteOffset = 0;

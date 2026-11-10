@@ -3076,6 +3076,12 @@ if (RECEIVER_BRANCH?.gui && (
                   ? Math.max(0, appliedAtMonotonicMs - receivedAtMonotonicMs)
                   : null,
                 receiverAudioClock,
+                requestedSourcePositionSec: Number.isFinite(message?.sourcePositionSec)
+                  ? message.sourcePositionSec : Number.isFinite(message?.offset) ? message.offset : null,
+                retainedAudioOwner: activeAudioPathOwner || "none",
+                nativeAttemptId: nativeStartupAttemptId,
+                workletReady: Boolean(workletReady),
+                outputEvidence: "control_applied_only",
                 receivedAtEpochMs: Number.isFinite(receivedAtEpochMs)
                   ? receivedAtEpochMs
                   : null,
@@ -3948,6 +3954,7 @@ if (RECEIVER_BRANCH?.gui && (
                     ").",
                 );
                 if (command === "PLAY") {
+                  desiredPlaybackState = "playing";
                   markPlaybackStartSignal();
                   playbackPaused = false;
                   restartUnavailableNativeResume("player_manager_play", null);
@@ -3958,12 +3965,9 @@ if (RECEIVER_BRANCH?.gui && (
                     publishMxsPlaybackStatus("STARTING", "player_manager_play");
                   }
                 } else if (command === "PAUSE") {
-                  const castMode = String(window._receiverCastMode || RECEIVER_BRANCH.mode || "").toUpperCase();
-                  if (castMode === "D18A9B3A" || castMode === "MIRROR_CAST") {
-                    desiredPlaybackState = "stopped";
-                    stopAllPlayout("player_manager_pause_as_full_stop", "STOPPED", true, false, false);
-                    return;
-                  }
+                  desiredPlaybackState = "paused";
+                  clearPlaybackRecoveryRetry();
+                  clearNativeOrderedResumeRecovery("player_manager_pause");
                   playbackPaused = true;
                   if (!pauseNativeStreamPlayout("player_manager_pause", true)) {
                     pauseAllPlayout("player_manager_pause");
@@ -5149,77 +5153,17 @@ if (RECEIVER_BRANCH?.gui && (
           return true;
         }
 
-        function trimNativeStreamAtResumeBoundary(reason) {
-          const activeAudio = getNativeStreamElements().find(function findBufferedNativeElement(element) {
-            return !!(
-              element &&
-              element.readyState >= 3 &&
-              element.buffered &&
-              element.buffered.length > 0
-            );
-          });
-          if (!activeAudio) return false;
-
-          // Resume is the only steady-session boundary where a live-edge trim
-          // is safe: Pause has already muted the native element, and unmute has
-          // not happened yet. Never use this helper from the audible monitor.
-          const mutedForResume =
-            activeAudio.muted === true || Number(activeAudio.volume) <= 0.001;
-          if (!mutedForResume) return false;
-
-          try {
-            const liveEdge = activeAudio.buffered.end(activeAudio.buffered.length - 1);
-            const playhead = activeAudio.currentTime;
-            const latencyBefore = liveEdge - playhead;
-            const bufferedStart = activeAudio.buffered.start(activeAudio.buffered.length - 1);
-            const effectiveTargetSec = Math.max(NATIVE_STARTUP_TARGET_SEC, NATIVE_SAFE_DECODE_BUFFER_SEC);
-            const resumeTrimThresholdSec = effectiveTargetSec + 0.20;
-            if (
-              !Number.isFinite(latencyBefore) ||
-              latencyBefore <= resumeTrimThresholdSec
-            ) {
-              return false;
-            }
-            const trimTarget = Math.max(bufferedStart, liveEdge - effectiveTargetSec);
-            if (trimTarget <= playhead + 0.20) return false;
-
-            activeAudio.currentTime = trimTarget;
-            const latencyAfter = Math.max(0, liveEdge - trimTarget);
-            relayLogToStudio(
-              "✂️ Receiver: Ordered native Resume trimmed muted buffer from " +
-                latencyBefore.toFixed(3) +
-                "s to " +
-                latencyAfter.toFixed(3) +
-                "s before unmute (" +
-                (reason || "playback_start") +
-                ").",
-            );
-            logReceiverStartupTiming("native_resume_trim_at_play", {
-              nativeAttemptId: nativeStartupAttemptId,
-              latencyBeforeSec: latencyBefore,
-              latencyAfterSec: latencyAfter,
-              reason: reason || "playback_start",
-            });
-            emitCafTelemetry("CAF_RESUME_LIVE_EDGE_TRIM", {
-              mediaElementId: activeAudio.id || "native-media",
-              latencyBeforeSec: latencyBefore,
-              latencyAfterSec: latencyAfter,
-              reason: reason || "playback_start",
-            });
-            return true;
-          } catch (error) {
-            emitCafTelemetry("CAF_RESUME_LIVE_EDGE_TRIM_FAILED", {
-              mediaElementId: activeAudio.id || "native-media",
-              reason: reason || "playback_start",
-              error: String(error && error.message ? error.message : error),
-            });
-            return false;
-          }
-        }
-
         function resumeNativeStreamPlayout(reason, cafRequestAlreadyApplied) {
           if (!nativeStreamActive || !nativeStreamPaused) return false;
-          trimNativeStreamAtResumeBoundary(reason || "playback_start");
+          // New source audio may already be in flight for this revision.
+          // Seeking to a generic live edge here can discard its first attack.
+          // Healthy Resume retains the media item and never seeks or loads.
+          emitCafTelemetry("CAF_WARM_RESUME_HOLD_RELEASE", {
+            reason: reason || "playback_resume",
+            playbackEpoch: lastPlaybackEpoch,
+            playbackRevision: lastPlaybackRevision,
+            mediaState: readNativeResumeMediaState(),
+          });
           nativeStreamPaused = false;
           const cafAudio = document.getElementById("cast-media-element");
           const htmlAudio = document.getElementById("native-stream-audio");
@@ -5236,9 +5180,9 @@ if (RECEIVER_BRANCH?.gui && (
           // Pause is implemented as a mute so the live progressive-WAV clock
           // stays warm. Do not call play() on an element that is already
           // running: that can force CAF to re-prime the decoder and creates a
-          // short click/stutter on rapid Pause -> Play. Only honor an actual
-          // CAF-applied pause when the media element reports itself paused.
-          if (cafRequestAlreadyApplied === true) {
+          // short click/stutter. An actual CAF remote Pause can leave the same
+          // element paused; app Resume must release that hold too.
+          {
             getNativeStreamElements().forEach(function resumePausedNativeElement(element) {
               if (!element || element.paused !== true || typeof element.play !== "function") return;
               try {
@@ -5248,7 +5192,7 @@ if (RECEIVER_BRANCH?.gui && (
             });
           }
           relayLogToStudio(
-            "▶️ Receiver: Native output unmuted at the live edge (" +
+            "▶️ Receiver: Native output unmuted on the retained media item (" +
               (cafRequestAlreadyApplied === true ? "CAF resume; " : "live clock preserved; ") +
               (reason || "playback_start") +
               ").",
@@ -5371,11 +5315,8 @@ if (RECEIVER_BRANCH?.gui && (
           clearLowLatencyStartupWatchdog();
           clearPcmStartupRetryTimer();
 
-          // Pause is reversible for native CAF playout. Keep the loaded
-          // progressive-WAV item and its live clock warm, but mute the output.
-          // Ordered Stop separately clears playback intent and position while
-          // retaining only a muted, live-edge-trimmed CAF item for fast replay;
-          // Cast-session shutdown remains the destructive media boundary.
+          // Pause preserves the audio owner and prepared transport. Explicit
+          // Stop and Cast shutdown retain their separate teardown semantics.
           if (pauseNativeStreamPlayout(reason || "playback_pause", true)) {
             relayLogToStudio(
               "⏸️ Receiver: Playback paused; native CAF media item preserved.",
@@ -5387,7 +5328,7 @@ if (RECEIVER_BRANCH?.gui && (
             resetRealtimePlayoutKeepPcmReady(reason || "playback_pause");
             publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
             relayLogToStudio(
-              "⏸️ Receiver: Playback paused; PCM worklet retained with queue reset.",
+              "⏸️ Receiver: Playback paused; PCM worklet and rendered-frame cursor retained.",
             );
             return;
           }
@@ -5396,10 +5337,8 @@ if (RECEIVER_BRANCH?.gui && (
         }
 
         function resetRealtimePlayoutKeepPcmReady(reason) {
-          // Pause is a reversible hold for PCM too. Clear queued audio and
-          // reset the processor timeline, but retain the initialized worklet
-          // so the next PLAYBACK_START can resume without a second module
-          // load or an implicit Stop-style teardown.
+          // Hold the worklet read cursor and existing bounded queue. Every
+          // Pause revision must reach it, even inside a rapid toggle burst.
           clearPlaybackStartSignal();
           pendingBinaryFrames = [];
           window._isDrainingStartup = false;
@@ -5415,7 +5354,7 @@ if (RECEIVER_BRANCH?.gui && (
           const duplicateReset =
             lastPcmQueueResetAt > 0 &&
             now - lastPcmQueueResetAt <= PCM_QUEUE_RESET_DEDUPE_MS;
-          if (workletNode && workletNode.port && !duplicateReset) {
+          if (workletNode && workletNode.port) {
             try {
               workletNode.port.postMessage({ type: "PAUSE", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision });
               workletQueueResetCount += 1;
@@ -5432,9 +5371,8 @@ if (RECEIVER_BRANCH?.gui && (
         }
 
         function stopRealtimePlayoutKeepNativePrimed(reason) {
-          // Pause/idle is a hard playout boundary. Keeping either native
-          // /stream.wav or the PCM worklet alive lets silence and late packets
-          // accumulate, making the next resume inherit avoidable latency.
+          // This helper is reserved for an explicit Stop boundary. Pause
+          // goes through pauseAllPlayout and retains the selected audio owner.
           stopAllPlayout(reason || "playback_stop");
         }
 
@@ -6531,7 +6469,7 @@ if (RECEIVER_BRANCH?.gui && (
                 return true;
               }
 
-            let workletUrl = "pcm-player-worklet-919e83c1ad145e6a32e1c9047865a0a9bf5bf59f70b0707d5f2816c277f05339.js";
+            let workletUrl = "pcm-player-worklet-c11d7ffed48783882236886963dbb6496a3ba3b32d0b7db34aca7f58035a73bd.js";
             // Executable modules always belong to the receiver origin.
             // Decide AudioWorklet support once per AudioContext using a tiny,
             // same-origin module. A failed capability probe selects native
@@ -11620,13 +11558,6 @@ if (RECEIVER_BRANCH?.gui && (
             return;
           }
           noteOrderedPlaybackAction("PLAYBACK_PAUSE");
-          const castMode = String(window._receiverCastMode || RECEIVER_BRANCH.mode || "").toUpperCase();
-          if (castMode === "D18A9B3A" || castMode === "MIRROR_CAST") {
-            desiredPlaybackState = "stopped";
-            stopAllPlayout("studio_mirror_pause_as_full_stop", "STOPPED", false, false, false);
-            acknowledgePlaybackRevision(d, "playback_stop_for_restart");
-            return;
-          }
           desiredPlaybackState = "paused";
           clearPlaybackRecoveryRetry();
           clearNativeOrderedResumeRecovery("playback_pause");
