@@ -765,6 +765,18 @@ if (RECEIVER_BRANCH?.gui && (
           };
         }
 
+        let remotePlaybackIntentRevision = 0;
+        function requestSenderRemotePlayback(action) {
+          if (!window._handshakeAcked || !receiverBridgeConfigReady || !guiSessionNonce) return false;
+          const sent = sendReceiverBridgeMessage({
+            type: "RECEIVER_REMOTE_PLAYBACK_INTENT", action,
+            guiSessionNonce, playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision,
+            remoteRevision: ++remotePlaybackIntentRevision,
+          }, "gui", true);
+          if (!sent) relayLogToStudio("Receiver remote control unavailable until the authenticated control bridge is ready.");
+          return sent;
+        }
+
         function publishMxsPlaybackStatus(playbackState, reason) {
           const pm = getCastPlayerManager();
           if (!pm) return;
@@ -2639,7 +2651,8 @@ if (RECEIVER_BRANCH?.gui && (
           lastOrderedPlaybackAt = Date.now();
         }
 
-        function shouldIgnorePlayerManagerCommand(command) {
+        function shouldIgnorePlayerManagerCommand(command, requestId) {
+          if (Number.isSafeInteger(Number(requestId)) && Number(requestId) > 0) return false;
           if (!lastOrderedPlaybackAt || !lastOrderedPlaybackAction) {
             return false;
           }
@@ -3906,12 +3919,9 @@ if (RECEIVER_BRANCH?.gui && (
               return request;
             }, "LOAD");
 
-            // Standard Cast transport controls must use the same lifecycle as
-            // the MXS custom channel. Let CAF finish its normal request first,
-            // then reconcile the MXS path on the next task: PAUSE keeps the
-            // active playout path warm, while an external PlayerManager STOP
-            // remains destructive. Ordered MXS STOP retains a muted native
-            // prewarm for the next replay.
+            // Hardware Play/Pause requests belong to the sender's source
+            // arbiter. Suppress CAF's independent state change, then apply
+            // the resulting ordered control to the retained receiver owner.
             const deferPlayerManagerCommand = function (command, request) {
               const commandAttemptId = nativeStartupAttemptId;
               setTimeout(function () {
@@ -3939,7 +3949,7 @@ if (RECEIVER_BRANCH?.gui && (
                   );
                   return;
                 }
-                if (shouldIgnorePlayerManagerCommand(command)) {
+                if (shouldIgnorePlayerManagerCommand(command, request && request.requestId)) {
                   relayLogToStudio(
                     "⏭️ Receiver: Ignored CAF PlayerManager " + command +
                       " during ordered MXS " + lastOrderedPlaybackAction +
@@ -3953,30 +3963,13 @@ if (RECEIVER_BRANCH?.gui && (
                     (request && request.requestId !== undefined ? request.requestId : "n/a") +
                     ").",
                 );
-                if (command === "PLAY") {
-                  desiredPlaybackState = "playing";
-                  markPlaybackStartSignal();
-                  playbackPaused = false;
-                  restartUnavailableNativeResume("player_manager_play", null);
-                  if (nativeStreamActive && nativeStreamPaused) {
-                    resumeNativeStreamPlayout("player_manager_play", true);
-                  } else {
-                    requestNativePlaybackStart("player_manager_play");
-                    publishMxsPlaybackStatus("STARTING", "player_manager_play");
-                  }
-                } else if (command === "PAUSE") {
-                  desiredPlaybackState = "paused";
-                  clearPlaybackRecoveryRetry();
-                  clearNativeOrderedResumeRecovery("player_manager_pause");
-                  playbackPaused = true;
-                  if (!pauseNativeStreamPlayout("player_manager_pause", true)) {
-                    pauseAllPlayout("player_manager_pause");
-                  }
+                if (command === "PLAY" || command === "PAUSE") {
+                  requestSenderRemotePlayback(command === "PAUSE" ? "pause" : "play");
                 } else if (command === "STOP") {
                   stopAllPlayout("player_manager_stop", undefined, true);
                 }
               }, 0);
-              return request;
+              return command === "PLAY" || command === "PAUSE" ? null : request;
             };
 
             [
@@ -5325,7 +5318,7 @@ if (RECEIVER_BRANCH?.gui && (
             return;
           }
           if (workletNode && workletReady) {
-            resetRealtimePlayoutKeepPcmReady(reason || "playback_pause");
+            holdRealtimePlayoutKeepPcmReady(reason || "playback_pause");
             publishMxsPlaybackStatus("PAUSED", reason || "playback_pause");
             relayLogToStudio(
               "⏸️ Receiver: Playback paused; PCM worklet and rendered-frame cursor retained.",
@@ -5336,7 +5329,7 @@ if (RECEIVER_BRANCH?.gui && (
           relayLogToStudio("⏸️ Receiver: Playback paused; no active playout teardown required.");
         }
 
-        function resetRealtimePlayoutKeepPcmReady(reason) {
+        function holdRealtimePlayoutKeepPcmReady(reason) {
           // Hold the worklet read cursor and existing bounded queue. Every
           // Pause revision must reach it, even inside a rapid toggle burst.
           clearPlaybackStartSignal();
@@ -5368,12 +5361,6 @@ if (RECEIVER_BRANCH?.gui && (
           if (reason && !duplicateReset) {
             relayLogToStudio("⏸️ Receiver: PCM playout paused; worklet retained and queue held (" + reason + ").");
           }
-        }
-
-        function stopRealtimePlayoutKeepNativePrimed(reason) {
-          // This helper is reserved for an explicit Stop boundary. Pause
-          // goes through pauseAllPlayout and retains the selected audio owner.
-          stopAllPlayout(reason || "playback_stop");
         }
 
         function startPcmFallbackAfterNativeFailure(reason) {
@@ -10310,6 +10297,7 @@ if (RECEIVER_BRANCH?.gui && (
         let lastCastSessionHeartbeatSequence = 0;
 
         const GUI_CONTROL_OUTBOUND_TYPES = new Set([
+          "RECEIVER_REMOTE_PLAYBACK_INTENT",
           "PLAYBACK_MODE",
           "PLAYOUT_STATE",
           "RECEIVER_READY",
