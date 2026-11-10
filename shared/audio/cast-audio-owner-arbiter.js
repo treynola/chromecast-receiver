@@ -85,5 +85,10 @@
             };
           }
         }
-  window.MXSCastAudioOwnerArbiter = CastAudioOwnerArbiter;
+  Object.defineProperty(window, "MXSCastAudioOwnerArbiter", {
+    value: Object.freeze(CastAudioOwnerArbiter),
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
 })(window);

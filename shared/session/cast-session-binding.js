@@ -56,5 +56,10 @@
     }
   }
 
-  window.MXSCastSessionBinding = CastSessionBinding;
+  Object.defineProperty(window, "MXSCastSessionBinding", {
+    value: Object.freeze(CastSessionBinding),
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
 })(window);

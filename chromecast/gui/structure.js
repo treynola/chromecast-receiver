@@ -1,7 +1,7 @@
 /* Studio DOM structure only: no session, transport, audio or video owner. */
 (function () {
   "use strict";
-  window.MXSCreateStudioStructure = function ({ document, knobConfigs, samplerColumns = 5, samplerRows = 4, onRemoveElement = () => {} }) {
+  const createStudioStructure = function ({ document, knobConfigs, samplerColumns = 5, samplerRows = 4, onRemoveElement = () => {} }) {
     const RECEIVER_SAMPLER_COLUMNS = samplerColumns;
     const RECEIVER_SAMPLER_ROWS = samplerRows;
     const RECEIVER_SAMPLER_PAD_COUNT = samplerColumns * samplerRows;
@@ -129,4 +129,11 @@
 
     return Object.freeze({ build, lockSamplerGrid: lockReceiverSamplerGridLayout });
   };
+
+  Object.defineProperty(window, "MXSCreateStudioStructure", {
+    value: Object.freeze(createStudioStructure),
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
 })();

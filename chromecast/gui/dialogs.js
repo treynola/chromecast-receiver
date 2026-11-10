@@ -1,7 +1,7 @@
 /* Studio dialog presentation only. No credentials, sockets, audio or video. */
 (function () {
   "use strict";
-  window.MXSCreateStudioDialogs = function ({ document, getEl, getEffectOptions,
+  const createStudioDialogs = function ({ document, getEl, getEffectOptions,
     formatMirroredParameterDisplay, readMirroredDisplayDescriptor, writeMirroredDisplayDescriptor }) {
     let disposed = false;
     let generation = 0;
@@ -518,10 +518,12 @@
                     baseBadge.setAttribute("aria-label", bpmSetting.baseBpmText);
                   }
                   (bpmSetting.syncButtons || []).forEach((sBtn) => {
-                    const btn = bpmModuleEl.querySelector(`.pad-bpm-sync-btn[data-track="${sBtn.track}"]`);
-                    if (btn) {
-                      btn.classList.toggle("is-selected", Boolean(sBtn.selected));
-                      btn.classList.toggle("is-populated", Boolean(sBtn.populated));
+                    if (typeof sBtn?.track === "string" && /^[A-Za-z0-9_-]{1,32}$/.test(sBtn.track)) {
+                      const btn = bpmModuleEl.querySelector(`.pad-bpm-sync-btn[data-track="${sBtn.track}"]`);
+                      if (btn) {
+                        btn.classList.toggle("is-selected", Boolean(sBtn.selected));
+                        btn.classList.toggle("is-populated", Boolean(sBtn.populated));
+                      }
                     }
                   });
                 }
@@ -1092,8 +1094,7 @@
                 Object.entries(attributes).forEach(([name, value]) => {
                   if (value === undefined || value === null) return;
                   if (
-                    name.startsWith("data-") ||
-                    name.startsWith("aria-") ||
+                    ((name.startsWith("data-") || name.startsWith("aria-")) && /^(data|aria)-[a-z0-9-]+$/.test(name)) ||
                     [
                       "type", "min", "max", "step", "value", "placeholder", "inputmode",
                       "name", "disabled", "checked", "selected", "width", "height",
@@ -1822,4 +1823,11 @@
       patch: (root, dialogs) => !disposed && patchMirroredDialogState(root, dialogs),
     });
   };
+
+  Object.defineProperty(window, "MXSCreateStudioDialogs", {
+    value: Object.freeze(createStudioDialogs),
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
 })();

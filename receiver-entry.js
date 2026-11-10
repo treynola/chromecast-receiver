@@ -1,11 +1,48 @@
 /* Registered Cast URL: route only. No audio, Studio DOM, or WebRTC owner here. */
 (function () {
   "use strict";
-  const routes = Object.freeze({
+  const ROUTE_BY_APP_ID = Object.freeze({
+    "82714EF7": "chromecast/index.html",
     D18A9B3A: "chromecast/index.html",
+    F918A6E8: "mirror/index.html",
     MIRROR_CAST: "mirror/index.html",
-    CC1AD845: "default/index.html",
   });
+  const routes = ROUTE_BY_APP_ID;
+  const MAX_BRIDGE_CONFIG_BYTES = 16384;
+
+  function safeJsonReviver(key, value) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      return undefined;
+    }
+    return value;
+  }
+
+  function isNonEmptyString(val) {
+    return typeof val === "string" && val.trim().length > 0;
+  }
+
+  function verifyBuildIdentity(receivedIdentity) {
+    if (typeof window.MXS_BUILD_IDENTITY === "undefined" || window.MXS_BUILD_IDENTITY === null) {
+      return true;
+    }
+    if (receivedIdentity === window.MXS_BUILD_IDENTITY) {
+      return true;
+    }
+    if (typeof window.MXS_BUILD_IDENTITY === "string") {
+      return receivedIdentity === window.MXS_BUILD_IDENTITY;
+    }
+    if (typeof window.MXS_BUILD_IDENTITY === "object" && typeof receivedIdentity === "object" && receivedIdentity !== null) {
+      if (window.MXS_BUILD_IDENTITY.version && receivedIdentity.version) {
+        if (window.MXS_BUILD_IDENTITY.version !== receivedIdentity.version) return false;
+      }
+      try {
+        return JSON.stringify(window.MXS_BUILD_IDENTITY) === JSON.stringify(receivedIdentity);
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
   const namespace = "urn:x-cast:com.nowmultimedia.mxs004";
   const rootId = typeof window.crypto?.randomUUID === "function"
     ? window.crypto.randomUUID()
@@ -114,24 +151,60 @@
   report("root_script", "entered");
 
   // LAN browser launches retain their peer-bound, one-use bootstrap fragment.
-  if (new URLSearchParams(window.location.hash.slice(1)).has("bootstrap")) {
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialMode = queryParams.get("mode") || hashParams.get("mode");
+  if (initialMode === "CC1AD845") {
+    try {
+      window.location.replace(new URL("default/index.html", window.location.href).href);
+      return;
+    } catch (_) {}
+  }
+  if (hashParams.has("bootstrap")) {
     route("D18A9B3A", window.location.hash);
     return;
   }
 
   function receive(event) {
-    if (typeof event.data === "string" && event.data.length > 65536) {
+    if (typeof event.data === "string" && event.data.length > MAX_BRIDGE_CONFIG_BYTES) {
       report("config", "rejected_oversize");
       return;
     }
     let data;
     try {
-      data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      if (typeof event.data === "string") {
+        data = JSON.parse(event.data, safeJsonReviver);
+      } else if (event.data && typeof event.data === "object") {
+        const raw = JSON.stringify(event.data);
+        if (raw.length > MAX_BRIDGE_CONFIG_BYTES) {
+          report("config", "rejected_oversize");
+          return;
+        }
+        data = JSON.parse(raw, safeJsonReviver);
+      } else {
+        data = event.data;
+      }
+      if (data && typeof data === "object") {
+        delete data.__proto__;
+        delete data.constructor;
+        delete data.prototype;
+      }
     } catch (_) {
       report("config", "rejected_malformed");
       return;
     }
     if (data?.type !== "BRIDGE_CONFIG") return;
+
+    if (!isNonEmptyString(data.ip) || !isNonEmptyString(data.token) || !isNonEmptyString(data.guiSessionNonce)) {
+      report("config", "rejected_missing_credentials");
+      return;
+    }
+
+    if (!verifyBuildIdentity(data.buildIdentity)) {
+      report("config", "rejected_build_identity");
+      return;
+    }
+
     const incomingGeneration = Number.isSafeInteger(data.credentialGeneration)
       ? data.credentialGeneration
       : null;

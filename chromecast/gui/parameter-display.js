@@ -88,7 +88,12 @@
           return `${displayValue.toFixed(decimals)}${unit ? unitSpacing + unit : ""}`;
         }
 
-  window.MXSStudioParameterDisplay = Object.freeze({
-    format: formatMirroredParameterDisplay, loopTimecode: formatMirroredLoopTimecode,
+  Object.defineProperty(window, "MXSStudioParameterDisplay", {
+    value: Object.freeze({
+      format: formatMirroredParameterDisplay, loopTimecode: formatMirroredLoopTimecode,
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: true,
   });
 })();

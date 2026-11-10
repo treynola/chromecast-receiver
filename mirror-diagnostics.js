@@ -353,7 +353,15 @@
     recover(now) { this.level = Math.max(0, this.level - 1); this.lastChange = now; this.good = 0; }
   }
 
-  root.MXSMirrorDiagnostics = Object.freeze({ Sampler, senderParameters, trackSettings, frameObservation,
+  const mirrorDiagnostics = Object.freeze({ Sampler, senderParameters, trackSettings, frameObservation,
     presentationState, presentationStatusLabel, captureRouteEvidence, codecName, codecProfile, capabilities, preferCodec,
     CodecTracker, PresentationSampler, WorkloadController });
+  if (typeof root.MXSMirrorDiagnostics === "undefined") {
+    Object.defineProperty(root, "MXSMirrorDiagnostics", {
+      value: mirrorDiagnostics,
+      writable: false,
+      configurable: false,
+      enumerable: true,
+    });
+  }
 })(typeof window !== "undefined" ? window : globalThis);

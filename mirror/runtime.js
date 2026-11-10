@@ -1,5 +1,5 @@
 /* Mirror video only. Authenticated audio and lifecycle remain in the shared core. */
-window.MXSCreateMirrorReceiver = function (shared) {
+const createMirrorReceiver = function (shared) {
   "use strict";
   const { getLfoVisualNow, sendReceiverBridgeMessage, readNativeResumeMediaState, relayLogToStudio, identityAllowsGui } = shared;
         let mirrorDiagnosticsState = null;
@@ -518,8 +518,23 @@ window.MXSCreateMirrorReceiver = function (shared) {
 
         const mirrorOfferTransactions = new Map();
         async function handleScreenMirrorSignal(data, replyFn) {
+          const isMirrorBranch = (typeof shared !== "undefined" && shared?.RECEIVER_BRANCH && shared.RECEIVER_BRANCH.mirror) ||
+            (typeof window !== "undefined" && window.MXS_RECEIVER_BRANCH && window.MXS_RECEIVER_BRANCH.mirror) ||
+            (typeof shared === "undefined" && typeof window === "undefined");
+          if (!isMirrorBranch) return false;
+          if (!data) return false;
+          if (typeof identityAllowsGui === "function" && !identityAllowsGui()) return false;
+          if (typeof shared !== "undefined" && shared?.receiverBridgeConfigReady === false) return false;
+          if (typeof window !== "undefined" && window._handshakeAcked === false) return false;
+
           const signal = data?.signal || data;
           if (signal?.type !== "offer") return processScreenMirrorSignal(data, replyFn);
+
+          const sdp = signal.offer?.sdp;
+          if (typeof sdp !== "string" || sdp.length > 131072) {
+            return false;
+          }
+
           const key = mirrorSessionKey(signal.sessionId, signal.sessionSequence);
           let queue = mirrorOfferTransactions.get(key);
           if (!queue) {
@@ -527,7 +542,6 @@ window.MXSCreateMirrorReceiver = function (shared) {
             queue = { tail: Promise.resolve(), offers: new Map() };
             mirrorOfferTransactions.set(key, queue);
           }
-          const sdp = signal.offer?.sdp;
           if (queue.offers.has(sdp)) return queue.offers.get(sdp);
           if (queue.offers.size >= 4) return false;
           const task = queue.tail.catch(() => {}).then(() => processScreenMirrorSignal(data, replyFn));
@@ -713,3 +727,10 @@ window.MXSCreateMirrorReceiver = function (shared) {
   return Object.freeze({ handleScreenMirrorSignal, activatePureScreenMirrorViewport,
     applyMirrorPresentationState, stopMirrorDiagnostics });
 };
+
+Object.defineProperty(window, "MXSCreateMirrorReceiver", {
+  value: Object.freeze(createMirrorReceiver),
+  writable: false,
+  configurable: false,
+  enumerable: true,
+});

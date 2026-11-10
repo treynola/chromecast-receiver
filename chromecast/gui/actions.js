@@ -1,7 +1,7 @@
 (function installStudioGuiActions(window) {
   "use strict";
 
-  window.MXSCreateStudioGuiActions = function createStudioGuiActions({
+  const createStudioGuiActions = function createStudioGuiActions({
     document,
     protocolVersion,
     getSessionNonce,
@@ -50,4 +50,11 @@
       dispose() { disposed = true; },
     });
   };
+
+  Object.defineProperty(window, "MXSCreateStudioGuiActions", {
+    value: Object.freeze(createStudioGuiActions),
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
 })(window);

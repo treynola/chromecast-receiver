@@ -1,6 +1,6 @@
 (function installStudioLfoWaveforms(window) {
   "use strict";
-  window.MXSCreateStudioLfoWaveforms = function createStudioLfoWaveforms({
+  const createStudioLfoWaveforms = function createStudioLfoWaveforms({
     ResizeObserver = window.ResizeObserver,
     computeReceiverLfoWaveformValue,
     normalizeReceiverLfoGateValue,
@@ -145,4 +145,11 @@
         }
     return Object.freeze({ draw });
   };
+
+  Object.defineProperty(window, "MXSCreateStudioLfoWaveforms", {
+    value: Object.freeze(createStudioLfoWaveforms),
+    writable: false,
+    configurable: false,
+    enumerable: true,
+  });
 })(window);
