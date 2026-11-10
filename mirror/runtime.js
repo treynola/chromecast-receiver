@@ -518,14 +518,11 @@ const createMirrorReceiver = function (shared) {
 
         const mirrorOfferTransactions = new Map();
         async function handleScreenMirrorSignal(data, replyFn) {
-          const isMirrorBranch = (typeof shared !== "undefined" && shared?.RECEIVER_BRANCH && shared.RECEIVER_BRANCH.mirror) ||
-            (typeof window !== "undefined" && window.MXS_RECEIVER_BRANCH && window.MXS_RECEIVER_BRANCH.mirror) ||
-            (typeof shared === "undefined" && typeof window === "undefined");
-          if (!isMirrorBranch) return false;
+          if (typeof shared === "undefined" || typeof window === "undefined") return false;
+          if (shared?.RECEIVER_BRANCH?.mirror !== true || window.MXS_RECEIVER_BRANCH?.mirror !== true) return false;
+          if (typeof identityAllowsGui !== "function" || !identityAllowsGui()) return false;
+          if (shared.receiverBridgeConfigReady !== true || window._handshakeAcked !== true) return false;
           if (!data) return false;
-          if (typeof identityAllowsGui === "function" && !identityAllowsGui()) return false;
-          if (typeof shared !== "undefined" && shared?.receiverBridgeConfigReady === false) return false;
-          if (typeof window !== "undefined" && window._handshakeAcked === false) return false;
 
           const signal = data?.signal || data;
           if (signal?.type !== "offer") return processScreenMirrorSignal(data, replyFn);

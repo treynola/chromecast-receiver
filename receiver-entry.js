@@ -116,7 +116,7 @@
     }
   }
 
-  function route(mode, fragment = "") {
+  function route(mode, fragment = "", acceptedGeneration = launchGeneration) {
     if (routing) {
       report("navigation", "duplicate_ignored", { requestedMode: mode });
       return false;
@@ -126,20 +126,21 @@
       setStatus("Cast mode was not recognized.");
       return false;
     }
-    selectedMode = mode;
-    report("mode_selected");
     const target = new URL(routes[mode], window.location.href);
     target.hash = fragment ? fragment.slice(1) : "";
     const destination = target.href;
-    try {
-      sessionStorage.setItem("mxs.cast.boot.rootId", rootId);
-      sessionStorage.setItem("mxs.cast.boot.mode", mode);
-      sessionStorage.setItem("mxs.cast.boot.generation", launchGeneration === null ? "" : String(launchGeneration));
-    } catch (_) {}
     report("navigation", "requested", { branch: routes[mode] });
     try {
       window.location.replace(destination);
       routing = true;
+      selectedMode = mode;
+      launchGeneration = acceptedGeneration;
+      try {
+        sessionStorage.setItem("mxs.cast.boot.rootId", rootId);
+        sessionStorage.setItem("mxs.cast.boot.mode", mode);
+        sessionStorage.setItem("mxs.cast.boot.generation", acceptedGeneration === null ? "" : String(acceptedGeneration));
+      } catch (_) {}
+      report("mode_selected");
       return true;
     } catch (error) {
       report("navigation", "failed", { errorName: String(error?.name || "Error").slice(0, 48) });
@@ -212,12 +213,18 @@
       report("config", "rejected_stale_generation", { receivedGeneration: incomingGeneration });
       return;
     }
-    if (incomingGeneration !== null) lastConfigGeneration = incomingGeneration;
-    launchGeneration = incomingGeneration;
-    report("config", "received");
     // This selects a page, never authenticates a bridge. The selected page
     // validates a fresh retried configuration using the existing fail-closed core.
-    route(data.castMode || "D18A9B3A");
+    const requestedMode = data.castMode || "D18A9B3A";
+    if (!Object.prototype.hasOwnProperty.call(routes, requestedMode)) {
+      report("config", "rejected_invalid_mode", { requestedMode: String(requestedMode).slice(0, 32) });
+      report("mode_selected", "invalid_mode", { requestedMode: String(requestedMode).slice(0, 32) });
+      setStatus("Cast mode was not recognized.");
+      return;
+    }
+    if (!route(requestedMode, "", incomingGeneration)) return;
+    if (incomingGeneration !== null) lastConfigGeneration = incomingGeneration;
+    report("config", "received");
   }
 
   function startReceiver(attempt = 0) {
