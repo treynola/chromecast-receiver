@@ -8978,7 +8978,8 @@ if (RECEIVER_BRANCH?.gui && (
           ) return false;
           const rttMs = (receiverMonotonicReceivedAtMs - receiverMonotonicSentAtMs) -
             (senderMonotonicSentAtMs - senderMonotonicReceivedAtMs);
-          if (!Number.isFinite(rttMs) || rttMs < 0 || rttMs > GUI_CLOCK_SYNC_MAX_RTT_MS) {
+          const maxRttMs = guiClockSyncSamples.length < 4 ? 400 : GUI_CLOCK_SYNC_MAX_RTT_MS;
+          if (!Number.isFinite(rttMs) || rttMs < 0 || rttMs > maxRttMs) {
             emitGuiChannelTelemetry("clock_sync_rejected", {
               reason: "round_trip_out_of_bounds",
               rttMs: Number.isFinite(rttMs) ? rttMs : null,
@@ -11171,7 +11172,9 @@ if (RECEIVER_BRANCH?.gui && (
               : {}),
             playbackIdentityMatchedAtAck: hasSnapshotPlaybackIdentity && hasReceiverPlaybackIdentity
               ? snapshotPlaybackEpoch === receiverPlaybackEpochAtAck &&
-                snapshotPlaybackRevision === receiverPlaybackRevisionAtAck
+                (envelope?.type === "GUI_PATCH"
+                  ? snapshotPlaybackRevision <= receiverPlaybackRevisionAtAck
+                  : snapshotPlaybackRevision === receiverPlaybackRevisionAtAck)
               : null,
           };
           if (Number.isSafeInteger(revision) && revision >= 0 && revision === lastGuiRevision) {
