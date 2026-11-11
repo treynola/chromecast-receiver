@@ -395,6 +395,7 @@ if (RECEIVER_BRANCH?.gui && (
             binaryWS.send(JSON.stringify({
               type: "RECEIVER_HANDSHAKE_COMMITTED",
               castMode: RECEIVER_BRANCH.mode,
+              playbackCommands: ["PLAYBACK_START", "PLAYBACK_PAUSE", "PLAYBACK_STOP", "PLAYBACK_RESUME"],
               handshakeCommitVersion: 2,
               guiSessionNonce,
               socketGeneration: playbackModeSocketGeneration,
