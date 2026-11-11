@@ -9,6 +9,9 @@
   const commandNames = Object.freeze([
     "control.activate",
     "control.set",
+    "control.settings",
+    "pad.down",
+    "pad.up",
     "registry.invoke",
   ]);
   const registryActionIds = Object.freeze([

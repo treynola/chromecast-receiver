@@ -5021,8 +5021,17 @@ select option {
 .sample-btn.active {
   background-color: var(--off-black) !important;
   color: var(--green) !important;
-  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--green);
-  border-color: var(--green) !important;
+  box-shadow: var(--sampler-pad-border-shadow), 0 0 12px var(--sampler-pad-color, var(--green));
+  border-color: var(--sampler-pad-color, var(--green)) !important;
+}
+
+.sample-btn.muted {
+  opacity: 0.4 !important;
+  filter: grayscale(0.8);
+}
+
+.sample-btn.stuttering {
+  border-style: dotted !important;
 }
 
 .sample-btn.trigger-error {
@@ -5244,8 +5253,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-04e3a3099a50") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-04e3a3099a50") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-08be3d94bc95") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-08be3d94bc95") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;

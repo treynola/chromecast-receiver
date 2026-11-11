@@ -77,28 +77,32 @@
             const decay = Math.max(0.001, read("Amp Decay", Number(envelopeCanvas.dataset.envelopeDecay) || 0.1));
             const sustain = Math.max(0, Math.min(1, read("Amp Sustain", Number(envelopeCanvas.dataset.envelopeSustain) || 0)));
             const release = Math.max(0.001, read("Amp Release", Number(envelopeCanvas.dataset.envelopeRelease) || 0.01));
-            const context = envelopeCanvas.getContext?.("2d");
-            if (context) {
-              const width = Math.max(1, Math.round(envelopeCanvas.clientWidth || 560));
-              const height = Math.max(1, Math.round(envelopeCanvas.clientHeight || 88));
-              if (envelopeCanvas.width !== width) envelopeCanvas.width = width;
-              if (envelopeCanvas.height !== height) envelopeCanvas.height = height;
-              const hold = Math.max(0.15, (attack + decay + release) * 0.22);
-              const total = attack + decay + hold + release;
-              const x = (time) => 8 + ((width - 16) * time / total);
-              const y = (level) => 8 + ((height - 16) * (1 - level));
-              context.clearRect(0, 0, width, height);
-              context.fillStyle = "#111";
-              context.fillRect(0, 0, width, height);
-              context.strokeStyle = "#ffcc00";
-              context.lineWidth = 2;
-              context.beginPath();
-              context.moveTo(x(0), y(0));
-              context.lineTo(x(attack), y(1));
-              context.lineTo(x(attack + decay), y(sustain));
-              context.lineTo(x(attack + decay + hold), y(sustain));
-              context.lineTo(x(total), y(0));
-              context.stroke();
+            const width = Math.max(1, Math.round(envelopeCanvas.clientWidth || 560));
+            const height = Math.max(1, Math.round(envelopeCanvas.clientHeight || 88));
+            const envSig = `${attack.toFixed(4)}:${decay.toFixed(4)}:${sustain.toFixed(4)}:${release.toFixed(4)}:${width}:${height}`;
+            if (envelopeCanvas.dataset.renderSig !== envSig) {
+              envelopeCanvas.dataset.renderSig = envSig;
+              const context = envelopeCanvas.getContext?.("2d");
+              if (context) {
+                if (envelopeCanvas.width !== width) envelopeCanvas.width = width;
+                if (envelopeCanvas.height !== height) envelopeCanvas.height = height;
+                const hold = Math.max(0.15, (attack + decay + release) * 0.22);
+                const total = attack + decay + hold + release;
+                const x = (time) => 8 + ((width - 16) * time / total);
+                const y = (level) => 8 + ((height - 16) * (1 - level));
+                context.clearRect(0, 0, width, height);
+                context.fillStyle = "#111";
+                context.fillRect(0, 0, width, height);
+                context.strokeStyle = "#ffcc00";
+                context.lineWidth = 2;
+                context.beginPath();
+                context.moveTo(x(0), y(0));
+                context.lineTo(x(attack), y(1));
+                context.lineTo(x(attack + decay), y(sustain));
+                context.lineTo(x(attack + decay + hold), y(sustain));
+                context.lineTo(x(total), y(0));
+                context.stroke();
+              }
             }
           }
 
@@ -116,10 +120,13 @@
           const center = Math.max(viewDuration / 2, Math.min(duration - (viewDuration / 2), (start + end) / 2));
           const viewStart = Math.max(0, center - (viewDuration / 2));
           const viewEnd = Math.min(duration, center + (viewDuration / 2));
+          const width = Math.max(1, Math.round(canvas.clientWidth || 720));
+          const height = Math.max(1, Math.round(canvas.clientHeight || 128));
+          const waveSig = `${start.toFixed(4)}:${end.toFixed(4)}:${zoom.toFixed(2)}:${viewStart.toFixed(4)}:${viewEnd.toFixed(4)}:${width}:${height}`;
+          if (canvas.dataset.renderSig === waveSig) return;
+          canvas.dataset.renderSig = waveSig;
           const context = canvas.getContext?.("2d");
           if (context) {
-            const width = Math.max(1, Math.round(canvas.clientWidth || 720));
-            const height = Math.max(1, Math.round(canvas.clientHeight || 128));
             if (canvas.width !== width) canvas.width = width;
             if (canvas.height !== height) canvas.height = height;
             context.clearRect(0, 0, width, height);
@@ -448,7 +455,15 @@
                   }
                 : null,
               samplePadLayout: dialog.samplePadLayout
-                ? { ...dialog.samplePadLayout, sampleNameText: undefined }
+                ? {
+                    ...dialog.samplePadLayout,
+                    activeTab: undefined,
+                    sampleNameText: undefined,
+                    tabs: (dialog.samplePadLayout.tabs || []).map((tab) => ({
+                      ...tab,
+                      active: undefined,
+                    })),
+                  }
                 : null,
               samplePadDomManifest: manifest,
               dialogDomManifest: manifest,
@@ -490,7 +505,7 @@
               panel.style.maxHeight = `${Math.max(0.25, Math.min(0.8, Number(dialog.height) || 0.5)) * 100}%`;
             }
             if (exactSamplePadDialog) {
-              const activeTab = dialog.samplePadLayout?.activeTab;
+              const activeTab = dialog.samplePadLayout?.activeTab || (dialog.samplePadLayout?.tabs || []).find((t) => t.active)?.id;
               if (activeTab && panel.dataset.padTab !== activeTab) {
                 panel.dataset.padTab = activeTab;
                 panel.querySelectorAll(".pad-dialog-tab-btn").forEach((btn) => {
@@ -1313,6 +1328,16 @@
               bottomControlRows.dataset.tab = "main performance";
               appendActionRows(bottomControlRows, layout.bottomControlRows);
               scrollContent.appendChild(bottomControlRows);
+
+              const envelopePreview = document.createElement("div");
+              envelopePreview.className = "pad-envelope-preview";
+              const envCanvas = document.createElement("canvas");
+              envCanvas.className = "sampler-envelope-canvas";
+              envCanvas.dataset.samplerEnvelope = "";
+              envCanvas.width = 560;
+              envCanvas.height = 88;
+              envelopePreview.appendChild(envCanvas);
+              scrollContent.appendChild(envelopePreview);
               const settingsStrip = document.createElement("div");
               settingsStrip.className = normalizeClassName(
                 layout.settingsStripClassName,
@@ -1462,6 +1487,7 @@
               });
               panel.appendChild(footer);
               appendMirroredPanel(panel, dialog.modal === true);
+              queueMirroredSamplerCanvasRender(panel, dialog);
               return;
             }
 

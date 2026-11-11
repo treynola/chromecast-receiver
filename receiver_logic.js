@@ -2995,18 +2995,55 @@ if (RECEIVER_BRANCH?.gui && (
           };
           document.addEventListener("pointerdown", hydrateEffectSelect);
           document.addEventListener("focusin", hydrateEffectSelect);
+          let lastSamplePadClick = 0;
+          let lastSamplePadTarget = null;
+          document.addEventListener("pointerdown", (event) => {
+            const target = event.target && event.target.closest ? event.target.closest("button.sample-btn") : null;
+            if (target && /^sample-\d+$/.test(target.id)) {
+              if (target.dataset.padMode === "gate" || target.dataset.padMode === "release_loop") {
+                sendGuiInteraction(target, "pad.down");
+              }
+            }
+          });
+          const handlePadRelease = (event) => {
+            const target = event.target && event.target.closest ? event.target.closest("button.sample-btn") : null;
+            if (target && /^sample-\d+$/.test(target.id)) {
+              if (target.dataset.padMode === "gate" || target.dataset.padMode === "release_loop") {
+                sendGuiInteraction(target, "pad.up");
+              }
+            }
+          };
+          document.addEventListener("pointerup", handlePadRelease);
+          document.addEventListener("pointercancel", handlePadRelease);
           document.addEventListener("click", (event) => {
             const target = event.target && event.target.closest
               ? event.target.closest('button, label[data-dialog-id][data-action-index]')
               : null;
             if (target) {
               if (target.tagName === "LABEL") event.preventDefault();
+              if (/^sample-\d+$/.test(target.id)) {
+                if (target.dataset.padMode === "gate" || target.dataset.padMode === "release_loop") {
+                  return; // Handled by pointerdown/pointerup
+                }
+                const now = Date.now();
+                if (lastSamplePadTarget === target && now - lastSamplePadClick < 350) {
+                  lastSamplePadClick = 0;
+                  lastSamplePadTarget = null;
+                  return;
+                }
+                lastSamplePadClick = now;
+                lastSamplePadTarget = target;
+              }
               sendGuiInteraction(target, "click");
             }
           });
           document.addEventListener("dblclick", (event) => {
             const target = event.target && event.target.closest ? event.target.closest("button") : null;
-            if (target && /^sample-\d+$/.test(target.id)) sendGuiInteraction(target, "settings");
+            if (target && /^sample-\d+$/.test(target.id)) {
+              lastSamplePadClick = 0;
+              lastSamplePadTarget = null;
+              sendGuiInteraction(target, "settings");
+            }
           });
           document.addEventListener("input", (event) => {
             const target = event.target;
@@ -8530,7 +8567,10 @@ if (RECEIVER_BRANCH?.gui && (
             timeline: state.master.timeline }, tracks: state.tracks.map((track) => ({ waveform: track.waveform,
               meters: track.meters, timeline: track.timeline, lfoBindings: track.lfoBindings,
               manualKnobInteraction: track.manualKnobInteraction, lfoIndicators: track.lfoIndicators,
-              lfoAssigns: track.lfoAssigns, paramDisplays: track.paramDisplays })) });
+              lfoAssigns: track.lfoAssigns, paramDisplays: track.paramDisplays })),
+            sampler: Array.isArray(state.sampler)
+              ? state.sampler.map((pad) => ({ id: pad.id, active: pad.active, selected: pad.selected, repeat: pad.repeat }))
+              : null });
           if (presentationVisualHistory.length > 256) {
             presentationVisualHistory.splice(0, presentationVisualHistory.length - 256);
           }
@@ -9576,6 +9616,12 @@ if (RECEIVER_BRANCH?.gui && (
               return padPatch ? { ...previousPad, ...padPatch } : previousPad;
             });
           }
+          if (patch.samplerMeta && typeof patch.samplerMeta === "object") {
+            nextState.samplerMeta = {
+              ...(nextState.samplerMeta || {}),
+              ...patch.samplerMeta,
+            };
+          }
           if (Array.isArray(patch.dialogStates) && Array.isArray(nextState.dialogs)) {
             const mergeControl = (previousControl, controlPatch) => {
               if (!controlPatch) return previousControl;
@@ -9892,6 +9938,12 @@ if (RECEIVER_BRANCH?.gui && (
             studioDialogs?.render(s.dialogs);
             const dialogsFinishedAt = phaseClock();
             if (s.sampler) {
+                const presentedVisual = (window._playbackMode === "native" || window._playbackMode === "pcm_fallback")
+                  ? (typeof getPresentationVisualState === "function" ? getPresentationVisualState(s) : null)
+                  : null;
+                const visualPads = presentedVisual?.sampler || null;
+                const visualPadMap = visualPads ? new Map(visualPads.map((vp) => [Number(vp.id), vp])) : null;
+
                 s.sampler.forEach((p, i) => {
                   if (i >= RECEIVER_SAMPLER_PAD_COUNT) return;
                   const numericPadId = Number(p?.id);
@@ -9900,15 +9952,22 @@ if (RECEIVER_BRANCH?.gui && (
                     : i + 1;
                   const btnId = "sample-" + padId;
                   const padCacheKey = `sampler-pad:${padId}`;
-                  const padSignature = getSamplerPadVisualSignature(p);
+                  const vPad = visualPadMap?.get(padId);
+                  const isPadActive = vPad ? Boolean(vPad.active) : Boolean(p.active);
+                  const padSignature = JSON.stringify([
+                    p.id, p.loaded, isPadActive, p.repeat?.enabled, p.reverse, p.name,
+                    p.selected, p.mode, p.muted, p.tune, p.baseBpm, p.effectiveBpm, p.syncAll, p.syncTrack, p.color
+                  ]);
                   if (valCache[padCacheKey] === padSignature) return;
                   valCache[padCacheKey] = padSignature;
                   const cls = [
                     "sample-btn",
                     p.loaded ? "loaded" : "",
-                    p.active ? "active" : "",
-                    p.active && p.repeat?.enabled ? "repeating" : "",
+                    isPadActive ? "active" : "",
+                    isPadActive && p.repeat?.enabled ? "repeating" : "",
                     p.reverse ? "reverse" : "",
+                    p.muted ? "muted" : "",
+                    p.stutter?.enabled ? "stuttering" : "",
                   ].filter(Boolean).join(" ");
                   updateClass(btnId, cls);
                   if (p.loaded && p.name) {
@@ -9937,6 +9996,7 @@ if (RECEIVER_BRANCH?.gui && (
                     const padColor = typeof p.color === "string" && /^#[0-9a-f]{6}$/i.test(p.color)
                       ? p.color
                       : "";
+                    pad.style.setProperty("--sampler-pad-color", padColor || "var(--yellow, #ffcc00)");
                     pad.style.borderColor = padColor || "";
                     pad.style.boxShadow = p.selected && padColor
                       ? `0 0 0 2px ${padColor}, 0 0 12px ${padColor}`
@@ -9952,39 +10012,48 @@ if (RECEIVER_BRANCH?.gui && (
                 });
             }
             if (s.samplerMeta) {
-              const bankSelector = getEl("sampler-bank-selector");
-              if (bankSelector) {
-                const showBankSelector = Boolean(
-                  s.samplerMeta.bankSelectorVisible ||
-                  s.samplerMeta.hasAdditionalBanks ||
-                  (Number.isInteger(s.samplerMeta.activeBankIndex) && s.samplerMeta.activeBankIndex > 0)
-                );
-                bankSelector.hidden = !showBankSelector;
-                const activeBank = Number(s.samplerMeta.activeBankIndex || 0);
-                const buttons = bankSelector.querySelectorAll(".sampler-bank-btn");
-                buttons.forEach((btn) => {
-                  const b = Number(btn.dataset.bank);
-                  btn.classList.toggle("active", b === activeBank);
-                });
-              }
-              const sampleGrid = getEl("sample-grid");
-              if (sampleGrid) {
-                const sixteenMode = s.samplerMeta.sixteenLevelsMode;
-                const isSixteenActive = Boolean(sixteenMode && sixteenMode !== "off");
-                sampleGrid.classList.toggle("sixteen-levels-active", isSixteenActive);
-                for (let padIdx = 1; padIdx <= RECEIVER_SAMPLER_PAD_COUNT; padIdx++) {
-                  const pBtn = getEl("sample-" + padIdx);
-                  if (pBtn) {
-                    if (isSixteenActive) {
-                      if (padIdx <= 16) {
-                        pBtn.classList.add("sixteen-levels-pad");
-                        pBtn.classList.remove("aux-pad");
+              const samplerMetaSig = JSON.stringify([
+                s.samplerMeta.bankSelectorVisible,
+                s.samplerMeta.hasAdditionalBanks,
+                s.samplerMeta.activeBankIndex,
+                s.samplerMeta.sixteenLevelsMode,
+              ]);
+              if (valCache["sampler-meta"] !== samplerMetaSig) {
+                valCache["sampler-meta"] = samplerMetaSig;
+                const bankSelector = getEl("sampler-bank-selector");
+                if (bankSelector) {
+                  const showBankSelector = Boolean(
+                    s.samplerMeta.bankSelectorVisible ||
+                    s.samplerMeta.hasAdditionalBanks ||
+                    (Number.isInteger(s.samplerMeta.activeBankIndex) && s.samplerMeta.activeBankIndex > 0)
+                  );
+                  bankSelector.hidden = !showBankSelector;
+                  const activeBank = Number(s.samplerMeta.activeBankIndex || 0);
+                  const buttons = bankSelector.querySelectorAll(".sampler-bank-btn");
+                  buttons.forEach((btn) => {
+                    const b = Number(btn.dataset.bank);
+                    btn.classList.toggle("active", b === activeBank);
+                  });
+                }
+                const sampleGrid = getEl("sample-grid");
+                if (sampleGrid) {
+                  const sixteenMode = s.samplerMeta.sixteenLevelsMode;
+                  const isSixteenActive = Boolean(sixteenMode && sixteenMode !== "off");
+                  sampleGrid.classList.toggle("sixteen-levels-active", isSixteenActive);
+                  for (let padIdx = 1; padIdx <= RECEIVER_SAMPLER_PAD_COUNT; padIdx++) {
+                    const pBtn = getEl("sample-" + padIdx);
+                    if (pBtn) {
+                      if (isSixteenActive) {
+                        if (padIdx <= 16) {
+                          pBtn.classList.add("sixteen-levels-pad");
+                          pBtn.classList.remove("aux-pad");
+                        } else {
+                          pBtn.classList.add("aux-pad");
+                          pBtn.classList.remove("sixteen-levels-pad");
+                        }
                       } else {
-                        pBtn.classList.add("aux-pad");
-                        pBtn.classList.remove("sixteen-levels-pad");
+                        pBtn.classList.remove("sixteen-levels-pad", "aux-pad");
                       }
-                    } else {
-                      pBtn.classList.remove("sixteen-levels-pad", "aux-pad");
                     }
                   }
                 }
@@ -10976,7 +11045,13 @@ if (RECEIVER_BRANCH?.gui && (
           };
         }
 
+        let _cachedSamplerLayoutSummary = null;
+        let _lastSamplerLayoutMeasureAt = 0;
         function summarizeSamplerVisualLayout() {
+          const now = Date.now();
+          if (_cachedSamplerLayoutSummary && now - _lastSamplerLayoutMeasureAt < 2000) {
+            return _cachedSamplerLayoutSummary;
+          }
           const grid = document.getElementById("sample-grid");
           const summary = {
             samplerExpected: RECEIVER_SAMPLER_PAD_COUNT,
@@ -10987,7 +11062,6 @@ if (RECEIVER_BRANCH?.gui && (
             samplerLayoutValid: false,
           };
           if (!grid) return summary;
-          lockReceiverSamplerGridLayout(grid);
           const pads = Array.from(grid.children).filter(function isSamplerPad(child) {
             return child.classList && child.classList.contains("sample-btn");
           });
@@ -11022,6 +11096,8 @@ if (RECEIVER_BRANCH?.gui && (
             summary.samplerVisible === RECEIVER_SAMPLER_PAD_COUNT &&
             summary.samplerColumns === RECEIVER_SAMPLER_COLUMNS &&
             summary.samplerRows === RECEIVER_SAMPLER_ROWS;
+          _cachedSamplerLayoutSummary = summary;
+          _lastSamplerLayoutMeasureAt = now;
           return summary;
         }
 
