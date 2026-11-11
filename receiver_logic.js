@@ -10724,11 +10724,6 @@ if (RECEIVER_BRANCH?.gui && (
           if (workletNode && workletNode.port) {
             try { workletNode.port.postMessage({ type: "RESUME", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision }); } catch (e) {}
           }
-          const immediateState = buildImmediatePlaybackState(d.trackId);
-          if (immediateState) {
-            renderState(immediateState, true);
-            lastMirroredState = immediateState;
-          }
           const playbackRevision = Number(d.playbackRevision);
           restartUnavailableNativeResume(
             reason || "playback_start",
@@ -10746,6 +10741,15 @@ if (RECEIVER_BRANCH?.gui && (
           }
           acknowledgePlaybackRevision(d, "playback_start");
           schedulePlaybackRecoveryRetry();
+          const immediateState = buildImmediatePlaybackState(d.trackId);
+          if (immediateState) {
+            lastMirroredState = immediateState;
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(() => renderState(immediateState, true));
+            } else {
+              renderState(immediateState, true);
+            }
+          }
         }
 
         function handlePlaybackResumeCommand(d) {
@@ -10763,11 +10767,6 @@ if (RECEIVER_BRANCH?.gui && (
           if (workletNode?.port) {
             try { workletNode.port.postMessage({ type: "RESUME", playbackEpoch: lastPlaybackEpoch, playbackRevision: lastPlaybackRevision }); } catch (e) {}
           }
-          const immediateState = buildImmediatePlaybackState(d.trackId);
-          if (immediateState) {
-            renderState(immediateState, true);
-            lastMirroredState = immediateState;
-          }
           const revision = Number(d.playbackRevision);
           restartUnavailableNativeResume("playback_resume", revision);
           const resumingNative = nativeStreamActive && nativeStreamPaused;
@@ -10777,6 +10776,15 @@ if (RECEIVER_BRANCH?.gui && (
           else if (!resumingNative) publishMxsPlaybackStatus("STARTING", "playback_resume");
           acknowledgePlaybackRevision(d, "playback_resume");
           schedulePlaybackRecoveryRetry();
+          const immediateState = buildImmediatePlaybackState(d.trackId);
+          if (immediateState) {
+            lastMirroredState = immediateState;
+            if (typeof requestAnimationFrame === "function") {
+              requestAnimationFrame(() => renderState(immediateState, true));
+            } else {
+              renderState(immediateState, true);
+            }
+          }
         }
 
         function summarizeLfoVisualState(state) {
