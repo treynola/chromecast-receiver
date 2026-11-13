@@ -4137,7 +4137,7 @@ if (RECEIVER_BRANCH?.gui && (
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
                 if (eventType === events.PLAYING) {
-                  if (nativeStreamPrewarmReady && nativeStreamStarting) {
+                  if (!nativeStreamPaused) {
                     releaseNativeStreamPrewarmMute();
                     relayLogToStudio("🔊 Receiver: CAF native prewarm reached PLAYING; output unmuted.");
                   }
@@ -12885,6 +12885,31 @@ if (RECEIVER_BRANCH?.gui && (
               relayLogToStudio("✅ Receiver: CAF remote command policy enforced (PAUSE/VOLUME/MUTE only).");
               context.start(options);
               markReceiverBoot("caf_started");
+              const notifyCafStartedForBootstrap = () => {
+                if (receiverBridgeConfigReady || window._handshakeAcked) return;
+                try {
+                  const senders = typeof context.getSenders === "function" ? context.getSenders() : [];
+                  const targetSender = senders && senders[0] && senders[0].id ? senders[0].id : "sender-0";
+                  context.sendCustomMessage(CUSTOM_NAMESPACE, targetSender, {
+                    type: "CAST_BOOT_DIAGNOSTIC",
+                    phase: "caf",
+                    outcome: "started",
+                    mode: window._receiverCastMode || "D18A9B3A",
+                  });
+                } catch (_) {}
+              };
+              notifyCafStartedForBootstrap();
+              if (
+                cast.framework.system &&
+                cast.framework.system.EventType &&
+                cast.framework.system.EventType.SENDER_CONNECTED &&
+                typeof context.addEventListener === "function"
+              ) {
+                context.addEventListener(
+                  cast.framework.system.EventType.SENDER_CONNECTED,
+                  notifyCafStartedForBootstrap,
+                );
+              }
               setTimeout(function () {
                 logReceiverHardwareTelemetry(context);
               }, 250);
