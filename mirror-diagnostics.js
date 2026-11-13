@@ -339,10 +339,10 @@
       const clean = number(presentation?.droppedFramesDelta) === 0 && decodeMs !== null && decodeMs < 15;
       this.bad = overloaded ? this.bad + 1 : 0;
       this.good = clean ? this.good + 1 : 0;
-      if (!overloaded && this.level > 0 && this.good >= 3 && now - this.lastChange >= 10000) {
+      if (!overloaded && this.level > 0 && this.good >= 3 && now - this.lastChange >= 3000) {
         return { action: "improve", status: "three_clean_windows" };
       }
-      if (now - this.lastChange < 10000) return { action: "hold", status: overloaded ? "overloaded" : "observed" };
+      if (now - this.lastChange < 3000) return { action: "hold", status: overloaded ? "overloaded" : "observed" };
       if (this.bad >= 2) {
         this.bad = 0;
         return { action: this.level < 3 ? "reduce" : "recover", status: "receiver_decode_overload" };

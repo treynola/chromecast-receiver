@@ -276,6 +276,10 @@
           const root = getEl("gui-dialog-registry-root");
           if (!root) return;
           const list = Array.isArray(registry) ? registry : [];
+          if (list.length === 0 && lastDialogMirrorState === "[]" && root.children.length === 0) {
+            finishDialogRender("unchanged");
+            return;
+          }
           const signature = JSON.stringify(list);
           if (signature === lastDialogRegistryState) return;
           lastDialogRegistryState = signature;
@@ -820,6 +824,10 @@
               domNodeCount: root.querySelectorAll?.("*")?.length || 0,
             };
           };
+          if (list.length === 0 && lastDialogMirrorState === "[]" && root.children.length === 0) {
+            finishDialogRender("unchanged");
+            return;
+          }
           const signature = JSON.stringify(list);
           if (
             signature === lastDialogMirrorState &&

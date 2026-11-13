@@ -134,7 +134,7 @@ const createMirrorReceiver = function (shared) {
             } catch (_) {
               // Optional observations must never interrupt playout or video.
             } finally { state.inFlight = false; }
-          }, 5000);
+          }, 1500);
           return state;
         }
         if (typeof window.addEventListener === "function") window.addEventListener("pagehide", stopMirrorDiagnostics);
@@ -598,7 +598,7 @@ const createMirrorReceiver = function (shared) {
               mirrorPeerConnection = null;
             }
             const pc = new RTCPeerConnection({
-              iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+              iceServers: []
             });
             mirrorPeerConnection = pc;
             const reportTransportState = () => {

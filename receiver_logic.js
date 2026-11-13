@@ -2808,7 +2808,11 @@ if (RECEIVER_BRANCH?.gui && (
           if (kind === "change") {
             const pending = pendingGuiInputTimers.get(element);
             if (pending) {
-              clearTimeout(pending.timer);
+              if (pending.isRaf && typeof window.cancelAnimationFrame === "function") {
+                window.cancelAnimationFrame(pending.timer);
+              } else {
+                clearTimeout(pending.timer);
+              }
               pendingGuiInputTimers.delete(element);
               sendGuiInteraction(element, "input", true);
               emitGuiChannelTelemetry("interaction_coalesced", {
@@ -2832,12 +2836,20 @@ if (RECEIVER_BRANCH?.gui && (
             element.matches?.("input[type=range]")
           ) {
             const previous = pendingGuiInputTimers.get(element);
-            if (previous) clearTimeout(previous.timer);
-            const timer = setTimeout(() => {
+            if (previous) {
+              if (previous.isRaf && typeof window.cancelAnimationFrame === "function") {
+                window.cancelAnimationFrame(previous.timer);
+              } else {
+                clearTimeout(previous.timer);
+              }
+            }
+            const useRaf = typeof window.requestAnimationFrame === "function";
+            const flush = () => {
               pendingGuiInputTimers.delete(element);
               sendGuiInteraction(element, kind, true);
-            }, 50);
-            pendingGuiInputTimers.set(element, { timer, value: interactionValue });
+            };
+            const timer = useRaf ? window.requestAnimationFrame(flush) : setTimeout(flush, 16);
+            pendingGuiInputTimers.set(element, { timer, isRaf: useRaf, value: interactionValue });
             return;
           }
           guiInteractionRevision += 1;
@@ -9044,11 +9056,25 @@ if (RECEIVER_BRANCH?.gui && (
             clock.presentation = presented;
             clock.presentationAvailable = Boolean(sample && (presented || !mediaOwned));
             clock.previewAvailable = Boolean(!presented && previewAvailable && sample);
-            if (sample) Object.assign(clock, sample, {
-              sourceAudioSec: presented || !mediaOwned ? audioSec : null,
-              correction: 0,
-              lastFrameMs: nowMs,
-            });
+            if (sample) {
+              Object.assign(clock, sample, {
+                sourceAudioSec: presented || !mediaOwned ? audioSec : null,
+                correction: 0,
+                lastFrameMs: nowMs,
+              });
+            } else if (clock.active && clock.phase !== null && clock.lastFrameMs) {
+              // Keep the LFO waveform animating smoothly on rAF between coarse
+              // media-element clock steps without claiming audio-time proof.
+              const deltaSeconds = Math.max(0, (nowMs - clock.lastFrameMs) / 1000);
+              clock.lastFrameMs = nowMs;
+              clock.sourceAudioSec = null;
+              clock.phase = normalizeLfoPhase(
+                clock.phase + (LFO_VISUAL_TWO_PI * deltaSeconds) / Math.max(0.1, clock.period || 1.8),
+              );
+            } else {
+              clock.sourceAudioSec = null;
+              clock.lastFrameMs = nowMs;
+            }
             return;
           }
           if (!clock || !clock.active || clock.phase === null) {
@@ -9087,6 +9113,10 @@ if (RECEIVER_BRANCH?.gui && (
           clock.waveformType = state?.waveformType || state?.type || "sine";
           clock.dutyCycle = state?.dutyCycle != null && Number.isFinite(Number(state.dutyCycle))
             ? Math.max(0.001, Math.min(0.999, Number(state.dutyCycle))) : 0.5;
+          const modelPeriod = Number(state?.time);
+          if (Number.isFinite(modelPeriod) && modelPeriod > 0) {
+            clock.period = Math.max(0.1, Math.min(60, modelPeriod));
+          }
           if (Array.isArray(state?.rateTimeline) && Number.isFinite(state.sampledAtAudioSec)) {
             clock.model = { ...state, rateTimeline: state.rateTimeline.slice(-512), gateTimeline: state.gateTimeline?.slice(-128) || [] };
             clock.modelReceivedAtMs = nowMs;
@@ -9130,9 +9160,7 @@ if (RECEIVER_BRANCH?.gui && (
 
         function canRenderSmoothLfo(index) {
           const clock = smoothLfoClocks[index];
-          const mediaOwned = window._playbackMode === "native" || window._playbackMode === "pcm_fallback";
-          return Boolean(clock && clock.phase !== null && (clock.active || clock.model) &&
-            (!clock.model || !mediaOwned || clock.presentationAvailable || clock.previewAvailable));
+          return Boolean(clock && clock.phase !== null && (clock.active || clock.model));
         }
 
         function getTrackLfoVisualBinding(track, parameter) {
