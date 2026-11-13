@@ -187,6 +187,9 @@ if (RECEIVER_BRANCH?.gui && (
         const PCM_QUEUE_RESET_DEDUPE_MS = 250;
         window._nativeStreamActive = false;
         window._playbackMode = "unknown";
+        window._receiverCastMode = window.MXS_RECEIVER_BRANCH && window.MXS_RECEIVER_BRANCH.mode === "MIRROR_CAST"
+          ? "MIRROR_CAST"
+          : "D18A9B3A";
         var playbackModeSocketGeneration = 0;
         var pcmV2Validator = null;
         var pcmV2AllowInitialOffset = true;
@@ -4132,6 +4135,12 @@ if (RECEIVER_BRANCH?.gui && (
                 emitCafTelemetry(eventType, cafTelemetryDetails);
                 if (eventType === events.ERROR || eventType === events.PLAYING || eventType === events.PAUSE) {
                   relayLogToStudio("📺 Receiver: " + msg);
+                }
+                if (eventType === events.PLAYING) {
+                  if (nativeStreamPrewarmReady && nativeStreamStarting) {
+                    releaseNativeStreamPrewarmMute();
+                    relayLogToStudio("🔊 Receiver: CAF native prewarm reached PLAYING; output unmuted.");
+                  }
                 }
                 if (
                   eventType === events.PAUSE &&
@@ -10340,6 +10349,9 @@ if (RECEIVER_BRANCH?.gui && (
           }
           activeRenderLookupStats = null;
           if (typeof scheduleGuiPaintOpportunity === "function") scheduleGuiPaintOpportunity(guiRevision);
+          if (!window._receiverUiRevealed && window._receiverCastMode !== "MIRROR_CAST") {
+            revealReceiverUi("first_gui_snapshot_rendered");
+          }
           return true;
         }
 
@@ -10758,6 +10770,9 @@ if (RECEIVER_BRANCH?.gui && (
           }
           if (options?.markPathReady !== false && config.ip) {
             markReceiverPlayoutPathReady();
+          }
+          if (window._receiverCastMode && window._receiverCastMode !== "MIRROR_CAST") {
+            revealReceiverUi(source ? "bridge_config_" + source : "bridge_config");
           }
           sendReceiverHandshakeCommit(source || "bridge_config");
           return sessionChanged;
@@ -12435,7 +12450,11 @@ if (RECEIVER_BRANCH?.gui && (
                   }
                   if (window.MXS_RECEIVER_BRANCH && window.MXS_RECEIVER_BRANCH.mode !== (d.castMode || "D18A9B3A")) return;
                   window._receiverCastMode = d.castMode || "D18A9B3A";
-                  if (window._receiverCastMode === "MIRROR_CAST") activatePureScreenMirrorViewport();
+                  if (window._receiverCastMode === "MIRROR_CAST") {
+                    activatePureScreenMirrorViewport();
+                  } else {
+                    revealReceiverUi("bridge_config_websocket");
+                  }
                   if (d.pcmProtocol && !acceptPcmV2ProtocolConfig(d.pcmProtocol, "websocket")) {
                     return;
                   }
@@ -12707,8 +12726,12 @@ if (RECEIVER_BRANCH?.gui && (
               if (LOCAL_BOOTSTRAP_TOKEN) return;
               if (!acceptBuildIdentity(d.buildIdentity, "cast_bridge_config")) return;
               if (window.MXS_RECEIVER_BRANCH && window.MXS_RECEIVER_BRANCH.mode !== (d.castMode || "D18A9B3A")) return;
-                  window._receiverCastMode = d.castMode || "D18A9B3A";
-              if (window._receiverCastMode === "MIRROR_CAST") activatePureScreenMirrorViewport();
+              window._receiverCastMode = d.castMode || "D18A9B3A";
+              if (window._receiverCastMode === "MIRROR_CAST") {
+                activatePureScreenMirrorViewport();
+              } else {
+                revealReceiverUi("bridge_config_cast_control");
+              }
               if (!acceptBridgeCredentials(d, "cast_control")) return;
               if (
                 d.pcmProtocol &&
