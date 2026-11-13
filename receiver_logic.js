@@ -9347,7 +9347,6 @@ if (RECEIVER_BRANCH?.gui && (
                 : binding.controlClockMode;
               const sampleBinding = currentBinding?.index === binding.index ? currentBinding : binding;
               const controlValue = samplePresentedControlValue(sampleBinding, trackIndex, config.p, smoothLfoClocks[binding.index].sourceAudioSec);
-              if (controlClockMode === "media_element_control_rate" && controlValue === null) return;
               const scaled = controlValue ?? (binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated);
               updateValue(sliderId, scaled);
               updateText(
@@ -10945,8 +10944,8 @@ if (RECEIVER_BRANCH?.gui && (
               const modulated = signedValue === null ? null : (signedValue + 1) * 0.5 * (rangeMaximum - rangeMinimum) + rangeMinimum;
               const gate = clock?.gateValue ?? 1;
               const controlValue = samplePresentedControlValue(binding, trackIndex, config.p, clock?.sourceAudioSec);
-              const expected = binding.controlClockMode === "media_element_control_rate" ? controlValue :
-                modulated === null ? null : binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated;
+              const smoothExpected = modulated === null ? null : binding.authoritative ? binding.baseValue + gate * (modulated - binding.baseValue) : modulated;
+              const expected = binding.controlClockMode === "media_element_control_rate" ? (controlValue ?? smoothExpected) : smoothExpected;
               const renderedValue = slider ? Number(slider.value) : null;
               samples.push({ trackIndex, parameter: config.p, lfoIndex, assigned: true,
                 reversed: Boolean(binding.reversed), renderBindingLfoIndex: lfoIndex, renderBindingMatches: true,
