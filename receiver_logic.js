@@ -6261,10 +6261,21 @@ if (RECEIVER_BRANCH?.gui && (
           }
         }
 
+        const mirroredDisplayDescriptorJsonCache = new WeakMap();
+
+        function serializeMirroredDisplayDescriptor(descriptor) {
+          let serialized = mirroredDisplayDescriptorJsonCache.get(descriptor);
+          if (serialized === undefined) {
+            serialized = JSON.stringify(descriptor);
+            mirroredDisplayDescriptorJsonCache.set(descriptor, serialized);
+          }
+          return serialized;
+        }
+
         function writeMirroredDisplayDescriptor(element, descriptor, confirmedDisplay) {
           if (!element) return;
           if (descriptor && typeof descriptor === "object") {
-            const serialized = JSON.stringify(descriptor);
+            const serialized = serializeMirroredDisplayDescriptor(descriptor);
             if (element.dataset.castDisplayDescriptor !== serialized) element.dataset.castDisplayDescriptor = serialized;
             const key = String(descriptor.parameterKey || "");
             if (element.dataset.parameterKey !== key) element.dataset.parameterKey = key;
@@ -7366,6 +7377,66 @@ if (RECEIVER_BRANCH?.gui && (
           };
         }
 
+        function setMirroredWaveformDataset(canvas, key, value) {
+          if (canvas.dataset[key] !== value) canvas.dataset[key] = value;
+        }
+
+        function resolveMirroredWaveformCanvasSize(canvas) {
+          if (!canvas._mxsWaveformSizeObserved) {
+            canvas._mxsWaveformSizeObserved = true;
+            canvas._mxsWaveformLogicalWidth =
+              canvas.clientWidth || Number(canvas.getAttribute?.("width")) || 238;
+            canvas._mxsWaveformLogicalHeight =
+              canvas.clientHeight || Number(canvas.getAttribute?.("height")) || 26;
+            if (typeof ResizeObserver === "function" && canvas instanceof Object) {
+              try {
+                canvas._mxsWaveformResizeObserver = new ResizeObserver((entries) => {
+                  const rect = entries?.[0]?.contentRect;
+                  if (rect?.width > 0 && rect?.height > 0) {
+                    canvas._mxsWaveformLogicalWidth = rect.width;
+                    canvas._mxsWaveformLogicalHeight = rect.height;
+                  }
+                });
+                canvas._mxsWaveformResizeObserver.observe?.(canvas);
+              } catch (_error) {}
+            }
+          }
+          return {
+            width: canvas._mxsWaveformLogicalWidth || 238,
+            height: canvas._mxsWaveformLogicalHeight || 26,
+          };
+        }
+
+        function resolveMirroredWaveformGradient(canvas, context, height, peak) {
+          const tier = peak >= 0.89 ? "clip" : peak >= 0.50 ? "warn" : "nom";
+          const cached = canvas._mxsWaveformGradCache;
+          if (cached && cached.context === context && cached.height === height && cached.tier === tier) {
+            return cached.grad;
+          }
+          const grad = context.createLinearGradient(0, 0, 0, height);
+          if (tier === "clip") {
+            grad.addColorStop(0.00, "#ff3333"); // True clipping red (>= -1 dBFS)
+            grad.addColorStop(0.08, "#ffea00"); // High yellow
+            grad.addColorStop(0.20, "#00e676"); // Safe green
+            grad.addColorStop(0.50, "#00e676"); // Centerline green
+            grad.addColorStop(0.80, "#00e676"); // Safe green
+            grad.addColorStop(0.92, "#ffea00"); // High yellow
+            grad.addColorStop(1.00, "#ff3333"); // True clipping red
+          } else if (tier === "warn") {
+            grad.addColorStop(0.00, "#ffea00"); // Headroom warning yellow (-6..-1 dBFS)
+            grad.addColorStop(0.16, "#00e676"); // Safe green
+            grad.addColorStop(0.50, "#00e676"); // Centerline green
+            grad.addColorStop(0.84, "#00e676"); // Safe green
+            grad.addColorStop(1.00, "#ffea00"); // Headroom warning yellow
+          } else {
+            grad.addColorStop(0.00, "#00e676"); // Nominal green (< -6 dBFS, never false red/yellow)
+            grad.addColorStop(0.50, "#00e676");
+            grad.addColorStop(1.00, "#00e676");
+          }
+          canvas._mxsWaveformGradCache = { context, height, tier, grad };
+          return grad;
+        }
+
         function drawMirroredWaveform(id, waveform, source, cacheResult = true, signatureOverride = null) {
           const canvas = getEl(id);
           if (!canvas || !waveform || !Array.isArray(waveform.points)) return false;
@@ -7386,16 +7457,17 @@ if (RECEIVER_BRANCH?.gui && (
           );
           const peak = Math.max(0, Number(waveform.peak) || 0);
           const nonFlat = Boolean(waveform.nonFlat ?? peak > 0.000001);
-          canvas.dataset.waveformState = hasData ? "ready" : "pending";
-          canvas.dataset.waveformSource = resolvedSource;
-          canvas.dataset.waveformAnalysisSource = waveform.analysisSource || "unknown";
-          canvas.dataset.waveformSampleCount = String(Number(waveform.sampleCount) || 0);
-          canvas.dataset.waveformActive = active ? "true" : "false";
-          canvas.dataset.waveformPeak = peak.toFixed(6);
-          canvas.dataset.waveformNonFlat = nonFlat ? "true" : "false";
-          canvas.dataset.waveformPaintMode = paintMode;
-          const width = canvas.clientWidth || Number(canvas.getAttribute("width")) || 238;
-          const height = canvas.clientHeight || Number(canvas.getAttribute("height")) || 26;
+          // Resolve cached geometry BEFORE mutating dataset attributes so batched
+          // draws across all 10 canvases never interleave DOM writes with layout reads.
+          const { width, height } = resolveMirroredWaveformCanvasSize(canvas);
+          setMirroredWaveformDataset(canvas, "waveformState", hasData ? "ready" : "pending");
+          setMirroredWaveformDataset(canvas, "waveformSource", resolvedSource);
+          setMirroredWaveformDataset(canvas, "waveformAnalysisSource", waveform.analysisSource || "unknown");
+          setMirroredWaveformDataset(canvas, "waveformSampleCount", String(Number(waveform.sampleCount) || 0));
+          setMirroredWaveformDataset(canvas, "waveformActive", active ? "true" : "false");
+          setMirroredWaveformDataset(canvas, "waveformPeak", peak.toFixed(6));
+          setMirroredWaveformDataset(canvas, "waveformNonFlat", nonFlat ? "true" : "false");
+          setMirroredWaveformDataset(canvas, "waveformPaintMode", paintMode);
           if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
@@ -7428,33 +7500,16 @@ if (RECEIVER_BRANCH?.gui && (
 
           // 2. Discrete Lofi MPC Vertical Column Bars with True-dBFS Green -> Yellow -> Red Palette
           const visualGain = calculateMirroredWaveformVisualGain(peak);
-          const grad = context.createLinearGradient(0, 0, 0, height);
-          if (peak >= 0.89) {
-            grad.addColorStop(0.00, "#ff3333"); // True clipping red (>= -1 dBFS)
-            grad.addColorStop(0.08, "#ffea00"); // High yellow
-            grad.addColorStop(0.20, "#00e676"); // Safe green
-            grad.addColorStop(0.50, "#00e676"); // Centerline green
-            grad.addColorStop(0.80, "#00e676"); // Safe green
-            grad.addColorStop(0.92, "#ffea00"); // High yellow
-            grad.addColorStop(1.00, "#ff3333"); // True clipping red
-          } else if (peak >= 0.50) {
-            grad.addColorStop(0.00, "#ffea00"); // Headroom warning yellow (-6..-1 dBFS)
-            grad.addColorStop(0.16, "#00e676"); // Safe green
-            grad.addColorStop(0.50, "#00e676"); // Centerline green
-            grad.addColorStop(0.84, "#00e676"); // Safe green
-            grad.addColorStop(1.00, "#ffea00"); // Headroom warning yellow
-          } else {
-            grad.addColorStop(0.00, "#00e676"); // Nominal green (< -6 dBFS, never false red/yellow)
-            grad.addColorStop(0.50, "#00e676");
-            grad.addColorStop(1.00, "#00e676");
-          }
-
-          context.fillStyle = grad;
+          context.fillStyle = resolveMirroredWaveformGradient(canvas, context, height, peak);
 
           const pointCount = (waveform.points && waveform.points.length) || (waveform.line && waveform.line.length) || 0;
           if (pointCount > 0) {
             const stepX = width / pointCount;
             const colWidth = Math.max(1, Math.ceil(stepX));
+            const canBatchRects = typeof context.beginPath === "function" &&
+              typeof context.rect === "function" &&
+              typeof context.fill === "function";
+            if (canBatchRects) context.beginPath();
 
             for (let i = 0; i < pointCount; i++) {
               let minVal = 0;
@@ -7477,8 +7532,14 @@ if (RECEIVER_BRANCH?.gui && (
               const x = Math.floor(i * stepX);
               if (x >= width) continue;
 
-              context.fillRect(x, yTop, Math.min(colWidth, width - x), barHeight);
+              const barW = Math.min(colWidth, width - x);
+              if (canBatchRects) {
+                context.rect(x, yTop, barW, barHeight);
+              } else {
+                context.fillRect(x, yTop, barW, barHeight);
+              }
             }
+            if (canBatchRects) context.fill();
           }
           return true;
         }
@@ -7686,8 +7747,9 @@ if (RECEIVER_BRANCH?.gui && (
           mirroredWaveformVisuals.forEach((state, id) => {
             if (!state?.target) return;
             const elapsed = Math.max(0, nowMs - state.startedAt);
+            const spanMs = Math.max(WAVEFORM_INTERPOLATION_MS, Number(state.interpolationMs) || WAVEFORM_INTERPOLATION_MS);
             const progress = state.interpolate
-              ? Math.min(1, elapsed / WAVEFORM_INTERPOLATION_MS)
+              ? Math.min(1, elapsed / spanMs)
               : 1;
             const frame = progress >= 1
               ? state.target
@@ -7717,6 +7779,7 @@ if (RECEIVER_BRANCH?.gui && (
           // analyser frame toward silence because that keeps a visibly moving
           // waveform alive after Pause. Replace the per-surface cache and
           // paint the explicit centerline immediately.
+          const nowMs = getMirroredWaveformNow();
           if (waveform.active === false) {
             const inactiveState = {
               source: resolvedSource,
@@ -7725,7 +7788,8 @@ if (RECEIVER_BRANCH?.gui && (
               target: waveform,
               displayed: waveform,
               interpolate: false,
-              startedAt: getMirroredWaveformNow(),
+              interpolationMs: WAVEFORM_INTERPOLATION_MS,
+              startedAt: nowMs,
             };
             mirroredWaveformVisuals.set(id, inactiveState);
             delete valCache["waveform:" + id];
@@ -7740,6 +7804,12 @@ if (RECEIVER_BRANCH?.gui && (
               Array.isArray(previous.displayed.points) &&
               previous.displayed.points.length === waveform.points?.length,
           );
+          const packetIntervalMs = previous && !sourceChanged && Number.isFinite(previous.startedAt)
+            ? nowMs - previous.startedAt
+            : WAVEFORM_INTERPOLATION_MS;
+          const interpolationMs = packetIntervalMs >= 50 && packetIntervalMs <= 350
+            ? Math.max(WAVEFORM_INTERPOLATION_MS, Math.min(240, packetIntervalMs))
+            : WAVEFORM_INTERPOLATION_MS;
           const nextState = {
             source: resolvedSource,
             signature,
@@ -7747,7 +7817,8 @@ if (RECEIVER_BRANCH?.gui && (
             target: waveform,
             displayed: canInterpolate ? previous.displayed : waveform,
             interpolate: canInterpolate,
-            startedAt: getMirroredWaveformNow(),
+            interpolationMs,
+            startedAt: nowMs,
           };
           mirroredWaveformVisuals.set(id, nextState);
           const didDraw = drawMirroredWaveform(
@@ -9083,8 +9154,11 @@ if (RECEIVER_BRANCH?.gui && (
           if (clock?.model) {
             const presented = getPresentedSourceAudioTime(nowMs);
             const mediaOwned = window._playbackMode === "native" || window._playbackMode === "pcm_fallback";
-            const elapsed = clock.model.clockRunning === true ? Math.max(0, nowMs - clock.modelReceivedAtMs) / 1000 : 0;
-            const previewAgeMs = nowMs - clock.modelReceivedAtMs;
+            // rAF VSync timestamps can trail performance.now() from GUI sync by a few ms;
+            // keep small negative deltas in idle_preview instead of flipping out of preview.
+            const rawPreviewAgeMs = nowMs - clock.modelReceivedAtMs;
+            const previewAgeMs = rawPreviewAgeMs >= -150 ? Math.max(0, rawPreviewAgeMs) : rawPreviewAgeMs;
+            const elapsed = clock.model.clockRunning === true ? Math.max(0, previewAgeMs) / 1000 : 0;
             const previewAvailable = lastMirroredState?.transport?.visualClockMode === "idle_preview" &&
               previewAgeMs >= 0 && previewAgeMs <= 1500 && Number.isFinite(clock.model.sampledAtAudioSec);
             const audioSec = presented?.audioSec ?? (previewAvailable || !mediaOwned
@@ -9156,13 +9230,27 @@ if (RECEIVER_BRANCH?.gui && (
             clock.period = Math.max(0.1, Math.min(60, modelPeriod));
           }
           if (Array.isArray(state?.rateTimeline) && Number.isFinite(state.sampledAtAudioSec)) {
-            clock.model = { ...state, rateTimeline: state.rateTimeline.slice(-512), gateTimeline: state.gateTimeline?.slice(-128) || [] };
+            const rateTimeline = state.rateTimeline.length > 512 ? state.rateTimeline.slice(-512) : state.rateTimeline;
+            const gateTimeline = Array.isArray(state.gateTimeline)
+              ? (state.gateTimeline.length > 128 ? state.gateTimeline.slice(-128) : state.gateTimeline)
+              : [];
+            const hasMeasuredCaptureAge = captureAgeMs !== null && Number.isFinite(captureAgeMs);
+            const rawCaptureAgeSec = Math.max(0, Number(captureAgeMs) || 0) / 1000;
+            const hadMeasuredAge = Boolean(
+              clock.model && clock.modelHasMeasuredCaptureAge && Number.isFinite(clock.modelCaptureAgeSec),
+            );
+            const ageDeltaSec = hadMeasuredAge ? rawCaptureAgeSec - clock.modelCaptureAgeSec : 0;
+            clock.model = { ...state, rateTimeline, gateTimeline };
             clock.modelReceivedAtMs = nowMs;
-            clock.modelCaptureAgeSec = Math.max(0, captureAgeMs || 0) / 1000;
+            clock.modelHasMeasuredCaptureAge = hasMeasuredCaptureAge;
+            clock.modelCaptureAgeSec = hadMeasuredAge && hasMeasuredCaptureAge && Math.abs(ageDeltaSec) > 0.03
+              ? clock.modelCaptureAgeSec + Math.sign(ageDeltaSec) * Math.min(Math.abs(ageDeltaSec), 0.04)
+              : rawCaptureAgeSec;
             advanceSmoothLfoClock(clock, nowMs);
             return;
           }
           clock.model = null;
+          clock.modelHasMeasuredCaptureAge = false;
           clock.presentationAvailable = false;
           clock.previewAvailable = false;
           advanceSmoothLfoClock(clock, nowMs);
@@ -9340,10 +9428,20 @@ if (RECEIVER_BRANCH?.gui && (
               lastFrameMs: 0,
               lastSampledAtMonotonicMs: null,
               model: null,
+              modelHasMeasuredCaptureAge: false,
               presentationAvailable: false,
               previewAvailable: false,
             });
           });
+        }
+
+        function updateSmoothLfoMeterBar(id, signedValue) {
+          const el = getEl(id);
+          if (!el || !el.style) return;
+          const clampedRatio = Math.max(0, Math.min(1, Math.abs(Number(signedValue) || 0)));
+          const nextTransform = `scaleX(${clampedRatio.toFixed(4)})`;
+          if (el.style.width !== "100%") el.style.width = "100%";
+          if (el.style.transform !== nextTransform) el.style.transform = nextTransform;
         }
 
         function renderSmoothLfoFrame(frameTime) {
@@ -9366,9 +9464,9 @@ if (RECEIVER_BRANCH?.gui && (
             [1, 2].forEach((index) => {
               if (!canRenderSmoothLfo(index)) return;
               const signedValue = computeReceiverLfoWaveformValue(smoothLfoClocks[index].phase, smoothLfoClocks[index].waveformType, smoothLfoClocks[index].dutyCycle) * (smoothLfoClocks[index].gateValue ?? 1);
-              updateStyleWidth(
+              updateSmoothLfoMeterBar(
                 index === 1 ? "lfo-meter-bar" : "lfo2-meter-bar",
-                `${Math.abs(signedValue) * 100}%`,
+                signedValue,
               );
               const canvas = getEl(index === 1 ? "lfo-waveform-1" : "lfo-waveform-2");
               if (canvas) {
@@ -9937,6 +10035,8 @@ if (RECEIVER_BRANCH?.gui && (
                 s.master.loopLength ?? 4,
               );
               if (!canRenderSmoothLfo(1)) {
+                const lfoBar1 = getEl("lfo-meter-bar");
+                if (lfoBar1?.style && lfoBar1.style.transform) lfoBar1.style.transform = "";
                 updateStyleWidth(
                   "lfo-meter-bar",
                   `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo1?.value) || 0))) * 100}%`,
@@ -9966,6 +10066,8 @@ if (RECEIVER_BRANCH?.gui && (
                 (s.master.lfo1 && s.master.lfo1.time) ?? 1.8,
               );
               if (!canRenderSmoothLfo(2)) {
+                const lfoBar2 = getEl("lfo2-meter-bar");
+                if (lfoBar2?.style && lfoBar2.style.transform) lfoBar2.style.transform = "";
                 updateStyleWidth(
                   "lfo2-meter-bar",
                   `${Math.max(0, Math.min(1, Math.abs(Number(s.master.lfo2?.value) || 0))) * 100}%`,

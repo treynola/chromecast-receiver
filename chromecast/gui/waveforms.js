@@ -43,11 +43,21 @@
           const gate = normalizeReceiverLfoGateValue(clock?.gateValue);
           const active = Boolean(clock && clock.active && gate > 0.001);
           const isPaused = Boolean(clock && clock.paused);
-          canvas.dataset.waveformActive = active ? "true" : "false";
-          canvas.dataset.waveformPaused = isPaused ? "true" : "false";
-          canvas.dataset.waveformPaintMode = "lfo_traveling";
-          canvas.dataset.waveformPixelRatio = String(pixelRatio);
-          canvas.dataset.waveformPainted = "true";
+          if (canvas.dataset.waveformActive !== (active ? "true" : "false")) {
+            canvas.dataset.waveformActive = active ? "true" : "false";
+          }
+          if (canvas.dataset.waveformPaused !== (isPaused ? "true" : "false")) {
+            canvas.dataset.waveformPaused = isPaused ? "true" : "false";
+          }
+          if (canvas.dataset.waveformPaintMode !== "lfo_traveling") {
+            canvas.dataset.waveformPaintMode = "lfo_traveling";
+          }
+          if (canvas.dataset.waveformPixelRatio !== String(pixelRatio)) {
+            canvas.dataset.waveformPixelRatio = String(pixelRatio);
+          }
+          if (canvas.dataset.waveformPainted !== "true") {
+            canvas.dataset.waveformPainted = "true";
+          }
 
           // 1. Hardware LCD dark teal background & zero-crossing centerline
           ctx.clearRect(0, 0, width, height);
@@ -99,15 +109,20 @@
           }
 
           // 3. Active / Paused Traveling Waveform with True-dBFS Gradient & Moving Oscilloscope Beam
-          const grad = ctx.createLinearGradient(0, 0, 0, height);
-          grad.addColorStop(0.00, "#ff3333");
-          grad.addColorStop(0.12, "#ffea00");
-          grad.addColorStop(0.28, "#00e676");
-          grad.addColorStop(0.50, "#00e676");
-          grad.addColorStop(0.72, "#00e676");
-          grad.addColorStop(0.88, "#ffea00");
-          grad.addColorStop(1.00, "#ff3333");
-          ctx.fillStyle = grad;
+          let gradCache = canvas._mxsLfoGradCache;
+          if (!gradCache || gradCache.ctx !== ctx || gradCache.height !== height) {
+            const grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0.00, "#ff3333");
+            grad.addColorStop(0.12, "#ffea00");
+            grad.addColorStop(0.28, "#00e676");
+            grad.addColorStop(0.50, "#00e676");
+            grad.addColorStop(0.72, "#00e676");
+            grad.addColorStop(0.88, "#ffea00");
+            grad.addColorStop(1.00, "#ff3333");
+            gradCache = { ctx, height, grad };
+            canvas._mxsLfoGradCache = gradCache;
+          }
+          ctx.fillStyle = gradCache.grad;
 
           ctx.strokeStyle = isPaused ? "#ffea00" : "#00ffff";
           ctx.lineWidth = 1.5;
