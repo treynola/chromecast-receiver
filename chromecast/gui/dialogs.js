@@ -32,6 +32,8 @@
         let lastDialogMirrorState = "";
         let lastDialogMirrorLayoutState = "";
         let lastDialogRegistryState = "";
+        let lastDialogMirrorRef = null;
+        let lastDialogRegistryRef = null;
         let lastDialogRenderStats = {
           mode: "none",
           renderTimeMs: 0,
@@ -276,12 +278,17 @@
           const root = getEl("gui-dialog-registry-root");
           if (!root) return;
           const list = Array.isArray(registry) ? registry : [];
-          if (list.length === 0 && lastDialogMirrorState === "[]" && root.children.length === 0) {
-            finishDialogRender("unchanged");
+          if (list === lastDialogRegistryRef && (list.length === 0 || root.dataset.registry)) return;
+          if (list.length === 0 && lastDialogRegistryState === "[]" && root.children.length === 0) {
+            lastDialogRegistryRef = list;
             return;
           }
-          const signature = JSON.stringify(list);
-          if (signature === lastDialogRegistryState) return;
+          const signature = list.length === 0 ? "[]" : JSON.stringify(list);
+          if (signature === lastDialogRegistryState) {
+            lastDialogRegistryRef = list;
+            return;
+          }
+          lastDialogRegistryRef = list;
           lastDialogRegistryState = signature;
           root.replaceChildren();
           // The registry is an action/schema catalog, not a visible dialog.
@@ -813,22 +820,33 @@
             };
             return;
           }
-          root.hidden = list.length === 0;
-          root.setAttribute("aria-hidden", list.length === 0 ? "true" : "false");
+          const nextHidden = list.length === 0;
+          if (root.hidden !== nextHidden) {
+            root.hidden = nextHidden;
+            root.setAttribute("aria-hidden", nextHidden ? "true" : "false");
+          }
           const finishDialogRender = (mode) => {
             lastDialogRenderStats = {
               mode,
               renderTimeMs: Math.max(0, Date.now() - renderStartedAt),
               firstPaintTimeMs,
               dialogCount: list.length,
-              domNodeCount: root.querySelectorAll?.("*")?.length || 0,
+              domNodeCount: list.length === 0 && root.children.length === 0
+                ? 0
+                : (root.querySelectorAll?.("*")?.length || 0),
             };
           };
           if (list.length === 0 && lastDialogMirrorState === "[]" && root.children.length === 0) {
+            lastDialogMirrorRef = list;
             finishDialogRender("unchanged");
             return;
           }
-          const signature = JSON.stringify(list);
+          if (list === lastDialogMirrorRef && root.children.length === list.length) {
+            finishDialogRender("unchanged");
+            return;
+          }
+          lastDialogMirrorRef = list;
+          const signature = list.length === 0 ? "[]" : JSON.stringify(list);
           if (
             signature === lastDialogMirrorState &&
             root.children.length === list.length &&
@@ -1837,6 +1855,8 @@
       lastDialogMirrorState = "";
       lastDialogMirrorLayoutState = "";
       lastDialogRegistryState = "";
+      lastDialogMirrorRef = null;
+      lastDialogRegistryRef = null;
       lastDialogRenderStats = { mode:"none", renderTimeMs:0, dialogCount:0, domNodeCount:0 };
     }
     function dispose() {

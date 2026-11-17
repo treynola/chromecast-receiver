@@ -5275,8 +5275,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-d1ee8f129b2b") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-d1ee8f129b2b") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-a5aa967e0496") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-a5aa967e0496") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -5512,6 +5512,10 @@ body.receiver-mode:not(.app-loading) #studio-root {
   visibility: visible !important;
   pointer-events: auto !important;
   transition: none !important;
+  transform: translate3d(-50%, -50%, 0) scale(var(--scale, 1)) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  contain: layout style;
 }
 body.receiver-mode #cursor-mirror {
   position: absolute;
@@ -5870,9 +5874,28 @@ body.receiver-mode .waveform-canvas-container.glow-green {
 body.receiver-mode .play-marker.is-scrubbing-keys::before {
   filter: none !important;
 }
+body.receiver-mode #studio-root * {
+  transition: none !important;
+  box-shadow: none !important;
+}
+body.receiver-mode .lfo-waveform-canvas,
+body.receiver-mode .waveform-canvas {
+  transform: translateZ(0);
+  will-change: contents;
+}
+body.receiver-mode .play-marker {
+  will-change: transform, left;
+}
+body.receiver-mode .track,
+body.receiver-mode .master-column,
+body.receiver-mode .lfo-column,
+body.receiver-mode .knob-container {
+  contain: layout style;
+}
 body.receiver-mode .lfo-meter,
 body.receiver-mode .meter-container,
-body.receiver-mode .lfo-waveform-container {
+body.receiver-mode .lfo-waveform-container,
+body.receiver-mode .waveform-canvas-container {
   contain: layout paint style;
 }
 body.receiver-mode .meter-bar {

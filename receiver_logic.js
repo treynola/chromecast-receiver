@@ -6384,8 +6384,10 @@ if (RECEIVER_BRANCH?.gui && (
           _lastAssignmentCache.length = 0;
           _lastParamsCache.length = 0;
           _lastFxCache.length = 0;
+          _cachedSamplerLayoutSummary = null;
+          _lastSamplerLayoutMeasureAt = 0;
           Object.keys(valCache).forEach((key) => {
-            if (key.startsWith("track-metadata:")) delete valCache[key];
+            if (key.startsWith("track-metadata:") || key.startsWith("lfo-fallback:")) delete valCache[key];
           });
           mirroredTrackCount = studioStructure.build(trackCount);
           updateScale();
@@ -9463,6 +9465,7 @@ if (RECEIVER_BRANCH?.gui && (
             recordLfoFrameMeasurement(nowMs);
             [1, 2].forEach((index) => {
               if (!canRenderSmoothLfo(index)) return;
+              if (typeof valCache !== "undefined") delete valCache["lfo-fallback:" + index];
               const signedValue = computeReceiverLfoWaveformValue(smoothLfoClocks[index].phase, smoothLfoClocks[index].waveformType, smoothLfoClocks[index].dutyCycle) * (smoothLfoClocks[index].gateValue ?? 1);
               updateSmoothLfoMeterBar(
                 index === 1 ? "lfo-meter-bar" : "lfo2-meter-bar",
@@ -10053,7 +10056,11 @@ if (RECEIVER_BRANCH?.gui && (
                   gateValue: s.master.lfo1?.gateValue ?? clock1.gateValue ?? 1,
                   paused: s.master.lfo1?.paused ?? clock1.paused ?? false,
                 };
-                drawReceiverLfoWaveform(canvas1, 1, state1);
+                const sig1 = `${state1.active}:${state1.paused}:${state1.waveformType}:${state1.dutyCycle}:${state1.gateValue}:${state1.active || state1.paused ? state1.phase : 0}`;
+                if (valCache["lfo-fallback:1"] !== sig1) {
+                  valCache["lfo-fallback:1"] = sig1;
+                  drawReceiverLfoWaveform(canvas1, 1, state1);
+                }
               }
               applyMirroredParameterDisplay(
                 "lfo-time",
@@ -10084,7 +10091,11 @@ if (RECEIVER_BRANCH?.gui && (
                   gateValue: s.master.lfo2?.gateValue ?? clock2.gateValue ?? 1,
                   paused: s.master.lfo2?.paused ?? clock2.paused ?? false,
                 };
-                drawReceiverLfoWaveform(canvas2, 2, state2);
+                const sig2 = `${state2.active}:${state2.paused}:${state2.waveformType}:${state2.dutyCycle}:${state2.gateValue}:${state2.active || state2.paused ? state2.phase : 0}`;
+                if (valCache["lfo-fallback:2"] !== sig2) {
+                  valCache["lfo-fallback:2"] = sig2;
+                  drawReceiverLfoWaveform(canvas2, 2, state2);
+                }
               }
               updateButtonState(
                 "master-record-button",
@@ -11233,12 +11244,18 @@ if (RECEIVER_BRANCH?.gui && (
 
         let _cachedSamplerLayoutSummary = null;
         let _lastSamplerLayoutMeasureAt = 0;
+        let _cachedSamplerPadCount = -1;
         function summarizeSamplerVisualLayout() {
           const now = Date.now();
-          if (_cachedSamplerLayoutSummary && now - _lastSamplerLayoutMeasureAt < 2000) {
+          const grid = document.getElementById("sample-grid");
+          if (
+            _cachedSamplerLayoutSummary &&
+            grid &&
+            grid.children.length === _cachedSamplerPadCount &&
+            now - _lastSamplerLayoutMeasureAt < 15000
+          ) {
             return _cachedSamplerLayoutSummary;
           }
-          const grid = document.getElementById("sample-grid");
           const summary = {
             samplerExpected: RECEIVER_SAMPLER_PAD_COUNT,
             samplerRendered: 0,
@@ -11283,6 +11300,7 @@ if (RECEIVER_BRANCH?.gui && (
             summary.samplerColumns === RECEIVER_SAMPLER_COLUMNS &&
             summary.samplerRows === RECEIVER_SAMPLER_ROWS;
           _cachedSamplerLayoutSummary = summary;
+          _cachedSamplerPadCount = grid.children.length;
           _lastSamplerLayoutMeasureAt = now;
           return summary;
         }
