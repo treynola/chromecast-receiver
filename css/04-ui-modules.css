@@ -1274,11 +1274,11 @@ select option {
 
 .effect-param-columns {
   display: grid;
-  gap: 10px;
+  gap: 4px;
   width: 100%;
   border-bottom: 1px solid var(--green);
-  padding-bottom: 5px;
-  margin-bottom: 5px;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
 }
 
 .effect-param-columns.layout-single {
@@ -1302,26 +1302,26 @@ select option {
   min-width: 0; /* Prevent grid overflow */
   margin-bottom: 0;
   background: #2a2a2a;
-  border: 1px solid #444;
+  border: 1px solid var(--green);
   border-radius: 4px;
   padding: 2px 3px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 0;
   box-sizing: border-box;
 }
 
 .effect-control-group .effect-param-title {
   width: 100%;
   text-align: center;
-  padding-top: 2px;
+  padding-top: 1px;
   margin-bottom: 0;
 }
 
 .effect-control-group .effect-param-title label {
-  font-size: 12px;
-  line-height: 1;
+  font-size: 11px;
+  line-height: 1.05;
   color: var(--gold);
   font-weight: bold;
   text-transform: uppercase;
@@ -1330,8 +1330,9 @@ select option {
 
 .effect-control-group .slider-wrapper {
   width: 100%;
-  min-height: 13px;
-  padding: 0;
+  min-height: 0;
+  height: 9px;
+  padding: 1px 0;
   display: flex;
   align-items: center;
 }
@@ -1345,9 +1346,10 @@ select option {
 .effect-control-group .effect-param-value {
   width: 100%;
   text-align: center;
-  min-height: 10px;
-  margin-top: 0;
-  line-height: 1;
+  min-height: 0;
+  margin-top: -2px;
+  padding-bottom: 1px;
+  line-height: 0.95;
 }
 
 .effect-control-group .param-value {
@@ -1356,7 +1358,7 @@ select option {
   left: auto;
   top: auto;
   font-family: monospace;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
   color: var(--green);
   font-weight: bold;
@@ -1365,9 +1367,9 @@ select option {
 
 .effect-control-group.program-counter-control {
   align-items: stretch;
-  gap: 4px;
-  padding: 5px;
-  min-height: 116px;
+  gap: 2px;
+  padding: 3px 5px;
+  min-height: 0;
 }
 
 .program-counter-control .effect-param-title {
@@ -1481,8 +1483,8 @@ select option {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
-  gap: 4px !important;
-  padding: 6px !important;
+  gap: 2px !important;
+  padding: 3px !important;
 }
 
 /* Reverb 2016 has a compact, fixed control set. Two columns keep its complete
@@ -1510,13 +1512,13 @@ select option {
 .effect-params-grid.rackmount-parameter-layout .rackmount-parameter-control {
   position: relative;
   align-items: stretch !important;
-  gap: 4px !important;
+  gap: 2px !important;
   min-height: 0 !important;
-  padding: 5px 8px !important;
-  border: 1px solid #3f473a;
-  border-radius: 8px;
+  padding: 2px 6px !important;
+  border: 1px solid var(--green);
+  border-radius: 6px;
   background: linear-gradient(145deg, #242720, #191b18);
-  scroll-margin-block: 8px;
+  scroll-margin-block: 4px;
 }
 
 .effect-params-grid.rackmount-parameter-layout .effect-param-title {
@@ -1543,8 +1545,8 @@ select option {
 
 .effect-params-grid.rackmount-parameter-layout .effect-param-value {
   position: absolute;
-  top: 10px;
-  right: 11px;
+  top: 4px;
+  right: 8px;
   width: auto !important;
   min-height: 0 !important;
   margin: 0 !important;
@@ -2776,7 +2778,10 @@ select option {
 
 .effect-params-dialog.is-stack-front,
 .audition-params-dialog.is-stack-front {
-  z-index: 2201;
+  z-index: 2201 !important;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Only the front track dialog remains visible and interactive. Inactive
@@ -2789,13 +2794,6 @@ select option {
   opacity: 0 !important;
   pointer-events: none !important;
   transform: none !important;
-}
-
-.effect-params-dialog.is-stack-front,
-.audition-params-dialog.is-stack-front {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .effect-params-dialog:focus,
@@ -2821,7 +2819,7 @@ select option {
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 5px 0 5px;
+  padding: 2px 0 2px;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -2850,8 +2848,8 @@ select option {
 .effect-params-grid {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
-  gap: 3px !important;
-  padding: 3px 3px 0 !important;
+  gap: 2px !important;
+  padding: 2px !important;
   width: 100% !important;
   box-sizing: border-box !important;
   justify-items: stretch !important;
@@ -2876,49 +2874,49 @@ select option {
   -moz-appearance: none;
   appearance: none;
   width: 100%;
-  height: 5px;
+  height: 3px;
   margin: 0;
   cursor: pointer;
   background: var(--mid-gray);
-  border-radius: 5px;
+  border-radius: 3px;
   outline: none;
   accent-color: var(--gold);
 }
 
 .effect-params-dialog .effect-param-slider::-webkit-slider-runnable-track,
 .audition-params-dialog .effect-param-slider::-webkit-slider-runnable-track {
-  height: 5px;
+  height: 3px;
   background: var(--mid-gray);
-  border-radius: 5px;
+  border-radius: 3px;
 }
 
 .effect-params-dialog .effect-param-slider::-webkit-slider-thumb,
 .audition-params-dialog .effect-param-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -4.5px;
+  width: 8px;
+  height: 8px;
+  margin-top: -2.5px;
   background: var(--gold);
   border-radius: 50%;
-  border: 2px solid var(--dark-gray);
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--dark-gray);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
 }
 
 .effect-params-dialog .effect-param-slider::-moz-range-track,
 .audition-params-dialog .effect-param-slider::-moz-range-track {
-  height: 5px;
+  height: 3px;
   background: var(--mid-gray);
-  border-radius: 5px;
+  border-radius: 3px;
 }
 
 .effect-params-dialog .effect-param-slider::-moz-range-thumb,
 .audition-params-dialog .effect-param-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 8px;
+  height: 8px;
   background: var(--gold);
   border-radius: 50%;
-  border: 2px solid var(--dark-gray);
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--dark-gray);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
 }
 
 .effect-params-dialog .effect-param-slider:focus,
@@ -2940,8 +2938,8 @@ select option {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  gap: 5px;
-  padding: 5px 6px;
+  gap: 2px;
+  padding: 3px 5px;
   background: #222;
   border-bottom: 1px solid #444;
   border-radius: 11px 11px 0 0;
@@ -3035,6 +3033,22 @@ select option {
   overflow: hidden;
   text-align: center;
   white-space: nowrap;
+}
+
+.effect-dialog-title-viewport[data-action="resume-audition-browse"] {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 4px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.effect-dialog-title-viewport[data-action="resume-audition-browse"]:hover {
+  background: rgba(99, 230, 190, 0.08);
+}
+
+.effect-params-dialog.is-audition-keyboard-active .effect-dialog-title-viewport[data-action="resume-audition-browse"] {
+  background: rgba(99, 230, 190, 0.12);
+  box-shadow: inset 0 -1px 0 rgba(99, 230, 190, 0.55);
 }
 
 .effect-dialog-title-text {
@@ -3708,18 +3722,6 @@ select option {
   z-index: 506;
 }
 
-/* Track dialog stacking is owned by the live dialog stack, not by the
-   historical per-slot z-index values above. */
-.effect-params-dialog.is-stack-front,
-.audition-params-dialog.is-stack-front {
-  z-index: 2201 !important;
-}
-
-.effect-params-dialog.is-stack-hidden,
-.audition-params-dialog.is-stack-hidden {
-  z-index: 2000 !important;
-}
-
 /* Sample Editor — intentionally layered on the Effects dialog shell. */
 .sample-editor-dialog .sample-editor-grid {
   grid-template-columns: repeat(3, 1fr) !important;
@@ -4289,6 +4291,16 @@ select option {
 .media-play-btn i {
   color: var(--gold);
 }
+.media-play-btn.is-playing,
+.playlist-item-btn.btn-preview.is-playing {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #000;
+}
+.media-play-btn.is-playing i,
+.playlist-item-btn.btn-preview.is-playing i {
+  color: #000;
+}
 .media-load-btn i {
   color: var(--green);
 }
@@ -4637,6 +4649,16 @@ select option {
 .playlist-item-btn.btn-cue {
   color: var(--gold);
   border-color: #554400;
+}
+
+.playlist-item-btn.btn-preview {
+  color: var(--gold);
+  border-color: #554400;
+}
+
+.playlist-item-btn.btn-preview:hover {
+  background: var(--gold);
+  color: #000;
 }
 
 .playlist-item-btn.btn-cue:hover {
@@ -5253,8 +5275,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-08be3d94bc95") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-08be3d94bc95") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-4478e4401a29") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-4478e4401a29") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -6014,7 +6036,7 @@ body.receiver-mode .unlock-button:focus {
 .dialog-help-text { font-size: 13px; color: #888; margin-top: 5px; }
 
 .dialog-range { width: 100%; }
-.dialog-gain-label { text-align: right; font-size: 13px; color: white; }
+.dialog-gain-label { text-align: right; font-size: 13px; color: var(--gold); }
 .dialog-lfo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; margin-bottom: 6px; }
 .dialog-lfo-column { display: flex; flex-direction: column; }
 
@@ -7817,4 +7839,264 @@ body.pure-screen-mirror-mode #audio-unlock-overlay {
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
+}
+
+/* Theremin Dual-Surface 16:9 Stacked Panels (inside existing effect dialog body) */
+.effect-params-dialog.has-theremin-parameters,
+.audition-params-dialog.has-theremin-parameters {
+  height: min(86vh, calc(100vh - 20px));
+  height: min(86dvh, calc(100dvh - 20px));
+  max-height: min(86vh, calc(100dvh - 20px));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.effect-params-dialog.has-theremin-parameters > .dialog-header,
+.audition-params-dialog.has-theremin-parameters > .dialog-header {
+  flex: 0 0 auto;
+}
+
+.effect-params-dialog.has-theremin-parameters > .dialog-content,
+.audition-params-dialog.has-theremin-parameters > .dialog-content {
+  flex: 1 1 0px;
+  min-height: 0;
+  height: 0;
+  max-height: none;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-top: 2px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.theremin-mount-host {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 2px;
+  box-sizing: border-box;
+}
+
+.has-theremin-parameters .effect-params-grid {
+  padding-bottom: 8px !important;
+}
+
+.has-theremin-parameters .effect-control-group {
+  order: -1;
+}
+
+.has-theremin-parameters .theremin-mount-host {
+  order: 1;
+}
+
+.theremin-surfaces-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--gold, #fad78e);
+}
+
+.theremin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  background: var(--surface-1, rgba(16, 18, 24, 0.92));
+  border: 1px solid var(--green);
+  transition: opacity 180ms ease, border-color 180ms ease;
+}
+
+.theremin-panel--trackpad,
+.theremin-panel--mouse.is-active {
+  opacity: 1;
+}
+
+.theremin-panel--mouse.is-dimmed {
+  opacity: 0.36;
+}
+
+.theremin-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.theremin-panel-title {
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.theremin-live-preview {
+  flex: 1;
+  text-align: right;
+  font-size: 10px;
+  color: var(--gold);
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.theremin-cfg-toggle {
+  padding: 2px 7px;
+  font-size: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong, rgba(250, 215, 142, 0.28));
+  background: var(--surface-2, rgba(250, 215, 142, 0.08));
+  color: var(--gold, #fad78e);
+  cursor: pointer;
+}
+
+.theremin-pad-frame {
+  position: relative;
+  width: 100%;
+  max-height: 165px;
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(6, 8, 12, 0.9);
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+
+.theremin-pad-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.theremin-hud-badges,
+.theremin-mouse-buttons-bar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.theremin-badge,
+.theremin-btn-pill {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid var(--green);
+  color: var(--gold);
+}
+
+.theremin-btn-pill.is-pressed {
+  background: var(--green);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.theremin-accordion-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 2px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  border-radius: 4px;
+  border: 1px solid rgba(99, 230, 190, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--mint, #63e6be);
+  cursor: pointer;
+}
+
+.theremin-accordion-toggle::after {
+  content: "▸";
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.theremin-accordion-toggle[aria-expanded="true"]::after {
+  transform: rotate(90deg);
+}
+
+.theremin-panel-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  box-sizing: border-box;
+  padding-top: 3px;
+  border-top: 1px solid var(--green);
+  font-size: 11px;
+}
+
+.theremin-panel-editor[hidden] {
+  display: none;
+}
+
+.theremin-cfg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(99, 230, 190, 0.25);
+}
+
+.theremin-cfg-name {
+  min-width: 68px;
+  flex: 0 0 68px;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.theremin-cfg-select {
+  flex: 1 1 180px;
+  min-width: 140px;
+  background: rgba(12, 14, 20, 0.9);
+  color: var(--gold);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.theremin-cfg-select--compact {
+  flex: 1 1 92px;
+  min-width: 84px;
+}
+
+.theremin-cfg-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gold);
+}
+
+.theremin-cfg-mini input[type="number"] {
+  width: 50px;
+  background: rgba(12, 14, 20, 0.9);
+  color: var(--gold);
+  border: 1px solid var(--green);
+  border-radius: 3px;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+.theremin-cfg-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gold);
 }

@@ -6,7 +6,7 @@
 
 @font-face {
   font-family: "Mexcellent";
-  src: url("../fonts/MexcellentRg.otf?v=13.9.509-08be3d94bc95") format("opentype");
+  src: url("../fonts/MexcellentRg.otf?v=13.9.509-4478e4401a29") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -14,7 +14,7 @@
 
 @font-face {
   font-family: "Mexcellent 3D";
-  src: url("../fonts/Mexcellent3d.otf?v=13.9.509-08be3d94bc95") format("opentype");
+  src: url("../fonts/Mexcellent3d.otf?v=13.9.509-4478e4401a29") format("opentype");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -22,7 +22,7 @@
 
 @font-face {
   font-family: "Cousine";
-  src: url("../fonts/Cousine-Regular.ttf?v=13.9.509-08be3d94bc95") format("truetype");
+  src: url("../fonts/Cousine-Regular.ttf?v=13.9.509-4478e4401a29") format("truetype");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -30,7 +30,7 @@
 
 @font-face {
   font-family: "Cousine";
-  src: url("../fonts/Cousine-Bold.ttf?v=13.9.509-08be3d94bc95") format("truetype");
+  src: url("../fonts/Cousine-Bold.ttf?v=13.9.509-4478e4401a29") format("truetype");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
@@ -46,10 +46,17 @@
   --off-black: #1a1a1a;
   --dark-gray: #2c2c2c;
   --mid-gray: #444;
-  --text-color: #f0f0f0;
+  --text-color: #fad78e;
   --dark-green-transparent: rgba(0, 100, 0, 0.5);
   --dark-red: #8b0000;
   --effect-dialog-resting-scale: 0.84;
+  --surface-0: #0b0b0b;
+  --surface-1: #141414;
+  --surface-2: #222222;
+  --border-subtle: #333333;
+  --border-strong: #555555;
+  --text-muted: rgba(250, 215, 142, 0.78);
+  --text-dim: #63e6be;
 }
 
 html {
