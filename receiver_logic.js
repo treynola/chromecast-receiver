@@ -360,6 +360,8 @@ if (RECEIVER_BRANCH?.gui && (
           }
           receiverHandshakeTelemetryReady = true;
           flushDeferredReceiverTelemetry();
+          // Flush startup/UI logs that were queued before the Studio LAN
+          // address and receiver WebSocket became available.
           flushPendingStudioLogs();
           // The bridge-open GUI_READY is intentionally independent of audio,
           // but it can arrive before the authenticated command gate is ready.
@@ -3500,6 +3502,33 @@ if (RECEIVER_BRANCH?.gui && (
               });
               return true;
             }
+            const durationFinite = Number.isFinite(activeAudio.duration);
+            const seekable = activeAudio.seekable;
+            let seekableForTrim = false;
+            if (durationFinite && seekable && seekable.length > 0) {
+              for (let idx = 0; idx < seekable.length; idx++) {
+                if (trimTarget >= seekable.start(idx) && trimTarget <= seekable.end(idx)) {
+                  seekableForTrim = true;
+                  break;
+                }
+              }
+            }
+            if (!seekableForTrim) {
+              nativeStartupTrimPending = false;
+              nativeStartupTrimState = "skipped_unseekable";
+              relayLogToStudio(
+                "⏭️ Receiver: Skipped live-stream seek on unseekable /stream.wav prewarm (latency=" +
+                  latency.toFixed(3) +
+                  "s).",
+              );
+              logReceiverStartupTiming("native_startup_trim_skipped_unseekable", {
+                nativeAttemptId: nativeStartupAttemptId,
+                latencyBeforeSec: latency,
+                durationFinite,
+                seekableRanges: seekable ? seekable.length : 0,
+              });
+              return true;
+            }
             activeAudio.currentTime = trimTarget;
             nativeStartupTrimPending = false;
             nativeStartupTrimState = "trimmed";
@@ -4967,6 +4996,15 @@ if (RECEIVER_BRANCH?.gui && (
           }
           notifyPlaybackMode("native", modeReason);
           revealReceiverUi("native_active");
+          if (
+            lastPlaybackStartSignalAt &&
+            lastOrderedPlaybackAction === "PLAYBACK_START" &&
+            lastPlaybackRevision >= 0 &&
+            !playbackPaused &&
+            !nativeResumeProbe
+          ) {
+            startNativeResumeProgressProbe(lastPlaybackRevision);
+          }
           teardownPcmPlayout("native_active", true);
           publishMxsPlaybackStatus(
             lastPlaybackStartSignalAt ? "PLAYING" : "READY",
@@ -10843,7 +10881,10 @@ if (RECEIVER_BRANCH?.gui && (
           );
           const resumingNative = nativeStreamActive && nativeStreamPaused;
           requestNativePlaybackStart(reason || "playback_start");
-          if (resumingNative) {
+          if (
+            (resumingNative || (nativeStreamActive && !nativeStreamPaused)) &&
+            !nativeResumeProbe
+          ) {
             startNativeResumeProgressProbe(playbackRevision);
           }
           if (nativeStreamActive) {
@@ -11462,6 +11503,9 @@ if (RECEIVER_BRANCH?.gui && (
                       screenWidth: Number(window.screen?.width) || null,
                       screenHeight: Number(window.screen?.height) || null,
                       devicePixelRatio: Number(window.devicePixelRatio) || null,
+                      uiRevealed: window._receiverUiRevealed === true,
+                      appLoadingActive: Boolean(document.body?.classList?.contains("app-loading")),
+                      startupStatusPresent: Boolean(document.getElementById("receiver-startup-status")),
                       evidence: "browser_screen_api_not_physical_hdmi_proof" },
                     waveformExpected: lastWaveformRenderStats.expected,
                     waveformDrawn: lastWaveformRenderStats.drawn,
@@ -12185,12 +12229,8 @@ if (RECEIVER_BRANCH?.gui && (
             receiverBridgeConfigRevision = null;
             receiverHandshakeCommitSignature = null;
             receiverPlayoutAudibleSignature = null;
-            deferredReceiverTelemetry = [];
             pendingPlaybackMode = null;
             pendingPlayoutSelection = null;
-            // Flush startup/UI logs that were queued before the Studio LAN
-            // address and receiver WebSocket became available.
-            flushPendingStudioLogs();
             const conn = document.getElementById("bridge-status-dot");
             if (conn) {
               conn.style.backgroundColor = "var(--green)";
