@@ -27,7 +27,8 @@
         Array.isArray(expected) !== Array.isArray(received)) return false;
     const keys = Object.keys(expected);
     return keys.length === Object.keys(received).length && keys.every((key) =>
-      Object.hasOwn(received, key) && equalBuildIdentity(expected[key], received[key]));
+      Object.prototype.hasOwnProperty.call(received, key) &&
+      equalBuildIdentity(expected[key], received[key]));
   }
 
   function verifyBuildIdentity(receivedIdentity) {
