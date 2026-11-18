@@ -21,27 +21,18 @@
     return typeof val === "string" && val.trim().length > 0;
   }
 
+  function equalBuildIdentity(expected, received) {
+    if (expected === received) return true;
+    if (!expected || !received || typeof expected !== "object" || typeof received !== "object" ||
+        Array.isArray(expected) !== Array.isArray(received)) return false;
+    const keys = Object.keys(expected);
+    return keys.length === Object.keys(received).length && keys.every((key) =>
+      Object.hasOwn(received, key) && equalBuildIdentity(expected[key], received[key]));
+  }
+
   function verifyBuildIdentity(receivedIdentity) {
-    if (typeof window.MXS_BUILD_IDENTITY === "undefined" || window.MXS_BUILD_IDENTITY === null) {
-      return true;
-    }
-    if (receivedIdentity === window.MXS_BUILD_IDENTITY) {
-      return true;
-    }
-    if (typeof window.MXS_BUILD_IDENTITY === "string") {
-      return receivedIdentity === window.MXS_BUILD_IDENTITY;
-    }
-    if (typeof window.MXS_BUILD_IDENTITY === "object" && typeof receivedIdentity === "object" && receivedIdentity !== null) {
-      if (window.MXS_BUILD_IDENTITY.version && receivedIdentity.version) {
-        if (window.MXS_BUILD_IDENTITY.version !== receivedIdentity.version) return false;
-      }
-      try {
-        return JSON.stringify(window.MXS_BUILD_IDENTITY) === JSON.stringify(receivedIdentity);
-      } catch (_) {
-        return false;
-      }
-    }
-    return false;
+    const expected = window.MXS_BUILD_IDENTITY;
+    return expected == null || equalBuildIdentity(expected, receivedIdentity);
   }
   const namespace = "urn:x-cast:com.nowmultimedia.mxs004";
   const rootId = typeof window.crypto?.randomUUID === "function"

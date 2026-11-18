@@ -12,6 +12,22 @@
   const OUTPUT_FORMAT = Object.freeze({ name: "s16le", format: FORMAT_PCM_SIGNED, bitDepth: 16, bytesPerFrame: 4 });
   const MAX_U64 = (1n << 64n) - 1n;
 
+  // Let short congestion drain before the hard ceiling. Express both limits
+  // in input PCM time so high sample rates do not get a smaller reserve.
+  function senderBacklogBytes(sampleRate, milliseconds) {
+    return Math.floor(sampleRate * INPUT_FORMAT.bytesPerFrame * milliseconds / 1000);
+  }
+
+  function senderIsBackpressured(bufferedBytes, sampleRate) {
+    return bufferedBytes >= senderBacklogBytes(sampleRate, 256);
+  }
+
+  function assertSenderBacklog(bufferedBytes, packetBytes, sampleRate) {
+    if (bufferedBytes + packetBytes > senderBacklogBytes(sampleRate, 512)) {
+      fail("pcm_sender_backlog_limit");
+    }
+  }
+
   function fail(code) {
     const error = new Error(code);
     error.code = code;
@@ -271,5 +287,7 @@
     encodeInto,
     decode,
     SequenceValidator,
+    senderIsBackpressured,
+    assertSenderBacklog,
   });
 })(typeof window !== "undefined" ? window : globalThis);
