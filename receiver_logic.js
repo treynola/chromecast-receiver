@@ -4179,8 +4179,28 @@ if (RECEIVER_BRANCH?.gui && (
                 }
                 if (eventType === events.PLAYING) {
                   if (!nativeStreamPaused) {
-                    releaseNativeStreamPrewarmMute();
-                    relayLogToStudio("🔊 Receiver: CAF native prewarm reached PLAYING; output unmuted.");
+                    const prewarmUnmuted = releaseNativeStreamPrewarmMute();
+                    if (prewarmUnmuted) {
+                      relayLogToStudio("🔊 Receiver: CAF native prewarm reached PLAYING; output unmuted.");
+                    } else if (nativeStreamActive) {
+                      const el = document.getElementById("cast-media-element");
+                      const mediaState = readNativeResumeMediaState();
+                      emitCafTelemetry("CAF_REBUFFER_RECOVERED", {
+                        playbackEpoch: lastPlaybackEpoch,
+                        playbackRevision: lastPlaybackRevision,
+                        readyState: el?.readyState ?? null,
+                        networkState: el?.networkState ?? null,
+                        currentTime: mediaState?.currentTime ?? null,
+                        bufferedEnd: mediaState?.bufferedEnd ?? null,
+                        bufferedGapSeconds:
+                          mediaState &&
+                          Number.isFinite(mediaState.bufferedEnd) &&
+                          Number.isFinite(mediaState.currentTime)
+                            ? Math.max(0, mediaState.bufferedEnd - mediaState.currentTime)
+                            : null,
+                      });
+                      relayLogToStudio("🔄 Receiver: CAF PLAYING resumed after buffer stall.");
+                    }
                   }
                 }
                 if (
@@ -4933,6 +4953,7 @@ if (RECEIVER_BRANCH?.gui && (
               fadeMs: 0,
             });
           }
+          return unmutedAny;
         }
 
         function activateNativeStream(modeReason, logMessage, attemptId) {
@@ -9684,9 +9705,28 @@ if (RECEIVER_BRANCH?.gui && (
           }
           if (patch.master && typeof patch.master === "object") {
             const previousMaster = nextState.master || {};
+            const mergeMasterSurface = (prevSurface, patchSurface) => {
+              if (!patchSurface || typeof patchSurface !== "object") {
+                return patchSurface !== undefined ? patchSurface : prevSurface;
+              }
+              return {
+                ...(prevSurface || {}),
+                ...patchSurface,
+              };
+            };
+            const previousWaveform = previousMaster.waveform;
+            const patchWaveform = patch.master.waveform;
             nextState.master = {
               ...previousMaster,
               ...patch.master,
+              waveform: patchWaveform && typeof patchWaveform === "object"
+                ? {
+                    ...(previousWaveform || {}),
+                    ...patchWaveform,
+                    left: mergeMasterSurface(previousWaveform?.left, patchWaveform.left),
+                    right: mergeMasterSurface(previousWaveform?.right, patchWaveform.right),
+                  }
+                : previousWaveform,
               meters: {
                 ...(previousMaster.meters || {}),
                 ...(patch.master.meters || {}),
