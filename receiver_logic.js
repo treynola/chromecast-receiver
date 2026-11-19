@@ -11204,7 +11204,7 @@ if (RECEIVER_BRANCH?.gui && (
             })) };
         }
 
-        function captureLfoVisualProof(state, nowMs = Date.now()) {
+        function captureLfoVisualProof(state, nowMs = getLfoVisualNow()) {
           const proof = lastSubmittedLfoProof;
           if (!proof) return null;
           if (Number.isSafeInteger(state?.transport?.playbackEpoch) && Number.isSafeInteger(proof.transport.playbackEpoch) &&
