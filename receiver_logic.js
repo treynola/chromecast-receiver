@@ -104,6 +104,58 @@ if (RECEIVER_BRANCH?.gui && (
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const CAST_GUI_PROTOCOL_VERSION = 3;
+        const RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS = 100;
+        const RECEIVER_GUI_EVENT_LOOP_LAG_REPORT_THRESHOLD_MS = 50;
+        let receiverGuiEventLoopLagExpectedAtMs = typeof performance !== "undefined" &&
+          typeof performance.now === "function"
+          ? performance.now() + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS
+          : Date.now() + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
+        let receiverGuiEventLoopLagWindowStartedAtMs = receiverGuiEventLoopLagExpectedAtMs -
+          RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
+        let receiverGuiEventLoopLagSamples = 0;
+        let receiverGuiEventLoopLagOver100Ms = 0;
+        let receiverGuiEventLoopLagOver250Ms = 0;
+        let receiverGuiEventLoopLagMaxMs = 0;
+        function readReceiverMonotonicNowMs() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
+        function sampleReceiverGuiEventLoopLag() {
+          const nowMs = readReceiverMonotonicNowMs();
+          const visible = typeof document === "undefined" || document.visibilityState !== "hidden";
+          if (visible) {
+            const lagMs = Math.max(0, nowMs - receiverGuiEventLoopLagExpectedAtMs);
+            receiverGuiEventLoopLagSamples += 1;
+            receiverGuiEventLoopLagMaxMs = Math.max(receiverGuiEventLoopLagMaxMs, lagMs);
+            if (lagMs >= 100) receiverGuiEventLoopLagOver100Ms += 1;
+            if (lagMs >= 250) receiverGuiEventLoopLagOver250Ms += 1;
+          }
+          receiverGuiEventLoopLagExpectedAtMs = nowMs + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
+          window.setTimeout(sampleReceiverGuiEventLoopLag, RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS);
+        }
+        if (RECEIVER_BRANCH?.gui) {
+          window.setTimeout(sampleReceiverGuiEventLoopLag, RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS);
+        }
+        function takeReceiverGuiEventLoopLagSnapshot() {
+          const nowMs = readReceiverMonotonicNowMs();
+          const snapshot = {
+            sampleWindowMs: Math.max(0, nowMs - receiverGuiEventLoopLagWindowStartedAtMs),
+            samples: receiverGuiEventLoopLagSamples,
+            over100Ms: receiverGuiEventLoopLagOver100Ms,
+            over250Ms: receiverGuiEventLoopLagOver250Ms,
+            maxLagMs: Math.round(receiverGuiEventLoopLagMaxMs * 100) / 100,
+            visibilityState: typeof document === "undefined" ? "unknown" : document.visibilityState,
+          };
+          receiverGuiEventLoopLagWindowStartedAtMs = nowMs;
+          receiverGuiEventLoopLagSamples = 0;
+          receiverGuiEventLoopLagOver100Ms = 0;
+          receiverGuiEventLoopLagOver250Ms = 0;
+          receiverGuiEventLoopLagMaxMs = 0;
+          return snapshot.maxLagMs >= RECEIVER_GUI_EVENT_LOOP_LAG_REPORT_THRESHOLD_MS
+            ? snapshot
+            : null;
+        }
         let guiInteractionRevision = 0;
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         var nativeStreamActive = false;
@@ -11419,6 +11471,7 @@ if (RECEIVER_BRANCH?.gui && (
                   ? snapshotPlaybackRevision <= receiverPlaybackRevisionAtAck
                   : snapshotPlaybackRevision === receiverPlaybackRevisionAtAck)
               : null,
+            receiverEventLoopLag: takeReceiverGuiEventLoopLagSnapshot(),
           };
           if (Number.isSafeInteger(revision) && revision >= 0 && revision === lastGuiRevision) {
             // A bounded sender retry can arrive after the original render was
