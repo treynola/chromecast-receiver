@@ -74,6 +74,73 @@ if (RECEIVER_BRANCH?.gui && (
         var lastBinaryResetAt = 0;
         var lastNativeStopReason = "";
         var lastNativeStopAt = 0;
+        const RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS = 100;
+        const RECEIVER_GUI_EVENT_LOOP_LAG_REPORT_THRESHOLD_MS = 50;
+        let receiverGuiEventLoopLagExpectedAtMs = typeof performance !== "undefined" &&
+          typeof performance.now === "function"
+          ? performance.now() + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS
+          : Date.now() + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
+        let receiverGuiEventLoopLagWindowStartedAtMs = receiverGuiEventLoopLagExpectedAtMs -
+          RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
+        let receiverGuiEventLoopLagSamples = 0;
+        let receiverGuiEventLoopLagOver100Ms = 0;
+        let receiverGuiEventLoopLagOver250Ms = 0;
+        let receiverGuiEventLoopLagMaxMs = 0;
+        let receiverGuiEventLoopLagTimerId = null;
+        function readReceiverMonotonicNowMs() {
+          return typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        }
+        function stopReceiverGuiEventLoopLagSampler() {
+          if (receiverGuiEventLoopLagTimerId !== null) {
+            clearTimeout(receiverGuiEventLoopLagTimerId);
+            receiverGuiEventLoopLagTimerId = null;
+          }
+        }
+        function sampleReceiverGuiEventLoopLag() {
+          receiverGuiEventLoopLagTimerId = null;
+          if (window._receiverShutdownInProgress) return;
+          const nowMs = readReceiverMonotonicNowMs();
+          const visible = typeof document === "undefined" || document.visibilityState !== "hidden";
+          if (visible) {
+            const lagMs = Math.max(0, nowMs - receiverGuiEventLoopLagExpectedAtMs);
+            receiverGuiEventLoopLagSamples += 1;
+            receiverGuiEventLoopLagMaxMs = Math.max(receiverGuiEventLoopLagMaxMs, lagMs);
+            if (lagMs >= 100) receiverGuiEventLoopLagOver100Ms += 1;
+            if (lagMs >= 250) receiverGuiEventLoopLagOver250Ms += 1;
+          }
+          receiverGuiEventLoopLagExpectedAtMs = nowMs + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
+          receiverGuiEventLoopLagTimerId = window.setTimeout(
+            sampleReceiverGuiEventLoopLag,
+            RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS,
+          );
+        }
+        if (typeof RECEIVER_BRANCH !== "undefined" && RECEIVER_BRANCH?.gui) {
+          receiverGuiEventLoopLagTimerId = window.setTimeout(
+            sampleReceiverGuiEventLoopLag,
+            RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS,
+          );
+        }
+        function takeReceiverGuiEventLoopLagSnapshot() {
+          const nowMs = readReceiverMonotonicNowMs();
+          const snapshot = {
+            sampleWindowMs: Math.max(0, nowMs - receiverGuiEventLoopLagWindowStartedAtMs),
+            samples: receiverGuiEventLoopLagSamples,
+            over100Ms: receiverGuiEventLoopLagOver100Ms,
+            over250Ms: receiverGuiEventLoopLagOver250Ms,
+            maxLagMs: Math.round(receiverGuiEventLoopLagMaxMs * 100) / 100,
+            visibilityState: typeof document === "undefined" ? "unknown" : document.visibilityState,
+          };
+          receiverGuiEventLoopLagWindowStartedAtMs = nowMs;
+          receiverGuiEventLoopLagSamples = 0;
+          receiverGuiEventLoopLagOver100Ms = 0;
+          receiverGuiEventLoopLagOver250Ms = 0;
+          receiverGuiEventLoopLagMaxMs = 0;
+          return snapshot.maxLagMs >= RECEIVER_GUI_EVENT_LOOP_LAG_REPORT_THRESHOLD_MS
+            ? snapshot
+            : null;
+        }
         const BUILD_IDENTITY_SCHEMA = "mxs-004.clock-sync-pcm.build-identity";
         const COMPATIBILITY_IDENTITY_SCHEMA = "mxs-004.cast-compatibility";
         const COMPATIBILITY_IDENTITY_VERSION = 2;
@@ -104,58 +171,6 @@ if (RECEIVER_BRANCH?.gui && (
         const VERSION_TAG = "v13.9.509-APORv2";
         const CUSTOM_NAMESPACE = "urn:x-cast:com.nowmultimedia.mxs004";
         const CAST_GUI_PROTOCOL_VERSION = 3;
-        const RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS = 100;
-        const RECEIVER_GUI_EVENT_LOOP_LAG_REPORT_THRESHOLD_MS = 50;
-        let receiverGuiEventLoopLagExpectedAtMs = typeof performance !== "undefined" &&
-          typeof performance.now === "function"
-          ? performance.now() + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS
-          : Date.now() + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
-        let receiverGuiEventLoopLagWindowStartedAtMs = receiverGuiEventLoopLagExpectedAtMs -
-          RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
-        let receiverGuiEventLoopLagSamples = 0;
-        let receiverGuiEventLoopLagOver100Ms = 0;
-        let receiverGuiEventLoopLagOver250Ms = 0;
-        let receiverGuiEventLoopLagMaxMs = 0;
-        function readReceiverMonotonicNowMs() {
-          return typeof performance !== "undefined" && typeof performance.now === "function"
-            ? performance.now()
-            : Date.now();
-        }
-        function sampleReceiverGuiEventLoopLag() {
-          const nowMs = readReceiverMonotonicNowMs();
-          const visible = typeof document === "undefined" || document.visibilityState !== "hidden";
-          if (visible) {
-            const lagMs = Math.max(0, nowMs - receiverGuiEventLoopLagExpectedAtMs);
-            receiverGuiEventLoopLagSamples += 1;
-            receiverGuiEventLoopLagMaxMs = Math.max(receiverGuiEventLoopLagMaxMs, lagMs);
-            if (lagMs >= 100) receiverGuiEventLoopLagOver100Ms += 1;
-            if (lagMs >= 250) receiverGuiEventLoopLagOver250Ms += 1;
-          }
-          receiverGuiEventLoopLagExpectedAtMs = nowMs + RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS;
-          window.setTimeout(sampleReceiverGuiEventLoopLag, RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS);
-        }
-        if (RECEIVER_BRANCH?.gui) {
-          window.setTimeout(sampleReceiverGuiEventLoopLag, RECEIVER_GUI_EVENT_LOOP_LAG_INTERVAL_MS);
-        }
-        function takeReceiverGuiEventLoopLagSnapshot() {
-          const nowMs = readReceiverMonotonicNowMs();
-          const snapshot = {
-            sampleWindowMs: Math.max(0, nowMs - receiverGuiEventLoopLagWindowStartedAtMs),
-            samples: receiverGuiEventLoopLagSamples,
-            over100Ms: receiverGuiEventLoopLagOver100Ms,
-            over250Ms: receiverGuiEventLoopLagOver250Ms,
-            maxLagMs: Math.round(receiverGuiEventLoopLagMaxMs * 100) / 100,
-            visibilityState: typeof document === "undefined" ? "unknown" : document.visibilityState,
-          };
-          receiverGuiEventLoopLagWindowStartedAtMs = nowMs;
-          receiverGuiEventLoopLagSamples = 0;
-          receiverGuiEventLoopLagOver100Ms = 0;
-          receiverGuiEventLoopLagOver250Ms = 0;
-          receiverGuiEventLoopLagMaxMs = 0;
-          return snapshot.maxLagMs >= RECEIVER_GUI_EVENT_LOOP_LAG_REPORT_THRESHOLD_MS
-            ? snapshot
-            : null;
-        }
         let guiInteractionRevision = 0;
         const ENABLE_NATIVE_STREAM_PLAYOUT = true;
         var nativeStreamActive = false;
@@ -1495,11 +1510,19 @@ if (RECEIVER_BRANCH?.gui && (
               playerState = String(playerManager.getPlayerState() || "");
             }
           } catch (_error) {}
+          let bufferedEnd = null;
+          try {
+            if (mediaElement?.buffered && mediaElement.buffered.length > 0) {
+              const end = mediaElement.buffered.end(mediaElement.buffered.length - 1);
+              if (Number.isFinite(end)) bufferedEnd = end;
+            }
+          } catch (_error) {}
           return {
             mediaElementId: mediaElement?.id || "native-media",
             currentTime: Number.isFinite(Number(mediaElement?.currentTime))
               ? Number(mediaElement.currentTime)
               : null,
+            bufferedEnd,
             readyState: Number.isFinite(Number(mediaElement?.readyState))
               ? Number(mediaElement.readyState)
               : null,
@@ -1715,7 +1738,8 @@ if (RECEIVER_BRANCH?.gui && (
             probe.playbackRevision !== playbackRevision ||
             probe.playbackEpoch !== lastPlaybackEpoch ||
             playbackRevision !== lastPlaybackRevision ||
-            lastOrderedPlaybackAction !== "PLAYBACK_START" ||
+            (lastOrderedPlaybackAction !== "PLAYBACK_START" &&
+              lastOrderedPlaybackAction !== "PLAYBACK_RESUME") ||
             playbackPaused ||
             nativeStreamPaused ||
             !nativeStreamActive ||
@@ -1772,7 +1796,8 @@ if (RECEIVER_BRANCH?.gui && (
           if (
             probe.playbackEpoch !== lastPlaybackEpoch ||
             probe.playbackRevision !== lastPlaybackRevision ||
-            lastOrderedPlaybackAction !== "PLAYBACK_START" ||
+            (lastOrderedPlaybackAction !== "PLAYBACK_START" &&
+              lastOrderedPlaybackAction !== "PLAYBACK_RESUME") ||
             playbackPaused ||
             nativeStreamPaused ||
             !nativeStreamActive
@@ -1823,7 +1848,8 @@ if (RECEIVER_BRANCH?.gui && (
             !Number.isSafeInteger(revision) ||
             revision < 0 ||
             revision !== lastPlaybackRevision ||
-            lastOrderedPlaybackAction !== "PLAYBACK_START" ||
+            (lastOrderedPlaybackAction !== "PLAYBACK_START" &&
+              lastOrderedPlaybackAction !== "PLAYBACK_RESUME") ||
             !nativeStreamActive ||
             nativeStreamPaused ||
             playbackPaused
@@ -2634,6 +2660,9 @@ if (RECEIVER_BRANCH?.gui && (
           if (!diag || window._pcmDegraded || window._playbackMode !== "pcm_fallback") {
             return;
           }
+          if (diag.paused === true) {
+            return;
+          }
           const measuredHz = Number(diag.measuredHz || diag.wallHz || 0);
           const healthy =
             diag.targetAcquired === true &&
@@ -2916,9 +2945,15 @@ if (RECEIVER_BRANCH?.gui && (
             "registry-action";
           const commandName = element.dataset.registryActionId
             ? "registry.invoke"
-            : kind === "click"
-              ? "control.activate"
-              : "control.set";
+            : kind === "pad.down"
+              ? "pad.down"
+              : kind === "pad.up"
+                ? "pad.up"
+                : kind === "settings"
+                  ? "control.settings"
+                  : kind === "click"
+                    ? "control.activate"
+                    : "control.set";
           const message = {
             type: "GUI_ACTION",
             transport: "gui",
@@ -4230,7 +4265,11 @@ if (RECEIVER_BRANCH?.gui && (
                   relayLogToStudio("📺 Receiver: " + msg);
                 }
                 if (eventType === events.PLAYING) {
-                  if (!nativeStreamPaused) {
+                  const awaitingPreplayPrewarmHold =
+                    nativeStreamStarting &&
+                    nativeStreamPrewarmBeforePlayback &&
+                    (!lastPlaybackStartSignalAt || nativeStreamCompanionForPcm);
+                  if (!nativeStreamPaused && !awaitingPreplayPrewarmHold) {
                     const prewarmUnmuted = releaseNativeStreamPrewarmMute();
                     if (prewarmUnmuted) {
                       relayLogToStudio("🔊 Receiver: CAF native prewarm reached PLAYING; output unmuted.");
@@ -5029,9 +5068,10 @@ if (RECEIVER_BRANCH?.gui && (
             stopNativeStreamPlayout("native_owner_promotion_failed");
             return false;
           }
+          const pausedAtActivation = playbackPaused || nativeStreamPaused;
           nativeStreamStarting = false;
           nativeStreamActive = true;
-          nativeStreamPaused = false;
+          nativeStreamPaused = pausedAtActivation;
           nativeFailureRetryAttempted = false;
           if (nativeOrderedResumeRecovery) {
             emitCafTelemetry("CAF_RESUME_RESTART_READY", {
@@ -5043,7 +5083,11 @@ if (RECEIVER_BRANCH?.gui && (
             });
             clearNativeOrderedResumeRecovery("native_restart_ready");
           }
-          releaseNativeStreamPrewarmMute();
+          if (pausedAtActivation) {
+            pauseNativeStreamPlayout("native_startup_paused");
+          } else {
+            releaseNativeStreamPrewarmMute();
+          }
           if (nativeStartupTrimState !== "idle" && nativeStartupTrimState !== "cancelled") {
             nativeStartupTrimState = "released";
           }
@@ -5071,16 +5115,22 @@ if (RECEIVER_BRANCH?.gui && (
           revealReceiverUi("native_active");
           if (
             lastPlaybackStartSignalAt &&
-            lastOrderedPlaybackAction === "PLAYBACK_START" &&
+            (lastOrderedPlaybackAction === "PLAYBACK_START" ||
+              lastOrderedPlaybackAction === "PLAYBACK_RESUME") &&
             lastPlaybackRevision >= 0 &&
             !playbackPaused &&
+            !nativeStreamPaused &&
             !nativeResumeProbe
           ) {
             startNativeResumeProgressProbe(lastPlaybackRevision);
           }
           teardownPcmPlayout("native_active", true);
           publishMxsPlaybackStatus(
-            lastPlaybackStartSignalAt ? "PLAYING" : "READY",
+            pausedAtActivation
+              ? "PAUSED"
+              : lastPlaybackStartSignalAt
+                ? "PLAYING"
+                : "READY",
             modeReason || "native_active",
           );
           if (logMessage) {
@@ -5891,7 +5941,10 @@ if (RECEIVER_BRANCH?.gui && (
             return;
           }
           window._receiverShutdownInProgress = true;
+          stopReceiverGuiEventLoopLagSampler();
           stopMirrorDiagnostics();
+          mirrorRuntime?.teardownMirrorSession?.(reason || "shutdown");
+          closeGuiControlBridge(reason || "shutdown");
           clearReceiverSessionCaches("cast_stopped");
           suppressBinaryReconnect = true;
           clearBinaryReconnectTimer();
@@ -6639,7 +6692,7 @@ if (RECEIVER_BRANCH?.gui && (
                 return true;
               }
 
-            let workletUrl = "pcm-player-worklet-c11d7ffed48783882236886963dbb6496a3ba3b32d0b7db34aca7f58035a73bd.js";
+            let workletUrl = "pcm-player-worklet-da4edb21bf0d057eca468066c66cb6447f220a0b85e91b73a765d2cbfb24219d.js";
             // Executable modules always belong to the receiver origin.
             // Decide AudioWorklet support once per AudioContext using a tiny,
             // same-origin module. A failed capability probe selects native
@@ -11467,7 +11520,7 @@ if (RECEIVER_BRANCH?.gui && (
               : {}),
             playbackIdentityMatchedAtAck: hasSnapshotPlaybackIdentity && hasReceiverPlaybackIdentity
               ? snapshotPlaybackEpoch === receiverPlaybackEpochAtAck &&
-                (envelope?.type === "GUI_PATCH"
+                (envelope?.type === "GUI_PATCH" || envelope?.type === "GUI_STATE_PATCH"
                   ? snapshotPlaybackRevision <= receiverPlaybackRevisionAtAck
                   : snapshotPlaybackRevision === receiverPlaybackRevisionAtAck)
               : null,
@@ -12838,6 +12891,9 @@ if (RECEIVER_BRANCH?.gui && (
             const reconnectPlaybackActive = Boolean(
               lastPlaybackStartSignalAt && !playbackPaused
             );
+            const preservePausedNative = Boolean(
+              lastPlaybackStartSignalAt && playbackPaused && nativeStreamActive
+            );
             const preserveLiveNative =
               reconnectPlaybackActive && nativeStreamActive;
             const preserveNativeReplay =
@@ -12847,12 +12903,17 @@ if (RECEIVER_BRANCH?.gui && (
               // The native progressive-WAV request is independent from the
               // control WebSocket. Keep its CAF media clock and audible item
               // untouched through a transient bridge reconnect; reopening or
-              // muting it here causes the exact cast-audio cancellation this
-              // reconnect path is meant to recover from.
+              // tearing it down here breaks open Pause/Play continuity.
               resetBinaryPlayoutState("websocket_closed_native_continuity");
               setPcmAudioPriority(false, "websocket_closed_native_continuity");
               relayLogToStudio(
                 "🔁 Receiver: Native CAF remained live across control bridge reconnect.",
+              );
+            } else if (preservePausedNative) {
+              resetBinaryPlayoutState("websocket_closed_native_continuity");
+              setPcmAudioPriority(false, "websocket_closed_native_continuity");
+              relayLogToStudio(
+                "🔁 Receiver: Paused native CAF hold retained across control bridge reconnect.",
               );
             } else {
               stopAllPlayout(
@@ -12920,7 +12981,7 @@ if (RECEIVER_BRANCH?.gui && (
               readyState: binaryWS ? binaryWS.readyState : null,
             });
             console.error("❌ Binary Bridge Error:", e);
-            relayLogToStudio(`❌ Receiver: WebSocket Error on ${url}`);
+            relayLogToStudio(`❌ Receiver: WebSocket Error on ${redactBridgeUrl(url)}`);
             // Reconnection is managed exclusively by binaryWS.onclose with exponential backoff
           };
         }
@@ -13116,14 +13177,24 @@ if (RECEIVER_BRANCH?.gui && (
                 () => {
                   if (window._receiverShutdownInProgress) return;
                   stopMirrorDiagnostics();
+                  mirrorRuntime?.teardownMirrorSession?.("sender_disconnected");
+                  closeGuiControlBridge("sender_disconnected");
                   buildIdentityAccepted = false;
                   window._buildIdentityAccepted = false;
+                  window._handshakeAcked = false;
+                  receiverBridgeConfigReady = false;
+                  if (handshakeRetryInterval) {
+                    clearInterval(handshakeRetryInterval);
+                    handshakeRetryInterval = null;
+                  }
                   playoutPathLogged = false;
                   window._binaryActive = false;
                   window._lastBinaryTime = 0;
                   window._playbackMode = "unknown";
                   stopNativeStreamPlayout("sender_disconnected");
                   setActiveAudioPathOwner("none", "sender_disconnected");
+                  resetBinaryPlayoutState("sender_disconnected");
+                  destroyAudioWorklet();
                   clearLegacyMediaStream();
                   suppressBinaryReconnect = true;
                   binaryConnectionGeneration++;

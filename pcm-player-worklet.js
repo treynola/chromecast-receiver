@@ -136,11 +136,17 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         }
         if (message && message.type === "PAUSE") {
           this._paused = true;
+          this._lastDiagWallMs = 0;
+          this._lastDiagAudioClockTime = null;
+          this._lastDiagRawQueuedFrames = null;
           this.port.postMessage({ type: "LOG", msg: "Worklet playout PAUSED (hold)." });
           return;
         }
         if (message && message.type === "RESUME") {
           this._paused = false;
+          this._lastDiagWallMs = 0;
+          this._lastDiagAudioClockTime = null;
+          this._lastDiagRawQueuedFrames = null;
           this.port.postMessage({ type: "LOG", msg: "Worklet playout RESUMED (hold released)." });
           return;
         }
@@ -572,7 +578,15 @@ class PCMPlayerProcessor extends AudioWorkletProcessor {
         }
         this._callbackCount++;
         if (this._callbackCount % 100 === 0) {
-          this.port.postMessage({ type: "DIAG", callbackCount: this._callbackCount, paused: true, buffering: this._isBuffering, wallNow: typeof Date !== "undefined" ? Date.now() : 0 });
+          this.port.postMessage({
+            type: "DIAG",
+            callbackCount: this._callbackCount,
+            paused: true,
+            buffering: this._isBuffering,
+            queuedFrames: this._ringBufferedFrames(),
+            queueUnderruns: this._underrunCount,
+            wallNow: typeof Date !== "undefined" ? Date.now() : 0,
+          });
         }
         return true;
       }

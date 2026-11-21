@@ -612,7 +612,9 @@
                   const optionState = control.options[optionIndex];
                   if (!optionState) return;
                   option.disabled = Boolean(optionState.disabled);
-                  option.selected = Boolean(optionState.selected);
+                  if (!pending) {
+                    option.selected = Boolean(optionState.selected);
+                  }
                 });
               }
               const descriptor = control.displayDescriptor || readMirroredDisplayDescriptor(value);

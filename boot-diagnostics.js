@@ -7,7 +7,8 @@
   let generation = null;
   try {
     rootId = sessionStorage.getItem("mxs.cast.boot.rootId") || rootId;
-    const value = Number(sessionStorage.getItem("mxs.cast.boot.generation"));
+    const rawGeneration = sessionStorage.getItem("mxs.cast.boot.generation");
+    const value = rawGeneration !== null && rawGeneration.trim() !== "" ? Number(rawGeneration) : NaN;
     generation = Number.isSafeInteger(value) ? value : null;
   } catch (_) {}
   const event = {

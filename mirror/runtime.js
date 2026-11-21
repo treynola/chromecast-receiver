@@ -89,7 +89,9 @@ const createMirrorReceiver = function (shared) {
               state.lastReportedFrameCallbacks = state.frameCallbacks;
               const latestFrameObservationAgeMs = state.frame ? now - state.frame.observedAtMonotonicMs : null;
               const transport = video.srcObject ? "webrtc" : video.src ? "hardware_mse" : "unbound";
-              const connectionState = pc?.connectionState || "not_applicable";
+              const connectionState = transport === "hardware_mse"
+                ? "hardware_mse"
+                : (pc?.connectionState || "not_applicable");
               const presentationState = helper?.presentationState?.({
                 connectionState, trackAttached: state.trackAttached,
                 trackReadyState: state.track?.readyState, playStatus: state.playStatus,
@@ -721,8 +723,33 @@ const createMirrorReceiver = function (shared) {
         }
 
 
+  function teardownMirrorSession(reason) {
+    stopMirrorDiagnostics();
+    if (mirrorPeerConnection) {
+      try { mirrorPeerConnection.ontrack = null; } catch (_) {}
+      try { mirrorPeerConnection.onicecandidate = null; } catch (_) {}
+      try { mirrorPeerConnection.onconnectionstatechange = null; } catch (_) {}
+      try { mirrorPeerConnection.close(); } catch (_) {}
+      mirrorPeerConnection = null;
+    }
+    mirrorRemoteDescriptionReady = false;
+    try { resetHardwareMirrorMediaSource(true); } catch (_) {}
+    mirrorPendingIceCandidatesBySession.clear();
+    activeMirrorSessionId = null;
+    activeMirrorSessionSequence = 0;
+    const video = document.getElementById("mirror-video");
+    if (video) {
+      try { video.pause(); } catch (_) {}
+      try { video.srcObject = null; } catch (_) {}
+      try { video.removeAttribute("src"); video.load(); } catch (_) {}
+    }
+    if (reason) {
+      relayLogToStudio(`🧹 Receiver: Mirror session torn down (${reason}).`);
+    }
+  }
+
   return Object.freeze({ handleScreenMirrorSignal, activatePureScreenMirrorViewport,
-    applyMirrorPresentationState, stopMirrorDiagnostics });
+    applyMirrorPresentationState, stopMirrorDiagnostics, teardownMirrorSession });
 };
 
 Object.defineProperty(window, "MXSCreateMirrorReceiver", {

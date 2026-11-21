@@ -234,11 +234,13 @@
 
   function presentationState(input = {}) {
     if (input.playStatus === "rejected") return "video_play_rejected";
-    if (["disconnected", "failed", "closed"].includes(input.connectionState)) return "connection_unavailable";
+    if (input.videoTransport !== "hardware_mse" && ["disconnected", "failed", "closed"].includes(input.connectionState)) {
+      return "connection_unavailable";
+    }
+    if (number(input.presentedFramesDelta) > 0) return "frames_advancing";
     if (!input.trackAttached) return input.videoTransport === "hardware_mse"
       ? "hardware_mse_attached_no_decoded_frames" : "waiting_for_track";
     if (input.trackReadyState === "ended") return "track_ended";
-    if (number(input.presentedFramesDelta) > 0) return "frames_advancing";
     if (number(input.latestFrameAgeMs) > 1500) return "frames_stale";
     if (input.decodedFramesAdvanced === true || number(input.decodedFrames) > 0) return "decoded_no_presented_frames";
     return "track_attached_no_decoded_frames";

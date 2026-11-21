@@ -31,9 +31,36 @@
       equalBuildIdentity(expected[key], received[key]));
   }
 
+  function isCompatibilityIdentity(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    if (value.schema !== "mxs-004.cast-compatibility" || value.version !== 2 || value.algorithm !== "sha256") {
+      return false;
+    }
+    const artifactKeys = ["senderCritical", "tauriCastingBackend", "receiverHtml", "receiverLogic", "receiverPcmWorklet"];
+    const protocolKeys = ["audio", "gui", "session"];
+    const schemaKeys = ["pcm", "gui", "actions"];
+    const hasExactKeys = (obj, expectedKeys) => Boolean(obj) && typeof obj === "object" && !Array.isArray(obj) &&
+      Object.keys(obj).length === expectedKeys.length &&
+      expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(obj, key) && isNonEmptyString(obj[key]));
+    return hasExactKeys(value.artifacts, artifactKeys) &&
+      artifactKeys.every((key) => /^[a-f0-9]{64}$/.test(value.artifacts[key])) &&
+      hasExactKeys(value.protocols, protocolKeys) &&
+      hasExactKeys(value.schemas, schemaKeys) &&
+      Array.isArray(value.capabilities) &&
+      value.capabilities.every((cap) => typeof cap === "string") &&
+      new Set(value.capabilities).size === value.capabilities.length;
+  }
+
   function verifyBuildIdentity(receivedIdentity) {
     const expected = window.MXS_BUILD_IDENTITY;
-    return expected == null || equalBuildIdentity(expected, receivedIdentity);
+    if (!expected || typeof expected !== "object") return false;
+    if (isCompatibilityIdentity(expected) && isCompatibilityIdentity(receivedIdentity)) {
+      return ["audio", "gui", "session"].every((k) => expected.protocols[k] === receivedIdentity.protocols[k]) &&
+        ["pcm", "gui", "actions"].every((k) => expected.schemas[k] === receivedIdentity.schemas[k]) &&
+        expected.capabilities.length === receivedIdentity.capabilities.length &&
+        expected.capabilities.every((cap) => receivedIdentity.capabilities.indexOf(cap) >= 0);
+    }
+    return equalBuildIdentity(expected, receivedIdentity);
   }
   const namespace = "urn:x-cast:com.nowmultimedia.mxs004";
   const rootId = typeof window.crypto?.randomUUID === "function"
