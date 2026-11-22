@@ -5275,8 +5275,8 @@ select option {
   background-color: currentColor !important;
   vertical-align: middle;
   color: var(--gold) !important;
-  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-a5aa967e0496") !important;
-  mask-image: url("../icons/scissors.svg?v=13.9.509-a5aa967e0496") !important;
+  -webkit-mask-image: url("../icons/scissors.svg?v=13.9.509-9d02fdafb32b") !important;
+  mask-image: url("../icons/scissors.svg?v=13.9.509-9d02fdafb32b") !important;
   -webkit-mask-position: center !important;
   mask-position: center !important;
   -webkit-mask-repeat: no-repeat !important;
@@ -8154,4 +8154,56 @@ body.pure-screen-mirror-mode #audio-unlock-overlay {
   align-items: center;
   gap: 4px;
   color: var(--gold);
+}
+
+.theremin-dual-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(12, 14, 20, 0.88);
+  border: 1px solid rgba(99, 230, 190, 0.3);
+}
+
+.theremin-status-pills,
+.theremin-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.theremin-status-pill {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(250, 215, 142, 0.25);
+  color: var(--gold);
+}
+
+.theremin-status-pill.is-live {
+  border-color: var(--mint, #63e6be);
+  color: var(--mint, #63e6be);
+  background: rgba(99, 230, 190, 0.14);
+}
+
+.theremin-status-pill--dual[hidden] {
+  display: none;
+}
+
+.theremin-status-pill--dual.is-live {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(250, 215, 142, 0.18);
+}
+
+.theremin-cfg-toggle.is-armed {
+  border-color: var(--mint, #63e6be);
+  background: rgba(99, 230, 190, 0.18);
+  color: var(--mint, #63e6be);
 }
